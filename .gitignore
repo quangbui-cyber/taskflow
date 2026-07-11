@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/app/generated/prisma
+
+# ảnh chụp & ghi chú review tạm thời (không phải mã nguồn app)
+/audit-navigation/
+design-qa.md
+admin-accounts-*.png

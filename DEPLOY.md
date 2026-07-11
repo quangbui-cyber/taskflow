@@ -1,0 +1,148 @@
+# Hướng dẫn đưa TaskFlow lên mạng cho cả công ty dùng
+
+Mục tiêu: 30 nhân viên truy cập app qua một địa chỉ web, dữ liệu chung một nơi.
+Cách làm dưới đây dùng **Vercel** (chạy app) + **Neon** (database PostgreSQL). Chi phí gói
+miễn phí là đủ cho 30 người; tổng thời gian làm khoảng 30–45 phút.
+
+---
+
+## Bước 0 — Chuẩn bị (một lần)
+
+Bạn cần 3 tài khoản miễn phí:
+
+- **GitHub** — nơi chứa mã nguồn: https://github.com
+- **Neon** — database PostgreSQL: https://neon.tech
+- **Vercel** — chạy app: https://vercel.com (đăng nhập bằng chính GitHub cho tiện)
+
+---
+
+## Bước 1 — Đưa mã nguồn lên GitHub
+
+Trong thư mục dự án, chạy:
+
+```bash
+git init
+git add .
+git commit -m "TaskFlow"
+```
+
+Tạo một repository mới (để **Private**) trên GitHub, rồi:
+
+```bash
+git remote add origin https://github.com/<tên-bạn>/taskflow.git
+git branch -M main
+git push -u origin main
+```
+
+> File `.env` đã được `.gitignore` bỏ qua nên **mật khẩu không bị đẩy lên GitHub** — đúng như mong muốn.
+
+---
+
+## Bước 2 — Tạo database trên Neon
+
+1. Đăng nhập Neon → **Create project** → đặt tên `taskflow`, chọn region gần Việt Nam (ví dụ Singapore).
+2. Sau khi tạo, Neon hiện **Connection string** dạng:
+   ```
+   postgresql://user:password@ep-abc-123.ap-southeast-1.aws.neon.tech/neondb?sslmode=require
+   ```
+3. **Sao chép chuỗi này lại** — sẽ dán vào Vercel ở bước sau.
+
+---
+
+## Bước 3 — Deploy lên Vercel
+
+1. Vào Vercel → **Add New → Project** → chọn repository `taskflow` vừa đẩy lên.
+2. Vercel tự nhận diện Next.js. **Trước khi bấm Deploy**, mở phần **Environment Variables** và thêm:
+
+   | Name             | Value                                                        |
+   | ---------------- | ------------------------------------------------------------ |
+   | `DATABASE_URL`   | (chuỗi kết nối Neon ở Bước 2)                                 |
+   | `SESSION_SECRET` | (chuỗi ngẫu nhiên mới — xem cách tạo bên dưới)                |
+   | `ADMIN_NAME`     | Tên admin, ví dụ `Nguyễn Văn A`                              |
+   | `ADMIN_EMAIL`    | Email admin, ví dụ `admin@congty.com`                        |
+   | `ADMIN_PASSWORD` | Mật khẩu admin mạnh                                          |
+   | `TZ`             | `Asia/Ho_Chi_Minh` — để giờ hạn chót hiển thị đúng giờ VN     |
+   | `GOOGLE_CHAT_WEBHOOK_URL` | (tuỳ chọn) URL webhook Google Chat — xem "Báo lên Google Chat" bên dưới |
+
+   Tạo `SESSION_SECRET` bằng lệnh (chạy trên máy bạn):
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+   ```
+
+3. Bấm **Deploy**. Quá trình build sẽ **tự động tạo bảng trong database** (chạy `prisma migrate deploy`).
+   Khi xong, Vercel cho bạn một địa chỉ như `https://taskflow-xyz.vercel.app`.
+
+---
+
+## Bước 4 — Tạo tài khoản admin đầu tiên
+
+Database mới còn trống, cần tạo admin một lần. Trên **máy bạn**, trỏ tạm vào database Neon rồi seed:
+
+```bash
+# macOS / Linux
+DATABASE_URL="<chuỗi-Neon>" \
+ADMIN_NAME="Nguyễn Văn A" \
+ADMIN_EMAIL="admin@congty.com" \
+ADMIN_PASSWORD="mật-khẩu-mạnh" \
+npm run seed
+```
+
+Thấy dòng `✓ Tài khoản admin sẵn sàng` là xong. (Chỉ cần làm **một lần**.)
+
+---
+
+## Bước 5 — Bàn giao cho công ty
+
+1. Mở địa chỉ Vercel, đăng nhập bằng tài khoản admin vừa tạo.
+2. Vào **⚙️ Quản trị người dùng** (góc dưới sidebar) → tạo tài khoản cho từng nhân viên
+   (họ tên + email + mật khẩu tạm). Gửi thông tin đăng nhập cho họ.
+3. Nhân viên đăng nhập, tạo project, thêm task, mời nhau vào project và làm việc.
+
+> Muốn dùng tên miền riêng như `task.congty.com`? Vào Vercel → project → **Settings → Domains** → thêm domain và trỏ DNS theo hướng dẫn.
+
+---
+
+## Cập nhật app sau này
+
+Mỗi lần sửa code, chỉ cần:
+
+```bash
+git add .
+git commit -m "Mô tả thay đổi"
+git push
+```
+
+Vercel **tự động build và cập nhật** bản chạy. Nếu có đổi cấu trúc database
+(`prisma/schema.prisma`), tạo migration trước khi push:
+
+```bash
+npx prisma migrate dev --name ten_thay_doi
+```
+
+---
+
+## Sao lưu & bảo mật
+
+- **Sao lưu**: Neon tự động backup; ngoài ra có thể bật *Point-in-time restore* trong cài đặt project.
+- **Đổi mật khẩu nhân viên**: admin vào trang Quản trị → **Đổi mật khẩu**.
+- **Nhân viên nghỉ việc**: admin vào trang Quản trị → **Xoá** tài khoản đó.
+- Không chia sẻ `DATABASE_URL` và `SESSION_SECRET` ra ngoài.
+
+---
+
+## Báo lên Google Chat (tuỳ chọn)
+
+Khi có **job mới** hoặc **job hoàn thành**, app gửi một tin nhắn vào group chat.
+
+1. Mở **Google Chat** → vào **Space** (group) muốn nhận thông báo.
+2. Bấm tên Space ở đầu trang → **Apps & integrations** → **Webhooks** → **Add webhooks**.
+3. Đặt tên (ví dụ "TaskFlow") → **Save** → **Copy** URL webhook.
+4. Dán URL đó vào biến môi trường `GOOGLE_CHAT_WEBHOOK_URL`:
+   - Trên máy dev: thêm vào file `.env`.
+   - Trên Vercel: Settings → Environment Variables → thêm `GOOGLE_CHAT_WEBHOOK_URL`, rồi **Redeploy**.
+
+Để trống biến này thì tính năng tự tắt, app vẫn chạy bình thường. Lỗi gửi tin
+nhắn (mạng, webhook bị xoá...) không làm hỏng việc tạo/hoàn thành job.
+
+> Lưu ý: webhook Google Chat chỉ gửi **một chiều** (app → group). Nhân viên trả
+> lời trong group sẽ không phản hồi ngược lại app.

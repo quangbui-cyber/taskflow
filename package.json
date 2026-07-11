@@ -3,13 +3,25 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
+    "dev": "TZ=Asia/Ho_Chi_Minh next dev",
+    "build": "prisma generate && prisma migrate deploy && next build --webpack",
+    "build:app": "prisma generate && next build --webpack",
+    "start": "TZ=Asia/Ho_Chi_Minh next start",
+    "lint": "eslint",
+    "postinstall": "prisma generate",
+    "seed": "prisma db seed"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@hello-pangea/dnd": "^18.0.1",
+    "@prisma/client": "^6.19.3",
+    "bcryptjs": "^3.0.3",
+    "jose": "^6.2.3",
+    "lucide-react": "^1.24.0",
     "next": "16.2.10",
+    "prisma": "^6.19.3",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
@@ -21,6 +33,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
     "tailwindcss": "^4",
+    "tsx": "^4.23.0",
     "typescript": "^5"
   }
 }
