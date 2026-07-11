@@ -1,32 +1,57 @@
-/** Số ngày từ hôm nay đến hạn chót (âm = đã quá ngày) — tính theo ngày lịch */
+// Việt Nam luôn ở UTC+7, không có giờ mùa hè — dùng offset cố định để đọc
+// "giờ Việt Nam" mà không phụ thuộc múi giờ cấu hình trên server (quan trọng
+// vì một số nền tảng deploy như Vercel không cho đặt biến môi trường TZ).
+const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+/** Dịch thời điểm sang "giờ Việt Nam" rồi đọc bằng các hàm getUTC* */
+function toVN(date: Date): Date {
+  return new Date(date.getTime() + VN_OFFSET_MS);
+}
+
+/** Số ngày từ hôm nay đến hạn chót (âm = đã quá ngày) — tính theo ngày lịch, giờ VN */
 export function daysUntil(dueDate: Date): number {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const due = new Date(dueDate);
-  due.setHours(0, 0, 0, 0);
-  return Math.round((due.getTime() - today.getTime()) / 86400000);
+  const today = toVN(new Date());
+  const due = toVN(dueDate);
+  const todayMidnight = Date.UTC(
+    today.getUTCFullYear(),
+    today.getUTCMonth(),
+    today.getUTCDate()
+  );
+  const dueMidnight = Date.UTC(
+    due.getUTCFullYear(),
+    due.getUTCMonth(),
+    due.getUTCDate()
+  );
+  return Math.round((dueMidnight - todayMidnight) / 86400000);
 }
 
-/** Deadline chỉ có ngày (00:00) thì coi như hết ngày đó; nếu có giờ thì lấy đúng thời điểm */
+/** Deadline chỉ có ngày (00:00 giờ VN) thì coi như hết ngày đó; nếu có giờ thì lấy đúng thời điểm */
 export function deadline(dueDate: Date): Date {
-  const d = new Date(dueDate);
-  if (d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0) {
-    const end = new Date(d);
-    end.setHours(23, 59, 59, 999);
-    return end;
+  const vn = toVN(dueDate);
+  if (vn.getUTCHours() === 0 && vn.getUTCMinutes() === 0 && vn.getUTCSeconds() === 0) {
+    const endOfDayVN = Date.UTC(
+      vn.getUTCFullYear(),
+      vn.getUTCMonth(),
+      vn.getUTCDate(),
+      23,
+      59,
+      59,
+      999
+    );
+    return new Date(endOfDayVN - VN_OFFSET_MS);
   }
-  return d;
+  return dueDate;
 }
 
-/** Deadline có kèm giờ cụ thể (khác 00:00) hay không */
+/** Deadline có kèm giờ cụ thể (khác 00:00 giờ VN) hay không */
 export function hasTime(dueDate: Date): boolean {
-  const d = new Date(dueDate);
-  return d.getHours() !== 0 || d.getMinutes() !== 0;
+  const vn = toVN(dueDate);
+  return vn.getUTCHours() !== 0 || vn.getUTCMinutes() !== 0;
 }
 
-/** Hiển thị giờ theo kiểu Việt Nam, chỉ giờ không phút, ví dụ 9h, 16h */
+/** Hiển thị giờ Việt Nam, chỉ giờ không phút, ví dụ 9h, 16h */
 export function formatHour(dueDate: Date): string {
-  return `${new Date(dueDate).getHours()}h`;
+  return `${toVN(dueDate).getUTCHours()}h`;
 }
 
 export function isOverdue(dueDate: Date): boolean {
@@ -34,20 +59,17 @@ export function isOverdue(dueDate: Date): boolean {
 }
 
 export function formatDue(dueDate: Date): string {
-  const d = new Date(dueDate);
-  const dateStr = d.toLocaleDateString("vi-VN", {
-    day: "numeric",
-    month: "numeric",
-  });
-  const timeStr = hasTime(d) ? " " + formatHour(d) : "";
+  const vn = toVN(dueDate);
+  const dateStr = `${vn.getUTCDate()}/${vn.getUTCMonth() + 1}`;
+  const timeStr = hasTime(dueDate) ? " " + formatHour(dueDate) : "";
   const label = `${dateStr}${timeStr}`;
 
-  if (isOverdue(d)) {
-    const days = daysUntil(d);
+  if (isOverdue(dueDate)) {
+    const days = daysUntil(dueDate);
     if (days < 0) return `${label} — quá hạn ${-days} ngày`;
     return `${label} — đã quá giờ`;
   }
-  const days = daysUntil(d);
+  const days = daysUntil(dueDate);
   if (days === 0) return `${label} — hôm nay`;
   if (days === 1) return `${label} — ngày mai`;
   if (days <= 7) return `${label} — còn ${days} ngày`;

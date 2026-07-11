@@ -151,6 +151,7 @@ export default async function DashboardPage({
     weekday: "long",
     day: "numeric",
     month: "long",
+    timeZone: "Asia/Ho_Chi_Minh",
   }).format(new Date());
   const tabHref = (view: DashboardView) => {
     const next = new URLSearchParams();
