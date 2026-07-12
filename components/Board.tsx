@@ -132,7 +132,7 @@ export default function Board({
                     ref={provided.innerRef}
                     {...provided.droppableProps}
                     className={`min-h-[80px] flex-1 space-y-2 overflow-y-auto p-3 transition-colors ${
-                      snapshot.isDraggingOver ? "bg-blue-50/70" : ""
+                      snapshot.isDraggingOver ? "bg-brand-50/70" : ""
                     }`}
                   >
                     {col.tasks.map((task, index) => {
@@ -163,9 +163,9 @@ export default function Board({
                               }}
                               role="button"
                               tabIndex={0}
-                              className={`group relative cursor-pointer rounded-[8px] border border-zinc-200 bg-white p-3.5 shadow-sm transition-all hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500/30 ${
+                              className={`group relative cursor-pointer rounded-[8px] border border-zinc-200 bg-white p-3.5 shadow-sm transition-all hover:border-brand-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-brand-400/30 ${
                                 snapshot.isDragging
-                                  ? "rotate-1 border-blue-400 shadow-lg"
+                                  ? "rotate-1 border-brand-400 shadow-lg"
                                   : ""
                               }`}
                             >

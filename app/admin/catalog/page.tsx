@@ -57,7 +57,7 @@ export default async function CatalogPage() {
               className="tf-button-secondary"
             >
               <BarChart3 size={16} aria-hidden="true" />
-              Đội & Hiệu suất
+              Hiệu suất
             </Link>
           </div>
 

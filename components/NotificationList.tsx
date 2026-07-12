@@ -124,7 +124,7 @@ export default function NotificationList({
           >
             Chưa đọc
             {unreadCount > 0 && (
-              <span className="min-w-5 rounded-full bg-blue-600 px-1.5 text-center text-[10px] font-bold leading-5 text-white">
+              <span className="min-w-5 rounded-full bg-brand-400 px-1.5 text-center text-[10px] font-bold leading-5 text-zinc-950">
                 {unreadCount > 99 ? "99+" : unreadCount}
               </span>
             )}
@@ -156,7 +156,7 @@ export default function NotificationList({
                   className={`group flex w-full gap-3 px-4 py-3.5 text-left transition-colors sm:px-5 ${
                     notification.read
                       ? "bg-white hover:bg-zinc-50"
-                      : "bg-blue-50/65 hover:bg-blue-50"
+                      : "bg-brand-50/65 hover:bg-brand-50"
                   } disabled:cursor-wait disabled:opacity-70`}
                   aria-label={`${notification.read ? "Đã đọc" : "Chưa đọc"}: ${notification.message}`}
                 >
@@ -164,7 +164,7 @@ export default function NotificationList({
                     className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] ${
                       notification.read
                         ? "bg-zinc-100 text-zinc-500"
-                        : "bg-blue-100 text-blue-700"
+                        : "bg-brand-100 text-brand-700"
                     }`}
                   >
                     <Icon size={18} strokeWidth={1.8} aria-hidden="true" />
@@ -186,7 +186,7 @@ export default function NotificationList({
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center">
                     {!notification.read && (
                       <span
-                        className="h-2.5 w-2.5 rounded-full bg-blue-600 ring-4 ring-blue-100"
+                        className="h-2.5 w-2.5 rounded-full bg-brand-400 ring-4 ring-brand-100"
                         title="Chưa đọc"
                         aria-hidden="true"
                       />

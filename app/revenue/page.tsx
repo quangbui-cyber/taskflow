@@ -14,25 +14,39 @@ import {
 
 const EARNED = ["ON_PROCESS", "DONE"];
 const LOST = ["CANCEL", "FAIL"];
+const BRAND_GREEN = "#a8d431";
+const BRAND_GREEN_DARK = "#587216";
+const BRAND_GREEN_SOFT = "#f7fbe9";
 
 function MixLegend({
   dotClass,
+  brand = false,
   label,
   value,
   count,
 }: {
   dotClass: string;
+  brand?: boolean;
   label: string;
   value: number;
   count: number;
 }) {
   return (
     <div>
-      <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
-        <span className={`h-2.5 w-2.5 rounded-full ${dotClass}`} aria-hidden="true" />
+      <p
+        className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-zinc-500"
+        style={brand ? { color: BRAND_GREEN_DARK } : undefined}
+      >
+        <span
+          className={`h-2.5 w-2.5 rounded-full ${dotClass}`}
+          style={brand ? { backgroundColor: BRAND_GREEN } : undefined}
+          aria-hidden="true"
+        />
         {label}
       </p>
-      <p className="mt-1 text-lg font-bold tabular-nums">{formatVND(value)}</p>
+      <p className="mt-1 text-lg font-bold tabular-nums text-zinc-950">
+        {formatVND(value)}
+      </p>
       <p className="text-xs text-zinc-400">{count} dự án</p>
     </div>
   );
@@ -125,10 +139,15 @@ export default async function RevenuePage() {
         <div className="tf-page space-y-6">
           <div>
             <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-emerald-50 text-emerald-700">
+              <span
+                className="flex h-10 w-10 items-center justify-center rounded-[8px]"
+                style={{ backgroundColor: BRAND_GREEN_SOFT, color: BRAND_GREEN_DARK }}
+              >
                 <CircleDollarSign size={20} aria-hidden="true" />
               </span>
-              <h1 className="tf-page-title">Doanh số</h1>
+              <h1 className="tf-page-title" style={{ color: BRAND_GREEN_DARK }}>
+                Doanh số
+              </h1>
             </div>
             {!isAdmin && (
               <p className="tf-page-subtitle">Chỉ tính các dự án bạn tham gia.</p>
@@ -147,8 +166,10 @@ export default async function RevenuePage() {
                 <div className="mt-4 flex h-4 overflow-hidden rounded-full bg-zinc-100">
                   {earned > 0 && (
                     <div
-                      className="bg-emerald-500"
-                      style={{ width: `${(earned / totalMix) * 100}%` }}
+                      style={{
+                        width: `${(earned / totalMix) * 100}%`,
+                        backgroundColor: BRAND_GREEN,
+                      }}
                       title={`Doanh thu: ${formatVND(earned)}`}
                     />
                   )}
@@ -176,7 +197,8 @@ export default async function RevenuePage() {
                 </div>
                 <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                   <MixLegend
-                    dotClass="bg-emerald-500"
+                    dotClass=""
+                    brand
                     label="Doanh thu"
                     value={earned}
                     count={countOf(EARNED)}

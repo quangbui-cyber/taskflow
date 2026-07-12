@@ -11,9 +11,9 @@
   --border-strong: #d4d8df;
   --muted: #767b86;
   --muted-strong: #545963;
-  --primary: #2563eb;
-  --primary-hover: #1d4ed8;
-  --primary-soft: #eaf1ff;
+  --primary: #a8d431;
+  --primary-hover: #93bb24;
+  --primary-soft: #f3f9df;
   --danger: #dc2626;
   --danger-soft: #fff0f0;
   --success: #16845b;
@@ -32,6 +32,16 @@
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
     "Segoe UI", Arial, sans-serif;
   --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --color-brand-50: #f7fbe9;
+  --color-brand-100: #edf7cb;
+  --color-brand-200: #dced9b;
+  --color-brand-300: #c7e365;
+  --color-brand-400: #a8d431;
+  --color-brand-500: #93bb24;
+  --color-brand-600: #739419;
+  --color-brand-700: #587216;
+  --color-brand-800: #465a16;
+  --color-brand-900: #3b4c16;
 }
 
 * {
@@ -74,13 +84,13 @@ summary:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 3px solid rgb(37 99 235 / 0.22);
+  outline: 3px solid rgb(168 212 49 / 0.28);
   outline-offset: 2px;
 }
 
 ::selection {
-  background: #cfe0ff;
-  color: #123a82;
+  background: #dced9b;
+  color: #2d3b0b;
 }
 
 ::-webkit-scrollbar {
@@ -171,9 +181,9 @@ textarea:focus-visible {
 .tf-button-primary {
   border: 1px solid var(--primary);
   background: var(--primary);
-  color: #fff;
+  color: #182008;
   padding: 8px 14px;
-  box-shadow: 0 1px 2px rgb(37 99 235 / 0.22);
+  box-shadow: 0 1px 2px rgb(88 114 22 / 0.2);
 }
 
 .tf-button-primary:hover {
@@ -249,7 +259,7 @@ textarea:focus-visible {
 
 .tf-field:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgb(37 99 235 / 0.14);
+  box-shadow: 0 0 0 3px rgb(168 212 49 / 0.2);
   outline: none;
 }
 

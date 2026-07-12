@@ -32,7 +32,7 @@ export default async function NotificationsPage() {
         <div className="tf-page-narrow space-y-6">
           <div>
             <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-blue-50 text-blue-600">
+              <span className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-brand-50 text-brand-700">
                 <Bell size={20} aria-hidden="true" />
               </span>
               <h1 className="tf-page-title">Thông báo</h1>

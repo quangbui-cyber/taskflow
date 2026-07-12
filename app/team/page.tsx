@@ -140,7 +140,7 @@ export default async function TeamPage() {
             <span className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-emerald-50 text-emerald-700">
               <TrendingUp size={20} aria-hidden="true" />
             </span>
-            <h1 className="tf-page-title">Đội & Hiệu suất</h1>
+            <h1 className="tf-page-title">Hiệu suất</h1>
           </div>
 
           {isAdmin && (

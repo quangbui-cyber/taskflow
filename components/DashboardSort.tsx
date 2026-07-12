@@ -21,7 +21,7 @@ export default function DashboardSort({ value }: { value: "due" | "project" }) {
           next.set("sort", event.target.value);
           router.replace(`/?${next.toString()}`);
         }}
-        className="rounded-[7px] border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-600 outline-none hover:bg-zinc-50 focus:border-blue-500"
+        className="rounded-[7px] border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-600 outline-none hover:bg-zinc-50 focus:border-brand-500"
       >
         <option value="due">Theo hạn</option>
         <option value="project">Theo dự án</option>

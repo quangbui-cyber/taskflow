@@ -14,6 +14,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { logout } from "@/app/actions/auth";
+import Brand from "@/components/Brand";
 import { canManageProjects } from "@/lib/auth";
 import { avatarClass } from "@/lib/avatar";
 import { prisma } from "@/lib/prisma";
@@ -48,7 +49,7 @@ function MenuLink({
       aria-current={active ? "page" : undefined}
       className={`flex min-h-10 items-center gap-3 rounded-[7px] px-3 py-2 text-sm transition-colors ${
         active
-          ? "bg-blue-50 font-medium text-blue-700"
+          ? "bg-brand-50 font-medium text-brand-700"
           : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
       }`}
     >
@@ -82,7 +83,7 @@ function ProjectLinks({
             href={`/projects/${project.id}`}
             className={`flex min-h-10 items-center gap-3 rounded-[7px] px-3 py-2 text-sm transition-colors ${
               project.id === activeProjectId
-                ? "bg-blue-50 font-medium text-blue-700"
+                ? "bg-brand-50 font-medium text-brand-700"
                 : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
             }`}
           >
@@ -159,11 +160,8 @@ export default async function Sidebar({
       <aside className="sticky top-0 hidden h-screen w-[280px] shrink-0 border-r border-zinc-200 bg-white md:flex">
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex h-[72px] shrink-0 items-center border-b border-zinc-200 px-5">
-            <Link href="/" className="flex items-center gap-2.5 text-[19px] font-semibold text-zinc-950">
-              <span className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-blue-600 text-white shadow-sm">
-                <CheckCircle2 size={20} strokeWidth={2.2} aria-hidden="true" />
-              </span>
-              TaskFlow
+            <Link href="/" aria-label="myCreative - Trang công việc">
+              <Brand />
             </Link>
           </div>
 
@@ -171,7 +169,7 @@ export default async function Sidebar({
             <nav className="space-y-1" aria-label="Không gian làm việc">
               <MenuLink href="/" label="Công việc" icon={CheckCircle2} active={activeSection === "home" && !activeProjectId} />
               <MenuLink href="/notifications" label="Thông báo" icon={Bell} active={activeSection === "notifications"} badge={unreadCount} />
-              <MenuLink href="/team" label="Đội & Hiệu suất" icon={UsersRound} active={activeSection === "team"} />
+              <MenuLink href="/team" label="Hiệu suất" icon={UsersRound} active={activeSection === "team"} />
               {canManage && (
                 <MenuLink href="/revenue" label="Doanh số" icon={CircleDollarSign} active={activeSection === "revenue"} />
               )}
@@ -183,7 +181,7 @@ export default async function Sidebar({
                 {canManage && (
                   <Link
                     href="/projects/new"
-                    className="flex h-7 w-7 items-center justify-center rounded-[6px] text-zinc-400 hover:bg-zinc-100 hover:text-blue-600"
+                    className="flex h-7 w-7 items-center justify-center rounded-[6px] text-zinc-400 hover:bg-zinc-100 hover:text-brand-700"
                     title="Tạo dự án"
                     aria-label="Tạo dự án"
                   >
@@ -232,11 +230,8 @@ export default async function Sidebar({
       </aside>
 
       <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-zinc-200 bg-white/95 px-4 backdrop-blur md:hidden">
-        <Link href="/" className="flex items-center gap-2.5 font-semibold text-zinc-950">
-          <span className="flex h-8 w-8 items-center justify-center rounded-[7px] bg-blue-600 text-white">
-            <CheckCircle2 size={19} strokeWidth={2.2} aria-hidden="true" />
-          </span>
-          TaskFlow
+        <Link href="/" aria-label="myCreative - Trang công việc">
+          <Brand compact />
         </Link>
         <details className="group relative">
           <summary className="flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-[7px] border border-zinc-200 text-zinc-600 hover:bg-zinc-50" aria-label="Mở điều hướng">
@@ -246,7 +241,7 @@ export default async function Sidebar({
             <div className="space-y-1">
               <MenuLink href="/" label="Công việc" icon={CheckCircle2} active={activeSection === "home" && !activeProjectId} />
               <MenuLink href="/notifications" label="Thông báo" icon={Bell} active={activeSection === "notifications"} badge={unreadCount} />
-              <MenuLink href="/team" label="Đội & Hiệu suất" icon={UsersRound} active={activeSection === "team"} />
+              <MenuLink href="/team" label="Hiệu suất" icon={UsersRound} active={activeSection === "team"} />
               {canManage && <MenuLink href="/revenue" label="Doanh số" icon={CircleDollarSign} active={activeSection === "revenue"} />}
             </div>
             <div className="my-3 border-t border-zinc-200" />

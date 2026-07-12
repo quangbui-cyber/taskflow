@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "TaskFlow — Quản lý công việc",
-  description: "Ứng dụng quản lý project và task cho nhóm",
+  title: "myCreative — Quản lý công việc",
+  description: "Không gian quản lý dự án và công việc của Creative Station",
 };
 
 export default function RootLayout({

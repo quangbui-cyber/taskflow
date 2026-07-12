@@ -117,7 +117,7 @@ Nội dung gồm:
 
 `ADMIN` thấy toàn công ty. `ACCOUNT` chỉ thấy các project mình tham gia.
 
-### 8. Đội & Hiệu suất
+### 8. Hiệu suất
 
 Trang `/team` dành cho mọi người dùng, dữ liệu hiển thị phụ thuộc vai trò:
 
@@ -146,7 +146,7 @@ Trang `/admin/catalog` chỉ dành cho `ADMIN`.
 
 Admin tạo trước danh mục Client và Account để người tạo project chọn từ dropdown. Việc này giúp dữ liệu doanh số thống nhất, tránh nhập sai tên hoặc trùng tên.
 
-Lưu ý: trang "Toàn cảnh công việc" (`/admin/overview`) đã được gộp vào **Đội & Hiệu suất** (`/team`); đường dẫn cũ tự chuyển hướng sang trang mới.
+Lưu ý: trang "Toàn cảnh công việc" (`/admin/overview`) đã được gộp vào **Hiệu suất** (`/team`); đường dẫn cũ tự chuyển hướng sang trang mới.
 
 ### 11. Thông báo
 

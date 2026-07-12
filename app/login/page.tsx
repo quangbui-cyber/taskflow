@@ -1,8 +1,9 @@
 "use client";
 
 import { useActionState } from "react";
-import { CheckCircle2, LogIn } from "lucide-react";
+import { LogIn } from "lucide-react";
 import { login, type AuthState } from "@/app/actions/auth";
+import Brand from "@/components/Brand";
 
 export default function LoginPage() {
   const [state, formAction, pending] = useActionState<AuthState, FormData>(
@@ -14,11 +15,8 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-[#f6f7f9] p-5">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="inline-flex items-center gap-2.5 text-2xl font-semibold text-zinc-950">
-            <span className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-blue-600 text-white shadow-sm">
-              <CheckCircle2 size={21} strokeWidth={2.2} aria-hidden="true" />
-            </span>
-            TaskFlow
+          <div className="inline-flex">
+            <Brand large />
           </div>
           <p className="text-zinc-500 mt-2">Đăng nhập để tiếp tục</p>
         </div>

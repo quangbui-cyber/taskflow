@@ -432,7 +432,7 @@ export default async function DashboardPage({
                         />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-start justify-between gap-3">
-                            <h3 className="truncate text-sm font-semibold text-zinc-900 group-hover:text-blue-700">
+                            <h3 className="truncate text-sm font-semibold text-zinc-900 group-hover:text-brand-700">
                               {project.name}
                             </h3>
                             <span className={`tf-badge shrink-0 ${status.className}`}>{status.label}</span>
@@ -444,7 +444,7 @@ export default async function DashboardPage({
                           )}
                           <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-zinc-200">
                             <div
-                              className="h-full rounded-full bg-blue-600 transition-all"
+                              className="h-full rounded-full bg-brand-400 transition-all"
                               style={{ width: `${percent}%` }}
                             />
                           </div>

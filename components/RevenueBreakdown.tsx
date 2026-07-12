@@ -1,6 +1,9 @@
 import { formatVND } from "@/lib/types";
 import type { LucideIcon } from "lucide-react";
 
+const BRAND_GREEN = "#a8d431";
+const BRAND_GREEN_DARK = "#587216";
+
 export type RevenueRow = {
   name: string;
   earned: number;
@@ -30,8 +33,11 @@ export default function RevenueBreakdown({
           {title}
         </h2>
         <span className="text-[11px] text-zinc-400">
-          <span className="mr-1 inline-block h-2 w-2 rounded-full bg-emerald-500" />
-          Doanh thu
+          <span
+            className="mr-1 inline-block h-2 w-2 rounded-full"
+            style={{ backgroundColor: BRAND_GREEN }}
+          />
+          <span style={{ color: BRAND_GREEN_DARK }}>Doanh thu</span>
           <span className="ml-3 mr-1 inline-block h-2 w-2 rounded-full bg-amber-400" />
           Bidding
         </span>
@@ -59,14 +65,17 @@ export default function RevenueBreakdown({
                     </span>
                   )}
                 </span>
-                <span className="shrink-0 font-semibold tabular-nums text-emerald-700">
+                <span className="shrink-0 font-semibold tabular-nums text-zinc-950">
                   {formatVND(r.earned)}
                 </span>
               </div>
               <div className="h-2.5 overflow-hidden rounded-full bg-zinc-100">
                 <div
-                  className="h-full rounded-full bg-emerald-500"
-                  style={{ width: `${(r.earned / max) * 100}%` }}
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${(r.earned / max) * 100}%`,
+                    backgroundColor: r.earned > 0 ? BRAND_GREEN : undefined,
+                  }}
                 />
               </div>
               {r.bidding > 0 && (
@@ -77,7 +86,7 @@ export default function RevenueBreakdown({
                       style={{ width: `${(r.bidding / max) * 100}%` }}
                     />
                   </div>
-                  <span className="shrink-0 text-[11px] tabular-nums text-amber-600">
+                  <span className="shrink-0 text-[11px] tabular-nums text-zinc-950">
                     {formatVND(r.bidding)}
                   </span>
                 </div>

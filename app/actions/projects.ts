@@ -1,5 +1,6 @@
 "use server";
 
+import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -33,6 +34,10 @@ function parseRevenue(raw: string): number | null {
   const value = Number(cleaned);
   if (!Number.isFinite(value) || value < 0) return null;
   return value;
+}
+
+function createWebhookToken() {
+  return randomBytes(24).toString("base64url");
 }
 
 export async function createProject(
@@ -126,6 +131,28 @@ export async function deleteProject(projectId: string) {
   await prisma.project.delete({ where: { id: projectId } });
   revalidatePath("/");
   redirect("/");
+}
+
+export async function regenerateProjectWebhookToken(projectId: string) {
+  const user = await requireUser();
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { id: true, ownerId: true },
+  });
+
+  if (!project) return { error: "Project không tồn tại." };
+  if (project.ownerId !== user.id && user.role !== "ADMIN") {
+    return { error: "Chỉ chủ project hoặc admin mới được tạo lại webhook." };
+  }
+
+  const updated = await prisma.project.update({
+    where: { id: projectId },
+    data: { webhookToken: createWebhookToken() },
+    select: { webhookToken: true },
+  });
+
+  revalidatePath(`/projects/${projectId}`);
+  return { token: updated.webhookToken };
 }
 
 export async function addMember(

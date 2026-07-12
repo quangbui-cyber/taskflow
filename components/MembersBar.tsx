@@ -82,7 +82,7 @@ export default function MembersBar({
             +{members.length - 4}
           </span>
         )}
-        <span className="ml-2 flex h-8 w-8 items-center justify-center rounded-full border border-dashed border-zinc-300 text-zinc-400 hover:border-blue-400 hover:text-blue-600">
+        <span className="ml-2 flex h-8 w-8 items-center justify-center rounded-full border border-dashed border-zinc-300 text-zinc-400 hover:border-brand-400 hover:text-brand-700">
           <Plus size={16} aria-hidden="true" />
         </span>
       </button>
@@ -167,7 +167,7 @@ export default function MembersBar({
                                 e.preventDefault();
                                 selectInvitee(u);
                               }}
-                              className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-blue-50"
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-brand-50"
                             >
                               <span
                                 className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${avatarClass(u.id)}`}

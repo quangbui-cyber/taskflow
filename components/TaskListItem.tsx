@@ -37,7 +37,7 @@ export default function TaskListItem({ task }: { task: TaskListItemData }) {
           aria-hidden="true"
         />
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-zinc-800 group-hover:text-blue-700">
+          <p className="truncate text-sm font-semibold text-zinc-800 group-hover:text-brand-700">
             {task.title}
           </p>
           <p className="mt-1 truncate text-xs text-zinc-400">

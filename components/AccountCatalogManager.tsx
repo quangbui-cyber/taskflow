@@ -94,7 +94,7 @@ export default function AccountCatalogManager({
                   if (result.error) setUpdateError(result.error);
                 });
               }}
-              className="rounded-[7px] border border-zinc-200 px-2 py-1.5 text-xs text-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              className="rounded-[7px] border border-zinc-200 px-2 py-1.5 text-xs text-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-400/30"
               aria-label={`Team của ${account.name}`}
             >
               <option value="">Chưa chọn Team</option>

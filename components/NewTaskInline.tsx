@@ -40,7 +40,7 @@ export default function NewTaskInline({
     return (
       <button
         onClick={() => setEditing(true)}
-        className="flex w-full items-center gap-2 rounded-[7px] px-2 py-2 text-left text-sm text-zinc-500 transition-colors hover:bg-white hover:text-blue-700"
+        className="flex w-full items-center gap-2 rounded-[7px] px-2 py-2 text-left text-sm text-zinc-500 transition-colors hover:bg-white hover:text-brand-700"
       >
         <Plus size={16} strokeWidth={1.8} aria-hidden="true" />
         Thêm task

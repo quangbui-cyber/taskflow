@@ -108,7 +108,7 @@ export default function TaskModal({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               title="Bấm để sửa tên task"
-              className="-mx-2 min-w-0 flex-1 rounded-[7px] border border-transparent px-2 py-1 text-lg font-semibold hover:border-zinc-200 hover:bg-zinc-50 focus:border-transparent focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              className="-mx-2 min-w-0 flex-1 rounded-[7px] border border-transparent px-2 py-1 text-lg font-semibold hover:border-zinc-200 hover:bg-zinc-50 focus:border-transparent focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-400/30"
             />
             <div className="flex items-center gap-2 shrink-0">
               <button
@@ -116,8 +116,8 @@ export default function TaskModal({
                 disabled={following}
                 className={`inline-flex min-h-9 items-center gap-1.5 rounded-[7px] border px-2.5 py-1 text-xs transition-colors disabled:opacity-50 ${
                   isFollowing
-                    ? "border-blue-300 bg-blue-50 text-blue-700"
-                    : "border-zinc-200 text-zinc-500 hover:border-blue-300 hover:text-blue-600"
+                    ? "border-brand-300 bg-brand-50 text-brand-700"
+                    : "border-zinc-200 text-zinc-500 hover:border-brand-300 hover:text-brand-700"
                 }`}
                 title="Nhận thông báo khi task hoàn thành hoặc có bình luận"
               >
@@ -176,7 +176,7 @@ export default function TaskModal({
                     const uid = e.target.value;
                     if (uid) startFollowing(() => addFollower(task.id, uid));
                   }}
-                  className="rounded-[7px] border border-dashed border-zinc-300 px-2.5 py-1 text-sm text-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-50"
+                  className="rounded-[7px] border border-dashed border-zinc-300 px-2.5 py-1 text-sm text-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand-400/30 disabled:opacity-50"
                 >
                   <option value="">+ Thêm người theo dõi</option>
                   {addableFollowers.map((m) => (
