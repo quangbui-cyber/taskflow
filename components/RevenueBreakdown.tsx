@@ -1,8 +1,8 @@
 import { formatVND } from "@/lib/types";
 import type { LucideIcon } from "lucide-react";
 
-const BRAND_GREEN = "#a8d431";
-const BRAND_GREEN_DARK = "#587216";
+const REVENUE_BLUE = "#2563eb";
+const REVENUE_BLUE_DARK = "#1d4ed8";
 
 export type RevenueRow = {
   name: string;
@@ -35,9 +35,9 @@ export default function RevenueBreakdown({
         <span className="text-[11px] text-zinc-400">
           <span
             className="mr-1 inline-block h-2 w-2 rounded-full"
-            style={{ backgroundColor: BRAND_GREEN }}
+            style={{ backgroundColor: REVENUE_BLUE }}
           />
-          <span style={{ color: BRAND_GREEN_DARK }}>Doanh thu</span>
+          <span style={{ color: REVENUE_BLUE_DARK }}>Doanh thu</span>
           <span className="ml-3 mr-1 inline-block h-2 w-2 rounded-full bg-amber-400" />
           Bidding
         </span>
@@ -53,7 +53,7 @@ export default function RevenueBreakdown({
 
             return (
             <li key={r.name}>
-              <div className="mb-1.5 flex items-baseline justify-between gap-3 text-sm">
+              <div className="mb-2 flex items-baseline gap-3 text-sm">
                 <span className="min-w-0 truncate font-medium">
                   {r.name}
                   <span className="ml-1.5 text-xs font-normal text-zinc-400">
@@ -65,32 +65,32 @@ export default function RevenueBreakdown({
                     </span>
                   )}
                 </span>
-                <span className="shrink-0 font-semibold tabular-nums text-zinc-950">
+              </div>
+              <div className="grid grid-cols-[minmax(0,1fr)_8.5rem] items-center gap-3">
+                <div className="h-2 overflow-hidden rounded-full bg-zinc-100">
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${(r.earned / max) * 100}%`,
+                      backgroundColor: r.earned > 0 ? REVENUE_BLUE : undefined,
+                    }}
+                  />
+                </div>
+                <span className="text-right text-[13px] font-medium tabular-nums text-zinc-900">
                   {formatVND(r.earned)}
                 </span>
               </div>
-              <div className="h-2.5 overflow-hidden rounded-full bg-zinc-100">
-                <div
-                  className="h-full rounded-full"
-                  style={{
-                    width: `${(r.earned / max) * 100}%`,
-                    backgroundColor: r.earned > 0 ? BRAND_GREEN : undefined,
-                  }}
-                />
-              </div>
-              {r.bidding > 0 && (
-                <div className="mt-1 flex items-center gap-2">
-                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-50">
-                    <div
-                      className="h-full rounded-full bg-amber-400"
-                      style={{ width: `${(r.bidding / max) * 100}%` }}
-                    />
-                  </div>
-                  <span className="shrink-0 text-[11px] tabular-nums text-zinc-950">
-                    {formatVND(r.bidding)}
-                  </span>
+              <div className="mt-1.5 grid grid-cols-[minmax(0,1fr)_8.5rem] items-center gap-3">
+                <div className="h-2 overflow-hidden rounded-full bg-zinc-100">
+                  <div
+                    className="h-full rounded-full bg-amber-400"
+                    style={{ width: `${(r.bidding / max) * 100}%` }}
+                  />
                 </div>
-              )}
+                <span className="text-right text-[13px] font-medium tabular-nums text-zinc-900">
+                  {formatVND(r.bidding)}
+                </span>
+              </div>
             </li>
             );
           })}

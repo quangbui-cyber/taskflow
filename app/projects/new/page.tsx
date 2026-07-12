@@ -17,8 +17,9 @@ export default async function NewProjectPage() {
       orderBy: { name: "asc" },
     }),
     prisma.account.findMany({
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
+      where: { userId: { not: null } },
+      select: { id: true, user: { select: { name: true } } },
+      orderBy: { user: { name: "asc" } },
     }),
   ]);
 
@@ -31,10 +32,16 @@ export default async function NewProjectPage() {
           <div>
             <h1 className="tf-page-title">Tạo dự án mới</h1>
             <p className="tf-page-subtitle">
-              Client và Account chọn từ danh mục có sẵn.
+              Client và Account chọn từ Cài đặt.
             </p>
           </div>
-          <NewProjectForm clients={clients} accounts={accounts} />
+          <NewProjectForm
+            clients={clients}
+            accounts={accounts.map((account) => ({
+              id: account.id,
+              name: account.user?.name ?? "",
+            }))}
+          />
         </div>
       </main>
     </div>

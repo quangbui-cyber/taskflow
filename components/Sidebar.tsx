@@ -9,7 +9,6 @@ import {
   Menu,
   Plus,
   Settings,
-  Tags,
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
@@ -26,8 +25,14 @@ type ActiveSection =
   | "notifications"
   | "team"
   | "revenue"
-  | "catalog"
   | "admin";
+
+const ARCHIVED_PROJECT_GROUPS = [
+  { status: "DONE", label: "Done", dotClassName: "bg-emerald-500" },
+  { status: "FAIL", label: "Fail", dotClassName: "bg-red-500" },
+  { status: "CANCEL", label: "Cancel", dotClassName: "bg-zinc-400" },
+  { status: "PENDING", label: "Pending", dotClassName: "bg-violet-500" },
+] as const;
 
 function MenuLink({
   href,
@@ -130,8 +135,46 @@ function ArchivedProjectLinks({
           aria-hidden="true"
         />
       </summary>
-      <div className="mt-1 border-l border-zinc-200 pl-2">
-        <ProjectLinks projects={projects} activeProjectId={activeProjectId} />
+      <div className="mt-1 space-y-1 border-l border-zinc-200 pl-2">
+        {ARCHIVED_PROJECT_GROUPS.map((group) => {
+          const groupProjects = projects.filter(
+            (project) => project.status === group.status
+          );
+          if (groupProjects.length === 0) return null;
+          const containsActiveProject = groupProjects.some(
+            (project) => project.id === activeProjectId
+          );
+
+          return (
+            <details
+              key={group.status}
+              className="group/archive-status"
+              open={containsActiveProject}
+            >
+              <summary className="flex min-h-8 cursor-pointer list-none items-center gap-2 rounded-[6px] px-2 py-1.5 text-xs text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800">
+                <span
+                  className={`h-2 w-2 shrink-0 rounded-full ${group.dotClassName}`}
+                  aria-hidden="true"
+                />
+                <span className="flex-1 font-medium">{group.label}</span>
+                <span className="text-[10px] tabular-nums text-zinc-400">
+                  {groupProjects.length}
+                </span>
+                <ChevronDown
+                  size={13}
+                  className="text-zinc-400 transition-transform group-open/archive-status:rotate-180"
+                  aria-hidden="true"
+                />
+              </summary>
+              <div className="ml-2 mt-1 border-l border-zinc-200 pl-2">
+                <ProjectLinks
+                  projects={groupProjects}
+                  activeProjectId={activeProjectId}
+                />
+              </div>
+            </details>
+          );
+        })}
       </div>
     </details>
   );
@@ -204,8 +247,7 @@ export default async function Sidebar({
             {user.role === "ADMIN" && (
               <div className="mt-6 border-t border-zinc-200 pt-4">
                 <p className="mb-2 px-3 text-xs font-semibold uppercase text-zinc-400">Quản trị</p>
-                <MenuLink href="/admin/catalog" label="Danh mục kinh doanh" icon={Tags} active={activeSection === "catalog"} />
-                <MenuLink href="/admin" label="Nhân sự & nhóm" icon={Settings} active={activeSection === "admin"} />
+                <MenuLink href="/admin" label="Cài đặt" icon={Settings} active={activeSection === "admin"} />
               </div>
             )}
           </div>
@@ -265,8 +307,7 @@ export default async function Sidebar({
             />
             {user.role === "ADMIN" && (
               <div className="mt-3 border-t border-zinc-200 pt-3">
-                <MenuLink href="/admin/catalog" label="Danh mục kinh doanh" icon={Tags} active={activeSection === "catalog"} />
-                <MenuLink href="/admin" label="Nhân sự & nhóm" icon={Settings} active={activeSection === "admin"} />
+                <MenuLink href="/admin" label="Cài đặt" icon={Settings} active={activeSection === "admin"} />
               </div>
             )}
             <div className="mt-3 flex items-center gap-3 border-t border-zinc-200 px-2 pt-3">

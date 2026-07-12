@@ -12,20 +12,7 @@ import {
 } from "@/app/actions/tasks";
 import { PRIORITIES, STATUSES, type MemberDTO, type TaskDTO } from "@/lib/types";
 import { avatarClass } from "@/lib/avatar";
-
-/** Chuyển ISO string sang giá trị cho input datetime-local (chỉ đến giờ, phút = 00) */
-function toDatetimeLocal(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:00`;
-}
-
-/** Làm tròn giá trị datetime-local về đầu giờ rồi trả ISO tuyệt đối */
-function roundToHour(local: string): string {
-  const d = new Date(local);
-  d.setMinutes(0, 0, 0);
-  return d.toISOString();
-}
+import DeadlineField, { toDeadlineLocalValue } from "@/components/DeadlineField";
 
 export default function TaskModal({
   task,
@@ -45,7 +32,7 @@ export default function TaskModal({
   const [priority, setPriority] = useState(task.priority);
   const [assigneeId, setAssigneeId] = useState(task.assigneeId ?? "");
   const [dueDate, setDueDate] = useState(
-    task.dueDate ? toDatetimeLocal(task.dueDate) : ""
+    task.dueDate ? toDeadlineLocalValue(task.dueDate) : ""
   );
   const [saving, startSaving] = useTransition();
   const [following, startFollowing] = useTransition();
@@ -78,8 +65,7 @@ export default function TaskModal({
         assigneeId: assigneeId || null,
         // Gửi thời điểm tuyệt đối (ISO) tính theo múi giờ trình duyệt,
         // để server (chạy UTC trên Vercel) lưu đúng, không lệch giờ.
-        // Làm tròn về đầu giờ (phút = 0) vì app chỉ dùng mốc giờ.
-        dueDate: dueDate ? roundToHour(dueDate) : null,
+        dueDate: dueDate ? new Date(dueDate).toISOString() : null,
       });
       onClose();
     });
@@ -242,18 +228,12 @@ export default function TaskModal({
               </select>
             </label>
 
-            <label className="block">
-              <span className="text-xs font-medium text-zinc-500">
-                Hạn chót (ngày & giờ)
-              </span>
-              <input
-                type="datetime-local"
-                step={3600}
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="tf-field mt-1 !min-h-9 !py-1.5"
-              />
-            </label>
+            <DeadlineField
+              label="Hạn chót"
+              value={dueDate}
+              onChange={setDueDate}
+              className="col-span-2"
+            />
           </div>
 
           <label className="block">

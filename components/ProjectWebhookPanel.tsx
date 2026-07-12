@@ -132,7 +132,7 @@ export default function ProjectWebhookPanel({
             </button>
           </div>
           <p className="mt-2 text-xs leading-5 text-zinc-500">
-            URL được giữ kín. App gửi tin khi có công việc mới hoặc công việc hoàn thành.
+            URL được giữ kín. Tin nhắn gồm trạng thái, người được giao và link mở job.
           </p>
         </div>
 

@@ -1,0 +1,9 @@
+.env
+.env.*
+.git
+.next
+node_modules
+*.tsbuildinfo
+admin-accounts-*.png
+audit-navigation
+design-qa.md

@@ -15,16 +15,18 @@ export default async function ProjectPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; task?: string }>;
 }) {
   const { id } = await params;
-  const { tab } = await searchParams;
+  const { tab, task: requestedTaskId } = await searchParams;
   const user = await requireUser();
   const project = await prisma.project.findUnique({
     where: { id },
     include: {
       client: { select: { id: true, name: true } },
-      account: { select: { id: true, name: true } },
+      account: {
+        select: { id: true, name: true, user: { select: { name: true } } },
+      },
       members: {
         include: { user: { select: { id: true, name: true, email: true } } },
         orderBy: { createdAt: "asc" },
@@ -48,7 +50,7 @@ export default async function ProjectPage({
   const isMember = project.members.some((m) => m.userId === user.id);
   if (!isMember) redirect("/");
 
-  const [sidebarProjects, clients, accounts, availableUsers] = await Promise.all([
+  const [sidebarProjects, clients, accounts, availableUsers, memberGroups] = await Promise.all([
     prisma.project.findMany({
       where: { members: { some: { userId: user.id } } },
       select: { id: true, name: true, color: true, status: true },
@@ -59,12 +61,34 @@ export default async function ProjectPage({
       orderBy: { name: "asc" },
     }),
     prisma.account.findMany({
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
+      where: {
+        OR: [
+          { userId: { not: null } },
+          ...(project.accountId ? [{ id: project.accountId }] : []),
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        userId: true,
+        user: { select: { name: true } },
+      },
+      orderBy: { user: { name: "asc" } },
     }),
     prisma.user.findMany({
       where: { memberships: { none: { projectId: id } } },
       select: { id: true, name: true, email: true, role: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.memberGroup.findMany({
+      include: {
+        members: {
+          include: {
+            user: { select: { id: true, name: true, email: true } },
+          },
+          orderBy: { user: { name: "asc" } },
+        },
+      },
       orderBy: { name: "asc" },
     }),
   ]);
@@ -97,6 +121,9 @@ export default async function ProjectPage({
   const isOwner = project.ownerId === user.id;
   const activeTab = tab === "webhook" ? "webhook" : "tasks";
   const canManageWebhook = isOwner || user.role === "ADMIN";
+  const initialTaskId = project.tasks.some((task) => task.id === requestedTaskId)
+    ? requestedTaskId ?? null
+    : null;
 
   return (
     <div className="tf-shell">
@@ -132,10 +159,16 @@ export default async function ProjectPage({
                   clientId: project.clientId,
                   clientName: project.client?.name ?? null,
                   accountId: project.accountId,
-                  accountName: project.account?.name ?? null,
+                  accountName:
+                    project.account?.user?.name ?? project.account?.name ?? null,
                 }}
                 clients={clients}
-                accounts={accounts}
+                accounts={accounts.map((account) => ({
+                  id: account.id,
+                  name:
+                    account.user?.name ??
+                    `${account.name} (dữ liệu cũ - cần liên kết)`,
+                }))}
                 canEdit={isOwner || user.role === "ADMIN"}
                 showRevenue={canManageProjects(user.role)}
               />
@@ -143,6 +176,20 @@ export default async function ProjectPage({
                 projectId={project.id}
                 members={members}
                 availableUsers={availableUsers}
+                memberGroups={memberGroups
+                  .map((group) => ({
+                    id: group.id,
+                    name: group.name,
+                    members: group.members
+                      .map((member) => member.user)
+                      .filter(
+                        (groupUser) =>
+                          !project.members.some(
+                            (projectMember) => projectMember.userId === groupUser.id
+                          )
+                      ),
+                  }))
+                  .filter((group) => group.members.length > 0)}
                 ownerId={project.ownerId}
                 currentUserId={user.id}
               />
@@ -191,6 +238,7 @@ export default async function ProjectPage({
             tasks={tasks}
             members={members}
             currentUserId={user.id}
+            initialTaskId={initialTaskId}
           />
         )}
       </main>

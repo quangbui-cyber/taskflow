@@ -87,7 +87,7 @@ export default function NewProjectForm({
       </div>
       {clients.length === 0 && accounts.length === 0 && (
         <p className="text-xs text-zinc-400">
-          Chưa có Client/Account nào. Admin có thể thêm trong mục Client & Account.
+          Chưa có Client/Account nào. Admin có thể thêm trong Cài đặt.
         </p>
       )}
       {state.error && (

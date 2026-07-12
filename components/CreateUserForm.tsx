@@ -73,7 +73,7 @@ export default function CreateUserForm() {
         className="tf-button-primary"
       >
         <UserPlus size={16} aria-hidden="true" />
-        {pending ? "Đang tạo..." : "Tạo tài khoản"}
+        {pending ? "Đang lưu..." : "Lưu thay đổi"}
       </button>
     </form>
   );

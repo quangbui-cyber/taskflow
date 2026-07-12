@@ -41,11 +41,13 @@ export default function Board({
   tasks: serverTasks,
   members,
   currentUserId,
+  initialTaskId,
 }: {
   projectId: string;
   tasks: TaskDTO[];
   members: MemberDTO[];
   currentUserId: string;
+  initialTaskId?: string | null;
 }) {
   const [tasks, moveTaskOptimistically] = useOptimistic(
     serverTasks,
@@ -59,7 +61,11 @@ export default function Board({
           : t
       )
   );
-  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  const [openTaskId, setOpenTaskId] = useState<string | null>(
+    initialTaskId && serverTasks.some((task) => task.id === initialTaskId)
+      ? initialTaskId
+      : null
+  );
   const [, startTransition] = useTransition();
 
   const columns = STATUSES.map((s) => ({

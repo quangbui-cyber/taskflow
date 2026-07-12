@@ -49,9 +49,12 @@ export function hasTime(dueDate: Date): boolean {
   return vn.getUTCHours() !== 0 || vn.getUTCMinutes() !== 0;
 }
 
-/** Hiển thị giờ Việt Nam, chỉ giờ không phút, ví dụ 9h, 16h */
+/** Hiển thị giờ Việt Nam theo giờ:phút, ví dụ 09:00, 16:30 */
 export function formatHour(dueDate: Date): string {
-  return `${toVN(dueDate).getUTCHours()}h`;
+  const vn = toVN(dueDate);
+  const hour = String(vn.getUTCHours()).padStart(2, "0");
+  const minute = String(vn.getUTCMinutes()).padStart(2, "0");
+  return `${hour}:${minute}`;
 }
 
 export function isOverdue(dueDate: Date): boolean {

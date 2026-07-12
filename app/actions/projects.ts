@@ -9,7 +9,7 @@ import {
   validateGoogleChatWebhookUrl,
 } from "@/lib/googleChat";
 
-export type ActionState = { error?: string };
+export type ActionState = { error?: string; success?: string };
 
 const PROJECT_COLORS = [
   "#6366f1",
@@ -39,6 +39,19 @@ function parseRevenue(raw: string): number | null {
   return value;
 }
 
+async function validAccount(accountId: string | null) {
+  if (!accountId) return true;
+  return Boolean(
+    await prisma.account.findFirst({
+      where: {
+        id: accountId,
+        userId: { not: null },
+      },
+      select: { id: true },
+    })
+  );
+}
+
 export async function createProject(
   _prev: ActionState,
   formData: FormData
@@ -55,6 +68,9 @@ export async function createProject(
 
   if (!name) return { error: "Tên project không được để trống." };
   if (revenue === null) return { error: "Doanh thu không hợp lệ." };
+  if (!(await validAccount(accountId))) {
+    return { error: "Account chưa liên kết user hoặc chưa được gán Team." };
+  }
   const color =
     PROJECT_COLORS[Math.floor(Math.random() * PROJECT_COLORS.length)];
 
@@ -98,6 +114,9 @@ export async function updateProject(
   }
   if (!name) return { error: "Tên project không được để trống." };
   if (revenue === null) return { error: "Doanh thu không hợp lệ." };
+  if (accountId !== project.accountId && !(await validAccount(accountId))) {
+    return { error: "Account chưa liên kết user hoặc chưa được gán Team." };
+  }
   if (!PROJECT_STATUS_KEYS.includes(status)) {
     return { error: "Tình trạng không hợp lệ." };
   }
@@ -236,6 +255,51 @@ export async function addMember(
 
   revalidatePath(`/projects/${projectId}`);
   return {};
+}
+
+export async function addMemberGroup(
+  projectId: string,
+  groupId: string
+): Promise<ActionState> {
+  const user = await requireUser();
+  const membership = await getMembership(projectId, user.id);
+  if (!membership) return { error: "Bạn không thuộc project này." };
+
+  const group = await prisma.memberGroup.findUnique({
+    where: { id: groupId },
+    select: {
+      name: true,
+      members: { select: { userId: true } },
+    },
+  });
+  if (!group) return { error: "Nhóm không tồn tại." };
+  if (group.members.length === 0) return { error: "Nhóm chưa có thành viên." };
+
+  const memberIds = group.members.map((member) => member.userId);
+  const existingMembers = await prisma.projectMember.findMany({
+    where: { projectId, userId: { in: memberIds } },
+    select: { userId: true },
+  });
+  const existingIds = new Set(existingMembers.map((member) => member.userId));
+  const newMemberIds = memberIds.filter((userId) => !existingIds.has(userId));
+
+  if (newMemberIds.length === 0) {
+    return { error: `Tất cả thành viên nhóm "${group.name}" đã có trong project.` };
+  }
+
+  await prisma.projectMember.createMany({
+    data: newMemberIds.map((userId) => ({
+      projectId,
+      userId,
+      role: "member",
+    })),
+    skipDuplicates: true,
+  });
+
+  revalidatePath(`/projects/${projectId}`);
+  return {
+    success: `Đã thêm ${newMemberIds.length} người từ nhóm "${group.name}".`,
+  };
 }
 
 export async function removeMember(projectId: string, memberUserId: string) {

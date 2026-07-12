@@ -14,19 +14,19 @@ import {
 
 const EARNED = ["ON_PROCESS", "DONE"];
 const LOST = ["CANCEL", "FAIL"];
-const BRAND_GREEN = "#a8d431";
-const BRAND_GREEN_DARK = "#587216";
-const BRAND_GREEN_SOFT = "#f7fbe9";
+const REVENUE_BLUE = "#2563eb";
+const REVENUE_BLUE_DARK = "#1d4ed8";
+const REVENUE_BLUE_SOFT = "#eff6ff";
 
 function MixLegend({
   dotClass,
-  brand = false,
+  revenue = false,
   label,
   value,
   count,
 }: {
   dotClass: string;
-  brand?: boolean;
+  revenue?: boolean;
   label: string;
   value: number;
   count: number;
@@ -35,11 +35,11 @@ function MixLegend({
     <div>
       <p
         className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-zinc-500"
-        style={brand ? { color: BRAND_GREEN_DARK } : undefined}
+        style={revenue ? { color: REVENUE_BLUE_DARK } : undefined}
       >
         <span
           className={`h-2.5 w-2.5 rounded-full ${dotClass}`}
-          style={brand ? { backgroundColor: BRAND_GREEN } : undefined}
+          style={revenue ? { backgroundColor: REVENUE_BLUE } : undefined}
           aria-hidden="true"
         />
         {label}
@@ -141,11 +141,14 @@ export default async function RevenuePage() {
             <div className="flex items-center gap-3">
               <span
                 className="flex h-10 w-10 items-center justify-center rounded-[8px]"
-                style={{ backgroundColor: BRAND_GREEN_SOFT, color: BRAND_GREEN_DARK }}
+                style={{
+                  backgroundColor: REVENUE_BLUE_SOFT,
+                  color: REVENUE_BLUE_DARK,
+                }}
               >
                 <CircleDollarSign size={20} aria-hidden="true" />
               </span>
-              <h1 className="tf-page-title" style={{ color: BRAND_GREEN_DARK }}>
+              <h1 className="tf-page-title" style={{ color: REVENUE_BLUE_DARK }}>
                 Doanh số
               </h1>
             </div>
@@ -168,7 +171,7 @@ export default async function RevenuePage() {
                     <div
                       style={{
                         width: `${(earned / totalMix) * 100}%`,
-                        backgroundColor: BRAND_GREEN,
+                        backgroundColor: REVENUE_BLUE,
                       }}
                       title={`Doanh thu: ${formatVND(earned)}`}
                     />
@@ -198,7 +201,7 @@ export default async function RevenuePage() {
                 <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                   <MixLegend
                     dotClass=""
-                    brand
+                    revenue
                     label="Doanh thu"
                     value={earned}
                     count={countOf(EARNED)}

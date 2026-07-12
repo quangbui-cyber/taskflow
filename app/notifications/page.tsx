@@ -1,17 +1,46 @@
 import { Bell } from "lucide-react";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
 import NotificationList from "@/components/NotificationList";
 
-export default async function NotificationsPage() {
-  const user = await requireUser();
+const PAGE_SIZE = 20;
 
-  const [notifications, sidebarProjects] = await Promise.all([
-    prisma.notification.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: "desc" },
-      take: 100,
+type NotificationView = "all" | "unread" | "archive";
+
+function daysAgo(days: number) {
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+}
+
+export default async function NotificationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string; page?: string }>;
+}) {
+  const user = await requireUser();
+  const params = await searchParams;
+  const view: NotificationView =
+    params.view === "unread" || params.view === "archive" ? params.view : "all";
+  const requestedPage = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
+  const archiveCutoff = daysAgo(7);
+  const deletionCutoff = daysAgo(30);
+  await prisma.notification.deleteMany({
+    where: { createdAt: { lt: deletionCutoff } },
+  });
+  const notificationWhere = {
+    userId: user.id,
+    createdAt:
+      view === "archive"
+        ? { gte: deletionCutoff, lt: archiveCutoff }
+        : { gte: archiveCutoff },
+    ...(view === "unread" ? { read: false } : {}),
+  };
+
+  const [totalNotifications, totalUnread, sidebarProjects] = await Promise.all([
+    prisma.notification.count({ where: notificationWhere }),
+    prisma.notification.count({
+      where: { userId: user.id, read: false, createdAt: { gte: archiveCutoff } },
     }),
     prisma.project.findMany({
       where: { members: { some: { userId: user.id } } },
@@ -19,6 +48,18 @@ export default async function NotificationsPage() {
       orderBy: { createdAt: "desc" },
     }),
   ]);
+  const totalPages = Math.max(1, Math.ceil(totalNotifications / PAGE_SIZE));
+  if (requestedPage > totalPages) {
+    const query = view === "all" ? "" : `?view=${view}`;
+    redirect(`/notifications${query}`);
+  }
+
+  const notifications = await prisma.notification.findMany({
+    where: notificationWhere,
+    orderBy: { createdAt: "desc" },
+    skip: (requestedPage - 1) * PAGE_SIZE,
+    take: PAGE_SIZE,
+  });
 
   return (
     <div className="tf-shell">
@@ -43,14 +84,20 @@ export default async function NotificationsPage() {
           </div>
 
           <NotificationList
+            key={`${view}-${requestedPage}`}
+            activeView={view}
+            currentPage={requestedPage}
             initialNotifications={notifications.map((notification) => ({
               id: notification.id,
               type: notification.type,
               message: notification.message,
               projectId: notification.projectId,
+              taskId: notification.taskId,
               read: notification.read,
               createdAt: notification.createdAt.toISOString(),
             }))}
+            totalPages={totalPages}
+            totalUnread={totalUnread}
           />
         </div>
       </main>

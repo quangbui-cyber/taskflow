@@ -1,8 +1,13 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { Plus, UserPlus, X } from "lucide-react";
-import { addMember, removeMember, type ActionState } from "@/app/actions/projects";
+import { useActionState, useState, useTransition } from "react";
+import { Plus, UserPlus, UsersRound, X } from "lucide-react";
+import {
+  addMember,
+  addMemberGroup,
+  removeMember,
+  type ActionState,
+} from "@/app/actions/projects";
 import type { MemberDTO } from "@/lib/types";
 import { avatarClass } from "@/lib/avatar";
 
@@ -13,16 +18,24 @@ type AvailableUser = {
   role: string;
 };
 
+type MemberGroupOption = {
+  id: string;
+  name: string;
+  members: { id: string; name: string; email: string }[];
+};
+
 export default function MembersBar({
   projectId,
   members,
   availableUsers,
+  memberGroups,
   ownerId,
   currentUserId,
 }: {
   projectId: string;
   members: MemberDTO[];
   availableUsers: AvailableUser[];
+  memberGroups: MemberGroupOption[];
   ownerId: string;
   currentUserId: string;
 }) {
@@ -30,6 +43,10 @@ export default function MembersBar({
   const [inviteQuery, setInviteQuery] = useState("");
   const [selectedInviteeId, setSelectedInviteeId] = useState("");
   const [inviteFocused, setInviteFocused] = useState(false);
+  const [selectedGroupId, setSelectedGroupId] = useState("");
+  const [groupMessage, setGroupMessage] = useState("");
+  const [groupError, setGroupError] = useState(false);
+  const [groupPending, startGroupTransition] = useTransition();
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     async (prev, formData) => {
       const result = await addMember(prev, formData);
@@ -206,6 +223,58 @@ export default function MembersBar({
               <p className="text-xs text-red-600">{state.error}</p>
             )}
           </form>
+
+          <div className="space-y-2 border-t border-zinc-100 pt-3">
+            <div className="flex items-center gap-2 text-xs font-medium text-zinc-500">
+              <UsersRound size={14} aria-hidden="true" />
+              Thêm nhóm cố định
+            </div>
+            {memberGroups.length > 0 ? (
+              <div className="flex gap-2">
+                <select
+                  value={selectedGroupId}
+                  onChange={(event) => {
+                    setSelectedGroupId(event.target.value);
+                    setGroupMessage("");
+                  }}
+                  className="tf-field !min-h-9 !py-1.5"
+                  aria-label="Chọn nhóm cố định"
+                >
+                  <option value="">Chọn nhóm</option>
+                  {memberGroups.map((group) => (
+                    <option key={group.id} value={group.id}>
+                      {group.name} · thêm {group.members.length} người
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  disabled={groupPending || !selectedGroupId}
+                  onClick={() => {
+                    startGroupTransition(async () => {
+                      const result = await addMemberGroup(projectId, selectedGroupId);
+                      setGroupError(Boolean(result.error));
+                      setGroupMessage(result.error ?? result.success ?? "");
+                      if (result.success) setSelectedGroupId("");
+                    });
+                  }}
+                  className="tf-button-secondary !min-h-9 shrink-0 !px-3 !py-1.5"
+                >
+                  <UsersRound size={15} aria-hidden="true" />
+                  Thêm nhóm
+                </button>
+              </div>
+            ) : (
+              <p className="text-xs text-zinc-400">
+                Chưa có nhóm phù hợp hoặc mọi người trong nhóm đã ở project.
+              </p>
+            )}
+            {groupMessage && (
+              <p className={`text-xs ${groupError ? "text-red-600" : "text-brand-800"}`}>
+                {groupMessage}
+              </p>
+            )}
+          </div>
         </div>
       )}
     </div>

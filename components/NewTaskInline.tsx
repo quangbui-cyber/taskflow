@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { createTask, type ActionState } from "@/app/actions/tasks";
 import { PRIORITIES, type MemberDTO } from "@/lib/types";
+import DeadlineField from "@/components/DeadlineField";
 
 export default function NewTaskInline({
   projectId,
@@ -96,14 +97,9 @@ export default function NewTaskInline({
         </label>
       </div>
 
-      <label className="block">
-        <span className="text-xs font-medium text-zinc-500">Hạn chót</span>
-        <input
-          name="dueDate"
-          type="datetime-local"
-          className="tf-field mt-1"
-        />
-      </label>
+      <div>
+        <DeadlineField name="dueDate" />
+      </div>
 
       <label className="block">
         <span className="text-xs font-medium text-zinc-500">Mô tả</span>

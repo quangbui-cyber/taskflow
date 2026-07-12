@@ -48,6 +48,7 @@ export async function deleteUser(userId: string): Promise<AdminState> {
     where: { id: userId },
     select: {
       _count: { select: { ownedProjects: true, createdTasks: true } },
+      accountProfile: { select: { id: true } },
     },
   });
   if (!user) return { error: "Tài khoản không tồn tại." };
@@ -63,6 +64,12 @@ export async function deleteUser(userId: string): Promise<AdminState> {
         "Không thể xoá tài khoản đã tạo task vì sẽ làm mất dữ liệu công việc. Hãy giữ tài khoản hoặc bổ sung luồng chuyển dữ liệu trước.",
     };
   }
+  if (user.accountProfile) {
+    return {
+      error:
+        "Không thể xoá user đang được dùng làm Account. Hãy xoá Account trong Cài đặt trước.",
+    };
+  }
 
   await prisma.user.delete({ where: { id: userId } });
   revalidatePath("/admin");
@@ -70,15 +77,34 @@ export async function deleteUser(userId: string): Promise<AdminState> {
 }
 
 /** Gán quản lý trực tiếp cho một nhân viên (managerId = null để bỏ gán) */
-export async function setManager(userId: string, managerId: string | null) {
+export async function setManager(
+  userId: string,
+  managerId: string | null
+): Promise<AdminState> {
   await requireAdmin();
-  if (managerId === userId) return; // không tự quản lý chính mình
+  if (managerId === userId) {
+    return { error: "Một tài khoản không thể tự quản lý chính mình." };
+  }
+
+  const targetUser = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true },
+  });
+  if (!targetUser) return { error: "Tài khoản không tồn tại." };
 
   if (managerId) {
+    const manager = await prisma.user.findUnique({
+      where: { id: managerId },
+      select: { id: true },
+    });
+    if (!manager) return { error: "Người quản lý không tồn tại." };
+
     // Chống vòng lặp: đi ngược chuỗi quản lý từ managerId, không được gặp lại userId
     let current: string | null = managerId;
     while (current) {
-      if (current === userId) return; // sẽ tạo vòng lặp — từ chối
+      if (current === userId) {
+        return { error: "Không thể lưu vì quan hệ quản lý sẽ tạo thành vòng lặp." };
+      }
       const u: { managerId: string | null } | null =
         await prisma.user.findUnique({
           where: { id: current },
@@ -91,6 +117,7 @@ export async function setManager(userId: string, managerId: string | null) {
   await prisma.user.update({ where: { id: userId }, data: { managerId } });
   revalidatePath("/admin");
   revalidatePath("/team");
+  return { success: "Đã lưu thay đổi người quản lý." };
 }
 
 export async function resetPassword(
@@ -110,4 +137,98 @@ export async function resetPassword(
 
   revalidatePath("/admin");
   return { success: "Đã đổi mật khẩu." };
+}
+
+function memberIdsFromForm(formData: FormData) {
+  return [...new Set(formData.getAll("memberIds").map(String).filter(Boolean))];
+}
+
+async function validMemberIds(memberIds: string[]) {
+  if (memberIds.length === 0) return [];
+  const users = await prisma.user.findMany({
+    where: { id: { in: memberIds } },
+    select: { id: true },
+  });
+  return users.map((user) => user.id);
+}
+
+export async function createMemberGroup(
+  _prev: AdminState,
+  formData: FormData
+): Promise<AdminState> {
+  await requireAdmin();
+  const name = String(formData.get("name") ?? "").trim();
+  const memberIds = memberIdsFromForm(formData);
+  if (!name) return { error: "Tên nhóm không được để trống." };
+  if (memberIds.length === 0) return { error: "Nhóm cần có ít nhất một thành viên." };
+
+  const existing = await prisma.memberGroup.findUnique({ where: { name } });
+  if (existing) return { error: "Tên nhóm này đã tồn tại." };
+  const validIds = await validMemberIds(memberIds);
+  if (validIds.length !== memberIds.length) {
+    return { error: "Danh sách thành viên có tài khoản không hợp lệ." };
+  }
+
+  await prisma.memberGroup.create({
+    data: {
+      name,
+      members: { create: validIds.map((userId) => ({ userId })) },
+    },
+  });
+  revalidatePath("/admin");
+  return { success: `Đã tạo nhóm "${name}".` };
+}
+
+export async function updateMemberGroup(
+  groupId: string,
+  name: string,
+  memberIds: string[]
+): Promise<AdminState> {
+  await requireAdmin();
+  const normalizedName = name.trim();
+  const uniqueMemberIds = [...new Set(memberIds.filter(Boolean))];
+  if (!normalizedName) return { error: "Tên nhóm không được để trống." };
+  if (uniqueMemberIds.length === 0) {
+    return { error: "Nhóm cần có ít nhất một thành viên." };
+  }
+
+  const [group, duplicate, validIds] = await Promise.all([
+    prisma.memberGroup.findUnique({ where: { id: groupId }, select: { id: true } }),
+    prisma.memberGroup.findFirst({
+      where: { name: normalizedName, id: { not: groupId } },
+      select: { id: true },
+    }),
+    validMemberIds(uniqueMemberIds),
+  ]);
+  if (!group) return { error: "Nhóm không tồn tại." };
+  if (duplicate) return { error: "Tên nhóm này đã tồn tại." };
+  if (validIds.length !== uniqueMemberIds.length) {
+    return { error: "Danh sách thành viên có tài khoản không hợp lệ." };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.memberGroup.update({
+      where: { id: groupId },
+      data: { name: normalizedName },
+    });
+    await tx.memberGroupMember.deleteMany({ where: { groupId } });
+    await tx.memberGroupMember.createMany({
+      data: validIds.map((userId) => ({ groupId, userId })),
+    });
+  });
+  revalidatePath("/admin");
+  return { success: `Đã cập nhật nhóm "${normalizedName}".` };
+}
+
+export async function deleteMemberGroup(groupId: string): Promise<AdminState> {
+  await requireAdmin();
+  const group = await prisma.memberGroup.findUnique({
+    where: { id: groupId },
+    select: { name: true },
+  });
+  if (!group) return { error: "Nhóm không tồn tại." };
+
+  await prisma.memberGroup.delete({ where: { id: groupId } });
+  revalidatePath("/admin");
+  return { success: `Đã xoá nhóm "${group.name}".` };
 }

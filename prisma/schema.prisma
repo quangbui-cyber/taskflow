@@ -8,22 +8,24 @@ datasource db {
 }
 
 model User {
-  id            String          @id @default(cuid())
-  email         String          @unique
-  name          String
-  passwordHash  String
-  role          String          @default("USER") // "ADMIN" | "ACCOUNT" | "USER"
-  managerId     String? // người quản lý trực tiếp
-  manager       User?           @relation("TeamManager", fields: [managerId], references: [id], onDelete: SetNull)
-  reports       User[]          @relation("TeamManager") // nhân viên dưới quyền
-  createdAt     DateTime        @default(now())
-  memberships   ProjectMember[]
-  ownedProjects Project[]       @relation("ProjectOwner")
-  assignedTasks Task[]          @relation("TaskAssignee")
-  createdTasks  Task[]          @relation("TaskCreator")
-  comments      Comment[]
-  notifications Notification[]
-  taskFollows   TaskFollower[]
+  id               String              @id @default(cuid())
+  email            String              @unique
+  name             String
+  passwordHash     String
+  role             String              @default("USER") // "ADMIN" | "ACCOUNT" | "USER"
+  managerId        String? // người quản lý trực tiếp
+  manager          User?               @relation("TeamManager", fields: [managerId], references: [id], onDelete: SetNull)
+  reports          User[]              @relation("TeamManager") // nhân viên dưới quyền
+  createdAt        DateTime            @default(now())
+  memberships      ProjectMember[]
+  ownedProjects    Project[]           @relation("ProjectOwner")
+  assignedTasks    Task[]              @relation("TaskAssignee")
+  createdTasks     Task[]              @relation("TaskCreator")
+  comments         Comment[]
+  notifications    Notification[]
+  taskFollows      TaskFollower[]
+  accountProfile   Account?
+  groupMemberships MemberGroupMember[]
 }
 
 model Project {
@@ -55,11 +57,13 @@ model Client {
 
 // Danh mục account (đầu mối phụ trách) — do admin tạo sẵn
 model Account {
-  id        String     @id @default(cuid())
-  name      String     @unique
-  teamId    String?
-  team      SalesTeam? @relation(fields: [teamId], references: [id], onDelete: SetNull)
-  createdAt DateTime   @default(now())
+  id        String    @id @default(cuid())
+  name      String
+  userId    String?   @unique
+  user      User?     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  teamId    String
+  team      SalesTeam @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  createdAt DateTime  @default(now())
   projects  Project[]
 
   @@index([teamId])
@@ -71,6 +75,26 @@ model SalesTeam {
   name      String    @unique
   createdAt DateTime  @default(now())
   accounts  Account[]
+}
+
+// Nhóm nhân sự cố định để thêm nhiều người vào project trong một lần
+model MemberGroup {
+  id        String              @id @default(cuid())
+  name      String              @unique
+  createdAt DateTime            @default(now())
+  members   MemberGroupMember[]
+}
+
+model MemberGroupMember {
+  id        String      @id @default(cuid())
+  groupId   String
+  userId    String
+  group     MemberGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+
+  @@unique([groupId, userId])
+  @@index([userId])
 }
 
 model ProjectMember {
@@ -133,6 +157,8 @@ model Notification {
   createdAt DateTime @default(now())
 
   @@index([userId, read])
+  @@index([userId, createdAt])
+  @@index([createdAt])
 }
 
 model Comment {

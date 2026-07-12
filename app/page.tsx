@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   CircleHelp,
   Plus,
@@ -16,7 +17,6 @@ import {
   ARCHIVED_PROJECT_STATUS_KEYS,
   formatVND,
   isArchivedProjectStatus,
-  projectStatusInfo,
 } from "@/lib/types";
 
 type DashboardView = "overview" | "mine" | "delegated";
@@ -29,6 +29,23 @@ const DASHBOARD_VIEWS: Array<{
   { key: "mine", label: "Của tôi" },
   { key: "delegated", label: "Đã giao" },
 ];
+
+const ACTIVE_PROJECT_GROUPS = [
+  {
+    status: "ON_PROCESS",
+    label: "On Process",
+    dotClassName: "bg-blue-500",
+    barClassName: "bg-blue-500",
+    badgeClassName: "bg-blue-100 text-blue-700",
+  },
+  {
+    status: "BIDDING",
+    label: "Bidding",
+    dotClassName: "bg-amber-500",
+    barClassName: "bg-amber-500",
+    badgeClassName: "bg-amber-100 text-amber-700",
+  },
+] as const;
 
 export default async function DashboardPage({
   searchParams,
@@ -117,6 +134,10 @@ export default async function DashboardPage({
         project.name.toLocaleLowerCase("vi").includes(query) ||
         project.description?.toLocaleLowerCase("vi").includes(query))
   );
+  const groupedVisibleProjects = ACTIVE_PROJECT_GROUPS.map((group) => ({
+    ...group,
+    projects: visibleProjects.filter((project) => project.status === group.status),
+  }));
 
   const overdue = visibleAssigned.filter(
     (task) => task.dueDate && isOverdue(task.dueDate)
@@ -413,52 +434,80 @@ export default async function DashboardPage({
                 <ChevronRight size={18} className="text-zinc-400" aria-hidden="true" />
               </div>
 
-              <div className="divide-y divide-zinc-200">
-                {visibleProjects.map((project) => {
-                  const done = project.tasks.length;
-                  const total = project._count.tasks;
-                  const percent = total > 0 ? Math.round((done / total) * 100) : 0;
-                  const status = projectStatusInfo(project.status);
-                  return (
-                    <Link
-                      key={project.id}
-                      href={`/projects/${project.id}`}
-                      prefetch={false}
-                      className="group block py-6"
-                    >
-                      <div className="flex items-start gap-3">
+              <div>
+                {groupedVisibleProjects.map((group) =>
+                  group.projects.length > 0 ? (
+                    <details key={group.status} open className="group/status pt-5">
+                      <summary className="flex cursor-pointer list-none items-center gap-2 pb-1 [&::-webkit-details-marker]:hidden">
                         <span
-                          className="mt-1 h-3 w-3 shrink-0 rounded-full"
-                          style={{ backgroundColor: project.color }}
+                          className={`h-3 w-1 rounded-full ${group.dotClassName}`}
                           aria-hidden="true"
                         />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-start justify-between gap-3">
-                            <h3 className="truncate text-sm font-semibold text-zinc-900 group-hover:text-brand-700">
-                              {project.name}
-                            </h3>
-                            <span className={`tf-badge shrink-0 ${status.className}`}>{status.label}</span>
-                          </div>
-                          {showRevenue && project.revenue > 0 && (
-                            <p className="mt-4 text-sm font-semibold text-zinc-600">
-                              {formatVND(project.revenue)}
-                            </p>
-                          )}
-                          <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-zinc-200">
-                            <div
-                              className="h-full rounded-full bg-brand-400 transition-all"
-                              style={{ width: `${percent}%` }}
-                            />
-                          </div>
-                          <div className="mt-3 flex items-center justify-between gap-3 text-xs text-zinc-400">
-                            <span>{done}/{total} task hoàn thành</span>
-                            <span>{project._count.members} thành viên</span>
-                          </div>
-                        </div>
+                        <h3 className="text-xs font-semibold uppercase text-zinc-500">
+                          {group.label}
+                        </h3>
+                        <span className="text-xs text-zinc-400">
+                          {group.projects.length}
+                        </span>
+                        <ChevronDown
+                          size={15}
+                          className="ml-auto text-zinc-400 transition-transform group-open/status:rotate-180"
+                          aria-hidden="true"
+                        />
+                      </summary>
+                      <div className="divide-y divide-zinc-200">
+                        {group.projects.map((project) => {
+                          const done = project.tasks.length;
+                          const total = project._count.tasks;
+                          const percent =
+                            total > 0 ? Math.round((done / total) * 100) : 0;
+                          return (
+                            <Link
+                              key={project.id}
+                              href={`/projects/${project.id}`}
+                              prefetch={false}
+                              className="group block py-6"
+                            >
+                              <div className="flex items-start gap-3">
+                                <span
+                                  className={`mt-1 h-3 w-3 shrink-0 rounded-full ${group.dotClassName}`}
+                                  aria-hidden="true"
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <h4 className="truncate text-sm font-semibold text-zinc-900 group-hover:text-brand-700">
+                                      {project.name}
+                                    </h4>
+                                    <span
+                                      className={`tf-badge shrink-0 ${group.badgeClassName}`}
+                                    >
+                                      {group.label}
+                                    </span>
+                                  </div>
+                                  {showRevenue && project.revenue > 0 && (
+                                    <p className="mt-4 text-sm font-semibold text-zinc-600">
+                                      {formatVND(project.revenue)}
+                                    </p>
+                                  )}
+                                  <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-zinc-200">
+                                    <div
+                                      className={`h-full rounded-full transition-all ${group.barClassName}`}
+                                      style={{ width: `${percent}%` }}
+                                    />
+                                  </div>
+                                  <div className="mt-3 flex items-center justify-between gap-3 text-xs text-zinc-400">
+                                    <span>{done}/{total} task hoàn thành</span>
+                                    <span>{project._count.members} thành viên</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </Link>
+                          );
+                        })}
                       </div>
-                    </Link>
-                  );
-                })}
+                    </details>
+                  ) : null
+                )}
                 {visibleProjects.length === 0 && (
                   <p className="py-8 text-sm text-zinc-400">Không tìm thấy dự án phù hợp.</p>
                 )}

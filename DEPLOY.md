@@ -80,20 +80,23 @@ Database mới còn trống, cần tạo admin một lần. Trên **máy bạn**
 ```bash
 # macOS / Linux
 DATABASE_URL="<chuỗi-Neon>" \
+SEED_MODE="admin" \
 ADMIN_NAME="Nguyễn Văn A" \
 ADMIN_EMAIL="admin@congty.com" \
 ADMIN_PASSWORD="mật-khẩu-mạnh" \
 npm run seed
 ```
 
-Thấy dòng `✓ Tài khoản admin sẵn sàng` là xong. (Chỉ cần làm **một lần**.)
+Thấy dòng `Tài khoản Admin đã sẵn sàng` là xong. (Chỉ cần làm **một lần**.)
+
+> Không chạy `npm run seed` trên production nếu thiếu `SEED_MODE=admin`, vì chế độ mặc định sẽ xoá dữ liệu cũ và tạo lại bộ dữ liệu mẫu.
 
 ---
 
 ## Bước 5 — Bàn giao cho công ty
 
 1. Mở địa chỉ Vercel, đăng nhập bằng tài khoản admin vừa tạo.
-2. Vào **⚙️ Quản trị người dùng** (góc dưới sidebar) → tạo tài khoản cho từng nhân viên
+2. Vào **Cài đặt → Tạo tài khoản** (góc dưới sidebar) → tạo tài khoản cho từng nhân viên
    (họ tên + email + mật khẩu tạm). Gửi thông tin đăng nhập cho họ.
 3. Nhân viên đăng nhập, tạo project, thêm task, mời nhau vào project và làm việc.
 
@@ -131,7 +134,7 @@ npx prisma migrate dev --name ten_thay_doi
 
 ## Báo lên Google Chat (tuỳ chọn)
 
-Khi có **job mới** hoặc **job hoàn thành**, app gửi một tin nhắn vào group chat.
+Khi có job mới, đổi người được giao hoặc đổi trạng thái, app gửi tin nhắn kèm người được giao và link mở đúng job vào group chat.
 
 1. Mở **Google Chat** → vào **Space** (group) muốn nhận thông báo.
 2. Bấm tên Space ở đầu trang → **Apps & integrations** → **Webhooks** → **Add webhooks**.
@@ -141,7 +144,7 @@ Khi có **job mới** hoặc **job hoàn thành**, app gửi một tin nhắn v�
 
 Mỗi dự án có thể dùng một URL riêng để gửi vào một group riêng. URL được lưu kín
 trong database và chỉ chủ dự án hoặc admin được thay đổi. Lỗi gửi tin nhắn (mạng,
-webhook bị xoá...) không làm hỏng việc tạo/hoàn thành job.
+webhook bị xoá...) không làm hỏng thao tác chính trong app.
 
 > Lưu ý: webhook Google Chat chỉ gửi **một chiều** (app → group). Nhân viên trả
 > lời trong group sẽ không phản hồi ngược lại app.

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { getMembership, requireUser } from "@/lib/auth";
 import { followerIds, notify } from "@/lib/notify";
@@ -13,6 +14,36 @@ async function projectChat(projectId: string) {
     select: { name: true, googleChatWebhookUrl: true },
   });
   return project;
+}
+
+function statusLabel(status: string) {
+  return STATUSES.find((item) => item.key === status)?.label ?? status;
+}
+
+async function taskLink(projectId: string, taskId: string) {
+  const headerList = await headers();
+  const host =
+    headerList.get("x-forwarded-host") ?? headerList.get("host") ?? "localhost:3000";
+  const protocol =
+    headerList.get("x-forwarded-proto") ??
+    (host.startsWith("localhost") || host.startsWith("127.0.0.1")
+      ? "http"
+      : "https");
+  return `${protocol}://${host}/projects/${projectId}?task=${taskId}`;
+}
+
+async function sendTaskChat(
+  projectId: string,
+  taskId: string,
+  lines: string[]
+) {
+  const chat = await projectChat(projectId);
+  if (!chat?.googleChatWebhookUrl) return;
+  const url = await taskLink(projectId, taskId);
+  await sendGoogleChat(
+    chat.googleChatWebhookUrl,
+    [`*${chat.name}*`, ...lines, `<${url}|Mở job>`].join("\n")
+  );
 }
 
 export type ActionState = { error?: string };
@@ -37,6 +68,16 @@ function parseDueDate(raw: string | null): Date | null | undefined {
   if (raw === null) return null;
   const dueDate = new Date(raw);
   if (Number.isNaN(dueDate.getTime())) return undefined;
+  dueDate.setSeconds(0, 0);
+
+  const minutes = dueDate.getMinutes();
+  if (minutes < 15) dueDate.setMinutes(0);
+  else if (minutes < 45) dueDate.setMinutes(30);
+  else {
+    dueDate.setHours(dueDate.getHours() + 1);
+    dueDate.setMinutes(0);
+  }
+
   return dueDate;
 }
 
@@ -85,6 +126,7 @@ export async function createTask(
       order: (last?.order ?? 0) + 1,
       completedAt: status === "DONE" ? new Date() : null,
     },
+    include: { assignee: { select: { name: true } } },
   });
 
   if (assigneeId && assigneeId !== user.id) {
@@ -96,13 +138,12 @@ export async function createTask(
     });
   }
 
-  const chat = await projectChat(projectId);
-  if (chat?.googleChatWebhookUrl) {
-    await sendGoogleChat(
-      chat.googleChatWebhookUrl,
-      `*${chat.name}*\nCông việc mới: *${title}*\nNgười tạo: ${user.name}`
-    );
-  }
+  await sendTaskChat(projectId, task.id, [
+    `Công việc mới: *${title}*`,
+    `Trạng thái: ${statusLabel(status)}`,
+    `Người được giao: ${task.assignee?.name ?? "Chưa giao"}`,
+    `Người tạo: ${user.name}`,
+  ]);
 
   revalidatePath(`/projects/${projectId}`);
   return {};
@@ -136,7 +177,7 @@ export async function updateTask(
     data.dueDate !== undefined ? parseDueDate(data.dueDate) : undefined;
   if (data.dueDate !== undefined && dueDate === undefined) return;
 
-  await prisma.task.update({
+  const updatedTask = await prisma.task.update({
     where: { id: taskId },
     data: {
       ...(data.title !== undefined ? { title: data.title } : {}),
@@ -164,6 +205,7 @@ export async function updateTask(
           }
         : {}),
     },
+    include: { assignee: { select: { name: true } } },
   });
 
   const title = data.title ?? task.title;
@@ -195,13 +237,25 @@ export async function updateTask(
         projectId: task.projectId,
       }
     );
-    const chat = await projectChat(task.projectId);
-    if (chat?.googleChatWebhookUrl) {
-      await sendGoogleChat(
-        chat.googleChatWebhookUrl,
-        `*${chat.name}*\nĐã hoàn thành: *${title}*\nThực hiện bởi: ${actor.name}`
-      );
-    }
+  }
+
+  if (data.status !== undefined && data.status !== task.status) {
+    await sendTaskChat(task.projectId, taskId, [
+      `Cập nhật trạng thái: *${updatedTask.title}*`,
+      `Trạng thái: ${statusLabel(task.status)} → ${statusLabel(updatedTask.status)}`,
+      `Người được giao: ${updatedTask.assignee?.name ?? "Chưa giao"}`,
+      `Cập nhật bởi: ${actor.name}`,
+    ]);
+  } else if (
+    data.assigneeId !== undefined &&
+    data.assigneeId !== task.assigneeId
+  ) {
+    await sendTaskChat(task.projectId, taskId, [
+      `Cập nhật người được giao: *${updatedTask.title}*`,
+      `Trạng thái: ${statusLabel(updatedTask.status)}`,
+      `Người được giao: ${updatedTask.assignee?.name ?? "Chưa giao"}`,
+      `Cập nhật bởi: ${actor.name}`,
+    ]);
   }
 
   revalidatePath(`/projects/${task.projectId}`);
@@ -218,7 +272,7 @@ export async function moveTask(
   const actor = await assertMember(task.projectId);
   if (!STATUS_KEYS.has(status) || !Number.isFinite(order)) return;
 
-  await prisma.task.update({
+  const updatedTask = await prisma.task.update({
     where: { id: taskId },
     data: {
       status,
@@ -231,6 +285,7 @@ export async function moveTask(
             : new Date()
           : null,
     },
+    include: { assignee: { select: { name: true } } },
   });
 
   // 🔔 Hoàn thành (kéo thả vào cột Hoàn thành): báo người giao + người theo dõi
@@ -245,13 +300,15 @@ export async function moveTask(
         projectId: task.projectId,
       }
     );
-    const chat = await projectChat(task.projectId);
-    if (chat?.googleChatWebhookUrl) {
-      await sendGoogleChat(
-        chat.googleChatWebhookUrl,
-        `*${chat.name}*\nĐã hoàn thành: *${task.title}*\nThực hiện bởi: ${actor.name}`
-      );
-    }
+  }
+
+  if (status !== task.status) {
+    await sendTaskChat(task.projectId, taskId, [
+      `Cập nhật trạng thái: *${updatedTask.title}*`,
+      `Trạng thái: ${statusLabel(task.status)} → ${statusLabel(updatedTask.status)}`,
+      `Người được giao: ${updatedTask.assignee?.name ?? "Chưa giao"}`,
+      `Cập nhật bởi: ${actor.name}`,
+    ]);
   }
 
   revalidatePath(`/projects/${task.projectId}`);

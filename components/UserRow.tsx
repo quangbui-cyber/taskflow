@@ -33,7 +33,12 @@ export default function UserRow({
 }) {
   const [resetting, setResetting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [managerId, setManagerId] = useState(user.managerId ?? "");
+  const [savedManagerId, setSavedManagerId] = useState(user.managerId ?? "");
+  const [managerMessage, setManagerMessage] = useState("");
+  const [managerError, setManagerError] = useState(false);
   const [pendingAction, startTransition] = useTransition();
+  const managerChanged = managerId !== savedManagerId;
   const [state, formAction, pending] = useActionState<AdminState, FormData>(
     async (prev, formData) => {
       const result = await resetPassword(prev, formData);
@@ -59,17 +64,16 @@ export default function UserRow({
           </p>
           <p className="text-xs text-zinc-400 truncate">{user.email}</p>
         </div>
-        <label className="hidden md:flex items-center gap-1.5 text-xs text-zinc-400 shrink-0">
-          Quản lý:
+        <div className="flex flex-wrap items-center gap-1.5 text-xs text-zinc-400">
+          <span>Quản lý:</span>
           <select
-            defaultValue={user.managerId ?? ""}
+            value={managerId}
             onChange={(e) => {
-              const value = e.target.value || null;
-              startTransition(() => {
-                setManager(user.id, value);
-              });
+              setManagerId(e.target.value);
+              setManagerMessage("");
             }}
             className="rounded-[7px] border border-zinc-200 px-2 py-1.5 text-xs text-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-400/30"
+            aria-label={`Quản lý của ${user.name}`}
           >
             <option value="">— Không —</option>
             {managers
@@ -80,7 +84,23 @@ export default function UserRow({
                 </option>
               ))}
           </select>
-        </label>
+          <button
+            type="button"
+            disabled={pendingAction || !managerChanged}
+            onClick={() => {
+              startTransition(async () => {
+                const result = await setManager(user.id, managerId || null);
+                setManagerError(Boolean(result.error));
+                setManagerMessage(result.error ?? result.success ?? "");
+                if (!result.error) setSavedManagerId(managerId);
+              });
+            }}
+            className="tf-button-secondary !min-h-8 !px-2.5 !py-1 text-xs"
+          >
+            <Save size={14} aria-hidden="true" />
+            Lưu thay đổi
+          </button>
+        </div>
         <div className="hidden sm:block text-xs text-zinc-400 text-right shrink-0">
           <p>{user.projectCount} project</p>
           <p>{user.taskCount} task</p>
@@ -135,7 +155,7 @@ export default function UserRow({
             className="tf-button-primary !min-h-9 !px-3 !py-1.5"
           >
             <Save size={14} aria-hidden="true" />
-            Lưu
+            Lưu thay đổi
           </button>
         </form>
       )}
@@ -144,6 +164,11 @@ export default function UserRow({
       )}
       {deleteError && (
         <p className="mt-2 text-xs text-red-600">{deleteError}</p>
+      )}
+      {managerMessage && (
+        <p className={`mt-2 text-xs ${managerError ? "text-red-600" : "text-brand-800"}`}>
+          {managerMessage}
+        </p>
       )}
     </li>
   );

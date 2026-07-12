@@ -7,7 +7,14 @@ import PerformanceBar from "@/components/PerformanceBar";
 import TaskListItem from "@/components/TaskListItem";
 import { avatarClass } from "@/lib/avatar";
 import RoleBadge from "@/components/RoleBadge";
-import { AlertTriangle, ChevronDown, TrendingUp } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
+  Inbox,
+  TrendingUp,
+  type LucideIcon,
+} from "lucide-react";
 import {
   ARCHIVED_PROJECT_STATUS_KEYS,
   isArchivedProjectStatus,
@@ -42,6 +49,51 @@ function PerfMini({ perf }: { perf: Perf }) {
             />
           )
       )}
+    </div>
+  );
+}
+
+type TeamHighlight = {
+  names: string[];
+  value: number;
+} | null;
+
+function HighlightCard({
+  label,
+  highlight,
+  unit,
+  icon: Icon,
+  iconClassName,
+}: {
+  label: string;
+  highlight: TeamHighlight;
+  unit: string;
+  icon: LucideIcon;
+  iconClassName: string;
+}) {
+  const fullNames = highlight?.names.join(", ") ?? "";
+  const displayNames = highlight
+    ? highlight.names.length > 2
+      ? `${highlight.names.slice(0, 2).join(", ")} +${highlight.names.length - 2}`
+      : fullNames
+    : "Chưa có dữ liệu";
+
+  return (
+    <div className="tf-panel flex min-h-32 gap-3 p-4">
+      <span
+        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] ${iconClassName}`}
+      >
+        <Icon size={18} aria-hidden="true" />
+      </span>
+      <div className="min-w-0">
+        <p className="text-xs font-medium text-zinc-500">{label}</p>
+        <p className="mt-1 truncate text-base font-semibold text-zinc-950" title={fullNames}>
+          {displayNames}
+        </p>
+        <p className="mt-2 text-sm tabular-nums text-zinc-500">
+          {highlight ? `${highlight.value} ${unit}` : "—"}
+        </p>
+      </div>
     </div>
   );
 }
@@ -110,6 +162,10 @@ export default async function TeamPage() {
       const openAssigned = m.assignedTasks.filter(
         (t) => t.status !== "DONE" && !isArchivedProjectStatus(t.project.status)
       );
+      const activeAssigned = m.assignedTasks.filter(
+        (t) => !isArchivedProjectStatus(t.project.status)
+      );
+      const activePerf = computePerf(activeAssigned);
       const delegated = m.createdTasks.filter(
         (t) =>
           t.assigneeId &&
@@ -119,7 +175,7 @@ export default async function TeamPage() {
       );
       const rate =
         perf.total > 0 ? Math.round((perf.onTime / perf.total) * 100) : null;
-      return { m, perf, openAssigned, delegated, rate };
+      return { m, perf, activePerf, openAssigned, delegated, rate };
     })
     .sort((a, b) => (b.rate ?? -1) - (a.rate ?? -1));
 
@@ -129,6 +185,19 @@ export default async function TeamPage() {
   const overdueTotal = allOpenTasks.filter(
     (t) => t.dueDate && isOverdue(t.dueDate)
   ).length;
+  const findLeaders = (
+    valueOf: (row: (typeof rows)[number]) => number
+  ): TeamHighlight => {
+    const highest = Math.max(0, ...rows.map(valueOf));
+    if (highest === 0) return null;
+    return {
+      value: highest,
+      names: rows.filter((row) => valueOf(row) === highest).map((row) => row.m.name),
+    };
+  };
+  const mostAssigned = findLeaders((row) => row.openAssigned.length);
+  const mostOverdue = findLeaders((row) => row.activePerf.overdueOpen);
+  const mostOnTime = findLeaders((row) => row.perf.onTime);
 
   return (
     <div className="tf-shell">
@@ -158,6 +227,37 @@ export default async function TeamPage() {
                 <p className="text-sm text-zinc-500">quá hạn</p>
               </div>
             </div>
+          )}
+
+          {rows.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="text-sm font-semibold text-zinc-700">
+                Điểm nổi bật nhân sự
+              </h2>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <HighlightCard
+                  label="Đang nhận nhiều task nhất"
+                  highlight={mostAssigned}
+                  unit="task đang mở"
+                  icon={Inbox}
+                  iconClassName="bg-blue-50 text-blue-700"
+                />
+                <HighlightCard
+                  label="Đang trễ hạn nhiều nhất"
+                  highlight={mostOverdue}
+                  unit="task quá hạn"
+                  icon={AlertTriangle}
+                  iconClassName="bg-red-50 text-red-700"
+                />
+                <HighlightCard
+                  label="Hoàn thành đúng hạn nhiều nhất"
+                  highlight={mostOnTime}
+                  unit="task đúng hạn"
+                  icon={CheckCircle2}
+                  iconClassName="bg-emerald-50 text-emerald-700"
+                />
+              </div>
+            </section>
           )}
 
           <section className="tf-panel space-y-3 p-5">

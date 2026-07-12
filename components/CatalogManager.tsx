@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import type { CatalogState } from "@/app/actions/catalog";
 
@@ -19,7 +19,7 @@ export default function CatalogManager({
   hint: string;
   items: Item[];
   createAction: (prev: CatalogState, formData: FormData) => Promise<CatalogState>;
-  deleteAction: (id: string) => Promise<void>;
+  deleteAction: (id: string) => Promise<void | CatalogState>;
   placeholder: string;
   countLabel?: string;
 }) {
@@ -28,6 +28,8 @@ export default function CatalogManager({
     createAction,
     {}
   );
+  const [deleteError, setDeleteError] = useState("");
+  const [deleting, startDeleteTransition] = useTransition();
 
   useEffect(() => {
     if (state.success) formRef.current?.reset();
@@ -54,11 +56,17 @@ export default function CatalogManager({
           className="tf-button-primary"
         >
           <Plus size={16} aria-hidden="true" />
-          Thêm
+          Lưu thay đổi
         </button>
       </form>
       {state.error && (
         <p className="px-4 -mt-2 pb-2 text-xs text-red-600">{state.error}</p>
+      )}
+      {state.success && (
+        <p className="px-4 -mt-2 pb-2 text-xs text-brand-800">{state.success}</p>
+      )}
+      {deleteError && (
+        <p className="px-4 -mt-2 pb-2 text-xs text-red-600">{deleteError}</p>
       )}
 
       <ul className="divide-y divide-zinc-50">
@@ -75,13 +83,18 @@ export default function CatalogManager({
               {item.projectCount} {countLabel}
             </span>
             <button
+              disabled={deleting}
               onClick={() => {
                 if (
                   confirm(
                     `Xoá "${item.name}"? Các project đang gắn sẽ bỏ trống mục này (không bị xoá project).`
                   )
                 ) {
-                  deleteAction(item.id);
+                  setDeleteError("");
+                  startDeleteTransition(async () => {
+                    const result = await deleteAction(item.id);
+                    if (result && result.error) setDeleteError(result.error);
+                  });
                 }
               }}
               className="tf-icon-button !h-8 !min-h-8 !w-8 shrink-0 !border-transparent hover:!border-red-100 hover:!bg-red-50 hover:!text-red-500"
