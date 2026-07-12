@@ -7,6 +7,8 @@ import { requireAdmin } from "@/lib/auth";
 
 export type AdminState = { error?: string; success?: string };
 
+const USER_ROLES = ["ADMIN", "ACCOUNT", "USER"] as const;
+
 export async function createUser(
   _prev: AdminState,
   formData: FormData
@@ -74,6 +76,66 @@ export async function deleteUser(userId: string): Promise<AdminState> {
   await prisma.user.delete({ where: { id: userId } });
   revalidatePath("/admin");
   return { success: "Đã xoá tài khoản." };
+}
+
+export async function updateUserProfile(
+  userId: string,
+  name: string,
+  role: string
+): Promise<AdminState> {
+  const admin = await requireAdmin();
+  const normalizedName = name.trim();
+
+  if (!normalizedName) return { error: "Tên tài khoản không được để trống." };
+  if (!USER_ROLES.includes(role as (typeof USER_ROLES)[number])) {
+    return { error: "Vai trò tài khoản không hợp lệ." };
+  }
+  const normalizedRole = role as (typeof USER_ROLES)[number];
+
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      role: true,
+      accountProfile: { select: { id: true } },
+    },
+  });
+  if (!target) return { error: "Tài khoản không tồn tại." };
+
+  if (target.role === "ADMIN" && normalizedRole !== "ADMIN") {
+    if (target.id === admin.id) {
+      return { error: "Bạn không thể tự bỏ vai trò Admin của chính mình." };
+    }
+    const adminCount = await prisma.user.count({ where: { role: "ADMIN" } });
+    if (adminCount <= 1) {
+      return { error: "Hệ thống phải luôn có ít nhất một Admin." };
+    }
+  }
+
+  if (normalizedRole === "USER" && target.accountProfile) {
+    return {
+      error: "Tài khoản đang được dùng làm Account. Hãy xoá liên kết Account trước khi chuyển thành User.",
+    };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: userId },
+      data: { name: normalizedName, role: normalizedRole },
+    });
+    if (target.accountProfile) {
+      await tx.account.update({
+        where: { id: target.accountProfile.id },
+        data: { name: normalizedName },
+      });
+    }
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/projects/new");
+  revalidatePath("/revenue");
+  revalidatePath("/team");
+  return { success: "Đã cập nhật tên và vai trò tài khoản." };
 }
 
 /** Gán quản lý trực tiếp cho một nhân viên (managerId = null để bỏ gán) */

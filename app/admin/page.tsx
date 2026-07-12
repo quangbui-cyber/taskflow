@@ -169,8 +169,8 @@ async function SettingsContent({
     }),
     prisma.salesTeam.findMany({ orderBy: { name: "asc" } }),
     prisma.user.findMany({
-      where: { role: "ACCOUNT", accountProfile: null },
-      select: { id: true, name: true, email: true },
+      where: { role: { in: ["ADMIN", "ACCOUNT"] }, accountProfile: null },
+      select: { id: true, name: true, email: true, role: true },
       orderBy: { name: "asc" },
     }),
   ]);

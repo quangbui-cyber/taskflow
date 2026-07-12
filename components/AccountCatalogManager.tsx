@@ -11,7 +11,7 @@ import {
 } from "@/app/actions/catalog";
 
 type TeamOption = { id: string; name: string };
-type AccountUserOption = { id: string; name: string; email: string };
+type AccountUserOption = { id: string; name: string; email: string; role: string };
 type AccountItem = {
   id: string;
   name: string;
@@ -83,7 +83,7 @@ function LegacyAccountRow({
           <option value="">Chọn user Account</option>
           {users.map((user) => (
             <option key={user.id} value={user.id}>
-              {user.name} · {user.email}
+              {user.name} · {user.email} · {user.role === "ADMIN" ? "Admin" : "Account"}
             </option>
           ))}
         </select>
@@ -230,7 +230,7 @@ export default function AccountCatalogManager({
       <div className="border-b border-zinc-100 px-5 py-3">
         <h2 className="font-semibold">Account</h2>
         <p className="mt-0.5 text-xs text-zinc-400">
-          Chọn từ user có vai trò Account và bắt buộc gán vào một Team.
+          Chọn người dùng Admin hoặc Account và bắt buộc gán vào một Team.
         </p>
       </div>
 
@@ -243,7 +243,7 @@ export default function AccountCatalogManager({
           <option value="">Chọn tài khoản Account</option>
           {accountUsers.map((user) => (
             <option key={user.id} value={user.id}>
-              {user.name} · {user.email}
+              {user.name} · {user.email} · {user.role === "ADMIN" ? "Admin" : "Account"}
             </option>
           ))}
         </select>
@@ -267,7 +267,7 @@ export default function AccountCatalogManager({
 
       {accountUsers.length === 0 && (
         <p className="px-4 pb-3 text-xs text-zinc-400">
-          Tất cả user Account đã được thêm, hoặc chưa có user mang vai trò Account.
+          Tất cả người dùng Admin hoặc Account đã được thêm vào danh sách Account.
         </p>
       )}
       {teams.length === 0 && (

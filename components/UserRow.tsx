@@ -5,11 +5,12 @@ import {
   deleteUser,
   resetPassword,
   setManager,
+  updateUserProfile,
   type AdminState,
 } from "@/app/actions/admin";
 import { avatarClass } from "@/lib/avatar";
 import RoleBadge from "@/components/RoleBadge";
-import { KeyRound, Save, Trash2 } from "lucide-react";
+import { KeyRound, Pencil, Save, Trash2, X } from "lucide-react";
 
 type UserItem = {
   id: string;
@@ -32,7 +33,12 @@ export default function UserRow({
   managers: { id: string; name: string }[];
 }) {
   const [resetting, setResetting] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [profileName, setProfileName] = useState(user.name);
+  const [profileRole, setProfileRole] = useState(user.role);
+  const [profileMessage, setProfileMessage] = useState("");
+  const [profileError, setProfileError] = useState(false);
   const [managerId, setManagerId] = useState(user.managerId ?? "");
   const [savedManagerId, setSavedManagerId] = useState(user.managerId ?? "");
   const [managerMessage, setManagerMessage] = useState("");
@@ -47,6 +53,15 @@ export default function UserRow({
     },
     {}
   );
+
+  function saveProfile() {
+    startTransition(async () => {
+      const result = await updateUserProfile(user.id, profileName, profileRole);
+      setProfileError(Boolean(result.error));
+      setProfileMessage(result.error ?? result.success ?? "");
+      if (!result.error) setEditingProfile(false);
+    });
+  }
 
   return (
     <li className="px-5 py-3">
@@ -107,6 +122,19 @@ export default function UserRow({
         </div>
         <div className="flex gap-1 shrink-0">
           <button
+            type="button"
+            onClick={() => {
+              setEditingProfile((value) => !value);
+              setProfileMessage("");
+              setProfileName(user.name);
+              setProfileRole(user.role);
+            }}
+            className="tf-button-secondary !min-h-8 !px-2.5 !py-1 text-xs"
+          >
+            {editingProfile ? <X size={14} aria-hidden="true" /> : <Pencil size={14} aria-hidden="true" />}
+            {editingProfile ? "Đóng" : "Sửa"}
+          </button>
+          <button
             onClick={() => setResetting((v) => !v)}
             className="tf-button-secondary !min-h-8 !px-2.5 !py-1 text-xs"
           >
@@ -137,6 +165,54 @@ export default function UserRow({
           )}
         </div>
       </div>
+
+      {editingProfile && (
+        <div className="mt-3 grid gap-2 rounded-[8px] bg-zinc-50 p-3 sm:grid-cols-[minmax(0,1fr)_180px_auto]">
+          <input
+            type="text"
+            value={profileName}
+            onChange={(event) => {
+              setProfileName(event.target.value);
+              setProfileMessage("");
+            }}
+            className="tf-field !min-h-9 !py-1.5"
+            aria-label={`Tên của ${user.name}`}
+          />
+          <select
+            value={profileRole}
+            disabled={isSelf}
+            onChange={(event) => {
+              setProfileRole(event.target.value);
+              setProfileMessage("");
+            }}
+            className="tf-field !min-h-9 !py-1.5"
+            aria-label={`Vai trò của ${user.name}`}
+          >
+            <option value="ADMIN">Admin</option>
+            <option value="ACCOUNT">Account</option>
+            <option value="USER">User</option>
+          </select>
+          <button
+            type="button"
+            onClick={saveProfile}
+            disabled={pendingAction || !profileName.trim()}
+            className="tf-button-primary !min-h-9 !px-3 !py-1.5"
+          >
+            <Save size={14} aria-hidden="true" />
+            Lưu thay đổi
+          </button>
+        </div>
+      )}
+      {editingProfile && isSelf && (
+        <p className="mt-2 text-xs text-zinc-400">
+          Admin có thể tham gia Team trong tab Account mà không cần đổi vai trò.
+        </p>
+      )}
+      {profileMessage && (
+        <p className={`mt-2 text-xs ${profileError ? "text-red-600" : "text-brand-800"}`}>
+          {profileMessage}
+        </p>
+      )}
 
       {resetting && (
         <form action={formAction} className="mt-3 flex gap-2 items-start">

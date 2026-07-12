@@ -6,6 +6,8 @@ import { requireAdmin } from "@/lib/auth";
 
 export type CatalogState = { error?: string; success?: string };
 
+const ACCOUNT_ELIGIBLE_ROLES = ["ADMIN", "ACCOUNT"];
+
 export async function createClient(
   _prev: CatalogState,
   formData: FormData
@@ -43,8 +45,8 @@ export async function createAccount(
     where: { id: userId },
     select: { id: true, name: true, role: true, accountProfile: { select: { id: true } } },
   });
-  if (!user || user.role !== "ACCOUNT") {
-    return { error: "Chỉ tài khoản người dùng có vai trò Account mới được chọn." };
+  if (!user || !ACCOUNT_ELIGIBLE_ROLES.includes(user.role)) {
+    return { error: "Chỉ người dùng có vai trò Admin hoặc Account mới được chọn." };
   }
   if (user.accountProfile) return { error: "Tài khoản này đã có trong danh sách Account." };
 
@@ -77,8 +79,8 @@ export async function linkLegacyAccount(
   ]);
   if (!account) return { error: "Account cũ không tồn tại." };
   if (account.userId) return { error: "Account này đã được liên kết." };
-  if (!user || user.role !== "ACCOUNT") {
-    return { error: "Chỉ tài khoản người dùng có vai trò Account mới được chọn." };
+  if (!user || !ACCOUNT_ELIGIBLE_ROLES.includes(user.role)) {
+    return { error: "Chỉ người dùng có vai trò Admin hoặc Account mới được chọn." };
   }
   if (user.accountProfile) return { error: "Tài khoản này đã liên kết với Account khác." };
   if (!team) return { error: "Team kinh doanh không tồn tại." };
