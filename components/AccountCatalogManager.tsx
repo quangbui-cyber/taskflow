@@ -33,22 +33,45 @@ function LegacyAccountRow({
   const [userId, setUserId] = useState("");
   const [teamId, setTeamId] = useState(account.teamId ?? "");
   const [message, setMessage] = useState("");
+  const [isError, setIsError] = useState(false);
   const [pending, startTransition] = useTransition();
 
   function linkAccount() {
     startTransition(async () => {
       const result = await linkLegacyAccount(account.id, userId, teamId);
+      setIsError(Boolean(result.error));
+      setMessage(result.error ?? result.success ?? "");
+    });
+  }
+
+  function removeAccount() {
+    if (!window.confirm(`Xoá "${account.name}" khỏi danh sách Account?`)) return;
+    startTransition(async () => {
+      const result = await deleteAccount(account.id);
+      setIsError(Boolean(result.error));
       setMessage(result.error ?? result.success ?? "");
     });
   }
 
   return (
     <li className="space-y-3 bg-amber-50/60 px-5 py-4">
-      <div>
-        <p className="text-sm font-medium text-zinc-800">{account.name}</p>
-        <p className="text-xs text-amber-700">
-          Dữ liệu cũ · đang gắn {account.projectCount} project · cần liên kết user Account
-        </p>
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-zinc-800">{account.name}</p>
+          <p className="text-xs text-amber-700">
+            Dữ liệu cũ · đang gắn {account.projectCount} project · cần liên kết user Account
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={removeAccount}
+          disabled={pending}
+          className="tf-icon-button !h-8 !min-h-8 !w-8 shrink-0 text-red-500"
+          title="Xoá Account cũ"
+          aria-label={`Xoá ${account.name}`}
+        >
+          <Trash2 size={14} aria-hidden="true" />
+        </button>
       </div>
       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
         <select
@@ -87,7 +110,11 @@ function LegacyAccountRow({
           Lưu thay đổi
         </button>
       </div>
-      {message && <p className="text-xs text-zinc-600">{message}</p>}
+      {message && (
+        <p className={`text-xs ${isError ? "text-red-600" : "text-brand-800"}`}>
+          {message}
+        </p>
+      )}
     </li>
   );
 }
@@ -112,6 +139,15 @@ function LinkedAccountRow({
       setIsError(Boolean(result.error));
       setMessage(result.error ?? "Đã lưu thay đổi.");
       if (!result.error) setSavedTeamId(teamId);
+    });
+  }
+
+  function removeAccount() {
+    if (!window.confirm(`Xoá "${account.name}" khỏi danh sách Account?`)) return;
+    startTransition(async () => {
+      const result = await deleteAccount(account.id);
+      setIsError(Boolean(result.error));
+      setMessage(result.error ?? result.success ?? "");
     });
   }
 
@@ -156,11 +192,8 @@ function LinkedAccountRow({
       </span>
       <button
         type="button"
-        onClick={() => {
-          if (window.confirm(`Xoá "${account.name}" khỏi danh sách Account?`)) {
-            deleteAccount(account.id);
-          }
-        }}
+        onClick={removeAccount}
+        disabled={pending}
         className="tf-icon-button !h-8 !min-h-8 !w-8 shrink-0 text-red-500"
         title="Xoá Account"
         aria-label={`Xoá ${account.name}`}

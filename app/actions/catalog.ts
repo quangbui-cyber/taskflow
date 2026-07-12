@@ -93,12 +93,25 @@ export async function linkLegacyAccount(
   return { success: `Đã liên kết dữ liệu cũ với ${user.name}.` };
 }
 
-export async function deleteAccount(id: string) {
+export async function deleteAccount(id: string): Promise<CatalogState> {
   await requireAdmin();
+
+  const account = await prisma.account.findUnique({
+    where: { id },
+    select: { name: true, _count: { select: { projects: true } } },
+  });
+  if (!account) return { error: "Account không tồn tại." };
+  if (account._count.projects > 0) {
+    return {
+      error: `Không thể xoá "${account.name}" vì đang gắn ${account._count.projects} project.`,
+    };
+  }
+
   await prisma.account.delete({ where: { id } });
   revalidatePath("/admin");
   revalidatePath("/projects/new");
   revalidatePath("/revenue");
+  return { success: `Đã xoá Account "${account.name}".` };
 }
 
 export async function setAccountTeam(
