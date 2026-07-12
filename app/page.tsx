@@ -6,6 +6,7 @@ import {
   CircleHelp,
   Plus,
   Search,
+  UsersRound,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { canManageProjects, requireUser } from "@/lib/auth";
@@ -13,13 +14,16 @@ import { daysUntil, isOverdue } from "@/lib/dates";
 import Sidebar from "@/components/Sidebar";
 import TaskListItem, { type TaskListItemData } from "@/components/TaskListItem";
 import DashboardSort from "@/components/DashboardSort";
+import PerformanceBar from "@/components/PerformanceBar";
+import { avatarClass } from "@/lib/avatar";
+import { computePerf } from "@/lib/performance";
 import {
   ARCHIVED_PROJECT_STATUS_KEYS,
   formatVND,
   isArchivedProjectStatus,
 } from "@/lib/types";
 
-type DashboardView = "overview" | "mine" | "delegated";
+type DashboardView = "overview" | "mine" | "delegated" | "team";
 
 const DASHBOARD_VIEWS: Array<{
   key: DashboardView;
@@ -56,8 +60,10 @@ export default async function DashboardPage({
   const params = await searchParams;
   const query = params.q?.trim().toLocaleLowerCase("vi") ?? "";
   const sort = params.sort === "project" ? "project" : "due";
-  const activeView: DashboardView =
-    params.view === "mine" || params.view === "delegated"
+  const requestedView: DashboardView =
+    params.view === "mine" ||
+    params.view === "delegated" ||
+    params.view === "team"
       ? params.view
       : "overview";
 
@@ -67,7 +73,7 @@ export default async function DashboardPage({
     creator: { select: { name: true } },
   } as const;
 
-  const [projects, assignedToMe, delegatedByMe] = await Promise.all([
+  const [projects, assignedToMe, delegatedByMe, directReports] = await Promise.all([
     prisma.project.findMany({
       where: { members: { some: { userId: user.id } } },
       include: {
@@ -102,7 +108,34 @@ export default async function DashboardPage({
       include: taskInclude,
       orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }],
     }),
+    prisma.user.findMany({
+      where: { managerId: user.id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        assignedTasks: {
+          where: {
+            project: {
+              status: { notIn: [...ARCHIVED_PROJECT_STATUS_KEYS] },
+            },
+          },
+          include: taskInclude,
+          orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }],
+        },
+      },
+      orderBy: { name: "asc" },
+    }),
   ]);
+
+  const activeView: DashboardView =
+    requestedView === "team" && directReports.length === 0
+      ? "overview"
+      : requestedView;
+  const dashboardViews =
+    directReports.length > 0
+      ? [...DASHBOARD_VIEWS, { key: "team" as const, label: "Nhân viên của tôi" }]
+      : DASHBOARD_VIEWS;
 
   const matchesQuery = (title: string, projectName: string) =>
     !query ||
@@ -127,6 +160,28 @@ export default async function DashboardPage({
   const visibleDelegated = sortTasks(
     delegatedByMe.filter((task) => matchesQuery(task.title, task.project.name))
   );
+  const visibleReports = directReports
+    .map((report) => {
+      const personMatches =
+        !query ||
+        report.name.toLocaleLowerCase("vi").includes(query) ||
+        report.email.toLocaleLowerCase("vi").includes(query);
+      const tasks = sortTasks(
+        report.assignedTasks.filter(
+          (task) => personMatches || matchesQuery(task.title, task.project.name)
+        )
+      );
+      const openTasks = tasks.filter((task) => task.status !== "DONE");
+      const completedTasks = tasks.filter((task) => task.status === "DONE");
+      return {
+        ...report,
+        tasks,
+        openTasks,
+        completedTasks,
+        perf: computePerf(report.assignedTasks),
+      };
+    })
+    .filter((report) => !query || report.tasks.length > 0);
   const visibleProjects = projects.filter(
     (project) =>
       !isArchivedProjectStatus(project.status) &&
@@ -187,8 +242,14 @@ export default async function DashboardPage({
       ? visibleAssigned.length
       : activeView === "delegated"
         ? visibleDelegated.length
-        : visibleAssigned.length + visibleDelegated.length;
-  const noTaskResults = query && currentViewTaskCount === 0;
+        : activeView === "team"
+          ? visibleReports.reduce((total, report) => total + report.tasks.length, 0)
+          : visibleAssigned.length + visibleDelegated.length;
+  const noTaskResults =
+    Boolean(query) &&
+    (activeView === "team"
+      ? visibleReports.length === 0
+      : currentViewTaskCount === 0);
 
   return (
     <div className="tf-shell">
@@ -262,17 +323,19 @@ export default async function DashboardPage({
               </div>
 
               <nav
-                className="mt-8 inline-flex rounded-[8px] bg-zinc-100 p-1"
+                className="mt-8 flex w-fit max-w-full overflow-x-auto rounded-[8px] bg-zinc-100 p-1"
                 aria-label="Bộ lọc công việc"
               >
-                {DASHBOARD_VIEWS.map((view) => {
+                {dashboardViews.map((view) => {
                   const active = activeView === view.key;
                   const count =
                     view.key === "mine"
                       ? visibleAssigned.length
                       : view.key === "delegated"
                         ? visibleDelegated.length
-                        : priorityTasks.length;
+                        : view.key === "team"
+                          ? directReports.length
+                          : priorityTasks.length;
 
                   return (
                     <Link
@@ -412,6 +475,107 @@ export default async function DashboardPage({
                     </div>
                   ) : (
                     <p className="py-6 text-sm text-zinc-400">Không có công việc nào.</p>
+                  )}
+                </section>
+              )}
+
+              {activeView === "team" && (
+                <section className="mt-10" aria-labelledby="team-report-heading">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 pb-3">
+                    <div>
+                      <h2 id="team-report-heading" className="text-base font-semibold text-zinc-900">
+                        Báo cáo công việc của nhân viên
+                      </h2>
+                      <p className="mt-1 text-xs text-zinc-400">
+                        {directReports.length} nhân viên trực thuộc · {currentViewTaskCount} task
+                      </p>
+                    </div>
+                    <UsersRound size={19} className="text-zinc-400" aria-hidden="true" />
+                  </div>
+
+                  {visibleReports.length > 0 ? (
+                    <div className="divide-y divide-zinc-200">
+                      {visibleReports.map((report) => (
+                        <details key={report.id} open className="group/report py-1">
+                          <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-1 py-4 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto_auto] sm:px-3">
+                            <span className="flex min-w-0 items-center gap-3">
+                              <span
+                                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${avatarClass(report.id)}`}
+                              >
+                                {report.name.charAt(0).toUpperCase()}
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block truncate text-sm font-semibold text-zinc-900">
+                                  {report.name}
+                                </span>
+                                <span className="block truncate text-xs text-zinc-400">
+                                  {report.email}
+                                </span>
+                              </span>
+                            </span>
+                            <span className="hidden text-right text-xs text-zinc-500 sm:block">
+                              <strong className="block text-sm text-zinc-800">{report.openTasks.length}</strong>
+                              đang mở
+                            </span>
+                            <span className={`hidden text-right text-xs sm:block ${report.perf.overdueOpen > 0 ? "text-red-600" : "text-zinc-400"}`}>
+                              <strong className="block text-sm">{report.perf.overdueOpen}</strong>
+                              quá hạn
+                            </span>
+                            <span className="hidden text-right text-xs text-zinc-500 sm:block">
+                              <strong className="block text-sm text-zinc-800">{report.perf.onTime}</strong>
+                              đúng hạn
+                            </span>
+                            <ChevronDown
+                              size={16}
+                              className="text-zinc-300 transition-transform group-open/report:rotate-180"
+                              aria-hidden="true"
+                            />
+                          </summary>
+
+                          <div className="space-y-6 bg-zinc-50/60 px-3 py-5 sm:px-5">
+                            <PerformanceBar perf={report.perf} />
+
+                            <div>
+                              <h3 className="mb-1 text-xs font-semibold uppercase text-zinc-400">
+                                Đang thực hiện ({report.openTasks.length})
+                              </h3>
+                              {report.openTasks.length > 0 ? (
+                                <div className="bg-white px-2">
+                                  {report.openTasks.map((task) => (
+                                    <TaskListItem
+                                      key={task.id}
+                                      task={toItem(task, `${report.name} phụ trách`)}
+                                    />
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="py-3 text-sm text-zinc-400">Không có công việc đang mở.</p>
+                              )}
+                            </div>
+
+                            <div>
+                              <h3 className="mb-1 text-xs font-semibold uppercase text-zinc-400">
+                                Đã hoàn thành ({report.completedTasks.length})
+                              </h3>
+                              {report.completedTasks.length > 0 ? (
+                                <div className="bg-white px-2">
+                                  {report.completedTasks.map((task) => (
+                                    <TaskListItem
+                                      key={task.id}
+                                      task={toItem(task, `${report.name} hoàn thành`)}
+                                    />
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="py-3 text-sm text-zinc-400">Chưa có công việc hoàn thành.</p>
+                              )}
+                            </div>
+                          </div>
+                        </details>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="py-8 text-sm text-zinc-400">Không có báo cáo phù hợp.</p>
                   )}
                 </section>
               )}
