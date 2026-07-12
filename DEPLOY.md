@@ -62,7 +62,6 @@ git push -u origin main
    | `ADMIN_EMAIL`    | Email admin, ví dụ `admin@congty.com`                        |
    | `ADMIN_PASSWORD` | Mật khẩu admin mạnh                                          |
    | `TZ`             | `Asia/Ho_Chi_Minh` — để giờ hạn chót hiển thị đúng giờ VN     |
-   | `GOOGLE_CHAT_WEBHOOK_URL` | (tuỳ chọn) URL webhook Google Chat — xem "Báo lên Google Chat" bên dưới |
 
    Tạo `SESSION_SECRET` bằng lệnh (chạy trên máy bạn):
    ```bash
@@ -136,13 +135,13 @@ Khi có **job mới** hoặc **job hoàn thành**, app gửi một tin nhắn v�
 
 1. Mở **Google Chat** → vào **Space** (group) muốn nhận thông báo.
 2. Bấm tên Space ở đầu trang → **Apps & integrations** → **Webhooks** → **Add webhooks**.
-3. Đặt tên (ví dụ "TaskFlow") → **Save** → **Copy** URL webhook.
-4. Dán URL đó vào biến môi trường `GOOGLE_CHAT_WEBHOOK_URL`:
-   - Trên máy dev: thêm vào file `.env`.
-   - Trên Vercel: Settings → Environment Variables → thêm `GOOGLE_CHAT_WEBHOOK_URL`, rồi **Redeploy**.
+3. Đặt tên (ví dụ "myCreative") → **Save** → **Copy** URL webhook.
+4. Trong myCreative, mở dự án cần kết nối → tab **Webhook** → dán URL → **Lưu webhook**.
+5. Bấm **Gửi thử** để kiểm tra tin nhắn đã vào đúng Space.
 
-Để trống biến này thì tính năng tự tắt, app vẫn chạy bình thường. Lỗi gửi tin
-nhắn (mạng, webhook bị xoá...) không làm hỏng việc tạo/hoàn thành job.
+Mỗi dự án có thể dùng một URL riêng để gửi vào một group riêng. URL được lưu kín
+trong database và chỉ chủ dự án hoặc admin được thay đổi. Lỗi gửi tin nhắn (mạng,
+webhook bị xoá...) không làm hỏng việc tạo/hoàn thành job.
 
 > Lưu ý: webhook Google Chat chỉ gửi **một chiều** (app → group). Nhân viên trả
 > lời trong group sẽ không phản hồi ngược lại app.

@@ -27,22 +27,22 @@ model User {
 }
 
 model Project {
-  id           String          @id @default(cuid())
-  name         String
-  description  String?
-  color        String          @default("#6366f1")
-  status       String          @default("BIDDING") // "BIDDING" | "ON_PROCESS" | "PENDING" | "DONE" | "CANCEL" | "FAIL"
-  revenue      Float           @default(0) // doanh thu dự kiến/thực tế (VND)
-  webhookToken String          @unique @default(cuid())
-  ownerId      String
-  owner        User            @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  clientId     String?
-  client       Client?         @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  accountId    String?
-  account      Account?        @relation(fields: [accountId], references: [id], onDelete: SetNull)
-  members      ProjectMember[]
-  tasks        Task[]
-  createdAt    DateTime        @default(now())
+  id                   String          @id @default(cuid())
+  name                 String
+  description          String?
+  color                String          @default("#6366f1")
+  status               String          @default("BIDDING") // "BIDDING" | "ON_PROCESS" | "PENDING" | "DONE" | "CANCEL" | "FAIL"
+  revenue              Float           @default(0) // doanh thu dự kiến/thực tế (VND)
+  googleChatWebhookUrl String?
+  ownerId              String
+  owner                User            @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  clientId             String?
+  client               Client?         @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  accountId            String?
+  account              Account?        @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  members              ProjectMember[]
+  tasks                Task[]
+  createdAt            DateTime        @default(now())
 }
 
 // Danh mục khách hàng — do admin tạo sẵn

@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { canManageProjects, requireUser } from "@/lib/auth";
@@ -21,13 +20,6 @@ export default async function ProjectPage({
   const { id } = await params;
   const { tab } = await searchParams;
   const user = await requireUser();
-  const headerList = await headers();
-  const host = headerList.get("x-forwarded-host") ?? headerList.get("host") ?? "";
-  const protocol =
-    headerList.get("x-forwarded-proto") ??
-    (host.startsWith("localhost") ? "http" : "https");
-  const baseUrl = host ? `${protocol}://${host}` : "";
-
   const project = await prisma.project.findUnique({
     where: { id },
     include: {
@@ -189,9 +181,8 @@ export default async function ProjectPage({
           <div className="flex-1 overflow-auto bg-[#f7f8fa] p-4 sm:p-6">
             <ProjectWebhookPanel
               projectId={project.id}
-              webhookToken={project.webhookToken}
+              configured={Boolean(project.googleChatWebhookUrl)}
               canManage={canManageWebhook}
-              baseUrl={baseUrl}
             />
           </div>
         ) : (

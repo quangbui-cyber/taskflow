@@ -160,7 +160,7 @@ Bạn nhận thông báo khi:
 
 Bấm vào thông báo để nhảy đến project liên quan. Người thao tác không tự nhận thông báo về hành động của chính mình.
 
-**Báo lên Google Chat (tuỳ chọn):** đặt biến môi trường `GOOGLE_CHAT_WEBHOOK_URL` (webhook của một Space) để app gửi tin nhắn vào group mỗi khi có **job mới** hoặc **job hoàn thành**. Hướng dẫn lấy URL webhook xem trong [DEPLOY.md](DEPLOY.md). Để trống thì tính năng tắt.
+**Báo lên Google Chat (tuỳ chọn):** trong từng dự án, mở tab **Webhook** và dán URL webhook của Space tương ứng. App sẽ gửi tin nhắn vào đúng group khi có **job mới** hoặc **job hoàn thành**. Hướng dẫn lấy URL xem trong [DEPLOY.md](DEPLOY.md).
 
 ## Chạy app trên máy cá nhân
 

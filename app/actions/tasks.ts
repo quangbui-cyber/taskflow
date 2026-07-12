@@ -4,16 +4,15 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getMembership, requireUser } from "@/lib/auth";
 import { followerIds, notify } from "@/lib/notify";
-import { googleChatEnabled, sendGoogleChat } from "@/lib/googleChat";
+import { sendGoogleChat } from "@/lib/googleChat";
 import { PRIORITIES, STATUSES } from "@/lib/types";
 
-/** Lấy tên project để hiển thị trong tin nhắn Google Chat */
-async function projectName(projectId: string): Promise<string> {
+async function projectChat(projectId: string) {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    select: { name: true },
+    select: { name: true, googleChatWebhookUrl: true },
   });
-  return project?.name ?? "dự án";
+  return project;
 }
 
 export type ActionState = { error?: string };
@@ -97,11 +96,11 @@ export async function createTask(
     });
   }
 
-  // 💬 Báo Google Chat: có job mới
-  if (googleChatEnabled()) {
-    const name = await projectName(projectId);
+  const chat = await projectChat(projectId);
+  if (chat?.googleChatWebhookUrl) {
     await sendGoogleChat(
-      `🆕 *${name}* — job mới: *${title}* (tạo bởi ${user.name})`
+      chat.googleChatWebhookUrl,
+      `*${chat.name}*\nCông việc mới: *${title}*\nNgười tạo: ${user.name}`
     );
   }
 
@@ -196,11 +195,11 @@ export async function updateTask(
         projectId: task.projectId,
       }
     );
-    // 💬 Báo Google Chat: job hoàn thành
-    if (googleChatEnabled()) {
-      const name = await projectName(task.projectId);
+    const chat = await projectChat(task.projectId);
+    if (chat?.googleChatWebhookUrl) {
       await sendGoogleChat(
-        `✅ *${name}* — hoàn thành: *${title}* (bởi ${actor.name})`
+        chat.googleChatWebhookUrl,
+        `*${chat.name}*\nĐã hoàn thành: *${title}*\nThực hiện bởi: ${actor.name}`
       );
     }
   }
@@ -246,11 +245,11 @@ export async function moveTask(
         projectId: task.projectId,
       }
     );
-    // 💬 Báo Google Chat: job hoàn thành
-    if (googleChatEnabled()) {
-      const name = await projectName(task.projectId);
+    const chat = await projectChat(task.projectId);
+    if (chat?.googleChatWebhookUrl) {
       await sendGoogleChat(
-        `✅ *${name}* — hoàn thành: *${task.title}* (bởi ${actor.name})`
+        chat.googleChatWebhookUrl,
+        `*${chat.name}*\nĐã hoàn thành: *${task.title}*\nThực hiện bởi: ${actor.name}`
       );
     }
   }
