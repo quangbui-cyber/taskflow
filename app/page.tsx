@@ -220,7 +220,7 @@ export default async function DashboardPage({
               </Link>
             </span>
             {showRevenue && (
-              <Link href="/projects/new" className="tf-button-primary">
+              <Link href="/projects/new" prefetch={false} className="tf-button-primary">
                 <Plus size={18} strokeWidth={2} aria-hidden="true" />
                 <span className="hidden sm:inline">Tạo dự án</span>
                 <span className="sm:hidden">Tạo</span>
@@ -257,6 +257,7 @@ export default async function DashboardPage({
                     <Link
                       key={view.key}
                       href={tabHref(view.key)}
+                      prefetch={false}
                       aria-current={active ? "page" : undefined}
                       className={`inline-flex min-h-9 items-center gap-2 rounded-[7px] px-3 text-sm font-medium transition-colors ${
                         active
@@ -422,6 +423,7 @@ export default async function DashboardPage({
                     <Link
                       key={project.id}
                       href={`/projects/${project.id}`}
+                      prefetch={false}
                       className="group block py-6"
                     >
                       <div className="flex items-start gap-3">

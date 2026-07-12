@@ -45,7 +45,10 @@ function MenuLink({
   return (
     <Link
       href={href}
-      prefetch={href === "/notifications" ? false : undefined}
+      // Mỗi trang này đều tự truy vấn Prisma riêng (task, doanh số, hiệu suất...).
+      // Tắt prefetch để tránh render ngầm hàng loạt trang mỗi khi sidebar hiện ra,
+      // vốn nhân số lượng query lên nhiều lần không cần thiết và làm chậm app.
+      prefetch={false}
       aria-current={active ? "page" : undefined}
       className={`flex min-h-10 items-center gap-3 rounded-[7px] px-3 py-2 text-sm transition-colors ${
         active
@@ -81,6 +84,7 @@ function ProjectLinks({
         <li key={project.id}>
           <Link
             href={`/projects/${project.id}`}
+            prefetch={false}
             className={`flex min-h-10 items-center gap-3 rounded-[7px] px-3 py-2 text-sm transition-colors ${
               project.id === activeProjectId
                 ? "bg-brand-50 font-medium text-brand-700"
@@ -181,6 +185,7 @@ export default async function Sidebar({
                 {canManage && (
                   <Link
                     href="/projects/new"
+                    prefetch={false}
                     className="flex h-7 w-7 items-center justify-center rounded-[6px] text-zinc-400 hover:bg-zinc-100 hover:text-brand-700"
                     title="Tạo dự án"
                     aria-label="Tạo dự án"
@@ -199,8 +204,8 @@ export default async function Sidebar({
             {user.role === "ADMIN" && (
               <div className="mt-6 border-t border-zinc-200 pt-4">
                 <p className="mb-2 px-3 text-xs font-semibold uppercase text-zinc-400">Quản trị</p>
-                <MenuLink href="/admin/catalog" label="Client, Account & Team" icon={Tags} active={activeSection === "catalog"} />
-                <MenuLink href="/admin" label="Người dùng" icon={Settings} active={activeSection === "admin"} />
+                <MenuLink href="/admin/catalog" label="Danh mục kinh doanh" icon={Tags} active={activeSection === "catalog"} />
+                <MenuLink href="/admin" label="Nhân sự & nhóm" icon={Settings} active={activeSection === "admin"} />
               </div>
             )}
           </div>
@@ -248,7 +253,7 @@ export default async function Sidebar({
             <div className="mb-2 flex items-center justify-between px-3">
               <span className="text-xs font-semibold uppercase text-zinc-400">Dự án</span>
               {canManage && (
-                <Link href="/projects/new" className="tf-icon-button !h-8 !min-h-8 !w-8" aria-label="Tạo dự án" title="Tạo dự án">
+                <Link href="/projects/new" prefetch={false} className="tf-icon-button !h-8 !min-h-8 !w-8" aria-label="Tạo dự án" title="Tạo dự án">
                   <Plus size={16} aria-hidden="true" />
                 </Link>
               )}
@@ -260,8 +265,8 @@ export default async function Sidebar({
             />
             {user.role === "ADMIN" && (
               <div className="mt-3 border-t border-zinc-200 pt-3">
-                <MenuLink href="/admin/catalog" label="Client, Account & Team" icon={Tags} active={activeSection === "catalog"} />
-                <MenuLink href="/admin" label="Quản trị người dùng" icon={Settings} active={activeSection === "admin"} />
+                <MenuLink href="/admin/catalog" label="Danh mục kinh doanh" icon={Tags} active={activeSection === "catalog"} />
+                <MenuLink href="/admin" label="Nhân sự & nhóm" icon={Settings} active={activeSection === "admin"} />
               </div>
             )}
             <div className="mt-3 flex items-center gap-3 border-t border-zinc-200 px-2 pt-3">
