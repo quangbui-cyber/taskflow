@@ -7,7 +7,6 @@ import {
   computePerf,
   getPerformancePeriod,
   PERFORMANCE_PERIOD_OPTIONS,
-  type Perf,
 } from "@/lib/performance";
 import { isOverdue } from "@/lib/dates";
 import Sidebar from "@/components/Sidebar";
@@ -34,32 +33,43 @@ const taskInclude = {
   creator: { select: { id: true, name: true } },
 } as const;
 
-/** Thanh hiệu suất thu nhỏ cho từng dòng trong bảng */
-function PerfMini({ perf }: { perf: Perf }) {
-  if (perf.total === 0) {
-    return <span className="text-xs text-zinc-300">Chưa có task</span>;
-  }
-  const segments = [
-    { value: perf.onTime, className: "bg-brand-400" },
-    { value: perf.late, className: "bg-amber-400" },
-    { value: perf.overdueOpen, className: "bg-red-500" },
-    { value: perf.inProgress, className: "bg-blue-500" },
-    { value: perf.todo, className: "bg-zinc-300" },
-  ];
+function ProjectParticipation({
+  bidding,
+  onProcess,
+}: {
+  bidding: number;
+  onProcess: number;
+}) {
   return (
-    <div className="flex h-2 w-full max-w-[140px] overflow-hidden rounded-full bg-zinc-100">
-      {segments.map(
-        (s, i) =>
-          s.value > 0 && (
-            <div
-              key={i}
-              className={s.className}
-              style={{ width: `${(s.value / perf.total) * 100}%` }}
-            />
-          )
-      )}
-    </div>
+    <span className="flex items-center gap-4">
+      <span>
+        <span className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+          <span className="h-1.5 w-1.5 rounded-full bg-blue-500" aria-hidden="true" />
+          On Process
+        </span>
+        <strong className="mt-0.5 block text-base font-semibold tabular-nums text-zinc-800">
+          {onProcess}
+        </strong>
+      </span>
+      <span className="h-8 w-px bg-zinc-200" aria-hidden="true" />
+      <span>
+        <span className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+          <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden="true" />
+          Bidding
+        </span>
+        <strong className="mt-0.5 block text-base font-semibold tabular-nums text-zinc-800">
+          {bidding}
+        </strong>
+      </span>
+    </span>
   );
+}
+
+function onTimeRateClass(rate: number | null) {
+  if (rate === null) return "text-zinc-400";
+  if (rate >= 80) return "text-brand-700";
+  if (rate >= 60) return "text-amber-600";
+  return "text-red-600";
 }
 
 type TeamHighlight = {
@@ -378,17 +388,15 @@ export default async function TeamPage({
                     Tỷ lệ đúng hạn = task đúng hạn / tổng task hoàn thành trong kỳ.
                   </p>
                 </div>
-                <span className="text-xs text-zinc-400">
-                  Bấm vào từng người để xem chi tiết
+                <span className="hidden text-xs text-zinc-400 sm:inline">
+                  Chọn một nhân viên để xem công việc chi tiết
                 </span>
               </div>
 
-              <div className="hidden grid-cols-[minmax(0,1fr)_130px_64px_72px_76px_76px_76px_28px] gap-3 border-b border-zinc-100 bg-zinc-50/60 px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-400 lg:grid">
+              <div className="hidden grid-cols-[minmax(220px,1.35fr)_minmax(180px,.9fr)_100px_76px_76px_28px] items-center gap-4 border-b border-zinc-100 bg-zinc-50/60 px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-400 lg:grid">
                 <span>Nhân viên</span>
-                <span>Hiệu suất</span>
-                <span className="text-right">Bidding</span>
-                <span className="text-right">On Process</span>
-                <span className="text-right">Tỷ lệ đúng hạn</span>
+                <span>Dự án tham gia</span>
+                <span className="text-right">Đúng hạn</span>
                 <span className="text-right">Đang mở</span>
                 <span className="text-right">Quá hạn</span>
                 <span />
@@ -405,63 +413,84 @@ export default async function TeamPage({
                   onProcessProjectCount,
                 }) => (
                   <details key={m.id} className="group">
-                    <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_28px] items-center gap-3 px-5 py-3 transition-colors hover:bg-zinc-50 lg:grid-cols-[minmax(0,1fr)_130px_64px_72px_76px_76px_76px_28px]">
-                      <span className="flex min-w-0 items-center gap-3" title={m.email}>
-                        <Avatar
-                          id={m.id}
-                          name={m.name}
-                          avatarUrl={m.avatarUrl}
-                          className="h-8 w-8 text-xs"
-                        />
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-medium">
-                            {m.name}
-                            <RoleBadge role={m.role} />
+                    <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 transition-colors hover:bg-zinc-50">
+                      <span className="grid min-w-0 flex-1 grid-cols-3 items-center gap-x-4 gap-y-3 lg:grid-cols-[minmax(220px,1.35fr)_minmax(180px,.9fr)_100px_76px_76px]">
+                        <span className="col-span-3 flex min-w-0 items-center gap-3 lg:col-span-1">
+                          <Avatar
+                            id={m.id}
+                            name={m.name}
+                            avatarUrl={m.avatarUrl}
+                            className="h-9 w-9 text-xs"
+                          />
+                          <span className="min-w-0">
+                            <span className="flex min-w-0 items-center gap-2">
+                              <span className="truncate text-sm font-medium">
+                                {m.name}
+                              </span>
+                              <RoleBadge role={m.role} />
+                            </span>
+                            <span className="mt-0.5 block truncate text-[11px] text-zinc-400 lg:hidden">
+                              {m.email}
+                            </span>
                           </span>
-                          <span className="mt-0.5 block text-[11px] tabular-nums text-zinc-400 lg:hidden">
-                            Bidding {biddingProjectCount} · On Process{" "}
-                            {onProcessProjectCount}
+                        </span>
+                        <span className="col-span-3 border-y border-zinc-100 py-2.5 lg:col-span-1 lg:border-0 lg:py-0">
+                          <ProjectParticipation
+                            bidding={biddingProjectCount}
+                            onProcess={onProcessProjectCount}
+                          />
+                        </span>
+                        <span className="text-left lg:text-right">
+                          <span className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-zinc-400 lg:hidden">
+                            Đúng hạn
+                          </span>
+                          {rate !== null ? (
+                            <>
+                              <span
+                                className={`block text-base font-semibold tabular-nums ${onTimeRateClass(rate)}`}
+                              >
+                                {rate}%
+                              </span>
+                              <span className="block text-[10px] tabular-nums text-zinc-400">
+                                {perf.onTime}/{perf.done} task
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-sm text-zinc-400">Chưa có</span>
+                          )}
+                        </span>
+                        <span className="text-center lg:text-right">
+                          <span className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-zinc-400 lg:hidden">
+                            Đang mở
+                          </span>
+                          <span
+                            className={`text-base font-medium tabular-nums ${
+                              openAssigned.length > 0
+                                ? "text-blue-600"
+                                : "text-zinc-400"
+                            }`}
+                          >
+                            {openAssigned.length}
+                          </span>
+                        </span>
+                        <span className="text-right">
+                          <span className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-zinc-400 lg:hidden">
+                            Quá hạn
+                          </span>
+                          <span
+                            className={`text-base tabular-nums ${
+                              perf.overdueOpen > 0
+                                ? "font-semibold text-red-600"
+                                : "font-medium text-zinc-400"
+                            }`}
+                          >
+                            {perf.overdueOpen}
                           </span>
                         </span>
                       </span>
-                      <span className="hidden lg:block">
-                        <PerfMini perf={perf} />
-                      </span>
-                      <span className="hidden text-right text-sm font-medium tabular-nums text-amber-600 lg:block">
-                        {biddingProjectCount}
-                      </span>
-                      <span className="hidden text-right text-sm font-medium tabular-nums text-blue-600 lg:block">
-                        {onProcessProjectCount}
-                      </span>
-                      <span className="hidden text-right lg:block">
-                        {rate !== null ? (
-                          <>
-                            <span className="block text-sm font-semibold text-zinc-700">
-                              {rate}%
-                            </span>
-                            <span className="block text-[10px] tabular-nums text-zinc-400">
-                              {perf.onTime}/{perf.done} task
-                            </span>
-                          </>
-                        ) : (
-                          <span className="text-sm text-zinc-400">—</span>
-                        )}
-                      </span>
-                      <span className="hidden text-right text-sm text-zinc-600 lg:block">
-                        {openAssigned.length}
-                      </span>
-                      <span
-                        className={`hidden text-right text-sm lg:block ${
-                          perf.overdueOpen > 0
-                            ? "font-semibold text-red-600"
-                            : "text-zinc-400"
-                        }`}
-                      >
-                        {perf.overdueOpen}
-                      </span>
                       <ChevronDown
                         size={16}
-                        className="justify-self-end text-zinc-300 transition-transform group-open:rotate-180"
+                        className="shrink-0 text-zinc-300 transition-transform group-open:rotate-180"
                         aria-hidden="true"
                       />
                     </summary>

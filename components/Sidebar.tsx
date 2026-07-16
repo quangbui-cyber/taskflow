@@ -40,6 +40,21 @@ const ARCHIVED_PROJECT_GROUPS = [
   { status: "PENDING", label: "Pending", dotClassName: "bg-violet-500" },
 ] as const;
 
+const PROJECT_STATUS_ORDER: Record<string, number> = {
+  ON_PROCESS: 0,
+  BIDDING: 1,
+};
+
+function compareProjects(a: ProjectItem, b: ProjectItem) {
+  const statusOrder =
+    (PROJECT_STATUS_ORDER[a.status] ?? Number.MAX_SAFE_INTEGER) -
+    (PROJECT_STATUS_ORDER[b.status] ?? Number.MAX_SAFE_INTEGER);
+
+  if (statusOrder !== 0) return statusOrder;
+
+  return a.name.localeCompare(b.name, "vi", { sensitivity: "base" });
+}
+
 function MenuLink({
   href,
   label,
@@ -91,11 +106,7 @@ function ProjectLinks({
 
   return (
     <ul className="space-y-1">
-      {[...projects]
-        .sort((a, b) =>
-          a.name.localeCompare(b.name, "vi", { sensitivity: "base" })
-        )
-        .map((project) => (
+      {[...projects].sort(compareProjects).map((project) => (
         <li key={project.id}>
           <Link
             href={`/projects/${project.id}`}
