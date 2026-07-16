@@ -46,3 +46,7 @@ next-env.d.ts
 /audit-navigation/
 design-qa.md
 admin-accounts-*.png
+
+# kết quả audit / tài liệu xuất ra từ công cụ (không phải mã nguồn app)
+/outputs/
+/.codex/

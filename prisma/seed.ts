@@ -146,6 +146,43 @@ function taskStatuses(projectStatus: string) {
   return ["DONE", "IN_PROGRESS", "TODO"];
 }
 
+/**
+ * Rào chắn an toàn: seed demo XOÁ SẠCH database rồi tạo lại dữ liệu mẫu.
+ * Chỉ cho phép chạy khi DATABASE_URL trỏ tới máy cá nhân (localhost).
+ * Muốn tạo Admin trên production thì dùng: SEED_MODE=admin npm run seed
+ * (chế độ đó chỉ upsert 1 tài khoản, không xoá gì).
+ */
+function assertLocalDatabase() {
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    throw new Error("Thiếu DATABASE_URL.");
+  }
+
+  let host: string;
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    throw new Error("DATABASE_URL không hợp lệ.");
+  }
+
+  const isLocal =
+    host === "localhost" || host === "127.0.0.1" || host === "::1";
+
+  if (!isLocal) {
+    throw new Error(
+      [
+        "DỪNG: seed demo sẽ XOÁ TOÀN BỘ dữ liệu, nhưng DATABASE_URL đang trỏ tới",
+        `database từ xa (${host}) chứ không phải máy cá nhân.`,
+        "",
+        "Nếu bạn muốn tạo/cập nhật tài khoản Admin trên database thật, hãy dùng:",
+        "  SEED_MODE=admin npm run seed",
+        "",
+        "Nếu thật sự muốn seed demo, hãy trỏ DATABASE_URL về localhost.",
+      ].join("\n")
+    );
+  }
+}
+
 async function cleanDatabase() {
   await prisma.$transaction([
     prisma.notification.deleteMany(),
@@ -186,6 +223,7 @@ async function main() {
     return;
   }
 
+  assertLocalDatabase();
   await cleanDatabase();
 
   const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10);
