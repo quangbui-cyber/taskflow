@@ -89,10 +89,10 @@ export default function TaskModal({
       if (event.key === "Escape") setOpenPicker(null);
     }
 
-    document.addEventListener("pointerdown", closePicker);
+    document.addEventListener("pointerdown", closePicker, true);
     document.addEventListener("keydown", closePickerOnEscape);
     return () => {
-      document.removeEventListener("pointerdown", closePicker);
+      document.removeEventListener("pointerdown", closePicker, true);
       document.removeEventListener("keydown", closePickerOnEscape);
     };
   }, [openPicker]);

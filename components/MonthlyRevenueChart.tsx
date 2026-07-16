@@ -43,7 +43,7 @@ export default function MonthlyRevenueChart({
         <div>
           <h2 className="font-semibold">Doanh thu theo tháng</h2>
           <p className="mt-1 text-xs text-zinc-400">
-            Ghi nhận vào tháng dự án chuyển sang Done.
+            Ghi nhận vào tháng dự án chuyển sang On Process.
           </p>
         </div>
         <div className="text-right">

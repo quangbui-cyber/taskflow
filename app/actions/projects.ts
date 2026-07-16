@@ -86,6 +86,7 @@ export async function createProject(
       description: description || null,
       color: projectStatusColor(initialStatus),
       status: initialStatus,
+      onProcessAt: initialStatus === "ON_PROCESS" ? new Date() : null,
       revenue,
       clientId,
       accountId,
@@ -165,7 +166,12 @@ export async function updateProjectStatus(
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    select: { ownerId: true, status: true, completedAt: true },
+    select: {
+      ownerId: true,
+      status: true,
+      onProcessAt: true,
+      completedAt: true,
+    },
   });
   if (!project) return { error: "Project không tồn tại." };
   if (project.ownerId !== user.id && user.role !== "ADMIN") {
@@ -177,6 +183,10 @@ export async function updateProjectStatus(
     data: {
       status,
       color: projectStatusColor(status),
+      onProcessAt:
+        status === "ON_PROCESS" || status === "DONE"
+          ? (project.onProcessAt ?? new Date())
+          : project.onProcessAt,
       completedAt:
         status === "DONE"
           ? project.status === "DONE"

@@ -23,10 +23,10 @@ export default function ProjectActionsMenu({
       if (event.key === "Escape") setOpen(false);
     }
 
-    document.addEventListener("pointerdown", closeOnOutsideClick);
+    document.addEventListener("pointerdown", closeOnOutsideClick, true);
     document.addEventListener("keydown", closeOnEscape);
     return () => {
-      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      document.removeEventListener("pointerdown", closeOnOutsideClick, true);
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, [open]);

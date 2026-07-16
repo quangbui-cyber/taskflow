@@ -77,10 +77,10 @@ export default function UserPicker({
         setMenuPosition(null);
       }
     }
-    document.addEventListener("pointerdown", closePicker);
+    document.addEventListener("pointerdown", closePicker, true);
     document.addEventListener("keydown", closeOnEscape);
     return () => {
-      document.removeEventListener("pointerdown", closePicker);
+      document.removeEventListener("pointerdown", closePicker, true);
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, []);
@@ -202,6 +202,7 @@ export default function UserPicker({
       {open && menuPosition && createPortal(
         <div
           ref={menuRef}
+          data-floating-layer
           className="tf-popover-enter fixed z-[100] max-h-72 overflow-y-auto rounded-[8px] border border-zinc-200 bg-white p-1 shadow-xl"
           style={menuPosition}
           role="listbox"

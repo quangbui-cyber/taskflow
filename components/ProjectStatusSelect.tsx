@@ -41,10 +41,10 @@ export default function ProjectStatusSelect({
       if (event.key === "Escape") setOpen(false);
     }
 
-    document.addEventListener("pointerdown", closeDropdown);
+    document.addEventListener("pointerdown", closeDropdown, true);
     document.addEventListener("keydown", closeOnEscape);
     return () => {
-      document.removeEventListener("pointerdown", closeDropdown);
+      document.removeEventListener("pointerdown", closeDropdown, true);
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, []);

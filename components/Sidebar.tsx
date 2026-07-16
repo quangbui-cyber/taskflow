@@ -6,7 +6,6 @@ import {
   ChevronDown,
   CircleDollarSign,
   LogOut,
-  Menu,
   Plus,
   Settings,
   UsersRound,
@@ -15,6 +14,7 @@ import {
 import { logout } from "@/app/actions/auth";
 import Brand from "@/components/Brand";
 import Avatar from "@/components/Avatar";
+import MobileSidebarMenu from "@/components/MobileSidebarMenu";
 import { canManageProjects } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isArchivedProjectStatus, projectStatusColor } from "@/lib/types";
@@ -377,14 +377,7 @@ export default async function Sidebar({
         <Link href="/" aria-label="myCreative - Trang công việc">
           <Brand compact />
         </Link>
-        <details className="group relative">
-          <summary
-            role="button"
-            className="flex h-11 w-11 cursor-pointer list-none items-center justify-center rounded-[7px] border border-zinc-200 text-zinc-600 hover:bg-zinc-50"
-            aria-label="Mở điều hướng"
-          >
-            <Menu size={20} aria-hidden="true" />
-          </summary>
+        <MobileSidebarMenu>
           <div className="absolute right-0 top-12 z-50 max-h-[calc(100vh-80px)] w-[min(88vw,340px)] overflow-y-auto rounded-[8px] border border-zinc-200 bg-white p-3 shadow-xl">
             <div className="space-y-1">
               <MenuLink href="/" label="Công việc" icon={CheckCircle2} active={activeSection === "home" && !activeProjectId} />
@@ -432,7 +425,7 @@ export default async function Sidebar({
               </form>
             </div>
           </div>
-        </details>
+        </MobileSidebarMenu>
       </header>
     </>
   );

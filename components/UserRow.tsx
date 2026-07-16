@@ -102,10 +102,10 @@ export default function UserRow({
       if (menuOpen) setMenuOpen(false);
       else if (drawerOpen) setDrawerOpen(false);
     }
-    document.addEventListener("pointerdown", closeMenu);
+    document.addEventListener("pointerdown", closeMenu, true);
     document.addEventListener("keydown", handleEscape);
     return () => {
-      document.removeEventListener("pointerdown", closeMenu);
+      document.removeEventListener("pointerdown", closeMenu, true);
       document.removeEventListener("keydown", handleEscape);
     };
   }, [drawerOpen, menuOpen]);

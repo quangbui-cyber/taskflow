@@ -22,6 +22,7 @@ import {
 
 const WON = ["DONE"];
 const LOST = ["CANCEL", "FAIL"];
+const RECOGNIZED_REVENUE = ["ON_PROCESS", "DONE"];
 const REVENUE_BLUE = "#2563eb";
 const REVENUE_BLUE_DARK = "#1d4ed8";
 const REVENUE_BLUE_SOFT = "#eff6ff";
@@ -82,7 +83,7 @@ export default async function RevenuePage() {
         color: true,
         status: true,
         revenue: true,
-        completedAt: true,
+        onProcessAt: true,
         client: { select: { id: true, name: true } },
         account: {
           select: {
@@ -116,7 +117,7 @@ export default async function RevenuePage() {
   const countOf = (statuses: string[]) =>
     projects.filter((p) => statuses.includes(p.status)).length;
 
-  const earned = revenueOf(WON);
+  const earned = revenueOf(RECOGNIZED_REVENUE);
   const bidding = revenueOf(["BIDDING"]);
   const wonCount = countOf(WON);
   const lostCount = countOf(LOST);
@@ -146,7 +147,7 @@ export default async function RevenuePage() {
         lostCount: 0,
       };
       entry.count += 1;
-      if (WON.includes(p.status)) entry.earned += p.revenue;
+      if (RECOGNIZED_REVENUE.includes(p.status)) entry.earned += p.revenue;
       if (p.status === "BIDDING") entry.bidding += p.revenue;
       if (WON.includes(p.status)) entry.wonCount += 1;
       if (LOST.includes(p.status)) entry.lostCount += 1;
@@ -162,8 +163,15 @@ export default async function RevenuePage() {
     monthlyRevenue.map((point) => [point.key, point])
   );
   for (const project of projects) {
-    if (project.status !== "DONE" || !project.completedAt) continue;
-    const point = monthlyRevenueByKey.get(vietnamYearMonth(project.completedAt).key);
+    if (
+      !RECOGNIZED_REVENUE.includes(project.status) ||
+      !project.onProcessAt
+    ) {
+      continue;
+    }
+    const point = monthlyRevenueByKey.get(
+      vietnamYearMonth(project.onProcessAt).key
+    );
     if (point) point.value += project.revenue;
   }
 
@@ -199,7 +207,9 @@ export default async function RevenuePage() {
               <p className="mt-2 text-xl font-semibold tabular-nums text-zinc-950">
                 {formatVND(earned)}
               </p>
-              <p className="mt-1 text-xs text-zinc-400">Chỉ dự án Done</p>
+              <p className="mt-1 text-xs text-zinc-400">
+                On Process + Done
+              </p>
             </section>
             <section className="tf-metric-item">
               <p className="text-xs font-medium text-zinc-500">Giá trị Bidding</p>

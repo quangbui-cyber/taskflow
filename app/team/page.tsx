@@ -143,6 +143,14 @@ export default async function TeamPage({
             orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }],
           },
           manager: { select: { name: true } },
+          memberships: {
+            where: {
+              project: { status: { in: ["BIDDING", "ON_PROCESS"] } },
+            },
+            select: {
+              project: { select: { id: true, status: true } },
+            },
+          },
         },
         orderBy: { name: "asc" },
       }),
@@ -228,7 +236,22 @@ export default async function TeamPage({
         periodPerf.done > 0
           ? Math.round((periodPerf.onTime / periodPerf.done) * 100)
           : null;
-      return { m, perf, periodPerf, openAssigned, delegated, rate };
+      const biddingProjectCount = m.memberships.filter(
+        (membership) => membership.project.status === "BIDDING"
+      ).length;
+      const onProcessProjectCount = m.memberships.filter(
+        (membership) => membership.project.status === "ON_PROCESS"
+      ).length;
+      return {
+        m,
+        perf,
+        periodPerf,
+        openAssigned,
+        delegated,
+        rate,
+        biddingProjectCount,
+        onProcessProjectCount,
+      };
     })
     .sort((a, b) => (b.rate ?? -1) - (a.rate ?? -1));
 
@@ -360,9 +383,11 @@ export default async function TeamPage({
                 </span>
               </div>
 
-              <div className="hidden grid-cols-[minmax(0,1fr)_150px_76px_76px_76px_28px] gap-3 border-b border-zinc-100 bg-zinc-50/60 px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-400 sm:grid">
+              <div className="hidden grid-cols-[minmax(0,1fr)_130px_64px_72px_76px_76px_76px_28px] gap-3 border-b border-zinc-100 bg-zinc-50/60 px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-400 lg:grid">
                 <span>Nhân viên</span>
                 <span>Hiệu suất</span>
+                <span className="text-right">Bidding</span>
+                <span className="text-right">On Process</span>
                 <span className="text-right">Tỷ lệ đúng hạn</span>
                 <span className="text-right">Đang mở</span>
                 <span className="text-right">Quá hạn</span>
@@ -370,9 +395,17 @@ export default async function TeamPage({
               </div>
 
               <div className="divide-y divide-zinc-100">
-                {rows.map(({ m, perf, openAssigned, delegated, rate }) => (
+                {rows.map(({
+                  m,
+                  perf,
+                  openAssigned,
+                  delegated,
+                  rate,
+                  biddingProjectCount,
+                  onProcessProjectCount,
+                }) => (
                   <details key={m.id} className="group">
-                    <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_28px] items-center gap-3 px-5 py-3 transition-colors hover:bg-zinc-50 sm:grid-cols-[minmax(0,1fr)_150px_76px_76px_76px_28px]">
+                    <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_28px] items-center gap-3 px-5 py-3 transition-colors hover:bg-zinc-50 lg:grid-cols-[minmax(0,1fr)_130px_64px_72px_76px_76px_76px_28px]">
                       <span className="flex min-w-0 items-center gap-3" title={m.email}>
                         <Avatar
                           id={m.id}
@@ -380,15 +413,27 @@ export default async function TeamPage({
                           avatarUrl={m.avatarUrl}
                           className="h-8 w-8 text-xs"
                         />
-                        <span className="truncate text-sm font-medium">
-                          {m.name}
-                          <RoleBadge role={m.role} />
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-medium">
+                            {m.name}
+                            <RoleBadge role={m.role} />
+                          </span>
+                          <span className="mt-0.5 block text-[11px] tabular-nums text-zinc-400 lg:hidden">
+                            Bidding {biddingProjectCount} · On Process{" "}
+                            {onProcessProjectCount}
+                          </span>
                         </span>
                       </span>
-                      <span className="hidden sm:block">
+                      <span className="hidden lg:block">
                         <PerfMini perf={perf} />
                       </span>
-                      <span className="hidden text-right sm:block">
+                      <span className="hidden text-right text-sm font-medium tabular-nums text-amber-600 lg:block">
+                        {biddingProjectCount}
+                      </span>
+                      <span className="hidden text-right text-sm font-medium tabular-nums text-blue-600 lg:block">
+                        {onProcessProjectCount}
+                      </span>
+                      <span className="hidden text-right lg:block">
                         {rate !== null ? (
                           <>
                             <span className="block text-sm font-semibold text-zinc-700">
@@ -402,11 +447,11 @@ export default async function TeamPage({
                           <span className="text-sm text-zinc-400">—</span>
                         )}
                       </span>
-                      <span className="hidden text-right text-sm text-zinc-600 sm:block">
+                      <span className="hidden text-right text-sm text-zinc-600 lg:block">
                         {openAssigned.length}
                       </span>
                       <span
-                        className={`hidden text-right text-sm sm:block ${
+                        className={`hidden text-right text-sm lg:block ${
                           perf.overdueOpen > 0
                             ? "font-semibold text-red-600"
                             : "text-zinc-400"
@@ -425,6 +470,8 @@ export default async function TeamPage({
                       <div className="text-xs text-zinc-400">
                         {m.email}
                         {isAdmin && m.manager && ` · Quản lý: ${m.manager.name}`}
+                        {" · "}Bidding: {biddingProjectCount}
+                        {" · "}On Process: {onProcessProjectCount}
                       </div>
                       <PerformanceBar perf={perf} periodLabel={period.label} />
 

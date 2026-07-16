@@ -300,6 +300,10 @@ async function main() {
         status: definition.status,
         revenue: definition.revenue,
         color: definition.color,
+        onProcessAt:
+          definition.status === "ON_PROCESS" || definition.status === "DONE"
+            ? daysFromNow(-(projectIndex + 1) * 18)
+            : null,
         completedAt:
           definition.status === "DONE" ? daysFromNow(-(projectIndex + 1) * 14) : null,
         ownerId: userId(definition.owner),

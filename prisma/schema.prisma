@@ -51,9 +51,11 @@ model Project {
   members              ProjectMember[]
   tasks                Task[]
   files                ProjectFile[]
-  completedAt          DateTime? // thời điểm chuyển sang DONE - dùng ghi nhận doanh thu theo tháng
+  onProcessAt          DateTime? // thời điểm đầu tiên chuyển sang ON_PROCESS - dùng ghi nhận doanh thu
+  completedAt          DateTime? // thời điểm chuyển sang DONE
   createdAt            DateTime        @default(now())
 
+  @@index([status, onProcessAt])
   @@index([status, completedAt])
 }
 

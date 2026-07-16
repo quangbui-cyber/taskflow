@@ -51,6 +51,35 @@ export default function NewTaskInline({
     if (editing) inputRef.current?.focus();
   }, [editing]);
 
+  useEffect(() => {
+    if (!editing) return;
+
+    function closeOnOutsideClick(event: PointerEvent) {
+      const target = event.target as Node;
+      const targetElement =
+        target instanceof Element ? target : target.parentElement;
+
+      if (
+        formRef.current?.contains(target) ||
+        targetElement?.closest("[data-floating-layer]")
+      ) {
+        return;
+      }
+      setEditing(false);
+    }
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setEditing(false);
+    }
+
+    document.addEventListener("pointerdown", closeOnOutsideClick, true);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick, true);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [editing]);
+
   if (!editing) {
     return (
       <button

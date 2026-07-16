@@ -92,10 +92,10 @@ export default function MembersBar({
       setInviteFocused(false);
     }
 
-    document.addEventListener("pointerdown", closeOnOutsideClick);
+    document.addEventListener("pointerdown", closeOnOutsideClick, true);
     document.addEventListener("keydown", closeOnEscape);
     return () => {
-      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      document.removeEventListener("pointerdown", closeOnOutsideClick, true);
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, [open]);
