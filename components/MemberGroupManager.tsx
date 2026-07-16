@@ -7,9 +7,14 @@ import {
   deleteMemberGroup,
   updateMemberGroup,
 } from "@/app/actions/admin";
-import { avatarClass } from "@/lib/avatar";
+import Avatar from "@/components/Avatar";
 
-type GroupUser = { id: string; name: string; email: string };
+type GroupUser = {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl: string | null;
+};
 type GroupItem = { id: string; name: string; memberIds: string[] };
 
 function MemberPicker({
@@ -58,11 +63,12 @@ function MemberPicker({
               onChange={() => toggle(user.id)}
               className="h-4 w-4 accent-[#a8d431]"
             />
-            <span
-              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${avatarClass(user.id)}`}
-            >
-              {user.name.charAt(0).toUpperCase()}
-            </span>
+            <Avatar
+              id={user.id}
+              name={user.name}
+              avatarUrl={user.avatarUrl}
+              className="h-7 w-7 text-xs"
+            />
             <span className="min-w-0">
               <span className="block truncate text-sm font-medium text-zinc-700">
                 {user.name}
@@ -170,7 +176,7 @@ export default function MemberGroupManager({
             className="tf-button-primary"
           >
             <Plus size={16} aria-hidden="true" />
-            Lưu thay đổi
+            Lưu
           </button>
         </div>
         <MemberPicker users={users} selectedIds={newMemberIds} onChange={setNewMemberIds} />
@@ -238,7 +244,7 @@ export default function MemberGroupManager({
                       className="tf-button-primary"
                     >
                       <Save size={15} aria-hidden="true" />
-                      Lưu thay đổi
+                      Lưu
                     </button>
                   </div>
                 </div>

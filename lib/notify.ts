@@ -8,7 +8,12 @@ function notificationDeletionCutoff() {
 export async function notify(
   userIds: (string | null | undefined)[],
   data: {
-    type: "TASK_ASSIGNED" | "TASK_COMPLETED" | "COMMENT" | "TASK_FOLLOW";
+    type:
+      | "TASK_ASSIGNED"
+      | "TASK_COMPLETED"
+      | "TASK_UPDATED"
+      | "COMMENT"
+      | "TASK_FOLLOW";
     message: string;
     taskId?: string;
     projectId?: string;

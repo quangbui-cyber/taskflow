@@ -4,14 +4,13 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
 import CreateUserForm from "@/components/CreateUserForm";
-import UserRow from "@/components/UserRow";
+import UserAccountManager from "@/components/UserAccountManager";
 import MemberGroupManager from "@/components/MemberGroupManager";
 import CatalogManager from "@/components/CatalogManager";
 import AccountCatalogManager from "@/components/AccountCatalogManager";
+import ClientCatalogManager from "@/components/ClientCatalogManager";
 import {
-  createClient,
   createSalesTeam,
-  deleteClient,
   deleteSalesTeam,
 } from "@/app/actions/catalog";
 
@@ -46,10 +45,16 @@ async function SettingsContent({
         name: true,
         email: true,
         role: true,
+        isActive: true,
+        deactivatedAt: true,
+        avatarUrl: true,
         managerId: true,
         createdAt: true,
+        accountProfile: { select: { id: true } },
         _count: {
           select: {
+            ownedProjects: true,
+            createdTasks: true,
             assignedTasks: true,
             memberships: true,
           },
@@ -57,43 +62,42 @@ async function SettingsContent({
       },
       orderBy: { createdAt: "asc" },
     });
-    const managers = users.map((manager) => ({
+    const managers = users.filter((manager) => manager.isActive).map((manager) => ({
       id: manager.id,
       name: manager.name,
+      email: manager.email,
+      avatarUrl: manager.avatarUrl,
     }));
 
     return (
-      <section className="tf-panel overflow-hidden">
-        <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-3">
-          <h2 className="font-semibold">Tài khoản ({users.length})</h2>
-        </div>
-        <ul className="divide-y divide-zinc-100">
-          {users.map((user) => (
-            <UserRow
-              key={user.id}
-              user={{
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                role: user.role,
-                managerId: user.managerId,
-                createdAt: user.createdAt.toISOString(),
-                taskCount: user._count.assignedTasks,
-                projectCount: user._count.memberships,
-              }}
-              isSelf={user.id === adminId}
-              managers={managers}
-            />
-          ))}
-        </ul>
-      </section>
+      <UserAccountManager
+        adminId={adminId}
+        managers={managers}
+        users={users.map((user) => ({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          isActive: user.isActive,
+          deactivatedAt: user.deactivatedAt?.toISOString() ?? null,
+          avatarUrl: user.avatarUrl,
+          managerId: user.managerId,
+          createdAt: user.createdAt.toISOString(),
+          assignedTaskCount: user._count.assignedTasks,
+          createdTaskCount: user._count.createdTasks,
+          projectMemberCount: user._count.memberships,
+          ownedProjectCount: user._count.ownedProjects,
+          isAccount: Boolean(user.accountProfile),
+        }))}
+      />
     );
   }
 
   if (activeTab === "groups") {
     const [users, memberGroups] = await Promise.all([
       prisma.user.findMany({
-        select: { id: true, name: true, email: true },
+        where: { isActive: true },
+        select: { id: true, name: true, email: true, avatarUrl: true },
         orderBy: { name: "asc" },
       }),
       prisma.memberGroup.findMany({
@@ -121,17 +125,12 @@ async function SettingsContent({
     });
 
     return (
-      <CatalogManager
-        title="Client"
-        hint="Nhóm khách hàng để phân loại và theo dõi doanh số."
-        placeholder="Tên client, ví dụ: Ngân hàng ABC"
-        items={clients.map((client) => ({
+      <ClientCatalogManager
+        clients={clients.map((client) => ({
           id: client.id,
           name: client.name,
           projectCount: client._count.projects,
         }))}
-        createAction={createClient}
-        deleteAction={deleteClient}
       />
     );
   }
@@ -162,15 +161,19 @@ async function SettingsContent({
   const [accounts, salesTeams, accountUsers] = await Promise.all([
     prisma.account.findMany({
       include: {
-        user: { select: { id: true, name: true, email: true } },
+        user: { select: { id: true, name: true, email: true, avatarUrl: true } },
         _count: { select: { projects: true } },
       },
       orderBy: { name: "asc" },
     }),
     prisma.salesTeam.findMany({ orderBy: { name: "asc" } }),
     prisma.user.findMany({
-      where: { role: { in: ["ADMIN", "ACCOUNT"] }, accountProfile: null },
-      select: { id: true, name: true, email: true, role: true },
+      where: {
+        role: { in: ["ADMIN", "ACCOUNT"] },
+        accountProfile: null,
+        isActive: true,
+      },
+      select: { id: true, name: true, email: true, role: true, avatarUrl: true },
       orderBy: { name: "asc" },
     }),
   ]);
@@ -181,6 +184,7 @@ async function SettingsContent({
         id: account.id,
         name: account.user?.name ?? account.name,
         email: account.user?.email ?? null,
+        avatarUrl: account.user?.avatarUrl ?? null,
         projectCount: account._count.projects,
         teamId: account.teamId,
         linked: Boolean(account.userId),
@@ -202,7 +206,15 @@ export default async function AdminPage({
     : "create-user";
   const sidebarProjects = await prisma.project.findMany({
     where: { members: { some: { userId: admin.id } } },
-    select: { id: true, name: true, color: true, status: true },
+    select: {
+      id: true,
+      name: true,
+      color: true,
+      status: true,
+      account: {
+        select: { team: { select: { id: true, name: true } } },
+      },
+    },
     orderBy: { createdAt: "desc" },
   });
 
@@ -226,7 +238,7 @@ export default async function AdminPage({
           </div>
 
           <nav
-            className="flex gap-1 overflow-x-auto border-b border-zinc-200"
+            className="tf-scroll-tabs flex gap-1 border-b border-zinc-200"
             aria-label="Các mục cài đặt"
           >
             {SETTINGS_TABS.map((tab) => (

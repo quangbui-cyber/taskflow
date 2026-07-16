@@ -128,7 +128,7 @@ Trang `/team` dành cho mọi người dùng, dữ liệu hiển thị phụ thu
 
 Nhân viên hiển thị dạng **bảng xếp hạng** theo % đúng hạn — mỗi người một dòng với thanh hiệu suất thu nhỏ, % đúng hạn, số việc đang mở và quá hạn. Bấm vào dòng để xem chi tiết (email, thanh hiệu suất đầy đủ, việc được giao, việc giao ra).
 
-Hiệu suất phân loại: Đúng hạn / Trễ hạn / Quá hạn chưa xong / Đang mở.
+Hiệu suất phân loại: Đúng hạn / Trễ hạn / Quá hạn / Đang làm / Cần làm.
 
 ### 9. Cài đặt
 

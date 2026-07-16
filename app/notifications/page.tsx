@@ -44,7 +44,15 @@ export default async function NotificationsPage({
     }),
     prisma.project.findMany({
       where: { members: { some: { userId: user.id } } },
-      select: { id: true, name: true, color: true, status: true },
+      select: {
+        id: true,
+        name: true,
+        color: true,
+        status: true,
+        account: {
+          select: { team: { select: { id: true, name: true } } },
+        },
+      },
       orderBy: { createdAt: "desc" },
     }),
   ]);

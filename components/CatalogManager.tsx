@@ -3,6 +3,10 @@
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import type { CatalogState } from "@/app/actions/catalog";
+import {
+  useActionFeedback,
+  useInteraction,
+} from "@/components/InteractionProvider";
 
 type Item = { id: string; name: string; projectCount: number };
 
@@ -23,6 +27,7 @@ export default function CatalogManager({
   placeholder: string;
   countLabel?: string;
 }) {
+  const { notify } = useInteraction();
   const formRef = useRef<HTMLFormElement>(null);
   const [state, formAction, pending] = useActionState<CatalogState, FormData>(
     createAction,
@@ -30,6 +35,7 @@ export default function CatalogManager({
   );
   const [deleteError, setDeleteError] = useState("");
   const [deleting, startDeleteTransition] = useTransition();
+  useActionFeedback(state);
 
   useEffect(() => {
     if (state.success) formRef.current?.reset();
@@ -54,16 +60,18 @@ export default function CatalogManager({
           type="submit"
           disabled={pending}
           className="tf-button-primary"
+          aria-busy={pending}
         >
-          <Plus size={16} aria-hidden="true" />
-          Lưu thay đổi
+          {pending ? (
+            <span className="tf-spinner" aria-hidden="true" />
+          ) : (
+            <Plus size={16} aria-hidden="true" />
+          )}
+          {pending ? "Đang thêm..." : "Thêm"}
         </button>
       </form>
       {state.error && (
         <p className="px-4 -mt-2 pb-2 text-xs text-red-600">{state.error}</p>
-      )}
-      {state.success && (
-        <p className="px-4 -mt-2 pb-2 text-xs text-brand-800">{state.success}</p>
       )}
       {deleteError && (
         <p className="px-4 -mt-2 pb-2 text-xs text-red-600">{deleteError}</p>
@@ -93,7 +101,12 @@ export default function CatalogManager({
                   setDeleteError("");
                   startDeleteTransition(async () => {
                     const result = await deleteAction(item.id);
-                    if (result && result.error) setDeleteError(result.error);
+                    if (result && result.error) {
+                      setDeleteError(result.error);
+                      notify({ message: result.error, tone: "error" });
+                    } else {
+                      notify({ message: `Đã xoá ${item.name}.`, tone: "success" });
+                    }
                   });
                 }
               }}

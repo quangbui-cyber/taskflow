@@ -20,6 +20,19 @@ function statusLabel(status: string) {
   return STATUSES.find((item) => item.key === status)?.label ?? status;
 }
 
+function deadlineLabel(value: Date | null) {
+  if (!value) return "Đã bỏ hạn chót";
+  return new Intl.DateTimeFormat("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Ho_Chi_Minh",
+  }).format(value);
+}
+
 async function taskLink(projectId: string, taskId: string) {
   const headerList = await headers();
   const host =
@@ -56,7 +69,9 @@ const PRIORITY_KEYS: ReadonlySet<string> = new Set(
 async function assertMember(projectId: string) {
   const user = await requireUser();
   const membership = await getMembership(projectId, user.id);
-  if (!membership) throw new Error("Bạn không thuộc project này.");
+  if (!membership && user.role !== "ADMIN") {
+    throw new Error("Bạn không thuộc project này.");
+  }
   return user;
 }
 
@@ -209,12 +224,21 @@ export async function updateTask(
   });
 
   const title = data.title ?? task.title;
+  const statusChanged =
+    data.status !== undefined && data.status !== task.status;
+  const assigneeChanged =
+    data.assigneeId !== undefined && data.assigneeId !== task.assigneeId;
+  const dueDateChanged =
+    data.dueDate !== undefined &&
+    (dueDate?.getTime() ?? null) !== (task.dueDate?.getTime() ?? null);
+  const hasFollowerUpdate = statusChanged || assigneeChanged || dueDateChanged;
+  const followers = hasFollowerUpdate ? await followerIds(taskId) : [];
 
   // 🔔 Giao việc: assignee mới ≠ assignee cũ và ≠ người thao tác
   if (
     data.assigneeId !== undefined &&
     data.assigneeId &&
-    data.assigneeId !== task.assigneeId &&
+    assigneeChanged &&
     data.assigneeId !== actor.id
   ) {
     await notify([data.assigneeId], {
@@ -226,13 +250,42 @@ export async function updateTask(
   }
 
   // 🔔 Hoàn thành: báo người giao (creator) + người theo dõi
-  if (data.status === "DONE" && task.status !== "DONE") {
-    const followers = await followerIds(taskId);
+  if (data.status === "DONE" && statusChanged) {
     await notify(
-      [task.creatorId, ...followers].filter((id) => id !== actor.id),
+      [task.creatorId, ...followers].filter(
+        (id) =>
+          id !== actor.id &&
+          (!assigneeChanged || id !== data.assigneeId)
+      ),
       {
         type: "TASK_COMPLETED",
         message: `${actor.name} đã hoàn thành task “${title}”`,
+        taskId,
+        projectId: task.projectId,
+      }
+    );
+  } else if (hasFollowerUpdate) {
+    const changes = [
+      statusChanged
+        ? `trạng thái ${statusLabel(task.status)} → ${statusLabel(updatedTask.status)}`
+        : null,
+      assigneeChanged
+        ? `người phụ trách: ${updatedTask.assignee?.name ?? "Chưa giao"}`
+        : null,
+      dueDateChanged
+        ? `hạn chót: ${deadlineLabel(updatedTask.dueDate)}`
+        : null,
+    ].filter((change): change is string => Boolean(change));
+
+    await notify(
+      followers.filter(
+        (id) =>
+          id !== actor.id &&
+          (!assigneeChanged || id !== data.assigneeId)
+      ),
+      {
+        type: "TASK_UPDATED",
+        message: `${actor.name} đã cập nhật task “${title}”: ${changes.join(" · ")}`,
         taskId,
         projectId: task.projectId,
       }
@@ -259,6 +312,7 @@ export async function updateTask(
   }
 
   revalidatePath(`/projects/${task.projectId}`);
+  revalidatePath("/");
 }
 
 /** Di chuyển task sang cột khác / vị trí khác (kéo thả) */
@@ -288,18 +342,30 @@ export async function moveTask(
     include: { assignee: { select: { name: true } } },
   });
 
-  // 🔔 Hoàn thành (kéo thả vào cột Hoàn thành): báo người giao + người theo dõi
-  if (status === "DONE" && task.status !== "DONE") {
+  // 🔔 Thay đổi trạng thái: người theo dõi nhận cập nhật; hoàn thành báo thêm người giao
+  if (status !== task.status) {
     const followers = await followerIds(taskId);
-    await notify(
-      [task.creatorId, ...followers].filter((id) => id !== actor.id),
-      {
-        type: "TASK_COMPLETED",
-        message: `${actor.name} đã hoàn thành task “${task.title}”`,
-        taskId,
-        projectId: task.projectId,
-      }
-    );
+    if (status === "DONE") {
+      await notify(
+        [task.creatorId, ...followers].filter((id) => id !== actor.id),
+        {
+          type: "TASK_COMPLETED",
+          message: `${actor.name} đã hoàn thành task “${task.title}”`,
+          taskId,
+          projectId: task.projectId,
+        }
+      );
+    } else {
+      await notify(
+        followers.filter((id) => id !== actor.id),
+        {
+          type: "TASK_UPDATED",
+          message: `${actor.name} đã cập nhật task “${task.title}”: trạng thái ${statusLabel(task.status)} → ${statusLabel(updatedTask.status)}`,
+          taskId,
+          projectId: task.projectId,
+        }
+      );
+    }
   }
 
   if (status !== task.status) {
@@ -312,6 +378,7 @@ export async function moveTask(
   }
 
   revalidatePath(`/projects/${task.projectId}`);
+  revalidatePath("/");
 }
 
 export async function deleteTask(taskId: string) {
@@ -321,6 +388,7 @@ export async function deleteTask(taskId: string) {
 
   await prisma.task.delete({ where: { id: taskId } });
   revalidatePath(`/projects/${task.projectId}`);
+  revalidatePath("/");
 }
 
 export async function addComment(
@@ -384,6 +452,7 @@ export async function addFollower(taskId: string, userId: string) {
   }
 
   revalidatePath(`/projects/${task.projectId}`);
+  revalidatePath("/");
 }
 
 export async function removeFollower(taskId: string, userId: string) {
@@ -395,4 +464,5 @@ export async function removeFollower(taskId: string, userId: string) {
     where: { taskId, userId },
   });
   revalidatePath(`/projects/${task.projectId}`);
+  revalidatePath("/");
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { Plus, UserPlus, UsersRound, X } from "lucide-react";
 import {
   addMember,
@@ -9,19 +9,25 @@ import {
   type ActionState,
 } from "@/app/actions/projects";
 import type { MemberDTO } from "@/lib/types";
-import { avatarClass } from "@/lib/avatar";
+import Avatar from "@/components/Avatar";
 
 type AvailableUser = {
   id: string;
   name: string;
   email: string;
   role: string;
+  avatarUrl: string | null;
 };
 
 type MemberGroupOption = {
   id: string;
   name: string;
-  members: { id: string; name: string; email: string }[];
+  members: {
+    id: string;
+    name: string;
+    email: string;
+    avatarUrl: string | null;
+  }[];
 };
 
 export default function MembersBar({
@@ -47,6 +53,7 @@ export default function MembersBar({
   const [groupMessage, setGroupMessage] = useState("");
   const [groupError, setGroupError] = useState(false);
   const [groupPending, startGroupTransition] = useTransition();
+  const rootRef = useRef<HTMLDivElement>(null);
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     async (prev, formData) => {
       const result = await addMember(prev, formData);
@@ -70,6 +77,29 @@ export default function MembersBar({
     .slice(0, 8);
   const showSuggestions = inviteFocused && availableUsers.length > 0;
 
+  useEffect(() => {
+    if (!open) return;
+
+    function closeOnOutsideClick(event: PointerEvent) {
+      if (rootRef.current?.contains(event.target as Node)) return;
+      setOpen(false);
+      setInviteFocused(false);
+    }
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      setInviteFocused(false);
+    }
+
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
   function selectInvitee(user: AvailableUser) {
     setInviteQuery(`${user.name} <${user.email}>`);
     setSelectedInviteeId(user.id);
@@ -77,7 +107,7 @@ export default function MembersBar({
   }
 
   return (
-    <div className="relative">
+    <div ref={rootRef} className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
         className="flex items-center rounded-[7px] px-1 py-1 transition-colors hover:bg-zinc-100"
@@ -85,13 +115,13 @@ export default function MembersBar({
       >
         <span className="flex -space-x-2">
           {members.slice(0, 4).map((m) => (
-            <span
+            <Avatar
               key={m.userId}
-              className={`flex h-8 w-8 items-center justify-center rounded-full border-2 border-white text-xs font-semibold ${avatarClass(m.userId)}`}
-              title={m.user.name}
-            >
-              {m.user.name.charAt(0).toUpperCase()}
-            </span>
+              id={m.userId}
+              name={m.user.name}
+              avatarUrl={m.user.avatarUrl}
+              className="h-8 w-8 border-2 border-white text-xs"
+            />
           ))}
         </span>
         {members.length > 4 && (
@@ -105,7 +135,7 @@ export default function MembersBar({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-11 z-30 w-[min(340px,90vw)] space-y-3 rounded-[8px] border border-zinc-200 bg-white p-4 shadow-xl">
+        <div className="tf-popover-enter absolute right-0 top-11 z-30 w-[min(340px,90vw)] space-y-3 rounded-[8px] border border-zinc-200 bg-white p-4 shadow-xl">
           <h3 className="font-semibold text-sm">
             Thành viên ({members.length})
           </h3>
@@ -115,11 +145,12 @@ export default function MembersBar({
                 key={m.userId}
                 className="flex items-center gap-2 py-1 text-sm"
               >
-                <span
-                  className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${avatarClass(m.userId)}`}
-                >
-                  {m.user.name.charAt(0).toUpperCase()}
-                </span>
+                <Avatar
+                  id={m.userId}
+                  name={m.user.name}
+                  avatarUrl={m.user.avatarUrl}
+                  className="h-7 w-7 text-xs"
+                />
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">
                     {m.user.name}
@@ -186,11 +217,12 @@ export default function MembersBar({
                               }}
                               className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-brand-50"
                             >
-                              <span
-                                className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${avatarClass(u.id)}`}
-                              >
-                                {u.name.charAt(0).toUpperCase()}
-                              </span>
+                              <Avatar
+                                id={u.id}
+                                name={u.name}
+                                avatarUrl={u.avatarUrl}
+                                className="h-7 w-7 text-xs"
+                              />
                               <span className="min-w-0 flex-1">
                                 <span className="block truncate text-sm font-medium text-zinc-700">
                                   {u.name}

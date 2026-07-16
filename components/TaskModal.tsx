@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
-import { Bell, Eye, Save, Send, Trash2, X } from "lucide-react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { Bell, Check, ChevronDown, Eye, Save, Send, Trash2, X } from "lucide-react";
 import {
   addComment,
   addFollower,
@@ -11,8 +11,16 @@ import {
   type ActionState,
 } from "@/app/actions/tasks";
 import { PRIORITIES, STATUSES, type MemberDTO, type TaskDTO } from "@/lib/types";
-import { avatarClass } from "@/lib/avatar";
 import DeadlineField, { toDeadlineLocalValue } from "@/components/DeadlineField";
+import Avatar from "@/components/Avatar";
+import UserPicker from "@/components/UserPicker";
+import { useInteraction } from "@/components/InteractionProvider";
+
+const PRIORITY_DOT: Record<string, string> = {
+  LOW: "bg-emerald-500",
+  MEDIUM: "bg-orange-500",
+  HIGH: "bg-red-500",
+};
 
 export default function TaskModal({
   task,
@@ -25,67 +33,143 @@ export default function TaskModal({
   currentUserId: string;
   onClose: () => void;
 }) {
+  const { notify } = useInteraction();
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description ?? "");
   const [result, setResult] = useState(task.result ?? "");
   const [status, setStatus] = useState(task.status);
   const [priority, setPriority] = useState(task.priority);
   const [assigneeId, setAssigneeId] = useState(task.assigneeId ?? "");
+  const [openPicker, setOpenPicker] = useState<"followers" | "priority" | null>(
+    null
+  );
   const [dueDate, setDueDate] = useState(
     task.dueDate ? toDeadlineLocalValue(task.dueDate) : ""
   );
   const [saving, startSaving] = useTransition();
   const [following, startFollowing] = useTransition();
+  const followersPickerRef = useRef<HTMLDivElement>(null);
+  const priorityPickerRef = useRef<HTMLDivElement>(null);
 
   const [commentState, commentAction, commentPending] = useActionState<
     ActionState,
     FormData
-  >(addComment, {});
+  >(async (prev, formData) => {
+    const response = await addComment(prev, formData);
+    if (response.error) {
+      notify({ message: response.error, tone: "error" });
+    } else {
+      notify({ message: "Đã gửi bình luận.", tone: "success" });
+    }
+    return response;
+  }, {});
 
   const followerIds = new Set(task.followers.map((f) => f.id));
   const isFollowing = followerIds.has(currentUserId);
   const addableFollowers = members.filter((m) => !followerIds.has(m.userId));
+  const selectedPriority =
+    PRIORITIES.find((p) => p.key === priority) ?? PRIORITIES[0];
+  const memberOptions = members.map((m) => ({
+    id: m.userId,
+    name: m.user.name,
+    email: m.user.email,
+    avatarUrl: m.user.avatarUrl,
+  }));
+
+  useEffect(() => {
+    if (!openPicker) return;
+
+    function closePicker(event: PointerEvent) {
+      const activePicker =
+        openPicker === "followers" ? followersPickerRef.current : priorityPickerRef.current;
+      if (!activePicker?.contains(event.target as Node)) setOpenPicker(null);
+    }
+
+    function closePickerOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpenPicker(null);
+    }
+
+    document.addEventListener("pointerdown", closePicker);
+    document.addEventListener("keydown", closePickerOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closePicker);
+      document.removeEventListener("keydown", closePickerOnEscape);
+    };
+  }, [openPicker]);
 
   function toggleFollow() {
     startFollowing(async () => {
-      if (isFollowing) await removeFollower(task.id, currentUserId);
-      else await addFollower(task.id, currentUserId);
+      try {
+        if (isFollowing) await removeFollower(task.id, currentUserId);
+        else await addFollower(task.id, currentUserId);
+        notify({
+          message: isFollowing ? "Đã bỏ theo dõi task." : "Đã theo dõi task.",
+          tone: "success",
+        });
+      } catch {
+        notify({ message: "Không thể cập nhật theo dõi.", tone: "error" });
+      }
+    });
+  }
+
+  function changeFollower(userId: string, shouldFollow: boolean) {
+    startFollowing(async () => {
+      try {
+        if (shouldFollow) await addFollower(task.id, userId);
+        else await removeFollower(task.id, userId);
+        notify({
+          message: shouldFollow ? "Đã thêm người theo dõi." : "Đã bỏ người theo dõi.",
+          tone: "success",
+        });
+      } catch {
+        notify({ message: "Không thể cập nhật người theo dõi.", tone: "error" });
+      }
     });
   }
 
   function save() {
     if (!title.trim()) return;
     startSaving(async () => {
-      await updateTask(task.id, {
-        title: title.trim(),
-        description: description.trim() || null,
-        result: result.trim() || null,
-        status,
-        priority,
-        assigneeId: assigneeId || null,
-        // Gửi thời điểm tuyệt đối (ISO) tính theo múi giờ trình duyệt,
-        // để server (chạy UTC trên Vercel) lưu đúng, không lệch giờ.
-        dueDate: dueDate ? new Date(dueDate).toISOString() : null,
-      });
-      onClose();
+      try {
+        await updateTask(task.id, {
+          title: title.trim(),
+          description: description.trim() || null,
+          result: result.trim() || null,
+          status,
+          priority,
+          assigneeId: assigneeId || null,
+          // Gửi thời điểm tuyệt đối (ISO) tính theo múi giờ trình duyệt,
+          // để server (chạy UTC trên Vercel) lưu đúng, không lệch giờ.
+          dueDate: dueDate ? new Date(dueDate).toISOString() : null,
+        });
+        notify({ message: "Đã lưu thay đổi task.", tone: "success" });
+        onClose();
+      } catch {
+        notify({ message: "Không thể lưu task. Vui lòng thử lại.", tone: "error" });
+      }
     });
   }
 
   function remove() {
     if (!confirm("Xoá task này?")) return;
     startSaving(async () => {
-      await deleteTask(task.id);
-      onClose();
+      try {
+        await deleteTask(task.id);
+        notify({ message: "Đã xoá task.", tone: "success" });
+        onClose();
+      } catch {
+        notify({ message: "Không thể xoá task.", tone: "error" });
+      }
     });
   }
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-zinc-950/35 p-3 backdrop-blur-[2px] sm:p-8"
+      className="tf-overlay-enter fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-zinc-950/35 p-3 backdrop-blur-[2px] sm:p-8"
       onClick={onClose}
     >
       <div
-        className="my-auto w-full max-w-2xl rounded-[10px] border border-zinc-200 bg-white shadow-xl"
+        className="tf-modal-enter my-auto w-full max-w-2xl rounded-[10px] border border-zinc-200 bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="space-y-5 p-4 sm:p-6">
@@ -105,7 +189,7 @@ export default function TaskModal({
                     ? "border-brand-300 bg-brand-50 text-brand-700"
                     : "border-zinc-200 text-zinc-500 hover:border-brand-300 hover:text-brand-700"
                 }`}
-                title="Nhận thông báo khi task hoàn thành hoặc có bình luận"
+                title="Nhận thông báo khi task có bình luận hoặc thay đổi quan trọng"
               >
                 <Bell size={14} aria-hidden="true" />
                 {isFollowing ? "Đang theo dõi" : "Theo dõi"}
@@ -136,16 +220,15 @@ export default function TaskModal({
                   key={f.id}
                   className="inline-flex items-center gap-1.5 rounded-full bg-zinc-100 pl-1 pr-2 py-0.5 text-sm"
                 >
-                  <span
-                    className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-semibold ${avatarClass(f.id)}`}
-                  >
-                    {f.name.charAt(0).toUpperCase()}
-                  </span>
+                  <Avatar
+                    id={f.id}
+                    name={f.name}
+                    avatarUrl={f.avatarUrl}
+                    className="h-5 w-5 text-[10px]"
+                  />
                   {f.name}
                   <button
-                    onClick={() =>
-                      startFollowing(() => removeFollower(task.id, f.id))
-                    }
+                    onClick={() => changeFollower(f.id, false)}
                     disabled={following}
                     className="text-zinc-400 hover:text-red-500 disabled:opacity-50"
                     title="Bỏ theo dõi"
@@ -155,77 +238,172 @@ export default function TaskModal({
                 </span>
               ))}
               {addableFollowers.length > 0 && (
-                <select
-                  value=""
-                  disabled={following}
-                  onChange={(e) => {
-                    const uid = e.target.value;
-                    if (uid) startFollowing(() => addFollower(task.id, uid));
-                  }}
-                  className="rounded-[7px] border border-dashed border-zinc-300 px-2.5 py-1 text-sm text-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand-400/30 disabled:opacity-50"
-                >
-                  <option value="">+ Thêm người theo dõi</option>
-                  {addableFollowers.map((m) => (
-                    <option key={m.userId} value={m.userId}>
-                      {m.user.name}
-                    </option>
-                  ))}
-                </select>
+                <div ref={followersPickerRef} className="relative">
+                  <button
+                    type="button"
+                    disabled={following}
+                    onClick={() =>
+                      setOpenPicker((current) =>
+                        current === "followers" ? null : "followers"
+                      )
+                    }
+                    className="inline-flex min-h-9 items-center gap-2 rounded-[7px] border border-dashed border-zinc-300 bg-white px-2.5 py-1 text-sm text-zinc-500 transition-colors hover:border-brand-300 hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400/30 disabled:opacity-50"
+                    aria-haspopup="listbox"
+                    aria-expanded={openPicker === "followers"}
+                  >
+                    + Thêm người theo dõi
+                    <ChevronDown size={14} aria-hidden="true" />
+                  </button>
+                  {openPicker === "followers" && (
+                    <div
+                      className="tf-popover-enter absolute left-0 z-50 mt-2 w-72 overflow-hidden rounded-[8px] border border-zinc-200 bg-white p-1 shadow-lg"
+                      role="listbox"
+                    >
+                      {addableFollowers.map((m) => (
+                        <button
+                          key={m.userId}
+                          type="button"
+                          onClick={() => {
+                            setOpenPicker(null);
+                            changeFollower(m.userId, true);
+                          }}
+                          className="flex w-full items-center gap-2 rounded-[6px] px-2 py-2 text-left transition-colors hover:bg-brand-50 focus:bg-brand-50 focus:outline-none"
+                          role="option"
+                          aria-selected={false}
+                        >
+                          <Avatar
+                            id={m.userId}
+                            name={m.user.name}
+                            avatarUrl={m.user.avatarUrl}
+                            className="h-8 w-8 text-xs"
+                          />
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-medium text-zinc-800">
+                              {m.user.name}
+                            </span>
+                            <span className="block truncate text-xs text-zinc-400">
+                              {m.user.email}
+                            </span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <label className="block">
               <span className="text-xs font-medium text-zinc-500">
                 Trạng thái
               </span>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-                className="tf-field mt-1 !min-h-9 !py-1.5"
-              >
-                {STATUSES.map((s) => (
-                  <option key={s.key} value={s.key}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
+              <span className="relative mt-1 block">
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value)}
+                  className="tf-field !h-12 !min-h-12 appearance-none !py-2 !pr-11"
+                >
+                  {STATUSES.map((s) => (
+                    <option key={s.key} value={s.key}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  size={16}
+                  className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500"
+                  aria-hidden="true"
+                />
+              </span>
             </label>
 
             <label className="block">
               <span className="text-xs font-medium text-zinc-500">
                 Độ ưu tiên
               </span>
-              <select
-                value={priority}
-                onChange={(e) => setPriority(e.target.value)}
-                className="tf-field mt-1 !min-h-9 !py-1.5"
-              >
-                {PRIORITIES.map((p) => (
-                  <option key={p.key} value={p.key}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
+              <div ref={priorityPickerRef} className="relative mt-1">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setOpenPicker((current) =>
+                      current === "priority" ? null : "priority"
+                    )
+                  }
+                  className="tf-field flex !h-12 !min-h-12 w-full items-center justify-between !py-2 text-left"
+                  aria-haspopup="listbox"
+                  aria-expanded={openPicker === "priority"}
+                >
+                  <span className="inline-flex min-w-0 items-center gap-2">
+                    <span
+                      className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                        PRIORITY_DOT[selectedPriority.key] ?? "bg-zinc-300"
+                      }`}
+                      aria-hidden="true"
+                    />
+                    <span
+                      className={`tf-badge ${
+                        selectedPriority.className
+                      }`}
+                    >
+                      {selectedPriority.label}
+                    </span>
+                  </span>
+                  <ChevronDown size={15} className="text-zinc-400" aria-hidden="true" />
+                </button>
+                {openPicker === "priority" && (
+                  <div
+                    className="tf-popover-enter absolute left-0 z-50 mt-2 w-full overflow-hidden rounded-[8px] border border-zinc-200 bg-white p-1 shadow-lg"
+                    role="listbox"
+                  >
+                    {PRIORITIES.map((p) => (
+                      <button
+                        key={p.key}
+                        type="button"
+                        onClick={() => {
+                          setPriority(p.key);
+                          setOpenPicker(null);
+                        }}
+                        className="flex w-full items-center justify-between gap-2 rounded-[6px] px-2.5 py-2 text-left transition-colors hover:bg-zinc-50 focus:bg-zinc-50 focus:outline-none"
+                        role="option"
+                        aria-selected={priority === p.key}
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <span
+                            className={`h-2.5 w-2.5 rounded-full ${
+                              PRIORITY_DOT[p.key] ?? "bg-zinc-300"
+                            }`}
+                            aria-hidden="true"
+                          />
+                          <span className={`tf-badge ${p.className}`}>
+                            {p.label}
+                          </span>
+                        </span>
+                        {priority === p.key && (
+                          <Check size={15} className="text-zinc-500" aria-hidden="true" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </label>
 
             <label className="block">
               <span className="text-xs font-medium text-zinc-500">
                 Người làm
               </span>
-              <select
+              <UserPicker
                 value={assigneeId}
-                onChange={(e) => setAssigneeId(e.target.value)}
-                className="tf-field mt-1 !min-h-9 !py-1.5"
-              >
-                <option value="">— Chưa gán —</option>
-                {members.map((m) => (
-                  <option key={m.userId} value={m.userId}>
-                    {m.user.name}
-                  </option>
-                ))}
-              </select>
+                onChange={setAssigneeId}
+                options={memberOptions}
+                placeholder="Chọn người làm"
+                emptyLabel="— Chưa gán —"
+                ariaLabel="Người làm"
+                className="mt-1"
+                controlClassName="!h-12 !min-h-12 !py-1.5"
+              />
             </label>
 
             <DeadlineField
@@ -280,8 +458,13 @@ export default function TaskModal({
                 onClick={save}
                 disabled={saving || !title.trim()}
                 className="tf-button-primary"
+                aria-busy={saving}
               >
-                <Save size={16} aria-hidden="true" />
+                {saving ? (
+                  <span className="tf-spinner" aria-hidden="true" />
+                ) : (
+                  <Save size={16} aria-hidden="true" />
+                )}
                 {saving ? "Đang lưu..." : "Lưu thay đổi"}
               </button>
             </div>
@@ -294,11 +477,12 @@ export default function TaskModal({
             <ul className="space-y-3 max-h-56 overflow-y-auto">
               {task.comments.map((c) => (
                 <li key={c.id} className="flex gap-2">
-                  <span
-                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${avatarClass(c.author.id)}`}
-                  >
-                    {c.author.name.charAt(0).toUpperCase()}
-                  </span>
+                  <Avatar
+                    id={c.author.id}
+                    name={c.author.name}
+                    avatarUrl={c.author.avatarUrl}
+                    className="h-7 w-7 text-xs"
+                  />
                   <div className="min-w-0 flex-1">
                     <p className="text-xs text-zinc-400">
                       <span className="font-medium text-zinc-600">
@@ -336,9 +520,14 @@ export default function TaskModal({
                 type="submit"
                 disabled={commentPending}
                 className="tf-button-primary"
+                aria-busy={commentPending}
               >
-                <Send size={15} aria-hidden="true" />
-                Gửi
+                {commentPending ? (
+                  <span className="tf-spinner" aria-hidden="true" />
+                ) : (
+                  <Send size={15} aria-hidden="true" />
+                )}
+                {commentPending ? "Đang gửi..." : "Gửi"}
               </button>
             </form>
             {commentState.error && (

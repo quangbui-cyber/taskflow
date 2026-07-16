@@ -3,53 +3,65 @@ import { prisma } from "@/lib/prisma";
 import { requireProjectManager } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
 import RevenueBreakdown, { type RevenueRow } from "@/components/RevenueBreakdown";
-import { avatarClass } from "@/lib/avatar";
-import { PROJECT_STATUSES, formatVND } from "@/lib/types";
+import RevenuePipeline from "@/components/RevenuePipeline";
+import RevenueWinRate from "@/components/RevenueWinRate";
+import MonthlyRevenueChart, {
+  type MonthlyRevenuePoint,
+} from "@/components/MonthlyRevenueChart";
 import {
-  BriefcaseBusiness,
+  PROJECT_STATUSES,
+  formatVND,
+  projectStatusColor,
+} from "@/lib/types";
+import {
   Building2,
+  ChevronDown,
   CircleDollarSign,
   UsersRound,
 } from "lucide-react";
 
-const EARNED = ["ON_PROCESS", "DONE"];
+const WON = ["DONE"];
 const LOST = ["CANCEL", "FAIL"];
 const REVENUE_BLUE = "#2563eb";
 const REVENUE_BLUE_DARK = "#1d4ed8";
 const REVENUE_BLUE_SOFT = "#eff6ff";
 
-function MixLegend({
-  dotClass,
-  revenue = false,
-  label,
-  value,
-  count,
-}: {
-  dotClass: string;
-  revenue?: boolean;
-  label: string;
-  value: number;
-  count: number;
-}) {
-  return (
-    <div>
-      <p
-        className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-zinc-500"
-        style={revenue ? { color: REVENUE_BLUE_DARK } : undefined}
-      >
-        <span
-          className={`h-2.5 w-2.5 rounded-full ${dotClass}`}
-          style={revenue ? { backgroundColor: REVENUE_BLUE } : undefined}
-          aria-hidden="true"
-        />
-        {label}
-      </p>
-      <p className="mt-1 text-lg font-bold tabular-nums text-zinc-950">
-        {formatVND(value)}
-      </p>
-      <p className="text-xs text-zinc-400">{count} dự án</p>
-    </div>
-  );
+const PIPELINE_STAGES = [
+  { key: "BIDDING", label: "Bidding", color: "#f59e0b" },
+  { key: "ON_PROCESS", label: "On Process", color: REVENUE_BLUE },
+  { key: "DONE", label: "Done", color: "#10b981" },
+  { key: "FAIL", label: "Fail", color: "#ef4444" },
+  { key: "PENDING", label: "Pending", color: "#8b5cf6" },
+  { key: "CANCEL", label: "Cancel", color: "#71717a" },
+] as const;
+
+const REVENUE_TIME_ZONE = "Asia/Ho_Chi_Minh";
+
+function vietnamYearMonth(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: REVENUE_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(date);
+  const year = Number(parts.find((part) => part.type === "year")?.value);
+  const month = Number(parts.find((part) => part.type === "month")?.value);
+  return { year, month, key: `${year}-${String(month).padStart(2, "0")}` };
+}
+
+function recentRevenueMonths(now = new Date()): MonthlyRevenuePoint[] {
+  const current = vietnamYearMonth(now);
+  const currentMonthIndex = current.year * 12 + current.month - 1;
+
+  return Array.from({ length: 12 }, (_, index) => {
+    const monthIndex = currentMonthIndex - 11 + index;
+    const year = Math.floor(monthIndex / 12);
+    const month = (monthIndex % 12) + 1;
+    return {
+      key: `${year}-${String(month).padStart(2, "0")}`,
+      label: `T${month}/${String(year).slice(-2)}`,
+      value: 0,
+    };
+  });
 }
 
 export default async function RevenuePage() {
@@ -70,7 +82,7 @@ export default async function RevenuePage() {
         color: true,
         status: true,
         revenue: true,
-        owner: { select: { id: true, name: true } },
+        completedAt: true,
         client: { select: { id: true, name: true } },
         account: {
           select: {
@@ -84,7 +96,15 @@ export default async function RevenuePage() {
     }),
     prisma.project.findMany({
       where: { members: { some: { userId: user.id } } },
-      select: { id: true, name: true, color: true, status: true },
+      select: {
+        id: true,
+        name: true,
+        color: true,
+        status: true,
+        account: {
+          select: { team: { select: { id: true, name: true } } },
+        },
+      },
       orderBy: { createdAt: "desc" },
     }),
   ]);
@@ -96,11 +116,18 @@ export default async function RevenuePage() {
   const countOf = (statuses: string[]) =>
     projects.filter((p) => statuses.includes(p.status)).length;
 
-  const earned = revenueOf(EARNED);
+  const earned = revenueOf(WON);
   const bidding = revenueOf(["BIDDING"]);
-  const pendingRevenue = revenueOf(["PENDING"]);
-  const lost = revenueOf(LOST);
-  const totalMix = earned + bidding + pendingRevenue + lost;
+  const wonCount = countOf(WON);
+  const lostCount = countOf(LOST);
+  const closedCount = wonCount + lostCount;
+  const winRate = closedCount > 0 ? Math.round((wonCount / closedCount) * 100) : null;
+  const activeProjectCount = countOf(["BIDDING", "ON_PROCESS"]);
+  const pipelineStages = PIPELINE_STAGES.map((stage) => ({
+    ...stage,
+    value: revenueOf([stage.key]),
+    count: countOf([stage.key]),
+  }));
 
   function groupRevenue(
     dimension: (p: (typeof projects)[number]) => { id: string; name: string } | null
@@ -119,9 +146,9 @@ export default async function RevenuePage() {
         lostCount: 0,
       };
       entry.count += 1;
-      if (EARNED.includes(p.status)) entry.earned += p.revenue;
+      if (WON.includes(p.status)) entry.earned += p.revenue;
       if (p.status === "BIDDING") entry.bidding += p.revenue;
-      if (p.status === "DONE") entry.wonCount += 1;
+      if (WON.includes(p.status)) entry.wonCount += 1;
       if (LOST.includes(p.status)) entry.lostCount += 1;
       map.set(key, entry);
     }
@@ -130,6 +157,15 @@ export default async function RevenuePage() {
   const byClient = groupRevenue((p) => p.client);
   const byAccount = groupRevenue((p) => p.account);
   const byTeam = groupRevenue((p) => p.account?.team ?? null);
+  const monthlyRevenue = recentRevenueMonths();
+  const monthlyRevenueByKey = new Map(
+    monthlyRevenue.map((point) => [point.key, point])
+  );
+  for (const project of projects) {
+    if (project.status !== "DONE" || !project.completedAt) continue;
+    const point = monthlyRevenueByKey.get(vietnamYearMonth(project.completedAt).key);
+    if (point) point.value += project.revenue;
+  }
 
   return (
     <div className="tf-shell">
@@ -157,93 +193,59 @@ export default async function RevenuePage() {
             )}
           </div>
 
-          <section className="tf-panel p-5">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="font-semibold">Cơ cấu doanh số</h2>
-              <span className="text-sm text-zinc-400">
-                Tổng {formatVND(totalMix)}
-              </span>
-            </div>
-            {totalMix > 0 ? (
-              <>
-                <div className="mt-4 flex h-4 overflow-hidden rounded-full bg-zinc-100">
-                  {earned > 0 && (
-                    <div
-                      style={{
-                        width: `${(earned / totalMix) * 100}%`,
-                        backgroundColor: REVENUE_BLUE,
-                      }}
-                      title={`Doanh thu: ${formatVND(earned)}`}
-                    />
-                  )}
-                  {bidding > 0 && (
-                    <div
-                      className="bg-amber-400"
-                      style={{ width: `${(bidding / totalMix) * 100}%` }}
-                      title={`Bidding: ${formatVND(bidding)}`}
-                    />
-                  )}
-                  {pendingRevenue > 0 && (
-                    <div
-                      className="bg-violet-400"
-                      style={{ width: `${(pendingRevenue / totalMix) * 100}%` }}
-                      title={`Pending: ${formatVND(pendingRevenue)}`}
-                    />
-                  )}
-                  {lost > 0 && (
-                    <div
-                      className="bg-red-500"
-                      style={{ width: `${(lost / totalMix) * 100}%` }}
-                      title={`Cancel / Fail: ${formatVND(lost)}`}
-                    />
-                  )}
-                </div>
-                <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                  <MixLegend
-                    dotClass=""
-                    revenue
-                    label="Doanh thu"
-                    value={earned}
-                    count={countOf(EARNED)}
-                  />
-                  <MixLegend
-                    dotClass="bg-amber-400"
-                    label="Bidding"
-                    value={bidding}
-                    count={countOf(["BIDDING"])}
-                  />
-                  <MixLegend
-                    dotClass="bg-violet-400"
-                    label="Pending"
-                    value={pendingRevenue}
-                    count={countOf(["PENDING"])}
-                  />
-                  <MixLegend
-                    dotClass="bg-red-500"
-                    label="Cancel / Fail"
-                    value={lost}
-                    count={countOf(LOST)}
-                  />
-                </div>
-              </>
-            ) : (
-              <p className="mt-4 text-sm text-zinc-400">Chưa có dữ liệu.</p>
-            )}
-          </section>
+          <div className="tf-metric-strip">
+            <section className="tf-metric-item">
+              <p className="text-xs font-medium text-zinc-500">Doanh số ghi nhận</p>
+              <p className="mt-2 text-xl font-semibold tabular-nums text-zinc-950">
+                {formatVND(earned)}
+              </p>
+              <p className="mt-1 text-xs text-zinc-400">Chỉ dự án Done</p>
+            </section>
+            <section className="tf-metric-item">
+              <p className="text-xs font-medium text-zinc-500">Giá trị Bidding</p>
+              <p className="mt-2 text-xl font-semibold tabular-nums text-zinc-950">
+                {formatVND(bidding)}
+              </p>
+              <p className="mt-1 text-xs text-zinc-400">
+                {countOf(["BIDDING"])} cơ hội đang mở
+              </p>
+            </section>
+            <section className="tf-metric-item">
+              <p className="text-xs font-medium text-zinc-500">Tỷ lệ thắng</p>
+              <p className="mt-2 text-xl font-semibold tabular-nums text-zinc-950">
+                {winRate === null ? "—" : `${winRate}%`}
+              </p>
+              <p className="mt-1 text-xs text-zinc-400">
+                {wonCount} thắng · {lostCount} thua
+              </p>
+            </section>
+            <section className="tf-metric-item">
+              <p className="text-xs font-medium text-zinc-500">Dự án hoạt động</p>
+              <p className="mt-2 text-xl font-semibold tabular-nums text-zinc-950">
+                {activeProjectCount}
+              </p>
+              <p className="mt-1 text-xs text-zinc-400">Bidding + On Process</p>
+            </section>
+          </div>
 
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-            <RevenueBreakdown title="Theo Client" rows={byClient} icon={Building2} />
+          <MonthlyRevenueChart data={monthlyRevenue} />
+
+          <RevenuePipeline stages={pipelineStages} />
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             <RevenueBreakdown
-              title="Theo Account"
-              rows={byAccount}
-              icon={BriefcaseBusiness}
-            />
-            <RevenueBreakdown
-              title="Theo Team"
+              title="Doanh số theo Team"
               rows={byTeam}
               icon={UsersRound}
             />
+            <RevenueWinRate rows={byAccount} />
           </div>
+
+          <RevenueBreakdown
+            title="Doanh số theo Client"
+            rows={byClient}
+            icon={Building2}
+          />
 
           <section className="tf-panel overflow-hidden">
             <div className="border-b border-zinc-100 px-5 py-3">
@@ -261,14 +263,24 @@ export default async function RevenuePage() {
                 if (group.length === 0) return null;
                 const subtotal = group.reduce((sum, p) => sum + p.revenue, 0);
                 return (
-                  <div key={s.key}>
-                    <div className="flex items-center gap-2 border-y border-zinc-100 bg-zinc-50 px-4 py-2">
+                  <details
+                    key={s.key}
+                    open
+                    data-status={s.key}
+                    className="group/project-status"
+                  >
+                    <summary className="flex cursor-pointer list-none items-center gap-2 border-y border-zinc-100 bg-zinc-50 px-4 py-2 transition-colors hover:bg-zinc-100/70 [&::-webkit-details-marker]:hidden">
                       <span className={`tf-badge ${s.className}`}>{s.label}</span>
                       <span className="text-xs text-zinc-400">{group.length}</span>
                       <span className="ml-auto text-xs font-semibold tabular-nums text-zinc-600">
                         {formatVND(subtotal)}
                       </span>
-                    </div>
+                      <ChevronDown
+                        size={16}
+                        className="shrink-0 text-zinc-400 transition-transform group-open/project-status:rotate-180"
+                        aria-hidden="true"
+                      />
+                    </summary>
                     <div className="divide-y divide-zinc-50">
                       {group.map((p) => (
                         <Link
@@ -278,30 +290,23 @@ export default async function RevenuePage() {
                         >
                           <span
                             className="h-2.5 w-2.5 shrink-0 rounded-full"
-                            style={{ backgroundColor: p.color }}
+                            style={{ backgroundColor: projectStatusColor(p.status) }}
                             aria-hidden="true"
                           />
                           <span className="min-w-0 flex-1 truncate text-sm font-medium">
                             {p.name}
                           </span>
                           <span className="hidden min-w-0 max-w-[220px] truncate text-xs text-zinc-400 sm:block">
-                            {p.client?.name ?? "—"} · {p.account?.name ?? "—"}
+                            {p.account?.name ?? "Chưa gán Account"} ·{" "}
+                            {p.client?.name ?? "Chưa gán Client"}
                           </span>
-                          {isAdmin && (
-                            <span
-                              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${avatarClass(p.owner.id)}`}
-                              title={`Chủ dự án: ${p.owner.name}`}
-                            >
-                              {p.owner.name.charAt(0).toUpperCase()}
-                            </span>
-                          )}
-                          <span className="w-[110px] shrink-0 text-right text-sm font-semibold tabular-nums text-zinc-600">
+                          <span className="max-w-24 shrink-0 text-right text-xs font-semibold tabular-nums text-zinc-600 sm:w-[110px] sm:max-w-none sm:text-sm">
                             {formatVND(p.revenue)}
                           </span>
                         </Link>
                       ))}
                     </div>
-                  </div>
+                  </details>
                 );
               })
             )}

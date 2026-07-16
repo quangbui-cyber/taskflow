@@ -56,6 +56,7 @@ html {
 body {
   min-height: 100vh;
   margin: 0;
+  overflow-x: hidden;
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
@@ -118,7 +119,8 @@ textarea:focus-visible {
 .tf-main {
   min-width: 0;
   flex: 1;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .tf-page {
@@ -191,6 +193,14 @@ textarea:focus-visible {
   background: var(--primary-hover);
 }
 
+.tf-button-primary:active:not(:disabled),
+.tf-button-secondary:active:not(:disabled),
+.tf-button-danger:active:not(:disabled),
+.tf-icon-button:active:not(:disabled),
+.tf-pressable:active:not(:disabled) {
+  transform: scale(0.975);
+}
+
 .tf-button-secondary {
   border: 1px solid var(--border-strong);
   background: #fff;
@@ -235,6 +245,99 @@ textarea:focus-visible {
 .tf-icon-button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
+  transform: none;
+}
+
+.tf-button-primary[aria-busy="true"],
+.tf-button-secondary[aria-busy="true"],
+.tf-button-danger[aria-busy="true"] {
+  cursor: wait;
+}
+
+.tf-spinner {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 999px;
+  animation: tf-spin 700ms linear infinite;
+}
+
+.tf-toast {
+  animation: tf-toast-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.tf-overlay-enter {
+  animation: tf-fade-in 160ms ease-out both;
+}
+
+.tf-sheet-enter {
+  animation: tf-sheet-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.tf-modal-enter {
+  animation: tf-modal-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.tf-popover-enter {
+  transform-origin: top right;
+  animation: tf-popover-in 150ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes tf-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes tf-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes tf-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes tf-sheet-in {
+  from {
+    opacity: 0.7;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes tf-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes tf-popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .tf-field {
@@ -261,6 +364,10 @@ textarea:focus-visible {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgb(168 212 49 / 0.2);
   outline: none;
+}
+
+.tf-date-field::-webkit-calendar-picker-indicator {
+  display: none;
 }
 
 .tf-label {
@@ -294,6 +401,43 @@ textarea:focus-visible {
   text-align: center;
 }
 
+.tf-scroll-tabs {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scroll-padding-inline: 4px;
+  scrollbar-width: none;
+  scroll-snap-type: inline proximity;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tf-scroll-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tf-scroll-tabs > * {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+}
+
+.tf-metric-strip {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.tf-metric-item {
+  min-width: 0;
+  padding: 18px;
+}
+
+.tf-metric-item + .tf-metric-item {
+  border-top: 1px solid var(--border);
+}
+
 @media (max-width: 767px) {
   .tf-shell {
     display: block;
@@ -305,7 +449,53 @@ textarea:focus-visible {
   }
 
   .tf-page-title {
-    font-size: 26px;
+    font-size: 28px;
+  }
+
+  .tf-scroll-tabs {
+    margin-right: -16px;
+    padding-right: 16px;
+  }
+}
+
+@media (min-width: 640px) {
+  .tf-metric-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tf-metric-item:nth-child(2) {
+    border-top: 0;
+  }
+
+  .tf-metric-item:nth-child(even) {
+    border-left: 1px solid var(--border);
+  }
+}
+
+@media (min-width: 1280px) {
+  .tf-metric-strip {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .tf-metric-item {
+    border-top: 0 !important;
+  }
+
+  .tf-metric-item + .tf-metric-item {
+    border-left: 1px solid var(--border);
+  }
+}
+
+@media (pointer: coarse) {
+  .tf-button-primary,
+  .tf-button-secondary,
+  .tf-button-danger,
+  .tf-icon-button {
+    min-height: 44px;
+  }
+
+  .tf-icon-button {
+    width: 44px;
   }
 }
 

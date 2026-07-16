@@ -4,40 +4,51 @@ import { useActionState } from "react";
 import { createProject, type ActionState } from "@/app/actions/projects";
 import RevenueInput from "@/components/RevenueInput";
 import { Plus } from "lucide-react";
-
-type Option = { id: string; name: string };
+import ClientSelect, { type ClientOption } from "@/components/ClientSelect";
+import UserPicker, { type UserPickerOption } from "@/components/UserPicker";
+import { useActionFeedback } from "@/components/InteractionProvider";
 
 export default function NewProjectForm({
   clients,
   accounts,
 }: {
-  clients: Option[];
-  accounts: Option[];
+  clients: ClientOption[];
+  accounts: UserPickerOption[];
 }) {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     createProject,
     {}
   );
+  useActionFeedback(state);
 
   return (
     <form
       action={formAction}
       className="tf-panel space-y-4 p-5 sm:p-6"
     >
-      <input
-        name="name"
-        type="text"
-        required
-        placeholder="Tên dự án, ví dụ: Website bán hàng"
-        className="tf-field"
-      />
-      <textarea
-        name="description"
-        rows={2}
-        placeholder="Mô tả ngắn (không bắt buộc)"
-        className="tf-field resize-none"
-      />
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <label className="block" htmlFor="project-name">
+        <span className="tf-label">Tên dự án</span>
+        <input
+          id="project-name"
+          name="name"
+          type="text"
+          required
+          autoComplete="off"
+          placeholder="Ví dụ: Website bán hàng"
+          className="tf-field"
+        />
+      </label>
+      <label className="block" htmlFor="project-description">
+        <span className="tf-label">Mô tả</span>
+        <textarea
+          id="project-description"
+          name="description"
+          rows={2}
+          placeholder="Phạm vi hoặc mục tiêu chính (không bắt buộc)"
+          className="tf-field resize-none"
+        />
+      </label>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="block">
           <span className="text-xs font-medium text-zinc-500">Tình trạng ban đầu</span>
           <span className="tf-field mt-1 flex items-center bg-zinc-50 text-zinc-600">
@@ -54,35 +65,20 @@ export default function NewProjectForm({
             className="tf-field mt-1"
           />
         </label>
-        <label className="block">
+        <div className="block">
           <span className="text-xs font-medium text-zinc-500">Client</span>
-          <select
-            name="clientId"
-            defaultValue=""
-            className="tf-field mt-1"
-          >
-            <option value="">— Chưa chọn —</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
+          <ClientSelect clients={clients} className="mt-1" />
+        </div>
         <label className="block">
           <span className="text-xs font-medium text-zinc-500">Account</span>
-          <select
+          <UserPicker
             name="accountId"
-            defaultValue=""
-            className="tf-field mt-1"
-          >
-            <option value="">— Chưa chọn —</option>
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
+            options={accounts}
+            placeholder="— Chưa chọn —"
+            emptyLabel="— Chưa chọn —"
+            ariaLabel="Account"
+            className="mt-1"
+          />
         </label>
       </div>
       {clients.length === 0 && accounts.length === 0 && (
@@ -99,8 +95,13 @@ export default function NewProjectForm({
         type="submit"
         disabled={pending}
         className="tf-button-primary"
+        aria-busy={pending}
       >
-        <Plus size={16} aria-hidden="true" />
+        {pending ? (
+          <span className="tf-spinner" aria-hidden="true" />
+        ) : (
+          <Plus size={16} aria-hidden="true" />
+        )}
         {pending ? "Đang tạo..." : "Tạo dự án"}
       </button>
     </form>

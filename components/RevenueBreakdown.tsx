@@ -13,7 +13,7 @@ export type RevenueRow = {
   lostCount: number;
 };
 
-/** Bar chart ngang: thanh xanh = doanh thu thực, thanh vàng mảnh = đang bidding */
+/** Bar chart ngang: thanh xanh = doanh số ghi nhận, thanh vàng = đang bidding */
 export default function RevenueBreakdown({
   title,
   rows,
@@ -37,7 +37,7 @@ export default function RevenueBreakdown({
             className="mr-1 inline-block h-2 w-2 rounded-full"
             style={{ backgroundColor: REVENUE_BLUE }}
           />
-          <span style={{ color: REVENUE_BLUE_DARK }}>Doanh thu</span>
+          <span style={{ color: REVENUE_BLUE_DARK }}>Doanh số</span>
           <span className="ml-3 mr-1 inline-block h-2 w-2 rounded-full bg-amber-400" />
           Bidding
         </span>

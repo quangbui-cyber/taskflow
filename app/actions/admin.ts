@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
+import { parseAvatarDataUrl } from "@/lib/avatarImage";
 
 export type AdminState = { error?: string; success?: string };
 
@@ -22,6 +23,7 @@ export async function createUser(
   const password = String(formData.get("password") ?? "");
   const rawRole = String(formData.get("role") ?? "USER");
   const role = ["ADMIN", "ACCOUNT"].includes(rawRole) ? rawRole : "USER";
+  const avatar = parseAvatarDataUrl(formData.get("avatarUrl"));
 
   if (!name || !email || !password) {
     return { error: "Vui lòng điền đầy đủ thông tin." };
@@ -29,6 +31,7 @@ export async function createUser(
   if (password.length < 6) {
     return { error: "Mật khẩu phải có ít nhất 6 ký tự." };
   }
+  if (avatar.error) return { error: avatar.error };
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
@@ -36,7 +39,9 @@ export async function createUser(
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
-  await prisma.user.create({ data: { name, email, passwordHash, role } });
+  await prisma.user.create({
+    data: { name, email, passwordHash, role, avatarUrl: avatar.avatarUrl },
+  });
 
   revalidatePath("/admin");
   return { success: `Đã tạo tài khoản cho ${name}.` };
@@ -49,21 +54,32 @@ export async function deleteUser(userId: string): Promise<AdminState> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
-      _count: { select: { ownedProjects: true, createdTasks: true } },
+      _count: {
+        select: {
+          ownedProjects: true,
+          memberships: true,
+          createdTasks: true,
+          assignedTasks: true,
+        },
+      },
       accountProfile: { select: { id: true } },
+      isActive: true,
     },
   });
   if (!user) return { error: "Tài khoản không tồn tại." };
-  if (user._count.ownedProjects > 0) {
+  if (user.isActive) {
+    return { error: "Hãy vô hiệu hóa tài khoản trước khi xoá vĩnh viễn." };
+  }
+  if (user._count.ownedProjects > 0 || user._count.memberships > 0) {
     return {
       error:
-        "Không thể xoá tài khoản đang là chủ project. Hãy chuyển hoặc xoá các project đó trước.",
+        "Không thể xoá tài khoản đang thuộc hoặc sở hữu dự án. Hãy chuyển dữ liệu dự án trước.",
     };
   }
-  if (user._count.createdTasks > 0) {
+  if (user._count.createdTasks > 0 || user._count.assignedTasks > 0) {
     return {
       error:
-        "Không thể xoá tài khoản đã tạo task vì sẽ làm mất dữ liệu công việc. Hãy giữ tài khoản hoặc bổ sung luồng chuyển dữ liệu trước.",
+        "Không thể xoá tài khoản đang có task được giao hoặc đã tạo. Hãy chuyển dữ liệu công việc trước.",
     };
   }
   if (user.accountProfile) {
@@ -78,15 +94,65 @@ export async function deleteUser(userId: string): Promise<AdminState> {
   return { success: "Đã xoá tài khoản." };
 }
 
+export async function setUserActive(
+  userId: string,
+  isActive: boolean
+): Promise<AdminState> {
+  const admin = await requireAdmin();
+  if (userId === admin.id && !isActive) {
+    return { error: "Bạn không thể tự vô hiệu hóa tài khoản của chính mình." };
+  }
+
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, name: true, role: true, isActive: true },
+  });
+  if (!target) return { error: "Tài khoản không tồn tại." };
+  if (target.isActive === isActive) {
+    return {
+      success: isActive
+        ? "Tài khoản đang hoạt động."
+        : "Tài khoản đã được vô hiệu hóa.",
+    };
+  }
+
+  if (!isActive && target.role === "ADMIN") {
+    const activeAdminCount = await prisma.user.count({
+      where: { role: "ADMIN", isActive: true },
+    });
+    if (activeAdminCount <= 1) {
+      return { error: "Hệ thống phải luôn có ít nhất một Admin đang hoạt động." };
+    }
+  }
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      isActive,
+      deactivatedAt: isActive ? null : new Date(),
+    },
+  });
+
+  revalidatePath("/", "layout");
+  return {
+    success: isActive
+      ? `Đã kích hoạt lại tài khoản ${target.name}.`
+      : `Đã vô hiệu hóa tài khoản ${target.name}.`,
+  };
+}
+
 export async function updateUserProfile(
   userId: string,
   name: string,
-  role: string
+  role: string,
+  rawAvatarUrl: string
 ): Promise<AdminState> {
   const admin = await requireAdmin();
   const normalizedName = name.trim();
+  const avatar = parseAvatarDataUrl(rawAvatarUrl);
 
   if (!normalizedName) return { error: "Tên tài khoản không được để trống." };
+  if (avatar.error) return { error: avatar.error };
   if (!USER_ROLES.includes(role as (typeof USER_ROLES)[number])) {
     return { error: "Vai trò tài khoản không hợp lệ." };
   }
@@ -121,7 +187,11 @@ export async function updateUserProfile(
   await prisma.$transaction(async (tx) => {
     await tx.user.update({
       where: { id: userId },
-      data: { name: normalizedName, role: normalizedRole },
+      data: {
+        name: normalizedName,
+        role: normalizedRole,
+        avatarUrl: avatar.avatarUrl,
+      },
     });
     if (target.accountProfile) {
       await tx.account.update({
@@ -131,11 +201,8 @@ export async function updateUserProfile(
     }
   });
 
-  revalidatePath("/admin");
-  revalidatePath("/projects/new");
-  revalidatePath("/revenue");
-  revalidatePath("/team");
-  return { success: "Đã cập nhật tên và vai trò tài khoản." };
+  revalidatePath("/", "layout");
+  return { success: "Đã cập nhật thông tin tài khoản." };
 }
 
 /** Gán quản lý trực tiếp cho một nhân viên (managerId = null để bỏ gán) */
@@ -157,9 +224,10 @@ export async function setManager(
   if (managerId) {
     const manager = await prisma.user.findUnique({
       where: { id: managerId },
-      select: { id: true },
+      select: { id: true, isActive: true },
     });
     if (!manager) return { error: "Người quản lý không tồn tại." };
+    if (!manager.isActive) return { error: "Không thể chọn tài khoản đã bị vô hiệu hóa làm quản lý." };
 
     // Chống vòng lặp: đi ngược chuỗi quản lý từ managerId, không được gặp lại userId
     let current: string | null = managerId;
@@ -208,7 +276,7 @@ function memberIdsFromForm(formData: FormData) {
 async function validMemberIds(memberIds: string[]) {
   if (memberIds.length === 0) return [];
   const users = await prisma.user.findMany({
-    where: { id: { in: memberIds } },
+    where: { id: { in: memberIds }, isActive: true },
     select: { id: true },
   });
   return users.map((user) => user.id);

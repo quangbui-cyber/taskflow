@@ -2,7 +2,9 @@
 
 import { useActionState, useEffect, useRef } from "react";
 import { createUser, type AdminState } from "@/app/actions/admin";
-import { UserPlus } from "lucide-react";
+import { ChevronDown, UserPlus } from "lucide-react";
+import AvatarUploader from "@/components/AvatarUploader";
+import { useActionFeedback } from "@/components/InteractionProvider";
 
 export default function CreateUserForm() {
   const formRef = useRef<HTMLFormElement>(null);
@@ -10,6 +12,7 @@ export default function CreateUserForm() {
     createUser,
     {}
   );
+  useActionFeedback(state);
 
   useEffect(() => {
     if (state.success) formRef.current?.reset();
@@ -21,7 +24,12 @@ export default function CreateUserForm() {
       action={formAction}
       className="tf-panel space-y-4 p-5"
     >
-      <h2 className="font-semibold">Tạo tài khoản mới</h2>
+      <h2 className="font-semibold">Tạo tài khoản</h2>
+      <AvatarUploader
+        id="new-user"
+        displayName="Tài khoản mới"
+        compact
+      />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <input
           name="name"
@@ -42,18 +50,26 @@ export default function CreateUserForm() {
           type="text"
           required
           minLength={6}
-          placeholder="Mật khẩu tạm (ít nhất 6 ký tự)"
+          defaultValue="gasangtao1810"
+          placeholder="Mật khẩu mặc định"
           className="tf-field"
         />
-        <select
-          name="role"
-          defaultValue="USER"
-          className="tf-field"
-        >
-          <option value="USER">User</option>
-          <option value="ACCOUNT">Account</option>
-          <option value="ADMIN">Admin</option>
-        </select>
+        <div className="relative min-w-0">
+          <select
+            name="role"
+            defaultValue="USER"
+            className="tf-field appearance-none !pr-11"
+          >
+            <option value="USER">User</option>
+            <option value="ACCOUNT">Account</option>
+            <option value="ADMIN">Admin</option>
+          </select>
+          <ChevronDown
+            size={16}
+            className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500"
+            aria-hidden="true"
+          />
+        </div>
       </div>
 
       {state.error && (
@@ -61,19 +77,18 @@ export default function CreateUserForm() {
           {state.error}
         </p>
       )}
-      {state.success && (
-        <p className="text-sm text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">
-          {state.success}
-        </p>
-      )}
-
       <button
         type="submit"
         disabled={pending}
         className="tf-button-primary"
+        aria-busy={pending}
       >
-        <UserPlus size={16} aria-hidden="true" />
-        {pending ? "Đang lưu..." : "Lưu thay đổi"}
+        {pending ? (
+          <span className="tf-spinner" aria-hidden="true" />
+        ) : (
+          <UserPlus size={16} aria-hidden="true" />
+        )}
+        {pending ? "Đang tạo..." : "Tạo tài khoản"}
       </button>
     </form>
   );

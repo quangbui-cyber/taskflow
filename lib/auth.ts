@@ -5,9 +5,9 @@ import { getSessionUserId } from "@/lib/session";
 export async function getCurrentUser() {
   const userId = await getSessionUserId();
   if (!userId) return null;
-  return prisma.user.findUnique({
-    where: { id: userId },
-    select: { id: true, email: true, name: true, role: true },
+  return prisma.user.findFirst({
+    where: { id: userId, isActive: true },
+    select: { id: true, email: true, name: true, role: true, avatarUrl: true },
   });
 }
 
