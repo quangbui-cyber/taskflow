@@ -10,6 +10,7 @@ import {
 import {
   CalendarDays,
   CircleCheckBig,
+  ListPlus,
   GripVertical,
   MessageSquare,
 } from "lucide-react";
@@ -67,6 +68,7 @@ export default function Board({
       : null
   );
   const [visibleColumn, setVisibleColumn] = useState<string>(STATUSES[0].key);
+  const [todoComposerSignal, setTodoComposerSignal] = useState(0);
   const boardScrollerRef = useRef<HTMLDivElement>(null);
   const [, startTransition] = useTransition();
 
@@ -176,6 +178,35 @@ export default function Board({
           );
         })}
       </nav>
+
+      {tasks.length === 0 && (
+        <div className="mx-4 mt-4 flex flex-col gap-3 rounded-[8px] border border-blue-100 bg-blue-50/70 px-4 py-3 sm:mx-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-[7px] bg-white text-blue-600 shadow-sm ring-1 ring-blue-100">
+              <ListPlus size={17} aria-hidden="true" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-zinc-800">
+                Dự án chưa có công việc
+              </p>
+              <p className="mt-0.5 text-xs leading-5 text-zinc-500">
+                Tạo task đầu tiên để bắt đầu phân công và theo dõi tiến độ.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              selectColumn("TODO");
+              setTodoComposerSignal((value) => value + 1);
+            }}
+            className="tf-button-secondary shrink-0 !min-h-9 !px-3 !py-1.5 text-xs"
+          >
+            <ListPlus size={15} aria-hidden="true" />
+            Tạo task đầu tiên
+          </button>
+        </div>
+      )}
 
       <div
         ref={boardScrollerRef}
@@ -317,9 +348,13 @@ export default function Board({
 
               <div className="shrink-0 border-t border-zinc-200 p-3 md:max-h-[calc(100%-8rem)] md:overflow-y-auto">
                 <NewTaskInline
+                  key={`${col.key}-${col.key === "TODO" ? todoComposerSignal : 0}`}
                   projectId={projectId}
                   status={col.key}
                   members={members}
+                  defaultOpen={
+                    col.key === "TODO" && todoComposerSignal > 0
+                  }
                 />
               </div>
             </div>

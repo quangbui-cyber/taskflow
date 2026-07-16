@@ -12,13 +12,15 @@ export default function NewTaskInline({
   projectId,
   status,
   members,
+  defaultOpen = false,
 }: {
   projectId: string;
   status: string;
   members: MemberDTO[];
+  defaultOpen?: boolean;
 }) {
   const { notify } = useInteraction();
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(defaultOpen);
   const inputRef = useRef<HTMLInputElement>(null);
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     async (prev, formData) => {

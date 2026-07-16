@@ -82,16 +82,22 @@ export default function DeadlineField({
       {name && <input type="hidden" name={name} value={composedValue} />}
       <span className="text-xs font-medium text-zinc-500">{label}</span>
       <div
-        className={`mt-1 grid grid-cols-[minmax(0,1fr)_3.625rem_3.625rem] gap-1.5 ${
+        className={`tf-deadline-group mt-1 grid overflow-hidden ${
           compact
-            ? ""
-            : "sm:grid-cols-[minmax(0,1fr)_4.75rem_4.25rem] sm:gap-2"
+            ? "grid-cols-[3rem_repeat(2,minmax(0,1fr))]"
+            : "grid-cols-[3.25rem_repeat(2,minmax(0,1fr))]"
         }`}
       >
-        <div className="relative min-w-0">
+        <div
+          className={`relative flex min-w-0 cursor-pointer items-center justify-center border-r border-zinc-200 transition-colors hover:bg-zinc-50 ${
+            date ? "bg-brand-50/60" : "bg-white"
+          }`}
+        >
           <CalendarDays
-            size={15}
-            className="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2 text-zinc-500"
+            size={16}
+            className={`pointer-events-none shrink-0 ${
+              date ? "text-brand-700" : "text-zinc-500"
+            }`}
             aria-hidden="true"
           />
           <input
@@ -103,12 +109,12 @@ export default function DeadlineField({
               update(nextDate, hour, minute);
             }}
             onClick={(event) => event.currentTarget.showPicker?.()}
-            className="tf-date-field tf-field min-w-0 appearance-none !min-h-9 !py-1.5 !pl-8 !pr-2"
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
             aria-label="Ngày hết hạn"
-            title="Ngày hết hạn"
+            title={date ? `Ngày hết hạn: ${date}` : "Chọn ngày hết hạn"}
           />
         </div>
-        <div className="relative min-w-0">
+        <div className="relative min-w-0 border-r border-zinc-200 bg-white transition-colors hover:bg-zinc-50">
           <select
             value={hour}
             onChange={(event) => {
@@ -116,7 +122,7 @@ export default function DeadlineField({
               setHour(nextHour);
               update(date, nextHour, minute);
             }}
-            className="tf-field appearance-none !min-h-9 !px-2.5 !py-1.5 !pr-8"
+            className="h-full min-h-11 w-full appearance-none bg-transparent pl-3 pr-9 text-center text-sm font-medium tabular-nums text-zinc-800 outline-none"
             aria-label="Giờ"
             title="Giờ"
           >
@@ -128,11 +134,11 @@ export default function DeadlineField({
           </select>
           <ChevronDown
             size={15}
-            className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500"
+            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400"
             aria-hidden="true"
           />
         </div>
-        <div className="relative min-w-0">
+        <div className="relative min-w-0 bg-white transition-colors hover:bg-zinc-50">
           <select
             value={minute}
             onChange={(event) => {
@@ -140,7 +146,7 @@ export default function DeadlineField({
               setMinute(nextMinute);
               update(date, hour, nextMinute);
             }}
-            className="tf-field appearance-none !min-h-9 !px-2.5 !py-1.5 !pr-8"
+            className="h-full min-h-11 w-full appearance-none bg-transparent pl-3 pr-9 text-center text-sm font-medium tabular-nums text-zinc-800 outline-none"
             aria-label="Phút"
             title="Phút"
           >
@@ -152,7 +158,7 @@ export default function DeadlineField({
           </select>
           <ChevronDown
             size={15}
-            className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500"
+            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400"
             aria-hidden="true"
           />
         </div>

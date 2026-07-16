@@ -8,6 +8,7 @@ import {
   sendGoogleChat,
   validateGoogleChatWebhookUrl,
 } from "@/lib/googleChat";
+import { readProjectUpload } from "@/lib/projectFiles";
 import { projectStatusColor } from "@/lib/types";
 
 export type ActionState = { error?: string; success?: string };
@@ -54,9 +55,19 @@ export async function createProject(
   const revenue = parseRevenue(String(formData.get("revenue") ?? ""));
   const clientId = String(formData.get("clientId") ?? "") || null;
   const accountId = String(formData.get("accountId") ?? "") || null;
+  const projectSource = String(formData.get("projectSource") ?? "");
+  let projectFile: Awaited<ReturnType<typeof readProjectUpload>> = null;
 
   if (!name) return { error: "Tên project không được để trống." };
   if (revenue === null) return { error: "Doanh thu không hợp lệ." };
+  try {
+    projectFile = await readProjectUpload(formData.get("projectFile"));
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error ? error.message : "Tài liệu PO không hợp lệ.",
+    };
+  }
   const account = await findValidAccount(accountId);
   if (accountId && !account) {
     return { error: "Account chưa liên kết user hoặc chưa được gán Team." };
@@ -65,17 +76,32 @@ export async function createProject(
   if (account?.userId && account.userId !== user.id) {
     initialMembers.push({ userId: account.userId, role: "member" });
   }
+  const initialStatus =
+    projectSource === "JABIL_PO" && projectFile?.mimeType === "application/pdf"
+      ? "ON_PROCESS"
+      : "BIDDING";
   const project = await prisma.project.create({
     data: {
       name,
       description: description || null,
-      color: projectStatusColor("BIDDING"),
-      status: "BIDDING",
+      color: projectStatusColor(initialStatus),
+      status: initialStatus,
       revenue,
       clientId,
       accountId,
       ownerId: user.id,
       members: { create: initialMembers },
+      files: projectFile
+        ? {
+            create: {
+              uploaderId: user.id,
+              name: projectFile.name,
+              mimeType: projectFile.mimeType,
+              size: projectFile.size,
+              data: projectFile.data,
+            },
+          }
+        : undefined,
     },
   });
 
