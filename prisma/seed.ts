@@ -300,6 +300,8 @@ async function main() {
         status: definition.status,
         revenue: definition.revenue,
         color: definition.color,
+        completedAt:
+          definition.status === "DONE" ? daysFromNow(-(projectIndex + 1) * 14) : null,
         ownerId: userId(definition.owner),
         clientId: clients[definition.client].id,
         accountId: account.id,

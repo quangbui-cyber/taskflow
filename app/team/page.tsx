@@ -1,11 +1,19 @@
+import Link from "next/link";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { computePerf, type Perf } from "@/lib/performance";
+import {
+  combinePeriodResultsWithActiveWork,
+  computePerf,
+  getPerformancePeriod,
+  PERFORMANCE_PERIOD_OPTIONS,
+  type Perf,
+} from "@/lib/performance";
 import { isOverdue } from "@/lib/dates";
 import Sidebar from "@/components/Sidebar";
+import Avatar from "@/components/Avatar";
 import PerformanceBar from "@/components/PerformanceBar";
 import TaskListItem from "@/components/TaskListItem";
-import { avatarClass } from "@/lib/avatar";
 import RoleBadge from "@/components/RoleBadge";
 import {
   AlertTriangle,
@@ -32,10 +40,11 @@ function PerfMini({ perf }: { perf: Perf }) {
     return <span className="text-xs text-zinc-300">Chưa có task</span>;
   }
   const segments = [
-    { value: perf.onTime, className: "bg-emerald-500" },
+    { value: perf.onTime, className: "bg-brand-400" },
     { value: perf.late, className: "bg-amber-400" },
     { value: perf.overdueOpen, className: "bg-red-500" },
-    { value: perf.open, className: "bg-zinc-300" },
+    { value: perf.inProgress, className: "bg-blue-500" },
+    { value: perf.todo, className: "bg-zinc-300" },
   ];
   return (
     <div className="flex h-2 w-full max-w-[140px] overflow-hidden rounded-full bg-zinc-100">
@@ -79,7 +88,7 @@ function HighlightCard({
     : "Chưa có dữ liệu";
 
   return (
-    <div className="tf-panel flex min-h-32 gap-3 p-4">
+    <div className="flex min-h-28 gap-3 p-4 sm:min-h-32">
       <span
         className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] ${iconClassName}`}
       >
@@ -98,9 +107,24 @@ function HighlightCard({
   );
 }
 
-export default async function TeamPage() {
+export default async function TeamPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ period?: string }>;
+}) {
   const user = await requireUser();
   const isAdmin = user.role === "ADMIN";
+  const { period: periodParam } = await searchParams;
+  const period = getPerformancePeriod(periodParam);
+  const performanceTaskWhere: Prisma.TaskWhereInput = {
+    OR: [
+      { status: { not: "DONE" } },
+      {
+        status: "DONE",
+        completedAt: { gte: period.start, lt: period.end },
+      },
+    ],
+  };
 
   const [members, myTasks, sidebarProjects, allOpenTasks, unassigned] =
     await Promise.all([
@@ -109,10 +133,12 @@ export default async function TeamPage() {
         where: isAdmin ? { id: { not: user.id } } : { managerId: user.id },
         include: {
           assignedTasks: {
+            where: performanceTaskWhere,
             include: taskInclude,
             orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }],
           },
           createdTasks: {
+            where: { status: { not: "DONE" } },
             include: taskInclude,
             orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }],
           },
@@ -121,12 +147,25 @@ export default async function TeamPage() {
         orderBy: { name: "asc" },
       }),
       prisma.task.findMany({
-        where: { assigneeId: user.id },
-        select: { status: true, dueDate: true, completedAt: true },
+        where: { assigneeId: user.id, ...performanceTaskWhere },
+        select: {
+          status: true,
+          dueDate: true,
+          completedAt: true,
+          project: { select: { status: true } },
+        },
       }),
       prisma.project.findMany({
         where: { members: { some: { userId: user.id } } },
-        select: { id: true, name: true, color: true, status: true },
+        select: {
+          id: true,
+          name: true,
+          color: true,
+          status: true,
+          account: {
+            select: { team: { select: { id: true, name: true } } },
+          },
+        },
         orderBy: { createdAt: "desc" },
       }),
       // Thống kê toàn công ty (chỉ admin)
@@ -154,11 +193,22 @@ export default async function TeamPage() {
         : Promise.resolve([]),
     ]);
 
-  const myPerf = computePerf(myTasks);
+  const myPeriodPerf = computePerf(myTasks);
+  const myActiveWorkPerf = computePerf(
+    myTasks.filter(
+      (task) =>
+        task.status !== "DONE" &&
+        !isArchivedProjectStatus(task.project.status)
+    )
+  );
+  const myPerf = combinePeriodResultsWithActiveWork(
+    myPeriodPerf,
+    myActiveWorkPerf
+  );
 
   const rows = members
     .map((m) => {
-      const perf = computePerf(m.assignedTasks);
+      const periodPerf = computePerf(m.assignedTasks);
       const openAssigned = m.assignedTasks.filter(
         (t) => t.status !== "DONE" && !isArchivedProjectStatus(t.project.status)
       );
@@ -166,6 +216,7 @@ export default async function TeamPage() {
         (t) => !isArchivedProjectStatus(t.project.status)
       );
       const activePerf = computePerf(activeAssigned);
+      const perf = combinePeriodResultsWithActiveWork(periodPerf, activePerf);
       const delegated = m.createdTasks.filter(
         (t) =>
           t.assigneeId &&
@@ -174,8 +225,10 @@ export default async function TeamPage() {
           !isArchivedProjectStatus(t.project.status)
       );
       const rate =
-        perf.total > 0 ? Math.round((perf.onTime / perf.total) * 100) : null;
-      return { m, perf, activePerf, openAssigned, delegated, rate };
+        periodPerf.done > 0
+          ? Math.round((periodPerf.onTime / periodPerf.done) * 100)
+          : null;
+      return { m, perf, periodPerf, openAssigned, delegated, rate };
     })
     .sort((a, b) => (b.rate ?? -1) - (a.rate ?? -1));
 
@@ -196,8 +249,8 @@ export default async function TeamPage() {
     };
   };
   const mostAssigned = findLeaders((row) => row.openAssigned.length);
-  const mostOverdue = findLeaders((row) => row.activePerf.overdueOpen);
-  const mostOnTime = findLeaders((row) => row.perf.onTime);
+  const mostOverdue = findLeaders((row) => row.perf.overdueOpen);
+  const mostOnTime = findLeaders((row) => row.periodPerf.onTime);
 
   return (
     <div className="tf-shell">
@@ -205,24 +258,49 @@ export default async function TeamPage() {
 
       <main className="tf-main">
         <div className="tf-page space-y-6">
-          <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-emerald-50 text-emerald-700">
-              <TrendingUp size={20} aria-hidden="true" />
-            </span>
-            <h1 className="tf-page-title">Hiệu suất</h1>
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-emerald-50 text-emerald-700">
+                <TrendingUp size={20} aria-hidden="true" />
+              </span>
+              <div>
+                <h1 className="tf-page-title">Hiệu suất</h1>
+                <p className="mt-0.5 text-sm text-zinc-500">{period.label}</p>
+              </div>
+            </div>
+
+            <nav
+              aria-label="Chọn kỳ đánh giá"
+              className="tf-scroll-tabs flex rounded-[8px] bg-zinc-100 p-1"
+            >
+              {PERFORMANCE_PERIOD_OPTIONS.map((option) => (
+                <Link
+                  key={option.key}
+                  href={`/team?period=${option.key}`}
+                  aria-current={period.key === option.key ? "page" : undefined}
+                  className={`whitespace-nowrap rounded-[6px] px-3 py-1.5 text-sm transition-colors ${
+                    period.key === option.key
+                      ? "bg-white font-medium text-zinc-950 shadow-sm"
+                      : "text-zinc-500 hover:text-zinc-800"
+                  }`}
+                >
+                  {option.label}
+                </Link>
+              ))}
+            </nav>
           </div>
 
           {isAdmin && (
-            <div className="grid grid-cols-3 gap-4">
-              <div className="tf-panel p-4">
+            <div className="tf-panel grid overflow-hidden sm:grid-cols-3 sm:divide-x sm:divide-zinc-200">
+              <div className="border-b border-zinc-200 p-4 sm:border-b-0">
                 <p className="text-2xl font-bold">{allOpenTasks.length}</p>
                 <p className="text-sm text-zinc-500">việc đang mở</p>
               </div>
-              <div className="tf-panel p-4">
+              <div className="border-b border-zinc-200 p-4 sm:border-b-0">
                 <p className="text-2xl font-bold text-blue-600">{inProgress}</p>
                 <p className="text-sm text-zinc-500">đang làm</p>
               </div>
-              <div className="tf-panel p-4">
+              <div className="p-4">
                 <p className="text-2xl font-bold text-red-600">{overdueTotal}</p>
                 <p className="text-sm text-zinc-500">quá hạn</p>
               </div>
@@ -234,7 +312,7 @@ export default async function TeamPage() {
               <h2 className="text-sm font-semibold text-zinc-700">
                 Điểm nổi bật nhân sự
               </h2>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div className="tf-panel grid overflow-hidden divide-y divide-zinc-200 md:grid-cols-3 md:divide-x md:divide-y-0">
                 <HighlightCard
                   label="Đang nhận nhiều task nhất"
                   highlight={mostAssigned}
@@ -243,7 +321,7 @@ export default async function TeamPage() {
                   iconClassName="bg-blue-50 text-blue-700"
                 />
                 <HighlightCard
-                  label="Đang trễ hạn nhiều nhất"
+                  label="Có nhiều task quá hạn nhất"
                   highlight={mostOverdue}
                   unit="task quá hạn"
                   icon={AlertTriangle}
@@ -254,7 +332,7 @@ export default async function TeamPage() {
                   highlight={mostOnTime}
                   unit="task đúng hạn"
                   icon={CheckCircle2}
-                  iconClassName="bg-emerald-50 text-emerald-700"
+                  iconClassName="bg-brand-50 text-brand-700"
                 />
               </div>
             </section>
@@ -262,16 +340,21 @@ export default async function TeamPage() {
 
           <section className="tf-panel space-y-3 p-5">
             <h2 className="font-semibold">Hiệu suất của tôi</h2>
-            <PerformanceBar perf={myPerf} />
+            <PerformanceBar perf={myPerf} periodLabel={period.label} />
           </section>
 
           {members.length > 0 && (
             <section className="tf-panel overflow-hidden">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-100 px-5 py-3">
-                <h2 className="font-semibold">
-                  {isAdmin ? "Nhân viên" : "Nhân viên của tôi"} (
-                  {members.length})
-                </h2>
+                <div>
+                  <h2 className="font-semibold">
+                    {isAdmin ? "Nhân viên" : "Nhân viên của tôi"} (
+                    {members.length})
+                  </h2>
+                  <p className="mt-0.5 text-xs text-zinc-400">
+                    Tỷ lệ đúng hạn = task đúng hạn / tổng task hoàn thành trong kỳ.
+                  </p>
+                </div>
                 <span className="text-xs text-zinc-400">
                   Bấm vào từng người để xem chi tiết
                 </span>
@@ -280,7 +363,7 @@ export default async function TeamPage() {
               <div className="hidden grid-cols-[minmax(0,1fr)_150px_76px_76px_76px_28px] gap-3 border-b border-zinc-100 bg-zinc-50/60 px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-400 sm:grid">
                 <span>Nhân viên</span>
                 <span>Hiệu suất</span>
-                <span className="text-right">Đúng hạn</span>
+                <span className="text-right">Tỷ lệ đúng hạn</span>
                 <span className="text-right">Đang mở</span>
                 <span className="text-right">Quá hạn</span>
                 <span />
@@ -291,11 +374,12 @@ export default async function TeamPage() {
                   <details key={m.id} className="group">
                     <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_28px] items-center gap-3 px-5 py-3 transition-colors hover:bg-zinc-50 sm:grid-cols-[minmax(0,1fr)_150px_76px_76px_76px_28px]">
                       <span className="flex min-w-0 items-center gap-3" title={m.email}>
-                        <span
-                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${avatarClass(m.id)}`}
-                        >
-                          {m.name.charAt(0).toUpperCase()}
-                        </span>
+                        <Avatar
+                          id={m.id}
+                          name={m.name}
+                          avatarUrl={m.avatarUrl}
+                          className="h-8 w-8 text-xs"
+                        />
                         <span className="truncate text-sm font-medium">
                           {m.name}
                           <RoleBadge role={m.role} />
@@ -304,8 +388,19 @@ export default async function TeamPage() {
                       <span className="hidden sm:block">
                         <PerfMini perf={perf} />
                       </span>
-                      <span className="hidden text-right text-sm font-semibold text-zinc-700 sm:block">
-                        {rate !== null ? `${rate}%` : "—"}
+                      <span className="hidden text-right sm:block">
+                        {rate !== null ? (
+                          <>
+                            <span className="block text-sm font-semibold text-zinc-700">
+                              {rate}%
+                            </span>
+                            <span className="block text-[10px] tabular-nums text-zinc-400">
+                              {perf.onTime}/{perf.done} task
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-sm text-zinc-400">—</span>
+                        )}
                       </span>
                       <span className="hidden text-right text-sm text-zinc-600 sm:block">
                         {openAssigned.length}
@@ -331,7 +426,7 @@ export default async function TeamPage() {
                         {m.email}
                         {isAdmin && m.manager && ` · Quản lý: ${m.manager.name}`}
                       </div>
-                      <PerformanceBar perf={perf} />
+                      <PerformanceBar perf={perf} periodLabel={period.label} />
 
                       <div>
                         <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-400">

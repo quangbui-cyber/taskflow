@@ -3,10 +3,11 @@
 import { useActionState, useState } from "react";
 import { BriefcaseBusiness, Building2, Pencil, X } from "lucide-react";
 import { updateProject, type ActionState } from "@/app/actions/projects";
-import { PROJECT_STATUSES, formatVND, projectStatusInfo } from "@/lib/types";
+import { formatVND } from "@/lib/types";
 import RevenueInput from "@/components/RevenueInput";
-
-type Option = { id: string; name: string };
+import ClientSelect, { type ClientOption } from "@/components/ClientSelect";
+import UserPicker, { type UserPickerOption } from "@/components/UserPicker";
+import { useInteraction } from "@/components/InteractionProvider";
 
 export default function ProjectEditButton({
   project,
@@ -19,37 +20,37 @@ export default function ProjectEditButton({
     id: string;
     name: string;
     description: string | null;
-    status: string;
     revenue: number;
     clientId: string | null;
     clientName: string | null;
     accountId: string | null;
     accountName: string | null;
   };
-  clients: Option[];
-  accounts: Option[];
+  clients: ClientOption[];
+  accounts: UserPickerOption[];
   canEdit: boolean;
   showRevenue: boolean;
 }) {
+  const { notify } = useInteraction();
   const [open, setOpen] = useState(false);
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     async (prev, formData) => {
       const result = await updateProject(prev, formData);
-      if (!result.error) setOpen(false);
+      if (result.error) {
+        notify({ message: result.error, tone: "error" });
+      } else {
+        notify({ message: "Đã lưu thông tin dự án.", tone: "success" });
+        setOpen(false);
+      }
       return result;
     },
     {}
   );
 
-  const info = projectStatusInfo(project.status);
-
   return (
     <>
       <div className="flex flex-col items-start gap-1.5 sm:items-end">
         <div className="flex flex-wrap items-center gap-2">
-          <span className={`tf-badge ${info.className}`}>
-            {info.label}
-          </span>
           {showRevenue && (
             <span className="text-sm font-semibold text-zinc-700">
               {formatVND(project.revenue)}
@@ -86,13 +87,13 @@ export default function ProjectEditButton({
 
       {open && (
         <div
-          className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-zinc-950/35 p-4 backdrop-blur-[2px] sm:p-8"
+          className="tf-overlay-enter fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-zinc-950/35 p-4 backdrop-blur-[2px] sm:p-8"
           onClick={() => setOpen(false)}
         >
           <form
             action={formAction}
             onClick={(e) => e.stopPropagation()}
-            className="my-auto w-full max-w-lg space-y-4 rounded-[10px] border border-zinc-200 bg-white p-6 shadow-xl"
+            className="tf-modal-enter my-auto w-full max-w-lg space-y-4 rounded-[10px] border border-zinc-200 bg-white p-6 shadow-xl"
           >
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Sửa thông tin dự án</h2>
@@ -133,24 +134,7 @@ export default function ProjectEditButton({
             </label>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <label className="block">
-                <span className="text-xs font-medium text-zinc-500">
-                  Tình trạng
-                </span>
-                <select
-                  name="status"
-                  defaultValue={project.status}
-                  className="tf-field mt-1"
-                >
-                  {PROJECT_STATUSES.map((s) => (
-                    <option key={s.key} value={s.key}>
-                      {s.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="block">
+              <label className="block sm:col-span-2">
                 <span className="text-xs font-medium text-zinc-500">
                   Doanh thu (VND)
                 </span>
@@ -162,40 +146,30 @@ export default function ProjectEditButton({
                 />
               </label>
 
-              <label className="block">
+              <div className="block">
                 <span className="text-xs font-medium text-zinc-500">
                   Client
                 </span>
-                <select
-                  name="clientId"
+                <ClientSelect
+                  clients={clients}
                   defaultValue={project.clientId ?? ""}
-                  className="tf-field mt-1"
-                >
-                  <option value="">— Chưa chọn —</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  className="mt-1"
+                />
+              </div>
 
               <label className="block">
                 <span className="text-xs font-medium text-zinc-500">
                   Account
                 </span>
-                <select
+                <UserPicker
                   name="accountId"
                   defaultValue={project.accountId ?? ""}
-                  className="tf-field mt-1"
-                >
-                  <option value="">— Chưa chọn —</option>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </select>
+                  options={accounts}
+                  placeholder="— Chưa chọn —"
+                  emptyLabel="— Chưa chọn —"
+                  ariaLabel="Account"
+                  className="mt-1"
+                />
               </label>
             </div>
 
@@ -217,7 +191,9 @@ export default function ProjectEditButton({
                 type="submit"
                 disabled={pending}
                 className="tf-button-primary"
+                aria-busy={pending}
               >
+                {pending && <span className="tf-spinner" aria-hidden="true" />}
                 {pending ? "Đang lưu..." : "Lưu thay đổi"}
               </button>
             </div>

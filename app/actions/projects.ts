@@ -8,18 +8,9 @@ import {
   sendGoogleChat,
   validateGoogleChatWebhookUrl,
 } from "@/lib/googleChat";
+import { projectStatusColor } from "@/lib/types";
 
 export type ActionState = { error?: string; success?: string };
-
-const PROJECT_COLORS = [
-  "#6366f1",
-  "#ec4899",
-  "#f59e0b",
-  "#10b981",
-  "#06b6d4",
-  "#8b5cf6",
-  "#ef4444",
-];
 
 const PROJECT_STATUS_KEYS = [
   "BIDDING",
@@ -39,17 +30,15 @@ function parseRevenue(raw: string): number | null {
   return value;
 }
 
-async function validAccount(accountId: string | null) {
-  if (!accountId) return true;
-  return Boolean(
-    await prisma.account.findFirst({
-      where: {
-        id: accountId,
-        userId: { not: null },
-      },
-      select: { id: true },
-    })
-  );
+async function findValidAccount(accountId: string | null) {
+  if (!accountId) return null;
+  return prisma.account.findFirst({
+    where: {
+      id: accountId,
+      user: { isActive: true },
+    },
+    select: { id: true, userId: true },
+  });
 }
 
 export async function createProject(
@@ -68,23 +57,25 @@ export async function createProject(
 
   if (!name) return { error: "Tên project không được để trống." };
   if (revenue === null) return { error: "Doanh thu không hợp lệ." };
-  if (!(await validAccount(accountId))) {
+  const account = await findValidAccount(accountId);
+  if (accountId && !account) {
     return { error: "Account chưa liên kết user hoặc chưa được gán Team." };
   }
-  const color =
-    PROJECT_COLORS[Math.floor(Math.random() * PROJECT_COLORS.length)];
-
+  const initialMembers = [{ userId: user.id, role: "owner" }];
+  if (account?.userId && account.userId !== user.id) {
+    initialMembers.push({ userId: account.userId, role: "member" });
+  }
   const project = await prisma.project.create({
     data: {
       name,
       description: description || null,
-      color,
+      color: projectStatusColor("BIDDING"),
       status: "BIDDING",
       revenue,
       clientId,
       accountId,
       ownerId: user.id,
-      members: { create: { userId: user.id, role: "owner" } },
+      members: { create: initialMembers },
     },
   });
 
@@ -100,7 +91,6 @@ export async function updateProject(
   const projectId = String(formData.get("projectId") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
-  const status = String(formData.get("status") ?? "");
   const revenue = parseRevenue(String(formData.get("revenue") ?? ""));
   const clientId = String(formData.get("clientId") ?? "") || null;
   const accountId = String(formData.get("accountId") ?? "") || null;
@@ -114,19 +104,18 @@ export async function updateProject(
   }
   if (!name) return { error: "Tên project không được để trống." };
   if (revenue === null) return { error: "Doanh thu không hợp lệ." };
-  if (accountId !== project.accountId && !(await validAccount(accountId))) {
+  if (
+    accountId !== project.accountId &&
+    accountId &&
+    !(await findValidAccount(accountId))
+  ) {
     return { error: "Account chưa liên kết user hoặc chưa được gán Team." };
   }
-  if (!PROJECT_STATUS_KEYS.includes(status)) {
-    return { error: "Tình trạng không hợp lệ." };
-  }
-
   await prisma.project.update({
     where: { id: projectId },
     data: {
       name,
       description: description || null,
-      status,
       revenue,
       clientId,
       accountId,
@@ -136,6 +125,46 @@ export async function updateProject(
   revalidatePath("/");
   revalidatePath(`/projects/${projectId}`);
   return {};
+}
+
+/** Đổi nhanh trạng thái project từ thanh thông tin đầu trang. */
+export async function updateProjectStatus(
+  projectId: string,
+  status: string
+): Promise<ActionState> {
+  const user = await requireUser();
+  if (!PROJECT_STATUS_KEYS.includes(status)) {
+    return { error: "Tình trạng không hợp lệ." };
+  }
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { ownerId: true, status: true, completedAt: true },
+  });
+  if (!project) return { error: "Project không tồn tại." };
+  if (project.ownerId !== user.id && user.role !== "ADMIN") {
+    return { error: "Chỉ chủ project hoặc admin mới được đổi trạng thái." };
+  }
+
+  await prisma.project.update({
+    where: { id: projectId },
+    data: {
+      status,
+      color: projectStatusColor(status),
+      completedAt:
+        status === "DONE"
+          ? project.status === "DONE"
+            ? (project.completedAt ?? new Date())
+            : new Date()
+          : null,
+    },
+  });
+
+  revalidatePath("/");
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/revenue");
+  revalidatePath("/team");
+  return { success: "Đã cập nhật trạng thái dự án." };
 }
 
 export async function deleteProject(projectId: string) {
@@ -245,6 +274,9 @@ export async function addMember(
         "Không tìm thấy người dùng này. Họ cần có tài khoản trước khi được thêm vào project.",
     };
   }
+  if (!invitee.isActive) {
+    return { error: "Tài khoản này đã bị vô hiệu hóa và không thể thêm vào dự án." };
+  }
 
   const existing = await getMembership(projectId, invitee.id);
   if (existing) return { error: "Người này đã là thành viên." };
@@ -269,7 +301,10 @@ export async function addMemberGroup(
     where: { id: groupId },
     select: {
       name: true,
-      members: { select: { userId: true } },
+      members: {
+        where: { user: { isActive: true } },
+        select: { userId: true },
+      },
     },
   });
   if (!group) return { error: "Nhóm không tồn tại." };

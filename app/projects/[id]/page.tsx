@@ -8,7 +8,8 @@ import MembersBar from "@/components/MembersBar";
 import DeleteProjectButton from "@/components/DeleteProjectButton";
 import ProjectEditButton from "@/components/ProjectEditButton";
 import ProjectWebhookPanel from "@/components/ProjectWebhookPanel";
-import type { MemberDTO, TaskDTO } from "@/lib/types";
+import ProjectStatusSelect from "@/components/ProjectStatusSelect";
+import { projectStatusColor, type MemberDTO, type TaskDTO } from "@/lib/types";
 
 export default async function ProjectPage({
   params,
@@ -25,20 +26,32 @@ export default async function ProjectPage({
     include: {
       client: { select: { id: true, name: true } },
       account: {
-        select: { id: true, name: true, user: { select: { name: true } } },
+        select: {
+          id: true,
+          name: true,
+          user: { select: { name: true, email: true, avatarUrl: true } },
+        },
       },
       members: {
-        include: { user: { select: { id: true, name: true, email: true } } },
+        include: {
+          user: {
+            select: { id: true, name: true, email: true, avatarUrl: true },
+          },
+        },
         orderBy: { createdAt: "asc" },
       },
       tasks: {
         include: {
           comments: {
-            include: { author: { select: { id: true, name: true } } },
+            include: {
+              author: { select: { id: true, name: true, avatarUrl: true } },
+            },
             orderBy: { createdAt: "asc" },
           },
           followers: {
-            include: { user: { select: { id: true, name: true } } },
+            include: {
+              user: { select: { id: true, name: true, avatarUrl: true } },
+            },
           },
         },
         orderBy: { order: "asc" },
@@ -48,12 +61,20 @@ export default async function ProjectPage({
 
   if (!project) notFound();
   const isMember = project.members.some((m) => m.userId === user.id);
-  if (!isMember) redirect("/");
+  if (!isMember && user.role !== "ADMIN") redirect("/");
 
   const [sidebarProjects, clients, accounts, availableUsers, memberGroups] = await Promise.all([
     prisma.project.findMany({
       where: { members: { some: { userId: user.id } } },
-      select: { id: true, name: true, color: true, status: true },
+      select: {
+        id: true,
+        name: true,
+        color: true,
+        status: true,
+        account: {
+          select: { team: { select: { id: true, name: true } } },
+        },
+      },
       orderBy: { createdAt: "desc" },
     }),
     prisma.client.findMany({
@@ -63,7 +84,7 @@ export default async function ProjectPage({
     prisma.account.findMany({
       where: {
         OR: [
-          { userId: { not: null } },
+          { user: { isActive: true } },
           ...(project.accountId ? [{ id: project.accountId }] : []),
         ],
       },
@@ -71,20 +92,31 @@ export default async function ProjectPage({
         id: true,
         name: true,
         userId: true,
-        user: { select: { name: true } },
+        user: { select: { name: true, email: true, avatarUrl: true } },
       },
       orderBy: { user: { name: "asc" } },
     }),
     prisma.user.findMany({
-      where: { memberships: { none: { projectId: id } } },
-      select: { id: true, name: true, email: true, role: true },
+      where: {
+        isActive: true,
+        memberships: { none: { projectId: id } },
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        avatarUrl: true,
+      },
       orderBy: { name: "asc" },
     }),
     prisma.memberGroup.findMany({
       include: {
         members: {
           include: {
-            user: { select: { id: true, name: true, email: true } },
+            user: {
+              select: { id: true, name: true, email: true, avatarUrl: true },
+            },
           },
           orderBy: { user: { name: "asc" } },
         },
@@ -131,30 +163,34 @@ export default async function ProjectPage({
 
       <main className="tf-main flex flex-col overflow-hidden bg-white md:h-screen md:max-h-screen">
         <header className="border-b border-zinc-200 bg-white px-4 py-4 sm:px-6">
-          <div className="flex min-h-[56px] flex-wrap items-center justify-between gap-4">
-            <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-h-[56px] flex-wrap items-start justify-between gap-4">
+            <div className="flex min-w-0 flex-1 items-start gap-3">
               <span
                 className="h-3 w-3 shrink-0 rounded-full"
-                style={{ backgroundColor: project.color }}
+                style={{ backgroundColor: projectStatusColor(project.status) }}
               />
               <div className="min-w-0">
-                <h1 className="truncate text-lg font-semibold text-zinc-950 sm:text-xl">
+                <h1 className="line-clamp-2 text-lg font-semibold text-zinc-950 sm:truncate sm:text-xl">
                   {project.name}
                 </h1>
                 {project.description && (
-                  <p className="mt-0.5 truncate text-sm text-zinc-500">
+                  <p className="mt-0.5 line-clamp-2 text-sm text-zinc-500 sm:truncate">
                     {project.description}
                   </p>
                 )}
               </div>
             </div>
-            <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-3">
+            <div className="flex w-full min-w-0 flex-wrap items-center justify-start gap-2 sm:w-auto sm:flex-1 sm:justify-end sm:gap-3">
+              <ProjectStatusSelect
+                projectId={project.id}
+                status={project.status}
+                canEdit={isOwner || user.role === "ADMIN"}
+              />
               <ProjectEditButton
                 project={{
                   id: project.id,
                   name: project.name,
                   description: project.description,
-                  status: project.status,
                   revenue: project.revenue,
                   clientId: project.clientId,
                   clientName: project.client?.name ?? null,
@@ -168,6 +204,9 @@ export default async function ProjectPage({
                   name:
                     account.user?.name ??
                     `${account.name} (dữ liệu cũ - cần liên kết)`,
+                  email: account.user?.email ?? null,
+                  avatarUrl: account.user?.avatarUrl ?? null,
+                  meta: account.user ? null : "Dữ liệu cũ",
                 }))}
                 canEdit={isOwner || user.role === "ADMIN"}
                 showRevenue={canManageProjects(user.role)}
@@ -198,7 +237,7 @@ export default async function ProjectPage({
           </div>
 
           <nav
-            className="mt-4 flex gap-1 border-t border-zinc-100 pt-3"
+            className="tf-scroll-tabs mt-4 flex gap-1 border-t border-zinc-100 pt-3"
             aria-label="Project tabs"
           >
             <Link

@@ -19,16 +19,44 @@ export async function createClient(
   const existing = await prisma.client.findUnique({ where: { name } });
   if (existing) return { error: "Client này đã tồn tại." };
 
-  await prisma.client.create({ data: { name } });
+  await prisma.client.create({
+    data: { name },
+  });
   revalidatePath("/admin");
   return { success: `Đã thêm client "${name}".` };
 }
 
-export async function deleteClient(id: string) {
+export async function updateClient(
+  id: string,
+  name: string
+): Promise<CatalogState> {
+  await requireAdmin();
+  const normalizedName = name.trim();
+  if (!normalizedName) return { error: "Tên client không được để trống." };
+
+  const duplicate = await prisma.client.findFirst({
+    where: { name: normalizedName, id: { not: id } },
+    select: { id: true },
+  });
+  if (duplicate) return { error: "Client này đã tồn tại." };
+
+  await prisma.client.update({
+    where: { id },
+    data: { name: normalizedName },
+  });
+  revalidatePath("/admin");
+  revalidatePath("/projects/new");
+  revalidatePath("/projects/[id]", "page");
+  return { success: `Đã cập nhật client "${normalizedName}".` };
+}
+
+export async function deleteClient(id: string): Promise<CatalogState> {
   await requireAdmin();
   // onDelete: SetNull ở Project.clientId → project cũ chỉ mất tham chiếu, không bị xoá
   await prisma.client.delete({ where: { id } });
   revalidatePath("/admin");
+  revalidatePath("/projects/new");
+  return { success: "Đã xoá Client." };
 }
 
 export async function createAccount(
@@ -43,11 +71,18 @@ export async function createAccount(
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, name: true, role: true, accountProfile: { select: { id: true } } },
+    select: {
+      id: true,
+      name: true,
+      role: true,
+      isActive: true,
+      accountProfile: { select: { id: true } },
+    },
   });
   if (!user || !ACCOUNT_ELIGIBLE_ROLES.includes(user.role)) {
     return { error: "Chỉ người dùng có vai trò Admin hoặc Account mới được chọn." };
   }
+  if (!user.isActive) return { error: "Tài khoản này đã bị vô hiệu hóa." };
   if (user.accountProfile) return { error: "Tài khoản này đã có trong danh sách Account." };
 
   const team = await prisma.salesTeam.findUnique({ where: { id: teamId } });
@@ -73,7 +108,12 @@ export async function linkLegacyAccount(
     prisma.account.findUnique({ where: { id: accountId } }),
     prisma.user.findUnique({
       where: { id: userId },
-      select: { name: true, role: true, accountProfile: { select: { id: true } } },
+      select: {
+        name: true,
+        role: true,
+        isActive: true,
+        accountProfile: { select: { id: true } },
+      },
     }),
     prisma.salesTeam.findUnique({ where: { id: teamId } }),
   ]);
@@ -82,6 +122,7 @@ export async function linkLegacyAccount(
   if (!user || !ACCOUNT_ELIGIBLE_ROLES.includes(user.role)) {
     return { error: "Chỉ người dùng có vai trò Admin hoặc Account mới được chọn." };
   }
+  if (!user.isActive) return { error: "Tài khoản này đã bị vô hiệu hóa." };
   if (user.accountProfile) return { error: "Tài khoản này đã liên kết với Account khác." };
   if (!team) return { error: "Team kinh doanh không tồn tại." };
 

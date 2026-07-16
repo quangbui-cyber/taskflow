@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import InteractionProvider from "@/components/InteractionProvider";
 
 export const metadata: Metadata = {
   title: "myCreative — Quản lý công việc",
@@ -13,7 +14,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="vi" className="h-full antialiased">
-      <body>{children}</body>
+      <body>
+        <InteractionProvider>{children}</InteractionProvider>
+      </body>
     </html>
   );
 }

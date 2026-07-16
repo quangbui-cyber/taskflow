@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState, useTransition } from "react";
-import { Link2, Plus, Save, Trash2 } from "lucide-react";
+import { useActionState, useRef, useState, useTransition } from "react";
+import { ChevronDown, Link2, Plus, Save, Trash2 } from "lucide-react";
 import {
   createAccount,
   deleteAccount,
@@ -9,17 +9,40 @@ import {
   setAccountTeam,
   type CatalogState,
 } from "@/app/actions/catalog";
+import Avatar from "@/components/Avatar";
+import UserPicker, { type UserPickerOption } from "@/components/UserPicker";
+import {
+  useActionFeedback,
+  useInteraction,
+} from "@/components/InteractionProvider";
 
 type TeamOption = { id: string; name: string };
-type AccountUserOption = { id: string; name: string; email: string; role: string };
+type AccountUserOption = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  avatarUrl: string | null;
+};
 type AccountItem = {
   id: string;
   name: string;
   email: string | null;
+  avatarUrl: string | null;
   projectCount: number;
   teamId: string | null;
   linked: boolean;
 };
+
+function accountUserOptions(users: AccountUserOption[]): UserPickerOption[] {
+  return users.map((user) => ({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    avatarUrl: user.avatarUrl,
+    meta: user.role === "ADMIN" ? "Admin" : "Account",
+  }));
+}
 
 function LegacyAccountRow({
   account,
@@ -30,17 +53,23 @@ function LegacyAccountRow({
   users: AccountUserOption[];
   teams: TeamOption[];
 }) {
+  const { notify } = useInteraction();
   const [userId, setUserId] = useState("");
   const [teamId, setTeamId] = useState(account.teamId ?? "");
   const [message, setMessage] = useState("");
   const [isError, setIsError] = useState(false);
   const [pending, startTransition] = useTransition();
+  const pickerOptions = accountUserOptions(users);
 
   function linkAccount() {
     startTransition(async () => {
       const result = await linkLegacyAccount(account.id, userId, teamId);
       setIsError(Boolean(result.error));
       setMessage(result.error ?? result.success ?? "");
+      notify({
+        message: result.error ?? result.success ?? "Đã liên kết Account.",
+        tone: result.error ? "error" : "success",
+      });
     });
   }
 
@@ -50,6 +79,10 @@ function LegacyAccountRow({
       const result = await deleteAccount(account.id);
       setIsError(Boolean(result.error));
       setMessage(result.error ?? result.success ?? "");
+      notify({
+        message: result.error ?? result.success ?? "Đã xoá Account.",
+        tone: result.error ? "error" : "success",
+      });
     });
   }
 
@@ -74,32 +107,34 @@ function LegacyAccountRow({
         </button>
       </div>
       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-        <select
+        <UserPicker
           value={userId}
-          onChange={(event) => setUserId(event.target.value)}
-          className="tf-field"
-          aria-label={`Tài khoản thay thế cho ${account.name}`}
-        >
-          <option value="">Chọn user Account</option>
-          {users.map((user) => (
-            <option key={user.id} value={user.id}>
-              {user.name} · {user.email} · {user.role === "ADMIN" ? "Admin" : "Account"}
-            </option>
-          ))}
-        </select>
-        <select
-          value={teamId}
-          onChange={(event) => setTeamId(event.target.value)}
-          className="tf-field"
-          aria-label={`Team của ${account.name}`}
-        >
-          <option value="">Chọn Team</option>
-          {teams.map((team) => (
-            <option key={team.id} value={team.id}>
-              {team.name}
-            </option>
-          ))}
-        </select>
+          onChange={setUserId}
+          options={pickerOptions}
+          placeholder="Chọn user Account"
+          emptyLabel="Chọn user Account"
+          ariaLabel={`Tài khoản thay thế cho ${account.name}`}
+        />
+        <div className="relative min-w-0">
+          <select
+            value={teamId}
+            onChange={(event) => setTeamId(event.target.value)}
+            className="tf-field appearance-none !pr-10"
+            aria-label={`Team của ${account.name}`}
+          >
+            <option value="">Chọn Team</option>
+            {teams.map((team) => (
+              <option key={team.id} value={team.id}>
+                {team.name}
+              </option>
+            ))}
+          </select>
+          <ChevronDown
+            size={15}
+            className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-500"
+            aria-hidden="true"
+          />
+        </div>
         <button
           type="button"
           onClick={linkAccount}
@@ -107,11 +142,11 @@ function LegacyAccountRow({
           className="tf-button-primary"
         >
           <Link2 size={16} aria-hidden="true" />
-          Lưu thay đổi
+          Lưu
         </button>
       </div>
-      {message && (
-        <p className={`text-xs ${isError ? "text-red-600" : "text-brand-800"}`}>
+      {message && isError && (
+        <p className="text-xs text-red-600">
           {message}
         </p>
       )}
@@ -126,6 +161,7 @@ function LinkedAccountRow({
   account: AccountItem;
   teams: TeamOption[];
 }) {
+  const { notify } = useInteraction();
   const [teamId, setTeamId] = useState(account.teamId ?? "");
   const [savedTeamId, setSavedTeamId] = useState(account.teamId ?? "");
   const [message, setMessage] = useState("");
@@ -139,6 +175,10 @@ function LinkedAccountRow({
       setIsError(Boolean(result.error));
       setMessage(result.error ?? "Đã lưu thay đổi.");
       if (!result.error) setSavedTeamId(teamId);
+      notify({
+        message: result.error ?? "Đã lưu Team của Account.",
+        tone: result.error ? "error" : "success",
+      });
     });
   }
 
@@ -148,36 +188,55 @@ function LinkedAccountRow({
       const result = await deleteAccount(account.id);
       setIsError(Boolean(result.error));
       setMessage(result.error ?? result.success ?? "");
+      notify({
+        message: result.error ?? result.success ?? "Đã xoá Account.",
+        tone: result.error ? "error" : "success",
+      });
     });
   }
 
   return (
     <li className="flex flex-wrap items-center gap-3 px-5 py-3 text-sm">
-      <span className="min-w-[180px] flex-1">
-        <span className="block truncate font-medium">{account.name}</span>
-        <span className="block truncate text-xs text-zinc-400">{account.email}</span>
-        {message && (
-          <span className={`mt-1 block text-xs ${isError ? "text-red-600" : "text-brand-800"}`}>
-            {message}
-          </span>
-        )}
+      <span className="flex min-w-[180px] flex-1 items-center gap-2">
+        <Avatar
+          id={account.id}
+          name={account.name}
+          avatarUrl={account.avatarUrl}
+          className="h-8 w-8 text-xs"
+        />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-medium">{account.name}</span>
+          <span className="block truncate text-xs text-zinc-400">{account.email}</span>
+          {message && isError && (
+            <span className="mt-1 block text-xs text-red-600">
+              {message}
+            </span>
+          )}
+        </span>
       </span>
-      <select
-        value={teamId}
-        disabled={pending}
-        onChange={(event) => {
-          setTeamId(event.target.value);
-          setMessage("");
-        }}
-        className="rounded-[7px] border border-zinc-200 px-2 py-1.5 text-xs text-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-400/30"
-        aria-label={`Team của ${account.name}`}
-      >
-        {teams.map((team) => (
-          <option key={team.id} value={team.id}>
-            {team.name}
-          </option>
-        ))}
-      </select>
+      <div className="relative min-w-[180px]">
+        <select
+          value={teamId}
+          disabled={pending}
+          onChange={(event) => {
+            setTeamId(event.target.value);
+            setMessage("");
+          }}
+          className="w-full appearance-none rounded-[7px] border border-zinc-200 py-1.5 pl-3 pr-9 text-xs text-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-400/30 disabled:opacity-50"
+          aria-label={`Team của ${account.name}`}
+        >
+          {teams.map((team) => (
+            <option key={team.id} value={team.id}>
+              {team.name}
+            </option>
+          ))}
+        </select>
+        <ChevronDown
+          size={14}
+          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500"
+          aria-hidden="true"
+        />
+      </div>
       <button
         type="button"
         onClick={saveTeam}
@@ -185,7 +244,7 @@ function LinkedAccountRow({
         className="tf-button-secondary !min-h-8 !px-2.5 !py-1 text-xs"
       >
         <Save size={14} aria-hidden="true" />
-        Lưu thay đổi
+        Lưu
       </button>
       <span className="shrink-0 text-xs text-zinc-400">
         {account.projectCount} project
@@ -214,16 +273,22 @@ export default function AccountCatalogManager({
   teams: TeamOption[];
 }) {
   const formRef = useRef<HTMLFormElement>(null);
+  const [selectedUserId, setSelectedUserId] = useState("");
   const [state, formAction, pending] = useActionState<CatalogState, FormData>(
-    createAccount,
+    async (prev, formData) => {
+      const result = await createAccount(prev, formData);
+      if (!result.error) {
+        formRef.current?.reset();
+        setSelectedUserId("");
+      }
+      return result;
+    },
     {}
   );
+  useActionFeedback(state);
   const linkedAccounts = accounts.filter((account) => account.linked);
   const legacyAccounts = accounts.filter((account) => !account.linked);
-
-  useEffect(() => {
-    if (state.success) formRef.current?.reset();
-  }, [state.success]);
+  const pickerOptions = accountUserOptions(accountUsers);
 
   return (
     <div className="tf-panel overflow-hidden xl:col-span-2">
@@ -239,29 +304,47 @@ export default function AccountCatalogManager({
         action={formAction}
         className="grid gap-2 p-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
       >
-        <select name="userId" defaultValue="" required className="tf-field">
-          <option value="">Chọn tài khoản Account</option>
-          {accountUsers.map((user) => (
-            <option key={user.id} value={user.id}>
-              {user.name} · {user.email} · {user.role === "ADMIN" ? "Admin" : "Account"}
-            </option>
-          ))}
-        </select>
-        <select name="teamId" defaultValue="" required className="tf-field">
-          <option value="">Chọn Team bắt buộc</option>
-          {teams.map((team) => (
-            <option key={team.id} value={team.id}>
-              {team.name}
-            </option>
-          ))}
-        </select>
+        <UserPicker
+          name="userId"
+          value={selectedUserId}
+          onChange={setSelectedUserId}
+          options={pickerOptions}
+          placeholder="Chọn tài khoản Account"
+          emptyLabel="Chọn tài khoản Account"
+          ariaLabel="Chọn tài khoản Account"
+        />
+        <div className="relative min-w-0">
+          <select
+            name="teamId"
+            defaultValue=""
+            required
+            className="tf-field appearance-none !pr-10"
+          >
+            <option value="">Chọn Team bắt buộc</option>
+            {teams.map((team) => (
+              <option key={team.id} value={team.id}>
+                {team.name}
+              </option>
+            ))}
+          </select>
+          <ChevronDown
+            size={15}
+            className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-500"
+            aria-hidden="true"
+          />
+        </div>
         <button
           type="submit"
-          disabled={pending || accountUsers.length === 0 || teams.length === 0}
+          disabled={pending || !selectedUserId || accountUsers.length === 0 || teams.length === 0}
           className="tf-button-primary"
+          aria-busy={pending}
         >
-          <Plus size={16} aria-hidden="true" />
-          Lưu thay đổi
+          {pending ? (
+            <span className="tf-spinner" aria-hidden="true" />
+          ) : (
+            <Plus size={16} aria-hidden="true" />
+          )}
+          {pending ? "Đang lưu..." : "Lưu"}
         </button>
       </form>
 
@@ -276,9 +359,6 @@ export default function AccountCatalogManager({
         </p>
       )}
       {state.error && <p className="px-4 pb-3 text-xs text-red-600">{state.error}</p>}
-      {state.success && (
-        <p className="px-4 pb-3 text-xs text-brand-800">{state.success}</p>
-      )}
 
       <ul className="divide-y divide-zinc-100">
         {linkedAccounts.length === 0 && legacyAccounts.length === 0 && (

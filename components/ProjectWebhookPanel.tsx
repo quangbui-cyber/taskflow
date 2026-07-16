@@ -7,6 +7,7 @@ import {
   saveProjectGoogleChatWebhook,
   testProjectGoogleChatWebhook,
 } from "@/app/actions/projects";
+import { useInteraction } from "@/components/InteractionProvider";
 
 export default function ProjectWebhookPanel({
   projectId,
@@ -17,6 +18,7 @@ export default function ProjectWebhookPanel({
   configured: boolean;
   canManage: boolean;
 }) {
+  const { notify } = useInteraction();
   const [isConfigured, setIsConfigured] = useState(configured);
   const [webhookUrl, setWebhookUrl] = useState("");
   const [message, setMessage] = useState("");
@@ -26,6 +28,10 @@ export default function ProjectWebhookPanel({
   function showResult(result: { error?: string; success?: string }) {
     setIsError(Boolean(result.error));
     setMessage(result.error ?? result.success ?? "");
+    notify({
+      message: result.error ?? result.success ?? "Đã cập nhật webhook.",
+      tone: result.error ? "error" : "success",
+    });
   }
 
   function saveWebhook() {
@@ -127,8 +133,10 @@ export default function ProjectWebhookPanel({
               className="tf-button-primary"
               onClick={saveWebhook}
               disabled={isPending || !webhookUrl.trim()}
+              aria-busy={isPending}
             >
-              Lưu webhook
+              {isPending && <span className="tf-spinner" aria-hidden="true" />}
+              {isPending ? "Đang lưu..." : "Lưu webhook"}
             </button>
           </div>
           <p className="mt-2 text-xs leading-5 text-zinc-500">

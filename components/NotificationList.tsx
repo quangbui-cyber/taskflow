@@ -11,6 +11,7 @@ import {
   Eye,
   Inbox,
   MessageSquare,
+  RefreshCw,
   type LucideIcon,
 } from "lucide-react";
 import { markNotificationRead } from "@/app/actions/notifications";
@@ -28,6 +29,7 @@ export type NotificationItem = {
 const TYPE_ICON: Record<string, LucideIcon> = {
   TASK_ASSIGNED: Inbox,
   TASK_COMPLETED: CheckCircle2,
+  TASK_UPDATED: RefreshCw,
   COMMENT: MessageSquare,
   TASK_FOLLOW: Eye,
 };
@@ -122,11 +124,11 @@ export default function NotificationList({
   return (
     <div className="tf-panel overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
-        <div className="inline-flex rounded-[7px] bg-zinc-100 p-1" aria-label="Lọc thông báo">
+        <div className="tf-scroll-tabs inline-flex rounded-[7px] bg-zinc-100 p-1" aria-label="Lọc thông báo">
           <Link
             href="/notifications"
             aria-current={activeView === "all" ? "page" : undefined}
-            className={`inline-flex min-h-8 items-center rounded-[6px] px-3 text-sm font-medium transition-colors ${
+            className={`inline-flex min-h-10 items-center rounded-[6px] px-3 text-sm font-medium transition-colors ${
               activeView === "all"
                 ? "bg-white text-zinc-900 shadow-sm"
                 : "text-zinc-500 hover:text-zinc-800"
@@ -137,7 +139,7 @@ export default function NotificationList({
           <Link
             href="/notifications?view=unread"
             aria-current={activeView === "unread" ? "page" : undefined}
-            className={`inline-flex min-h-8 items-center gap-2 rounded-[6px] px-3 text-sm font-medium transition-colors ${
+            className={`inline-flex min-h-10 items-center gap-2 rounded-[6px] px-3 text-sm font-medium transition-colors ${
               activeView === "unread"
                 ? "bg-white text-zinc-900 shadow-sm"
                 : "text-zinc-500 hover:text-zinc-800"
@@ -153,7 +155,7 @@ export default function NotificationList({
           <Link
             href="/notifications?view=archive"
             aria-current={activeView === "archive" ? "page" : undefined}
-            className={`inline-flex min-h-8 items-center rounded-[6px] px-3 text-sm font-medium transition-colors ${
+            className={`inline-flex min-h-10 items-center rounded-[6px] px-3 text-sm font-medium transition-colors ${
               activeView === "archive"
                 ? "bg-white text-zinc-900 shadow-sm"
                 : "text-zinc-500 hover:text-zinc-800"
@@ -162,7 +164,7 @@ export default function NotificationList({
             Lưu trữ
           </Link>
         </div>
-        <p className="text-xs text-zinc-400">
+        <p className="hidden text-xs text-zinc-400 sm:block">
           Nhấn vào thông báo để đánh dấu đã đọc
         </p>
       </div>

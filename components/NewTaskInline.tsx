@@ -1,10 +1,12 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import { Plus } from "lucide-react";
+import { ChevronDown, Plus } from "lucide-react";
 import { createTask, type ActionState } from "@/app/actions/tasks";
 import { PRIORITIES, type MemberDTO } from "@/lib/types";
 import DeadlineField from "@/components/DeadlineField";
+import UserPicker from "@/components/UserPicker";
+import { useInteraction } from "@/components/InteractionProvider";
 
 export default function NewTaskInline({
   projectId,
@@ -15,6 +17,7 @@ export default function NewTaskInline({
   status: string;
   members: MemberDTO[];
 }) {
+  const { notify } = useInteraction();
   const [editing, setEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
@@ -23,15 +26,24 @@ export default function NewTaskInline({
       if (dueDate) formData.set("dueDate", new Date(dueDate).toISOString());
 
       const result = await createTask(prev, formData);
-      if (!result.error) {
+      if (result.error) {
+        notify({ message: result.error, tone: "error" });
+      } else {
         formRef.current?.reset();
         setEditing(false);
+        notify({ message: "Đã tạo task.", tone: "success" });
       }
       return result;
     },
     {}
   );
   const formRef = useRef<HTMLFormElement>(null);
+  const memberOptions = members.map((member) => ({
+    id: member.userId,
+    name: member.user.name,
+    email: member.user.email,
+    avatarUrl: member.user.avatarUrl,
+  }));
 
   useEffect(() => {
     if (editing) inputRef.current?.focus();
@@ -75,30 +87,42 @@ export default function NewTaskInline({
       <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
         <label className="block">
           <span className="text-xs font-medium text-zinc-500">Người làm</span>
-          <select name="assigneeId" defaultValue="" className="tf-field mt-1">
-            <option value="">Chưa gán</option>
-            {members.map((member) => (
-              <option key={member.userId} value={member.userId}>
-                {member.user.name}
-              </option>
-            ))}
-          </select>
+          <UserPicker
+            name="assigneeId"
+            options={memberOptions}
+            placeholder="Chưa gán"
+            emptyLabel="Chưa gán"
+            ariaLabel="Người làm"
+            className="mt-1"
+            menuPlacement="top"
+          />
         </label>
 
         <label className="block">
           <span className="text-xs font-medium text-zinc-500">Ưu tiên</span>
-          <select name="priority" defaultValue="MEDIUM" className="tf-field mt-1">
-            {PRIORITIES.map((priority) => (
-              <option key={priority.key} value={priority.key}>
-                {priority.label}
-              </option>
-            ))}
-          </select>
+          <div className="relative mt-1">
+            <select
+              name="priority"
+              defaultValue="MEDIUM"
+              className="tf-field appearance-none !pr-10"
+            >
+              {PRIORITIES.map((priority) => (
+                <option key={priority.key} value={priority.key}>
+                  {priority.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              size={16}
+              className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500"
+              aria-hidden="true"
+            />
+          </div>
         </label>
       </div>
 
       <div>
-        <DeadlineField name="dueDate" />
+        <DeadlineField name="dueDate" compact />
       </div>
 
       <label className="block">
@@ -129,7 +153,9 @@ export default function NewTaskInline({
           type="submit"
           disabled={pending}
           className="tf-button-primary !min-h-8 !px-3 !py-1 text-xs"
+          aria-busy={pending}
         >
+          {pending && <span className="tf-spinner" aria-hidden="true" />}
           {pending ? "Đang thêm..." : "Tạo task"}
         </button>
         <button

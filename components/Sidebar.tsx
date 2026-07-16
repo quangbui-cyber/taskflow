@@ -14,12 +14,18 @@ import {
 } from "lucide-react";
 import { logout } from "@/app/actions/auth";
 import Brand from "@/components/Brand";
+import Avatar from "@/components/Avatar";
 import { canManageProjects } from "@/lib/auth";
-import { avatarClass } from "@/lib/avatar";
 import { prisma } from "@/lib/prisma";
-import { isArchivedProjectStatus } from "@/lib/types";
+import { isArchivedProjectStatus, projectStatusColor } from "@/lib/types";
 
-type ProjectItem = { id: string; name: string; color: string; status: string };
+type ProjectItem = {
+  id: string;
+  name: string;
+  color: string;
+  status: string;
+  account: { team: { id: string; name: string } } | null;
+};
 type ActiveSection =
   | "home"
   | "notifications"
@@ -85,7 +91,11 @@ function ProjectLinks({
 
   return (
     <ul className="space-y-1">
-      {projects.map((project) => (
+      {[...projects]
+        .sort((a, b) =>
+          a.name.localeCompare(b.name, "vi", { sensitivity: "base" })
+        )
+        .map((project) => (
         <li key={project.id}>
           <Link
             href={`/projects/${project.id}`}
@@ -98,7 +108,7 @@ function ProjectLinks({
           >
             <span
               className="h-2.5 w-2.5 shrink-0 rounded-full"
-              style={{ backgroundColor: project.color }}
+              style={{ backgroundColor: projectStatusColor(project.status) }}
               aria-hidden="true"
             />
             <span className="truncate">{project.name}</span>
@@ -106,6 +116,81 @@ function ProjectLinks({
         </li>
       ))}
     </ul>
+  );
+}
+
+function ActiveProjectLinks({
+  projects,
+  activeProjectId,
+}: {
+  projects: ProjectItem[];
+  activeProjectId?: string;
+}) {
+  if (projects.length === 0) {
+    return <p className="px-3 py-2 text-sm text-zinc-400">Chưa có dự án</p>;
+  }
+
+  const teams = projects.reduce<
+    Array<{ id: string; name: string; projects: ProjectItem[] }>
+  >((groups, project) => {
+    const team = project.account?.team;
+    const teamId = team?.id ?? "unassigned";
+    const existingGroup = groups.find((group) => group.id === teamId);
+
+    if (existingGroup) {
+      return groups.map((group) =>
+        group.id === teamId
+          ? { ...group, projects: [...group.projects, project] }
+          : group
+      );
+    }
+
+    return [
+      ...groups,
+      {
+        id: teamId,
+        name: team?.name ?? "Chưa gán Team",
+        projects: [project],
+      },
+    ];
+  }, []);
+
+  teams.sort((a, b) => {
+    if (a.id === "unassigned") return 1;
+    if (b.id === "unassigned") return -1;
+    return a.name.localeCompare(b.name, "vi");
+  });
+
+  return (
+    <div className="space-y-1">
+      {teams.map((team) => (
+        <details
+          key={team.id}
+          open
+          className="group/active-team"
+          data-team-id={team.id}
+        >
+          <summary className="flex min-h-8 cursor-pointer list-none items-center gap-2 rounded-[6px] px-3 py-1.5 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800">
+            <UsersRound size={14} strokeWidth={1.8} aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate">{team.name}</span>
+            <span className="text-[10px] tabular-nums text-zinc-400">
+              {team.projects.length}
+            </span>
+            <ChevronDown
+              size={13}
+              className="text-zinc-400 transition-transform group-open/active-team:rotate-180"
+              aria-hidden="true"
+            />
+          </summary>
+          <div className="ml-3 border-l border-zinc-200 pl-1">
+            <ProjectLinks
+              projects={team.projects}
+              activeProjectId={activeProjectId}
+            />
+          </div>
+        </details>
+      ))}
+    </div>
   );
 }
 
@@ -186,7 +271,13 @@ export default async function Sidebar({
   activeProjectId,
   activeSection = "home",
 }: {
-  user: { id: string; name: string; email: string; role?: string };
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role?: string;
+    avatarUrl?: string | null;
+  };
   projects: ProjectItem[];
   activeProjectId?: string;
   activeSection?: ActiveSection;
@@ -204,7 +295,7 @@ export default async function Sidebar({
 
   return (
     <>
-      <aside className="sticky top-0 hidden h-screen w-[280px] shrink-0 border-r border-zinc-200 bg-white md:flex">
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-zinc-200 bg-white md:flex">
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex h-[72px] shrink-0 items-center border-b border-zinc-200 px-5">
             <Link href="/" aria-label="myCreative - Trang công việc">
@@ -237,7 +328,10 @@ export default async function Sidebar({
                   </Link>
                 )}
               </div>
-              <ProjectLinks projects={activeProjects} activeProjectId={activeProjectId} />
+              <ActiveProjectLinks
+                projects={activeProjects}
+                activeProjectId={activeProjectId}
+              />
               <ArchivedProjectLinks
                 projects={archivedProjects}
                 activeProjectId={activeProjectId}
@@ -254,9 +348,12 @@ export default async function Sidebar({
 
           <div className="border-t border-zinc-200 p-3">
             <div className="flex items-center gap-3 rounded-[7px] px-2 py-2">
-              <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${avatarClass(user.id)}`}>
-                {user.name.charAt(0).toUpperCase()}
-              </span>
+              <Avatar
+                id={user.id}
+                name={user.name}
+                avatarUrl={user.avatarUrl}
+                className="h-9 w-9 text-sm"
+              />
               <div className="min-w-0 flex-1" title={user.email}>
                 <p className="truncate text-sm font-medium text-zinc-800">{user.name}</p>
                 <p className="truncate text-xs text-zinc-400">{user.email}</p>
@@ -281,7 +378,11 @@ export default async function Sidebar({
           <Brand compact />
         </Link>
         <details className="group relative">
-          <summary className="flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-[7px] border border-zinc-200 text-zinc-600 hover:bg-zinc-50" aria-label="Mở điều hướng">
+          <summary
+            role="button"
+            className="flex h-11 w-11 cursor-pointer list-none items-center justify-center rounded-[7px] border border-zinc-200 text-zinc-600 hover:bg-zinc-50"
+            aria-label="Mở điều hướng"
+          >
             <Menu size={20} aria-hidden="true" />
           </summary>
           <div className="absolute right-0 top-12 z-50 max-h-[calc(100vh-80px)] w-[min(88vw,340px)] overflow-y-auto rounded-[8px] border border-zinc-200 bg-white p-3 shadow-xl">
@@ -300,7 +401,10 @@ export default async function Sidebar({
                 </Link>
               )}
             </div>
-            <ProjectLinks projects={activeProjects} activeProjectId={activeProjectId} />
+            <ActiveProjectLinks
+              projects={activeProjects}
+              activeProjectId={activeProjectId}
+            />
             <ArchivedProjectLinks
               projects={archivedProjects}
               activeProjectId={activeProjectId}
@@ -311,9 +415,12 @@ export default async function Sidebar({
               </div>
             )}
             <div className="mt-3 flex items-center gap-3 border-t border-zinc-200 px-2 pt-3">
-              <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${avatarClass(user.id)}`}>
-                {user.name.charAt(0).toUpperCase()}
-              </span>
+              <Avatar
+                id={user.id}
+                name={user.name}
+                avatarUrl={user.avatarUrl}
+                className="h-9 w-9 text-sm"
+              />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{user.name}</p>
                 <p className="truncate text-xs text-zinc-400">{user.email}</p>

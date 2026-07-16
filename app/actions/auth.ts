@@ -20,6 +20,9 @@ export async function login(
   if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
     return { error: "Email hoặc mật khẩu không đúng." };
   }
+  if (!user.isActive) {
+    return { error: "Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ Admin." };
+  }
 
   await createSession(user.id);
   redirect("/");

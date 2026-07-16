@@ -3,19 +3,17 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  CircleHelp,
   Plus,
-  Search,
   UsersRound,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { canManageProjects, requireUser } from "@/lib/auth";
 import { daysUntil, isOverdue } from "@/lib/dates";
 import Sidebar from "@/components/Sidebar";
+import Avatar from "@/components/Avatar";
 import TaskListItem, { type TaskListItemData } from "@/components/TaskListItem";
 import DashboardSort from "@/components/DashboardSort";
 import PerformanceBar from "@/components/PerformanceBar";
-import { avatarClass } from "@/lib/avatar";
 import { computePerf } from "@/lib/performance";
 import {
   ARCHIVED_PROJECT_STATUS_KEYS,
@@ -23,15 +21,17 @@ import {
   isArchivedProjectStatus,
 } from "@/lib/types";
 
-type DashboardView = "overview" | "mine" | "delegated" | "team";
+type DashboardView = "overview" | "mine" | "delegated" | "following" | "team";
 
 const DASHBOARD_VIEWS: Array<{
   key: DashboardView;
   label: string;
+  compactLabel?: string;
 }> = [
   { key: "overview", label: "Tổng quan" },
   { key: "mine", label: "Của tôi" },
   { key: "delegated", label: "Đã giao" },
+  { key: "following", label: "Đang theo dõi", compactLabel: "Theo dõi" },
 ];
 
 const ACTIVE_PROJECT_GROUPS = [
@@ -54,31 +54,34 @@ const ACTIVE_PROJECT_GROUPS = [
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; sort?: string; view?: string }>;
+  searchParams: Promise<{ sort?: string; view?: string }>;
 }) {
   const user = await requireUser();
   const params = await searchParams;
-  const query = params.q?.trim().toLocaleLowerCase("vi") ?? "";
   const sort = params.sort === "project" ? "project" : "due";
   const requestedView: DashboardView =
     params.view === "mine" ||
     params.view === "delegated" ||
+    params.view === "following" ||
     params.view === "team"
       ? params.view
       : "overview";
 
   const taskInclude = {
-    project: { select: { id: true, name: true, color: true } },
+    project: { select: { id: true, name: true, color: true, status: true } },
     assignee: { select: { name: true } },
     creator: { select: { name: true } },
   } as const;
 
-  const [projects, assignedToMe, delegatedByMe, directReports] = await Promise.all([
+  const [projects, assignedToMe, delegatedByMe, followedTasks, directReports] = await Promise.all([
     prisma.project.findMany({
       where: { members: { some: { userId: user.id } } },
       include: {
         _count: { select: { tasks: true, members: true } },
         tasks: { where: { status: "DONE" }, select: { id: true } },
+        account: {
+          select: { team: { select: { id: true, name: true } } },
+        },
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -108,12 +111,25 @@ export default async function DashboardPage({
       include: taskInclude,
       orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }],
     }),
+    prisma.task.findMany({
+      where: {
+        followers: { some: { userId: user.id } },
+        status: { not: "DONE" },
+        project: {
+          status: { notIn: [...ARCHIVED_PROJECT_STATUS_KEYS] },
+          members: { some: { userId: user.id } },
+        },
+      },
+      include: taskInclude,
+      orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }],
+    }),
     prisma.user.findMany({
       where: { managerId: user.id },
       select: {
         id: true,
         name: true,
         email: true,
+        avatarUrl: true,
         assignedTasks: {
           where: {
             project: {
@@ -134,13 +150,15 @@ export default async function DashboardPage({
       : requestedView;
   const dashboardViews =
     directReports.length > 0
-      ? [...DASHBOARD_VIEWS, { key: "team" as const, label: "Nhân viên của tôi" }]
+      ? [
+          ...DASHBOARD_VIEWS,
+          {
+            key: "team" as const,
+            label: "Nhân viên của tôi",
+            compactLabel: "Nhân viên",
+          },
+        ]
       : DASHBOARD_VIEWS;
-
-  const matchesQuery = (title: string, projectName: string) =>
-    !query ||
-    title.toLocaleLowerCase("vi").includes(query) ||
-    projectName.toLocaleLowerCase("vi").includes(query);
 
   const sortTasks = <T extends { project: { name: string }; dueDate: Date | null }>(
     tasks: T[]
@@ -154,23 +172,18 @@ export default async function DashboardPage({
       return a.dueDate.getTime() - b.dueDate.getTime();
     });
 
-  const visibleAssigned = sortTasks(
-    assignedToMe.filter((task) => matchesQuery(task.title, task.project.name))
-  );
-  const visibleDelegated = sortTasks(
-    delegatedByMe.filter((task) => matchesQuery(task.title, task.project.name))
+  const visibleAssigned = sortTasks(assignedToMe);
+  const visibleDelegated = sortTasks(delegatedByMe);
+  const visibleFollowing = sortTasks(
+    followedTasks.filter(
+      (task) =>
+        task.assigneeId !== user.id &&
+        task.creatorId !== user.id
+    )
   );
   const visibleReports = directReports
     .map((report) => {
-      const personMatches =
-        !query ||
-        report.name.toLocaleLowerCase("vi").includes(query) ||
-        report.email.toLocaleLowerCase("vi").includes(query);
-      const tasks = sortTasks(
-        report.assignedTasks.filter(
-          (task) => personMatches || matchesQuery(task.title, task.project.name)
-        )
-      );
+      const tasks = sortTasks(report.assignedTasks);
       const openTasks = tasks.filter((task) => task.status !== "DONE");
       const completedTasks = tasks.filter((task) => task.status === "DONE");
       return {
@@ -180,18 +193,17 @@ export default async function DashboardPage({
         completedTasks,
         perf: computePerf(report.assignedTasks),
       };
-    })
-    .filter((report) => !query || report.tasks.length > 0);
+    });
   const visibleProjects = projects.filter(
-    (project) =>
-      !isArchivedProjectStatus(project.status) &&
-      (!query ||
-        project.name.toLocaleLowerCase("vi").includes(query) ||
-        project.description?.toLocaleLowerCase("vi").includes(query))
+    (project) => !isArchivedProjectStatus(project.status)
   );
   const groupedVisibleProjects = ACTIVE_PROJECT_GROUPS.map((group) => ({
     ...group,
-    projects: visibleProjects.filter((project) => project.status === group.status),
+    projects: visibleProjects
+      .filter((project) => project.status === group.status)
+      .sort((a, b) =>
+        a.name.localeCompare(b.name, "vi", { sensitivity: "base" })
+      ),
   }));
 
   const overdue = visibleAssigned.filter(
@@ -231,7 +243,6 @@ export default async function DashboardPage({
   }).format(new Date());
   const tabHref = (view: DashboardView) => {
     const next = new URLSearchParams();
-    if (params.q?.trim()) next.set("q", params.q.trim());
     if (sort !== "due") next.set("sort", sort);
     if (view !== "overview") next.set("view", view);
     const qs = next.toString();
@@ -242,15 +253,11 @@ export default async function DashboardPage({
       ? visibleAssigned.length
       : activeView === "delegated"
         ? visibleDelegated.length
-        : activeView === "team"
-          ? visibleReports.reduce((total, report) => total + report.tasks.length, 0)
-          : visibleAssigned.length + visibleDelegated.length;
-  const noTaskResults =
-    Boolean(query) &&
-    (activeView === "team"
-      ? visibleReports.length === 0
-      : currentViewTaskCount === 0);
-
+        : activeView === "following"
+          ? visibleFollowing.length
+          : activeView === "team"
+            ? visibleReports.reduce((total, report) => total + report.tasks.length, 0)
+            : visibleAssigned.length + visibleDelegated.length;
   return (
     <div className="tf-shell">
       <Sidebar
@@ -260,58 +267,13 @@ export default async function DashboardPage({
           name: project.name,
           color: project.color,
           status: project.status,
+          account: project.account,
         }))}
         activeSection="home"
       />
 
       <main className="tf-main bg-white">
-        <div className="flex min-h-[72px] items-center justify-between gap-4 border-b border-zinc-200 bg-white px-4 py-3 sm:px-6">
-          <form action="/" className="relative w-full max-w-[360px]">
-            {sort !== "due" && <input type="hidden" name="sort" value={sort} />}
-            {activeView !== "overview" && (
-              <input type="hidden" name="view" value={activeView} />
-            )}
-            <Search
-              size={17}
-              strokeWidth={1.8}
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
-              aria-hidden="true"
-            />
-            <input
-              name="q"
-              defaultValue={params.q ?? ""}
-              className="tf-field !min-h-10 !pl-10 !pr-14"
-              placeholder="Tìm công việc hoặc dự án"
-              aria-label="Tìm công việc hoặc dự án"
-            />
-            <span className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-[10px] text-zinc-400 sm:block">
-              Enter
-            </span>
-          </form>
-
-          <div className="flex shrink-0 items-center gap-2">
-            <span className="hidden sm:inline-flex">
-              <Link
-                href="/notifications"
-                className="tf-icon-button"
-                title="Trợ giúp và thông báo"
-                aria-label="Trợ giúp và thông báo"
-                prefetch={false}
-              >
-                <CircleHelp size={18} strokeWidth={1.8} aria-hidden="true" />
-              </Link>
-            </span>
-            {showRevenue && (
-              <Link href="/projects/new" prefetch={false} className="tf-button-primary">
-                <Plus size={18} strokeWidth={2} aria-hidden="true" />
-                <span className="hidden sm:inline">Tạo dự án</span>
-                <span className="sm:hidden">Tạo</span>
-              </Link>
-            )}
-          </div>
-        </div>
-
-        <div className="grid min-h-[calc(100vh-72px)] lg:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="grid min-h-screen lg:grid-cols-[minmax(0,1fr)_380px]">
           <div className="min-w-0 px-4 py-8 sm:px-8 lg:px-10">
             <div className="mx-auto max-w-3xl">
               <div className="flex flex-wrap items-start justify-between gap-4">
@@ -319,11 +281,20 @@ export default async function DashboardPage({
                   <h1 className="tf-page-title">Công việc</h1>
                   <p className="tf-page-subtitle first-letter:uppercase">{dateLabel}</p>
                 </div>
-                <DashboardSort value={sort} />
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <DashboardSort value={sort} />
+                  {showRevenue && (
+                    <Link href="/projects/new" prefetch={false} className="tf-button-primary">
+                      <Plus size={18} strokeWidth={2} aria-hidden="true" />
+                      <span className="hidden sm:inline">Tạo dự án</span>
+                      <span className="sm:hidden">Tạo</span>
+                    </Link>
+                  )}
+                </div>
               </div>
 
               <nav
-                className="mt-8 flex w-fit max-w-full overflow-x-auto rounded-[8px] bg-zinc-100 p-1"
+                className="tf-scroll-tabs mt-8 flex w-fit rounded-[8px] bg-zinc-100 p-1"
                 aria-label="Bộ lọc công việc"
               >
                 {dashboardViews.map((view) => {
@@ -333,9 +304,11 @@ export default async function DashboardPage({
                       ? visibleAssigned.length
                       : view.key === "delegated"
                         ? visibleDelegated.length
-                        : view.key === "team"
-                          ? directReports.length
-                          : priorityTasks.length;
+                        : view.key === "following"
+                          ? visibleFollowing.length
+                          : view.key === "team"
+                            ? directReports.length
+                            : priorityTasks.length;
 
                   return (
                     <Link
@@ -343,13 +316,18 @@ export default async function DashboardPage({
                       href={tabHref(view.key)}
                       prefetch={false}
                       aria-current={active ? "page" : undefined}
-                      className={`inline-flex min-h-9 items-center gap-2 rounded-[7px] px-3 text-sm font-medium transition-colors ${
+                      className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[7px] px-1.5 text-xs font-medium transition-colors 2xl:gap-2 2xl:px-3 2xl:text-sm ${
                         active
                           ? "bg-white text-zinc-950 shadow-sm"
                           : "text-zinc-500 hover:text-zinc-800"
                       }`}
                     >
-                      {view.label}
+                      <span className={view.compactLabel ? "hidden 2xl:inline" : undefined}>
+                        {view.label}
+                      </span>
+                      {view.compactLabel && (
+                        <span className="2xl:hidden">{view.compactLabel}</span>
+                      )}
                       {count > 0 && (
                         <span
                           className={`rounded-full px-1.5 py-0.5 text-[10px] ${
@@ -479,6 +457,38 @@ export default async function DashboardPage({
                 </section>
               )}
 
+              {activeView === "following" && (
+                <section className="mt-10" aria-labelledby="following-heading">
+                  <div className="border-b border-zinc-200 pb-3">
+                    <h2 id="following-heading" className="text-base font-semibold text-zinc-900">
+                      Đang theo dõi ({visibleFollowing.length})
+                    </h2>
+                    <p className="mt-1 text-xs text-zinc-400">
+                      Các công việc bạn theo dõi nhưng không trực tiếp làm hoặc giao.
+                    </p>
+                  </div>
+                  {visibleFollowing.length > 0 ? (
+                    <div>
+                      {visibleFollowing.map((task) => (
+                        <TaskListItem
+                          key={task.id}
+                          task={toItem(
+                            task,
+                            task.assignee
+                              ? `${task.assignee.name} phụ trách`
+                              : "Chưa có người phụ trách"
+                          )}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="py-6 text-sm text-zinc-400">
+                      Chưa có công việc nào cần theo dõi riêng.
+                    </p>
+                  )}
+                </section>
+              )}
+
               {activeView === "team" && (
                 <section className="mt-10" aria-labelledby="team-report-heading">
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 pb-3">
@@ -499,11 +509,12 @@ export default async function DashboardPage({
                         <details key={report.id} open className="group/report py-1">
                           <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-1 py-4 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto_auto] sm:px-3">
                             <span className="flex min-w-0 items-center gap-3">
-                              <span
-                                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${avatarClass(report.id)}`}
-                              >
-                                {report.name.charAt(0).toUpperCase()}
-                              </span>
+                              <Avatar
+                                id={report.id}
+                                name={report.name}
+                                avatarUrl={report.avatarUrl}
+                                className="h-9 w-9 text-xs"
+                              />
                               <span className="min-w-0">
                                 <span className="block truncate text-sm font-semibold text-zinc-900">
                                   {report.name}
@@ -580,11 +591,6 @@ export default async function DashboardPage({
                 </section>
               )}
 
-              {noTaskResults && (
-                <div className="mt-8 rounded-[8px] border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500">
-                  Không tìm thấy công việc phù hợp với “{params.q}”.
-                </div>
-              )}
             </div>
           </div>
 
@@ -639,7 +645,7 @@ export default async function DashboardPage({
                                 />
                                 <div className="min-w-0 flex-1">
                                   <div className="flex items-start justify-between gap-3">
-                                    <h4 className="truncate text-sm font-semibold text-zinc-900 group-hover:text-brand-700">
+                                    <h4 className="line-clamp-2 text-sm font-semibold text-zinc-900 group-hover:text-brand-700 sm:truncate">
                                       {project.name}
                                     </h4>
                                     <span
@@ -659,7 +665,7 @@ export default async function DashboardPage({
                                       style={{ width: `${percent}%` }}
                                     />
                                   </div>
-                                  <div className="mt-3 flex items-center justify-between gap-3 text-xs text-zinc-400">
+                                  <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-zinc-400">
                                     <span>{done}/{total} task hoàn thành</span>
                                     <span>{project._count.members} thành viên</span>
                                   </div>

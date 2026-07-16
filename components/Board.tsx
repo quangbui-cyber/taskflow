@@ -1,6 +1,6 @@
 "use client";
 
-import { useOptimistic, useState, useTransition } from "react";
+import { useOptimistic, useRef, useState, useTransition } from "react";
 import {
   DragDropContext,
   Droppable,
@@ -15,13 +15,13 @@ import {
 } from "lucide-react";
 import { moveTask } from "@/app/actions/tasks";
 import { STATUSES, PRIORITIES, type MemberDTO, type TaskDTO } from "@/lib/types";
-import { avatarClass } from "@/lib/avatar";
 import { formatHour, hasTime, isOverdue } from "@/lib/dates";
+import Avatar from "@/components/Avatar";
 import NewTaskInline from "@/components/NewTaskInline";
 import TaskModal from "@/components/TaskModal";
 
 const COLUMN_ACCENT: Record<string, string> = {
-  TODO: "bg-zinc-400",
+  TODO: "bg-orange-500",
   IN_PROGRESS: "bg-blue-500",
   DONE: "bg-emerald-500",
 };
@@ -66,6 +66,8 @@ export default function Board({
       ? initialTaskId
       : null
   );
+  const [visibleColumn, setVisibleColumn] = useState<string>(STATUSES[0].key);
+  const boardScrollerRef = useRef<HTMLDivElement>(null);
   const [, startTransition] = useTransition();
 
   const columns = STATUSES.map((s) => ({
@@ -113,14 +115,80 @@ export default function Board({
 
   const openTask = tasks.find((t) => t.id === openTaskId) ?? null;
 
+  function selectColumn(status: string) {
+    const scroller = boardScrollerRef.current;
+    const column = scroller?.querySelector<HTMLElement>(
+      `[data-board-column="${status}"]`
+    );
+    if (scroller && column) {
+      scroller.scrollTo({
+        left: Math.max(0, column.offsetLeft - 16),
+        behavior: "smooth",
+      });
+    }
+    setVisibleColumn(status);
+  }
+
+  function syncVisibleColumn() {
+    const scroller = boardScrollerRef.current;
+    if (!scroller) return;
+    const columns = Array.from(
+      scroller.querySelectorAll<HTMLElement>("[data-board-column]")
+    );
+    const target = scroller.scrollLeft + 16;
+    const closest = columns.reduce<HTMLElement | null>((current, column) => {
+      if (!current) return column;
+      return Math.abs(column.offsetLeft - target) <
+        Math.abs(current.offsetLeft - target)
+        ? column
+        : current;
+    }, null);
+    const status = closest?.dataset.boardColumn;
+    if (status && status !== visibleColumn) setVisibleColumn(status);
+  }
+
   return (
-    <div className="flex-1 overflow-x-auto overflow-y-hidden bg-[#f7f8fa] p-4 sm:p-6">
-      <DragDropContext onDragEnd={onDragEnd}>
-        <div className="grid h-full min-w-[760px] grid-cols-3 gap-4">
+    <div className="flex min-h-0 flex-1 flex-col bg-[#f7f8fa]">
+      <nav
+        className="tf-scroll-tabs mx-4 mt-4 flex rounded-[8px] bg-zinc-200/70 p-1 md:hidden"
+        aria-label="Chọn cột công việc"
+      >
+        {STATUSES.map((status) => {
+          const selected = visibleColumn === status.key;
+          return (
+            <button
+              key={status.key}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => selectColumn(status.key)}
+              className={`inline-flex min-h-10 items-center gap-2 rounded-[7px] px-3 text-sm font-medium transition-colors ${
+                selected
+                  ? "bg-white text-zinc-950 shadow-sm"
+                  : "text-zinc-500"
+              }`}
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${COLUMN_ACCENT[status.key]}`}
+                aria-hidden="true"
+              />
+              {status.label}
+            </button>
+          );
+        })}
+      </nav>
+
+      <div
+        ref={boardScrollerRef}
+        onScroll={syncVisibleColumn}
+        className="flex-1 snap-x snap-mandatory scroll-px-4 overflow-x-auto overflow-y-hidden p-4 sm:p-6 md:snap-none"
+      >
+        <DragDropContext onDragEnd={onDragEnd}>
+          <div className="flex h-full gap-3 md:grid md:min-w-[760px] md:grid-cols-3 md:gap-4">
           {columns.map((col) => (
             <div
               key={col.key}
-              className="flex min-h-[calc(100vh-172px)] flex-col overflow-hidden rounded-[8px] border border-zinc-200 bg-[#f1f3f5]"
+              data-board-column={col.key}
+              className="flex min-h-[520px] w-[calc(100vw-48px)] max-w-[360px] shrink-0 snap-start flex-col overflow-hidden rounded-[8px] border border-zinc-200 bg-[#f1f3f5] md:h-full md:min-h-0 md:w-auto md:max-w-none"
             >
               <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3.5">
                 <div className="flex items-center gap-2.5">
@@ -229,12 +297,12 @@ export default function Board({
                                   </span>
                                 )}
                                 {assignee && (
-                                  <span
-                                    className={`ml-auto flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-semibold ${avatarClass(assignee.userId)}`}
-                                    title={assignee.user.name}
-                                  >
-                                    {assignee.user.name.charAt(0).toUpperCase()}
-                                  </span>
+                                  <Avatar
+                                    id={assignee.userId}
+                                    name={assignee.user.name}
+                                    avatarUrl={assignee.user.avatarUrl}
+                                    className="ml-auto h-7 w-7 text-[11px]"
+                                  />
                                 )}
                               </div>
                             </div>
@@ -247,7 +315,7 @@ export default function Board({
                 )}
               </Droppable>
 
-              <div className="border-t border-zinc-200 p-3">
+              <div className="shrink-0 border-t border-zinc-200 p-3 md:max-h-[calc(100%-8rem)] md:overflow-y-auto">
                 <NewTaskInline
                   projectId={projectId}
                   status={col.key}
@@ -256,8 +324,9 @@ export default function Board({
               </div>
             </div>
           ))}
-        </div>
-      </DragDropContext>
+          </div>
+        </DragDropContext>
+      </div>
 
       {openTask && (
         <TaskModal

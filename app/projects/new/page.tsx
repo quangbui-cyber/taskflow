@@ -9,7 +9,15 @@ export default async function NewProjectPage() {
   const [sidebarProjects, clients, accounts] = await Promise.all([
     prisma.project.findMany({
       where: { members: { some: { userId: user.id } } },
-      select: { id: true, name: true, color: true, status: true },
+      select: {
+        id: true,
+        name: true,
+        color: true,
+        status: true,
+        account: {
+          select: { team: { select: { id: true, name: true } } },
+        },
+      },
       orderBy: { createdAt: "desc" },
     }),
     prisma.client.findMany({
@@ -17,8 +25,11 @@ export default async function NewProjectPage() {
       orderBy: { name: "asc" },
     }),
     prisma.account.findMany({
-      where: { userId: { not: null } },
-      select: { id: true, user: { select: { name: true } } },
+      where: { user: { isActive: true } },
+      select: {
+        id: true,
+        user: { select: { name: true, email: true, avatarUrl: true } },
+      },
       orderBy: { user: { name: "asc" } },
     }),
   ]);
@@ -40,6 +51,8 @@ export default async function NewProjectPage() {
             accounts={accounts.map((account) => ({
               id: account.id,
               name: account.user?.name ?? "",
+              email: account.user?.email ?? null,
+              avatarUrl: account.user?.avatarUrl ?? null,
             }))}
           />
         </div>

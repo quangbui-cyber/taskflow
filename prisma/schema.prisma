@@ -11,8 +11,11 @@ model User {
   id               String              @id @default(cuid())
   email            String              @unique
   name             String
+  avatarUrl        String?
   passwordHash     String
   role             String              @default("USER") // "ADMIN" | "ACCOUNT" | "USER"
+  isActive         Boolean             @default(true)
+  deactivatedAt    DateTime?
   managerId        String? // người quản lý trực tiếp
   manager          User?               @relation("TeamManager", fields: [managerId], references: [id], onDelete: SetNull)
   reports          User[]              @relation("TeamManager") // nhân viên dưới quyền
@@ -26,6 +29,8 @@ model User {
   taskFollows      TaskFollower[]
   accountProfile   Account?
   groupMemberships MemberGroupMember[]
+
+  @@index([isActive])
 }
 
 model Project {
@@ -44,7 +49,10 @@ model Project {
   account              Account?        @relation(fields: [accountId], references: [id], onDelete: SetNull)
   members              ProjectMember[]
   tasks                Task[]
+  completedAt          DateTime?       // thời điểm chuyển sang DONE - dùng ghi nhận doanh thu theo tháng
   createdAt            DateTime        @default(now())
+
+  @@index([status, completedAt])
 }
 
 // Danh mục khách hàng — do admin tạo sẵn
@@ -132,7 +140,7 @@ model Task {
   updatedAt     DateTime       @updatedAt
 }
 
-// Người theo dõi task — nhận thông báo khi task hoàn thành / có bình luận
+// Người theo dõi task — nhận thông báo khi task có bình luận hoặc thay đổi quan trọng
 model TaskFollower {
   id        String   @id @default(cuid())
   taskId    String
@@ -148,7 +156,7 @@ model Notification {
   id        String   @id @default(cuid())
   userId    String // người nhận
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      String // "TASK_ASSIGNED" | "TASK_COMPLETED" | "COMMENT"
+  type      String // "TASK_ASSIGNED" | "TASK_COMPLETED" | "TASK_UPDATED" | "COMMENT" | "TASK_FOLLOW"
   message   String
   taskId    String?
   task      Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
