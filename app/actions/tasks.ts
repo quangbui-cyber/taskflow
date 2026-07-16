@@ -399,7 +399,10 @@ export async function addComment(
   const body = String(formData.get("body") ?? "").trim();
   if (!body) return { error: "Bình luận không được để trống." };
 
-  const task = await prisma.task.findUnique({ where: { id: taskId } });
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: { assignee: { select: { name: true } } },
+  });
   if (!task) return { error: "Task không tồn tại." };
   const user = await assertMember(task.projectId);
 
@@ -421,6 +424,15 @@ export async function addComment(
       projectId: task.projectId,
     }
   );
+
+  const chatSnippet =
+    body.length > 300 ? `${body.slice(0, 300).trimEnd()}…` : body;
+  await sendTaskChat(task.projectId, taskId, [
+    `Bình luận mới: *${task.title}*`,
+    `Người bình luận: ${user.name}`,
+    `Nội dung: ${chatSnippet}`,
+    `Người được giao: ${task.assignee?.name ?? "Chưa giao"}`,
+  ]);
 
   revalidatePath(`/projects/${task.projectId}`);
   return {};
