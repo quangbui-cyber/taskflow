@@ -1,9 +1,8 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { BriefcaseBusiness, Building2, Pencil, X } from "lucide-react";
+import { Pencil, X } from "lucide-react";
 import { updateProject, type ActionState } from "@/app/actions/projects";
-import { formatVND } from "@/lib/types";
 import RevenueInput from "@/components/RevenueInput";
 import ClientSelect, { type ClientOption } from "@/components/ClientSelect";
 import UserPicker, { type UserPickerOption } from "@/components/UserPicker";
@@ -14,7 +13,6 @@ export default function ProjectEditButton({
   clients,
   accounts,
   canEdit,
-  showRevenue,
 }: {
   project: {
     id: string;
@@ -29,7 +27,6 @@ export default function ProjectEditButton({
   clients: ClientOption[];
   accounts: UserPickerOption[];
   canEdit: boolean;
-  showRevenue: boolean;
 }) {
   const { notify } = useInteraction();
   const [open, setOpen] = useState(false);
@@ -49,41 +46,16 @@ export default function ProjectEditButton({
 
   return (
     <>
-      <div className="flex flex-col items-start gap-1.5 sm:items-end">
-        <div className="flex flex-wrap items-center gap-2">
-          {showRevenue && (
-            <span className="text-sm font-semibold text-zinc-700">
-              {formatVND(project.revenue)}
-            </span>
-          )}
-          {canEdit && (
-            <button
-              onClick={() => setOpen(true)}
-              className="tf-button-secondary !min-h-8 !px-2.5 !py-1 text-xs"
-            >
-              <Pencil size={14} strokeWidth={1.8} aria-hidden="true" />
-              Sửa
-            </button>
-          )}
-        </div>
-        {(project.clientName || project.accountName) && (
-          <span className="flex flex-wrap items-center gap-1.5 text-xs text-zinc-400">
-            {project.clientName && (
-              <span className="inline-flex items-center gap-1">
-                <Building2 size={13} aria-hidden="true" />
-                {project.clientName}
-              </span>
-            )}
-            {project.clientName && project.accountName && " · "}
-            {project.accountName && (
-              <span className="inline-flex items-center gap-1">
-                <BriefcaseBusiness size={13} aria-hidden="true" />
-                {project.accountName}
-              </span>
-            )}
-          </span>
-        )}
-      </div>
+      {canEdit && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="tf-button-secondary !min-h-9 !px-3 !py-1.5 text-sm"
+        >
+          <Pencil size={15} strokeWidth={1.8} aria-hidden="true" />
+          Sửa
+        </button>
+      )}
 
       {open && (
         <div

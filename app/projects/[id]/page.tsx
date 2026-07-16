@@ -1,15 +1,42 @@
 import Link from "next/link";
+import {
+  BriefcaseBusiness,
+  Building2,
+  CalendarDays,
+  FileText,
+  UsersRound,
+} from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { canManageProjects, requireUser } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
 import Board from "@/components/Board";
 import MembersBar from "@/components/MembersBar";
-import DeleteProjectButton from "@/components/DeleteProjectButton";
 import ProjectEditButton from "@/components/ProjectEditButton";
+import ProjectActionsMenu from "@/components/ProjectActionsMenu";
+import ProjectDescriptionDisclosure from "@/components/ProjectDescriptionDisclosure";
 import ProjectWebhookPanel from "@/components/ProjectWebhookPanel";
+import ProjectFilesPanel from "@/components/ProjectFilesPanel";
 import ProjectStatusSelect from "@/components/ProjectStatusSelect";
-import { projectStatusColor, type MemberDTO, type TaskDTO } from "@/lib/types";
+import {
+  formatVND,
+  projectStatusColor,
+  type MemberDTO,
+  type TaskDTO,
+} from "@/lib/types";
+
+function extractProjectMetadata(description: string | null) {
+  if (!description) return { poNumber: null, poDate: null };
+  const lines = description.split(/\r?\n/).map((line) => line.trim());
+  const poNumber =
+    lines.find((line) => /^PO:\s*/i.test(line))?.replace(/^PO:\s*/i, "") ??
+    null;
+  const poDate =
+    lines
+      .find((line) => /^Ngày PO:\s*/i.test(line))
+      ?.replace(/^Ngày PO:\s*/i, "") ?? null;
+  return { poNumber, poDate };
+}
 
 export default async function ProjectPage({
   params,
@@ -55,6 +82,19 @@ export default async function ProjectPage({
           },
         },
         orderBy: { order: "asc" },
+      },
+      files: {
+        select: {
+          id: true,
+          name: true,
+          mimeType: true,
+          size: true,
+          createdAt: true,
+          uploader: {
+            select: { id: true, name: true, avatarUrl: true },
+          },
+        },
+        orderBy: { createdAt: "desc" },
       },
     },
   });
@@ -151,8 +191,13 @@ export default async function ProjectPage({
   }));
 
   const isOwner = project.ownerId === user.id;
-  const activeTab = tab === "webhook" ? "webhook" : "tasks";
+  const activeTab =
+    tab === "webhook" ? "webhook" : tab === "files" ? "files" : "tasks";
   const canManageWebhook = isOwner || user.role === "ADMIN";
+  const canViewRevenue = canManageProjects(user.role);
+  const projectMetadata = extractProjectMetadata(project.description);
+  const accountName =
+    project.account?.user?.name ?? project.account?.name ?? null;
   const initialTaskId = project.tasks.some((task) => task.id === requestedTaskId)
     ? requestedTaskId ?? null
     : null;
@@ -162,82 +207,133 @@ export default async function ProjectPage({
       <Sidebar user={user} projects={sidebarProjects} activeProjectId={id} />
 
       <main className="tf-main flex flex-col overflow-hidden bg-white md:h-screen md:max-h-screen">
-        <header className="border-b border-zinc-200 bg-white px-4 py-4 sm:px-6">
-          <div className="flex min-h-[56px] flex-wrap items-start justify-between gap-4">
-            <div className="flex min-w-0 flex-1 items-start gap-3">
-              <span
-                className="h-3 w-3 shrink-0 rounded-full"
-                style={{ backgroundColor: projectStatusColor(project.status) }}
-              />
-              <div className="min-w-0">
-                <h1 className="line-clamp-2 text-lg font-semibold text-zinc-950 sm:truncate sm:text-xl">
-                  {project.name}
-                </h1>
-                {project.description && (
-                  <p className="mt-0.5 line-clamp-2 text-sm text-zinc-500 sm:truncate">
-                    {project.description}
-                  </p>
+        <header className="border-b border-zinc-200 bg-white px-4 pt-4 sm:px-6">
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="flex min-w-0 flex-1 items-start gap-3">
+                <span
+                  className="mt-1.5 h-3 w-3 shrink-0 rounded-full"
+                  style={{
+                    backgroundColor: projectStatusColor(project.status),
+                  }}
+                />
+                <div className="min-w-0">
+                  <h1 className="line-clamp-2 text-lg font-semibold text-zinc-950 sm:truncate sm:text-xl">
+                    {project.name}
+                  </h1>
+                </div>
+              </div>
+
+              <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
+                <ProjectStatusSelect
+                  projectId={project.id}
+                  status={project.status}
+                  canEdit={isOwner || user.role === "ADMIN"}
+                />
+                {canViewRevenue && (
+                  <span className="whitespace-nowrap px-1 text-sm font-semibold text-zinc-800">
+                    {formatVND(project.revenue)}
+                  </span>
                 )}
+                <ProjectEditButton
+                  project={{
+                    id: project.id,
+                    name: project.name,
+                    description: project.description,
+                    revenue: project.revenue,
+                    clientId: project.clientId,
+                    clientName: project.client?.name ?? null,
+                    accountId: project.accountId,
+                    accountName:
+                      project.account?.user?.name ??
+                      project.account?.name ??
+                      null,
+                  }}
+                  clients={clients}
+                  accounts={accounts.map((account) => ({
+                    id: account.id,
+                    name:
+                      account.user?.name ??
+                      `${account.name} (dữ liệu cũ - cần liên kết)`,
+                    email: account.user?.email ?? null,
+                    avatarUrl: account.user?.avatarUrl ?? null,
+                    meta: account.user ? null : "Dữ liệu cũ",
+                  }))}
+                  canEdit={isOwner || user.role === "ADMIN"}
+                />
+                {isOwner && <ProjectActionsMenu projectId={project.id} />}
               </div>
             </div>
-            <div className="flex w-full min-w-0 flex-wrap items-center justify-start gap-2 sm:w-auto sm:flex-1 sm:justify-end sm:gap-3">
-              <ProjectStatusSelect
-                projectId={project.id}
-                status={project.status}
-                canEdit={isOwner || user.role === "ADMIN"}
-              />
-              <ProjectEditButton
-                project={{
-                  id: project.id,
-                  name: project.name,
-                  description: project.description,
-                  revenue: project.revenue,
-                  clientId: project.clientId,
-                  clientName: project.client?.name ?? null,
-                  accountId: project.accountId,
-                  accountName:
-                    project.account?.user?.name ?? project.account?.name ?? null,
-                }}
-                clients={clients}
-                accounts={accounts.map((account) => ({
-                  id: account.id,
-                  name:
-                    account.user?.name ??
-                    `${account.name} (dữ liệu cũ - cần liên kết)`,
-                  email: account.user?.email ?? null,
-                  avatarUrl: account.user?.avatarUrl ?? null,
-                  meta: account.user ? null : "Dữ liệu cũ",
-                }))}
-                canEdit={isOwner || user.role === "ADMIN"}
-                showRevenue={canManageProjects(user.role)}
-              />
-              <MembersBar
-                projectId={project.id}
-                members={members}
-                availableUsers={availableUsers}
-                memberGroups={memberGroups
-                  .map((group) => ({
-                    id: group.id,
-                    name: group.name,
-                    members: group.members
-                      .map((member) => member.user)
-                      .filter(
-                        (groupUser) =>
-                          !project.members.some(
-                            (projectMember) => projectMember.userId === groupUser.id
-                          )
-                      ),
-                  }))
-                  .filter((group) => group.members.length > 0)}
-                ownerId={project.ownerId}
-                currentUserId={user.id}
-              />
-              {isOwner && <DeleteProjectButton projectId={project.id} />}
+
+            <div className="flex flex-col gap-3 border-t border-zinc-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-xs text-zinc-500">
+                {project.client?.name && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Building2 size={14} aria-hidden="true" />
+                    {project.client.name}
+                  </span>
+                )}
+                {projectMetadata.poNumber && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <FileText size={14} aria-hidden="true" />
+                    PO {projectMetadata.poNumber}
+                  </span>
+                )}
+                {projectMetadata.poDate && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <CalendarDays size={14} aria-hidden="true" />
+                    {projectMetadata.poDate}
+                  </span>
+                )}
+                <span
+                  className={`inline-flex items-center gap-1.5 ${
+                    accountName ? "" : "font-medium text-amber-600"
+                  }`}
+                >
+                  <BriefcaseBusiness size={14} aria-hidden="true" />
+                  {accountName ?? "Chưa gán Account"}
+                </span>
+              </div>
+
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-500">
+                  <UsersRound size={14} aria-hidden="true" />
+                  {members.length} thành viên
+                </span>
+                <MembersBar
+                  projectId={project.id}
+                  members={members}
+                  availableUsers={availableUsers}
+                  memberGroups={memberGroups
+                    .map((group) => ({
+                      id: group.id,
+                      name: group.name,
+                      members: group.members
+                        .map((member) => member.user)
+                        .filter(
+                          (groupUser) =>
+                            !project.members.some(
+                              (projectMember) =>
+                                projectMember.userId === groupUser.id
+                            )
+                        ),
+                    }))
+                    .filter((group) => group.members.length > 0)}
+                  ownerId={project.ownerId}
+                  currentUserId={user.id}
+                />
+              </div>
             </div>
+
+            {project.description && (
+              <ProjectDescriptionDisclosure
+                description={project.description}
+              />
+            )}
           </div>
 
           <nav
-            className="tf-scroll-tabs mt-4 flex gap-1 border-t border-zinc-100 pt-3"
+            className="tf-scroll-tabs mt-3 flex gap-1 border-t border-zinc-100 py-3"
             aria-label="Project tabs"
           >
             <Link
@@ -249,6 +345,21 @@ export default async function ProjectPage({
               }`}
             >
               Task
+            </Link>
+            <Link
+              href={`/projects/${project.id}?tab=files`}
+              className={`rounded-[7px] px-3 py-1.5 text-sm font-medium transition-colors ${
+                activeTab === "files"
+                  ? "bg-brand-50 text-brand-800"
+                  : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
+              }`}
+            >
+              Tài liệu
+              {project.files.length > 0 && (
+                <span className="ml-1.5 text-xs text-zinc-400">
+                  {project.files.length}
+                </span>
+              )}
             </Link>
             <Link
               href={`/projects/${project.id}?tab=webhook`}
@@ -269,6 +380,18 @@ export default async function ProjectPage({
               projectId={project.id}
               configured={Boolean(project.googleChatWebhookUrl)}
               canManage={canManageWebhook}
+            />
+          </div>
+        ) : activeTab === "files" ? (
+          <div className="flex-1 overflow-auto bg-[#f7f8fa] p-4 sm:p-6">
+            <ProjectFilesPanel
+              projectId={project.id}
+              currentUserId={user.id}
+              canManageAll={isOwner || user.role === "ADMIN"}
+              initialFiles={project.files.map((file) => ({
+                ...file,
+                createdAt: file.createdAt.toISOString(),
+              }))}
             />
           </div>
         ) : (
