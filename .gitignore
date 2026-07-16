@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# .env.example chỉ là mẫu (không có giá trị thật) — cần commit để người khác
+# biết app cần những biến môi trường nào.
+!.env.example
 
 # vercel
 .vercel

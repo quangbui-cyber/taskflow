@@ -148,3 +148,48 @@ webhook bị xoá...) không làm hỏng thao tác chính trong app.
 
 > Lưu ý: webhook Google Chat chỉ gửi **một chiều** (app → group). Nhân viên trả
 > lời trong group sẽ không phản hồi ngược lại app.
+
+---
+
+## Nhắc việc hàng ngày lúc 9h sáng (tuỳ chọn)
+
+Mỗi sáng, app tự gửi vào group Chat của **từng dự án** một tin tổng hợp: việc
+**quá hạn** và việc **đến hạn hôm nay** của chính dự án đó. Dự án không có việc
+nào cần nhắc thì không gửi (không làm phiền group).
+
+Cơ chế: [Vercel Cron](https://vercel.com/docs/cron-jobs) gọi route
+`/api/cron/daily-digest`. Lịch khai báo sẵn trong `vercel.json`.
+
+**Cần làm để bật:**
+
+1. Đảm bảo dự án đã cấu hình webhook Chat (xem mục trên).
+2. Tạo chuỗi bí mật bảo vệ endpoint:
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"
+   ```
+3. Vercel → Settings → Environment Variables → thêm `CRON_SECRET` = chuỗi vừa tạo → **Redeploy**.
+
+Vercel tự gửi kèm `Authorization: Bearer <CRON_SECRET>` khi chạy cron; route đối
+chiếu để chặn người lạ gọi bừa. **Chưa đặt `CRON_SECRET` thì endpoint luôn trả
+401** — an toàn mặc định, nhưng cron cũng sẽ không chạy.
+
+### Hai điều cần biết về lịch chạy
+
+- **Cron của Vercel luôn theo giờ UTC.** Lịch đang đặt là `0 2 * * *` = **02:00 UTC
+  = 9:00 giờ Việt Nam**. Nếu muốn đổi giờ, nhớ trừ đi 7 tiếng.
+- **Gói Hobby chỉ đảm bảo độ chính xác ±59 phút** — tài liệu Vercel ghi rõ cron
+  có thể chạy bất kỳ lúc nào trong khung giờ đó để dàn tải. Nên tin nhắn sẽ đến
+  đâu đó trong khoảng **9:00–9:59**, không đúng phóc 9:00. Muốn chính xác từng
+  phút thì cần nâng lên gói Pro. Gói Hobby cũng chỉ cho phép cron **1 lần/ngày**.
+
+### Chạy thử
+
+Cron không hoạt động với `next dev`. Muốn thử, gọi thẳng endpoint:
+
+```bash
+curl -H "Authorization: Bearer <CRON_SECRET>" \
+  https://<app>.vercel.app/api/cron/daily-digest
+```
+
+> ⚠️ Endpoint này gửi tin **thật** vào group Chat của mọi dự án có việc trễ hạn.
+> Đừng gọi thử trên production nếu chưa muốn cả công ty nhận tin nhắn.
