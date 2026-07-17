@@ -20,7 +20,7 @@ import {
   UsersRound,
 } from "lucide-react";
 
-const WON = ["DONE"];
+const WON = ["ON_PROCESS", "DONE"];
 const LOST = ["CANCEL", "FAIL"];
 const RECOGNIZED_REVENUE = ["ON_PROCESS", "DONE"];
 const REVENUE_BLUE = "#2563eb";
