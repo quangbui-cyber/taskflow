@@ -177,10 +177,10 @@ chiếu để chặn người lạ gọi bừa. **Chưa đặt `CRON_SECRET` th�
 
 - **Cron của Vercel luôn theo giờ UTC.** Lịch đang đặt là `0 2 * * *` = **02:00 UTC
   = 9:00 giờ Việt Nam**. Nếu muốn đổi giờ, nhớ trừ đi 7 tiếng.
-- **Gói Hobby chỉ đảm bảo độ chính xác ±59 phút** — tài liệu Vercel ghi rõ cron
-  có thể chạy bất kỳ lúc nào trong khung giờ đó để dàn tải. Nên tin nhắn sẽ đến
-  đâu đó trong khoảng **9:00–9:59**, không đúng phóc 9:00. Muốn chính xác từng
-  phút thì cần nâng lên gói Pro. Gói Hobby cũng chỉ cho phép cron **1 lần/ngày**.
+- **Độ chính xác tuỳ gói.** Dự án này đang chạy gói **Pro** nên cron chạy **đúng
+  9:00 sáng**. Nếu sau này hạ về gói **Hobby**, tài liệu Vercel ghi rõ cron chỉ
+  đảm bảo **±59 phút** (tin sẽ đến đâu đó trong khoảng 9:00–9:59) và chỉ cho
+  phép chạy **1 lần/ngày**.
 
 ### Chạy thử
 
