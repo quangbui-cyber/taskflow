@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "TZ=Asia/Ho_Chi_Minh next dev",
-    "build": "prisma generate && ([ \"$VERCEL_ENV\" != \"production\" ] || prisma migrate deploy) && next build --webpack",
+    "build": "prisma generate && node scripts/deploy-migrations.mjs && next build --webpack",
     "build:app": "prisma generate && next build --webpack",
     "start": "TZ=Asia/Ho_Chi_Minh next start",
     "lint": "eslint",
