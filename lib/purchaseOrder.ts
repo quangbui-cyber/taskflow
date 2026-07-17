@@ -29,6 +29,10 @@ export type PurchaseOrderItem = {
   total: number | null;
 };
 
+export function normalizePurchaseOrderNumber(value: string): string {
+  return value.trim().toUpperCase();
+}
+
 function parseMoney(value: string | undefined): number | null {
   if (!value) return null;
   const parsed = Number(value.replace(/[^\d]/g, ""));
@@ -92,7 +96,9 @@ export function parsePurchaseOrder(text: string): PurchaseOrderDraft {
     throw new Error("Hiện tại app chỉ hỗ trợ mẫu PO của Jabil.");
   }
 
-  const poNumber = text.match(/\bC-\d{8,}\b/i)?.[0] ?? "";
+  const poNumber = normalizePurchaseOrderNumber(
+    text.match(/\bC-\d{8,}\b/i)?.[0] ?? ""
+  );
   const poDateRaw = text.match(
     new RegExp(`${poNumber.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+(\\d{2}\\/\\d{2}\\/\\d{4})`, "i")
   )?.[1];

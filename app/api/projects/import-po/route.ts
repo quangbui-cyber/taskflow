@@ -1,8 +1,7 @@
-import "pdf-parse/worker";
-import { PDFParse } from "pdf-parse";
 import { canManageProjects, getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { MAX_PROJECT_FILE_SIZE } from "@/lib/projectFiles";
-import { parsePurchaseOrder } from "@/lib/purchaseOrder";
+import { parsePurchaseOrderPdf } from "@/lib/purchaseOrderPdf";
 
 export const runtime = "nodejs";
 
@@ -42,10 +41,22 @@ export async function POST(request: Request) {
     );
   }
 
-  const parser = new PDFParse({ data });
   try {
-    const result = await parser.getText({ first: 5 });
-    const draft = parsePurchaseOrder(result.text);
+    const draft = await parsePurchaseOrderPdf(data);
+    if (draft.poNumber) {
+      const existingProject = await prisma.project.findUnique({
+        where: { purchaseOrderNumber: draft.poNumber },
+        select: { name: true },
+      });
+      if (existingProject) {
+        return Response.json(
+          {
+            error: `PO ${draft.poNumber} đã được dùng để tạo dự án "${existingProject.name}". Không thể tạo thêm dự án trùng PO.`,
+          },
+          { status: 409 }
+        );
+      }
+    }
     return Response.json({ draft, fileName: file.name });
   } catch (error) {
     const message =
@@ -53,7 +64,5 @@ export async function POST(request: Request) {
         ? error.message
         : "Không thể đọc nội dung PO này.";
     return Response.json({ error: message }, { status: 422 });
-  } finally {
-    await parser.destroy();
   }
 }

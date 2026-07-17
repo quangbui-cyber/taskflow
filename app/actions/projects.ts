@@ -1,5 +1,6 @@
 "use server";
 
+import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -9,6 +10,7 @@ import {
   validateGoogleChatWebhookUrl,
 } from "@/lib/googleChat";
 import { readProjectUpload } from "@/lib/projectFiles";
+import { parsePurchaseOrderPdf } from "@/lib/purchaseOrderPdf";
 import { projectStatusColor } from "@/lib/types";
 
 export type ActionState = { error?: string; success?: string };
@@ -56,6 +58,7 @@ export async function createProject(
   const clientId = String(formData.get("clientId") ?? "") || null;
   const accountId = String(formData.get("accountId") ?? "") || null;
   const projectSource = String(formData.get("projectSource") ?? "");
+  let purchaseOrderNumber: string | null = null;
   let projectFile: Awaited<ReturnType<typeof readProjectUpload>> = null;
 
   if (!name) return { error: "Tên project không được để trống." };
@@ -68,9 +71,40 @@ export async function createProject(
         error instanceof Error ? error.message : "Tài liệu PO không hợp lệ.",
     };
   }
+  if (projectSource === "JABIL_PO") {
+    if (!projectFile || projectFile.mimeType !== "application/pdf") {
+      return { error: "Vui lòng tải lại file PO PDF trước khi tạo dự án." };
+    }
+    try {
+      const purchaseOrder = await parsePurchaseOrderPdf(projectFile.data);
+      purchaseOrderNumber = purchaseOrder.poNumber || null;
+    } catch (error) {
+      return {
+        error:
+          error instanceof Error ? error.message : "Tài liệu PO không hợp lệ.",
+      };
+    }
+    if (!purchaseOrderNumber) {
+      return {
+        error:
+          "Không nhận diện được số PO. Vui lòng kiểm tra lại file trước khi tạo dự án.",
+      };
+    }
+  }
   const account = await findValidAccount(accountId);
   if (accountId && !account) {
     return { error: "Account chưa liên kết user hoặc chưa được gán Team." };
+  }
+  if (purchaseOrderNumber) {
+    const existingProject = await prisma.project.findUnique({
+      where: { purchaseOrderNumber },
+      select: { name: true },
+    });
+    if (existingProject) {
+      return {
+        error: `PO ${purchaseOrderNumber} đã được dùng để tạo dự án "${existingProject.name}". Không thể tạo thêm dự án trùng PO.`,
+      };
+    }
   }
   const initialMembers = [{ userId: user.id, role: "owner" }];
   if (account?.userId && account.userId !== user.id) {
@@ -80,31 +114,45 @@ export async function createProject(
     projectSource === "JABIL_PO" && projectFile?.mimeType === "application/pdf"
       ? "ON_PROCESS"
       : "BIDDING";
-  const project = await prisma.project.create({
-    data: {
-      name,
-      description: description || null,
-      color: projectStatusColor(initialStatus),
-      status: initialStatus,
-      onProcessAt: initialStatus === "ON_PROCESS" ? new Date() : null,
-      revenue,
-      clientId,
-      accountId,
-      ownerId: user.id,
-      members: { create: initialMembers },
-      files: projectFile
-        ? {
-            create: {
-              uploaderId: user.id,
-              name: projectFile.name,
-              mimeType: projectFile.mimeType,
-              size: projectFile.size,
-              data: projectFile.data,
-            },
-          }
-        : undefined,
-    },
-  });
+  let project;
+  try {
+    project = await prisma.project.create({
+      data: {
+        name,
+        description: description || null,
+        purchaseOrderNumber,
+        color: projectStatusColor(initialStatus),
+        status: initialStatus,
+        onProcessAt: initialStatus === "ON_PROCESS" ? new Date() : null,
+        revenue,
+        clientId,
+        accountId,
+        ownerId: user.id,
+        members: { create: initialMembers },
+        files: projectFile
+          ? {
+              create: {
+                uploaderId: user.id,
+                name: projectFile.name,
+                mimeType: projectFile.mimeType,
+                size: projectFile.size,
+                data: projectFile.data,
+              },
+            }
+          : undefined,
+      },
+    });
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return {
+        error: `PO ${purchaseOrderNumber} đã tồn tại. Không thể tạo thêm dự án trùng PO.`,
+      };
+    }
+    throw error;
+  }
 
   redirect(`/projects/${project.id}`);
 }

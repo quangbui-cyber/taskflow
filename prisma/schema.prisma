@@ -38,6 +38,7 @@ model Project {
   id                   String          @id @default(cuid())
   name                 String
   description          String?
+  purchaseOrderNumber  String?         @unique
   color                String          @default("#6366f1")
   status               String          @default("BIDDING") // "BIDDING" | "ON_PROCESS" | "PENDING" | "DONE" | "CANCEL" | "FAIL"
   revenue              Float           @default(0) // doanh thu dự kiến/thực tế (VND)
