@@ -13,7 +13,8 @@ export async function notify(
       | "TASK_COMPLETED"
       | "TASK_UPDATED"
       | "COMMENT"
-      | "TASK_FOLLOW";
+      | "TASK_FOLLOW"
+      | "DEADLINE_REMINDER";
     message: string;
     taskId?: string;
     projectId?: string;

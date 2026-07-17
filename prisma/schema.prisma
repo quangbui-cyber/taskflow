@@ -175,9 +175,10 @@ model TaskFollower {
 
 model Notification {
   id        String   @id @default(cuid())
+  dedupeKey String?  @unique // chống tạo trùng cho thông báo tự động
   userId    String // người nhận
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      String // "TASK_ASSIGNED" | "TASK_COMPLETED" | "TASK_UPDATED" | "COMMENT" | "TASK_FOLLOW"
+  type      String // "TASK_ASSIGNED" | "TASK_COMPLETED" | "TASK_UPDATED" | "COMMENT" | "TASK_FOLLOW" | "DEADLINE_REMINDER"
   message   String
   taskId    String?
   task      Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)

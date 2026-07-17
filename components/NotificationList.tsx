@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
+  AlarmClock,
   Bell,
   CheckCircle2,
   ChevronLeft,
@@ -32,6 +33,7 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   TASK_UPDATED: RefreshCw,
   COMMENT: MessageSquare,
   TASK_FOLLOW: Eye,
+  DEADLINE_REMINDER: AlarmClock,
 };
 
 function timeAgo(value: string): string {
