@@ -134,13 +134,14 @@ export async function GET(request: Request) {
       })
     );
 
-    const notificationRows: Prisma.NotificationCreateManyInput[] = [];
     const dateKey = vietnamDateKey();
+    let reminders = 0;
     let sent = 0;
     let skipped = 0;
     let failed = 0;
 
     for (const project of projects) {
+      const notificationRows: Prisma.NotificationCreateManyInput[] = [];
       const overdue: DigestTask[] = [];
       const dueToday: DigestTask[] = [];
 
@@ -164,8 +165,24 @@ export async function GET(request: Request) {
         });
       }
 
+      const created = notificationRows.length
+        ? await withDatabaseRetry(() =>
+            prisma.notification.createMany({
+              data: notificationRows,
+              skipDuplicates: true,
+            })
+          )
+        : { count: 0 };
+      reminders += created.count;
+
       const message = buildMessage(project.name, overdue, dueToday);
-      if (!message || !project.googleChatWebhookUrl) {
+      const alreadyDeliveredToday =
+        notificationRows.length > 0 && created.count === 0;
+      if (
+        !message ||
+        !project.googleChatWebhookUrl ||
+        alreadyDeliveredToday
+      ) {
         skipped += 1;
         continue;
       }
@@ -185,19 +202,10 @@ export async function GET(request: Request) {
       })
     );
 
-    const created = notificationRows.length
-      ? await withDatabaseRetry(() =>
-          prisma.notification.createMany({
-            data: notificationRows,
-            skipDuplicates: true,
-          })
-        )
-      : { count: 0 };
-
     return Response.json({
       ok: true,
       projects: projects.length,
-      reminders: created.count,
+      reminders,
       chat: { sent, skipped, failed },
     });
   } catch (error) {
