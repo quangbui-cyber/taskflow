@@ -24,6 +24,48 @@ const PROJECT_STATUS_KEYS = [
   "FAIL",
 ];
 
+const PROJECT_TYPE_KEYS = [
+  "TEAMBUILDING",
+  "MICE",
+  "ACTIVATION",
+  "EVENT",
+  "PUR",
+  "OTHER",
+];
+
+/** "yyyy-MM-dd" → nửa đêm giờ VN; "" → null; sai định dạng → undefined */
+function parseExecutionDate(raw: string): Date | null | undefined {
+  if (!raw) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return undefined;
+  const date = new Date(`${raw}T00:00:00+07:00`);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+function parseExecutionFields(formData: FormData):
+  | { error: string }
+  | { type: string; executionStartAt: Date | null; executionEndAt: Date | null } {
+  const type = String(formData.get("type") ?? "OTHER");
+  if (!PROJECT_TYPE_KEYS.includes(type)) {
+    return { error: "Loại hình dự án không hợp lệ." };
+  }
+  const executionStartAt = parseExecutionDate(
+    String(formData.get("executionStartAt") ?? "")
+  );
+  const executionEndAt = parseExecutionDate(
+    String(formData.get("executionEndAt") ?? "")
+  );
+  if (executionStartAt === undefined || executionEndAt === undefined) {
+    return { error: "Ngày thực hiện không hợp lệ." };
+  }
+  if (executionEndAt && !executionStartAt) {
+    return { error: "Hãy điền ngày bắt đầu trước khi điền ngày kết thúc." };
+  }
+  if (executionStartAt && executionEndAt && executionEndAt < executionStartAt) {
+    return { error: "Ngày kết thúc phải từ ngày bắt đầu trở đi." };
+  }
+  return { type, executionStartAt, executionEndAt };
+}
+
 function parseRevenue(raw: string): number | null {
   // Chấp nhận "500000000", "500.000.000", "500,000,000"
   const cleaned = raw.replace(/[.,\s₫đ]/gi, "");
@@ -63,6 +105,8 @@ export async function createProject(
 
   if (!name) return { error: "Tên project không được để trống." };
   if (revenue === null) return { error: "Doanh thu không hợp lệ." };
+  const execution = parseExecutionFields(formData);
+  if ("error" in execution) return execution;
   try {
     projectFile = await readProjectUpload(formData.get("projectFile"));
   } catch (error) {
@@ -123,6 +167,9 @@ export async function createProject(
         purchaseOrderNumber,
         color: projectStatusColor(initialStatus),
         status: initialStatus,
+        type: execution.type,
+        executionStartAt: execution.executionStartAt,
+        executionEndAt: execution.executionEndAt,
         onProcessAt: initialStatus === "ON_PROCESS" ? new Date() : null,
         revenue,
         clientId,
@@ -179,6 +226,8 @@ export async function updateProject(
   }
   if (!name) return { error: "Tên project không được để trống." };
   if (revenue === null) return { error: "Doanh thu không hợp lệ." };
+  const execution = parseExecutionFields(formData);
+  if ("error" in execution) return execution;
   if (
     accountId !== project.accountId &&
     accountId &&
@@ -191,6 +240,9 @@ export async function updateProject(
     data: {
       name,
       description: description || null,
+      type: execution.type,
+      executionStartAt: execution.executionStartAt,
+      executionEndAt: execution.executionEndAt,
       revenue,
       clientId,
       accountId,
@@ -199,6 +251,7 @@ export async function updateProject(
 
   revalidatePath("/");
   revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/revenue");
   return {};
 }
 

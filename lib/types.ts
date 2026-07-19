@@ -40,6 +40,24 @@ export const PROJECT_STATUSES = [
   { key: "CANCEL", label: "Cancel", color: "#71717a", className: "bg-zinc-200 text-zinc-700" },
 ] as const;
 
+// Bảng màu 6 loại hình đã qua validator dataviz (phân biệt được với người
+// mù màu, đủ tương phản trên nền trắng) — đừng đổi tuỳ tiện từng màu lẻ.
+export const PROJECT_TYPES = [
+  { key: "TEAMBUILDING", label: "Teambuilding", color: "#0d9488", className: "bg-teal-100 text-teal-700" },
+  { key: "MICE", label: "MICE", color: "#4f46e5", className: "bg-indigo-100 text-indigo-700" },
+  { key: "ACTIVATION", label: "Activation", color: "#ea580c", className: "bg-orange-100 text-orange-700" },
+  { key: "EVENT", label: "Event", color: "#db2777", className: "bg-pink-100 text-pink-700" },
+  { key: "PUR", label: "Pur", color: "#65a30d", className: "bg-lime-100 text-lime-700" },
+  { key: "OTHER", label: "Other", color: "#0891b2", className: "bg-cyan-100 text-cyan-700" },
+] as const;
+
+export function projectTypeInfo(key: string) {
+  return (
+    PROJECT_TYPES.find((t) => t.key === key) ??
+    PROJECT_TYPES[PROJECT_TYPES.length - 1]
+  );
+}
+
 export const ARCHIVED_PROJECT_STATUS_KEYS = [
   "DONE",
   "CANCEL",

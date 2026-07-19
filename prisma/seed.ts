@@ -23,16 +23,22 @@ const PROJECTS: Array<{
   name: string;
   description: string;
   status: string;
+  type: string;
   revenue: number;
   color: string;
   owner: "lan" | "minh" | "ha";
   client: number;
   memberKeys: UserKey[];
+  /** Ngày bắt đầu thực hiện, tính từ hôm nay (âm = đã qua); undefined = chưa đặt lịch */
+  execStartInDays?: number;
+  /** Số ngày chạy (1 = trong ngày) */
+  execDurationDays?: number;
 }> = [
   {
     name: "Tái định vị thương hiệu Nova Bank",
     description: "Chiến lược thương hiệu và hệ thống nhận diện mới.",
     status: "BIDDING",
+    type: "OTHER",
     revenue: 1_200_000_000,
     color: "#a855f7",
     owner: "lan",
@@ -43,6 +49,9 @@ const PROJECTS: Array<{
     name: "Website thương mại Mộc Living",
     description: "Thiết kế và phát triển website bán hàng nội thất.",
     status: "ON_PROCESS",
+    type: "OTHER",
+    execStartInDays: -1,
+    execDurationDays: 3,
     revenue: 450_000_000,
     color: "#6366f1",
     owner: "minh",
@@ -53,6 +62,9 @@ const PROJECTS: Array<{
     name: "Chiến dịch Tết GreenFoods",
     description: "Ý tưởng lớn, nội dung và sản xuất hình ảnh Tết.",
     status: "ON_PROCESS",
+    type: "ACTIVATION",
+    execStartInDays: 9,
+    execDurationDays: 3,
     revenue: 780_000_000,
     color: "#10b981",
     owner: "lan",
@@ -63,6 +75,9 @@ const PROJECTS: Array<{
     name: "Ra mắt sản phẩm Lumi Beauty",
     description: "Kế hoạch ra mắt sản phẩm và truyền thông đa kênh.",
     status: "PENDING",
+    type: "EVENT",
+    execStartInDays: 24,
+    execDurationDays: 1,
     revenue: 620_000_000,
     color: "#ec4899",
     owner: "ha",
@@ -73,6 +88,7 @@ const PROJECTS: Array<{
     name: "Video giới thiệu TechWave",
     description: "Phim doanh nghiệp giới thiệu năng lực và văn hóa.",
     status: "DONE",
+    type: "OTHER",
     revenue: 320_000_000,
     color: "#06b6d4",
     owner: "minh",
@@ -83,6 +99,9 @@ const PROJECTS: Array<{
     name: "Sự kiện Nova Partner Day",
     description: "Tổ chức sự kiện đối tác thường niên.",
     status: "DONE",
+    type: "MICE",
+    execStartInDays: -16,
+    execDurationDays: 2,
     revenue: 950_000_000,
     color: "#f59e0b",
     owner: "ha",
@@ -93,6 +112,9 @@ const PROJECTS: Array<{
     name: "Booth GreenFoods Vietnam Expo",
     description: "Thiết kế và thi công gian hàng triển lãm.",
     status: "CANCEL",
+    type: "ACTIVATION",
+    execStartInDays: -6,
+    execDurationDays: 3,
     revenue: 280_000_000,
     color: "#64748b",
     owner: "lan",
@@ -103,6 +125,7 @@ const PROJECTS: Array<{
     name: "Pitch ứng dụng Nova Pay",
     description: "Đề xuất UX/UI và kế hoạch ra mắt ứng dụng fintech.",
     status: "FAIL",
+    type: "OTHER",
     revenue: 500_000_000,
     color: "#ef4444",
     owner: "minh",
@@ -113,6 +136,7 @@ const PROJECTS: Array<{
     name: "Social Always-on Mộc Living",
     description: "Vận hành nội dung mạng xã hội trong sáu tháng.",
     status: "BIDDING",
+    type: "PUR",
     revenue: 360_000_000,
     color: "#8b5cf6",
     owner: "ha",
@@ -123,6 +147,9 @@ const PROJECTS: Array<{
     name: "Annual Report TechWave 2026",
     description: "Biên tập, thiết kế và xuất bản báo cáo thường niên.",
     status: "ON_PROCESS",
+    type: "PUR",
+    execStartInDays: 40,
+    execDurationDays: 1,
     revenue: 410_000_000,
     color: "#0ea5e9",
     owner: "lan",
@@ -336,6 +363,20 @@ async function main() {
         name: definition.name,
         description: definition.description,
         status: definition.status,
+        type: definition.type,
+        executionStartAt:
+          definition.execStartInDays !== undefined
+            ? daysFromNow(definition.execStartInDays)
+            : null,
+        executionEndAt:
+          definition.execStartInDays !== undefined &&
+          (definition.execDurationDays ?? 1) > 1
+            ? daysFromNow(
+                definition.execStartInDays +
+                  (definition.execDurationDays ?? 1) -
+                  1
+              )
+            : null,
         revenue: definition.revenue,
         color: definition.color,
         onProcessAt:

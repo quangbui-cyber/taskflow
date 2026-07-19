@@ -13,6 +13,7 @@ import {
 import ClientSelect, { type ClientOption } from "@/components/ClientSelect";
 import UserPicker, { type UserPickerOption } from "@/components/UserPicker";
 import { useActionFeedback } from "@/components/InteractionProvider";
+import { PROJECT_TYPES } from "@/lib/types";
 import type { PurchaseOrderDraft } from "@/lib/purchaseOrder";
 
 type ImportResult = {
@@ -225,6 +226,16 @@ export default function NewProjectForm({
           </span>
         </label>
         <label className="block">
+          <span className="text-xs font-medium text-zinc-500">Loại hình</span>
+          <select name="type" defaultValue="OTHER" className="tf-field mt-1">
+            {PROJECT_TYPES.map((t) => (
+              <option key={t.key} value={t.key}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
           <span className="text-xs font-medium text-zinc-500">
             Doanh thu (VND)
           </span>
@@ -255,6 +266,22 @@ export default function NewProjectForm({
             ariaLabel="Account"
             className="mt-1"
           />
+        </label>
+        <label className="block">
+          <span className="text-xs font-medium text-zinc-500">
+            Ngày thực hiện
+          </span>
+          <input
+            name="executionStartAt"
+            type="date"
+            className="tf-field mt-1"
+          />
+        </label>
+        <label className="block">
+          <span className="text-xs font-medium text-zinc-500">
+            Đến ngày (nếu chạy nhiều ngày)
+          </span>
+          <input name="executionEndAt" type="date" className="tf-field mt-1" />
         </label>
       </div>
       {clients.length === 0 && accounts.length === 0 && (

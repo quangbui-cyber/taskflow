@@ -41,6 +41,9 @@ model Project {
   purchaseOrderNumber  String?         @unique
   color                String          @default("#6366f1")
   status               String          @default("BIDDING") // "BIDDING" | "ON_PROCESS" | "PENDING" | "DONE" | "CANCEL" | "FAIL"
+  type                 String          @default("OTHER") // "TEAMBUILDING" | "MICE" | "ACTIVATION" | "EVENT" | "PUR" | "OTHER"
+  executionStartAt     DateTime? // ngày bắt đầu thực hiện (chạy event)
+  executionEndAt       DateTime? // ngày kết thúc — null nếu chỉ 1 ngày
   revenue              Float           @default(0) // doanh thu dự kiến/thực tế (VND)
   googleChatWebhookUrl String?
   ownerId              String
@@ -58,6 +61,7 @@ model Project {
 
   @@index([status, onProcessAt])
   @@index([status, completedAt])
+  @@index([executionStartAt])
 }
 
 // Danh mục khách hàng — do admin tạo sẵn

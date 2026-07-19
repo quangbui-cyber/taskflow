@@ -61,6 +61,41 @@ export function isOverdue(dueDate: Date): boolean {
   return Date.now() > deadline(dueDate).getTime();
 }
 
+/** Ngày dạng dd/MM/yyyy theo giờ VN, ví dụ 15/08/2026 */
+export function formatDateVN(date: Date): string {
+  const vn = toVN(date);
+  const day = String(vn.getUTCDate()).padStart(2, "0");
+  const month = String(vn.getUTCMonth() + 1).padStart(2, "0");
+  return `${day}/${month}/${vn.getUTCFullYear()}`;
+}
+
+/** Giá trị cho <input type="date"> (yyyy-MM-dd) theo giờ VN */
+export function toDateInputVN(date: Date): string {
+  const vn = toVN(date);
+  const month = String(vn.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(vn.getUTCDate()).padStart(2, "0");
+  return `${vn.getUTCFullYear()}-${month}-${day}`;
+}
+
+/** Khoảng ngày thực hiện: "15/08/2026" hoặc "15/08 – 17/08/2026" (gọn khi cùng năm) */
+export function formatExecutionRange(
+  start: Date | null,
+  end: Date | null
+): string | null {
+  if (!start) return null;
+  if (!end || toDateInputVN(end) === toDateInputVN(start)) {
+    return formatDateVN(start);
+  }
+  const startVN = toVN(start);
+  const endVN = toVN(end);
+  if (startVN.getUTCFullYear() === endVN.getUTCFullYear()) {
+    const day = String(startVN.getUTCDate()).padStart(2, "0");
+    const month = String(startVN.getUTCMonth() + 1).padStart(2, "0");
+    return `${day}/${month} – ${formatDateVN(end)}`;
+  }
+  return `${formatDateVN(start)} – ${formatDateVN(end)}`;
+}
+
 export function formatDue(dueDate: Date): string {
   const vn = toVN(dueDate);
   const dateStr = `${vn.getUTCDate()}/${vn.getUTCMonth() + 1}`;

@@ -8,15 +8,20 @@ import RevenueWinRate from "@/components/RevenueWinRate";
 import MonthlyRevenueChart, {
   type MonthlyRevenuePoint,
 } from "@/components/MonthlyRevenueChart";
+import ProjectTypeMix from "@/components/ProjectTypeMix";
+import ExecutionSchedule from "@/components/ExecutionSchedule";
 import {
   PROJECT_STATUSES,
+  PROJECT_TYPES,
   formatVND,
   projectStatusColor,
+  projectTypeInfo,
 } from "@/lib/types";
 import {
   Building2,
   ChevronDown,
   CircleDollarSign,
+  Tags,
   UsersRound,
 } from "lucide-react";
 
@@ -82,6 +87,9 @@ export default async function RevenuePage() {
         name: true,
         color: true,
         status: true,
+        type: true,
+        executionStartAt: true,
+        executionEndAt: true,
         revenue: true,
         onProcessAt: true,
         client: { select: { id: true, name: true } },
@@ -158,6 +166,32 @@ export default async function RevenuePage() {
   const byClient = groupRevenue((p) => p.client);
   const byAccount = groupRevenue((p) => p.account);
   const byTeam = groupRevenue((p) => p.account?.team ?? null);
+  const byType = groupRevenue((p) => {
+    const info = projectTypeInfo(p.type);
+    return { id: info.key, name: info.label };
+  });
+  const typeSlices = PROJECT_TYPES.map((t) => {
+    const group = projects.filter((p) => projectTypeInfo(p.type).key === t.key);
+    return {
+      key: t.key,
+      label: t.label,
+      color: t.color,
+      value: group
+        .filter((p) => RECOGNIZED_REVENUE.includes(p.status))
+        .reduce((sum, p) => sum + p.revenue, 0),
+      count: group.length,
+    };
+  }).filter((slice) => slice.count > 0);
+  const scheduleRows = projects
+    .filter((p) => p.executionStartAt)
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      type: p.type,
+      status: p.status,
+      executionStartAt: p.executionStartAt!,
+      executionEndAt: p.executionEndAt,
+    }));
   const monthlyRevenue = recentRevenueMonths();
   const monthlyRevenueByKey = new Map(
     monthlyRevenue.map((point) => [point.key, point])
@@ -238,9 +272,20 @@ export default async function RevenuePage() {
             </section>
           </div>
 
+          <ExecutionSchedule rows={scheduleRows} />
+
           <MonthlyRevenueChart data={monthlyRevenue} />
 
           <RevenuePipeline stages={pipelineStages} />
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <ProjectTypeMix slices={typeSlices} />
+            <RevenueBreakdown
+              title="Doanh số theo loại hình"
+              rows={byType}
+              icon={Tags}
+            />
+          </div>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             <RevenueBreakdown
@@ -305,6 +350,11 @@ export default async function RevenuePage() {
                           />
                           <span className="min-w-0 flex-1 truncate text-sm font-medium">
                             {p.name}
+                          </span>
+                          <span
+                            className={`tf-badge hidden shrink-0 sm:inline-flex ${projectTypeInfo(p.type).className}`}
+                          >
+                            {projectTypeInfo(p.type).label}
                           </span>
                           <span className="hidden min-w-0 max-w-[220px] truncate text-xs text-zinc-400 sm:block">
                             {p.account?.name ?? "Chưa gán Account"} ·{" "}

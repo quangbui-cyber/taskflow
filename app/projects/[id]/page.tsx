@@ -21,9 +21,11 @@ import ProjectStatusSelect from "@/components/ProjectStatusSelect";
 import {
   formatVND,
   projectStatusColor,
+  projectTypeInfo,
   type MemberDTO,
   type TaskDTO,
 } from "@/lib/types";
+import { formatExecutionRange, toDateInputVN } from "@/lib/dates";
 
 function extractProjectMetadata(description: string | null) {
   if (!description) return { poNumber: null, poDate: null };
@@ -196,6 +198,11 @@ export default async function ProjectPage({
   const canManageWebhook = isOwner || user.role === "ADMIN";
   const canViewRevenue = canManageProjects(user.role);
   const projectMetadata = extractProjectMetadata(project.description);
+  const typeInfo = projectTypeInfo(project.type);
+  const executionRange = formatExecutionRange(
+    project.executionStartAt,
+    project.executionEndAt
+  );
   const accountName =
     project.account?.user?.name ?? project.account?.name ?? null;
   const initialTaskId = project.tasks.some((task) => task.id === requestedTaskId)
@@ -240,6 +247,13 @@ export default async function ProjectPage({
                     id: project.id,
                     name: project.name,
                     description: project.description,
+                    type: project.type,
+                    executionStartAt: project.executionStartAt
+                      ? toDateInputVN(project.executionStartAt)
+                      : null,
+                    executionEndAt: project.executionEndAt
+                      ? toDateInputVN(project.executionEndAt)
+                      : null,
                     revenue: project.revenue,
                     clientId: project.clientId,
                     clientName: project.client?.name ?? null,
@@ -267,6 +281,15 @@ export default async function ProjectPage({
 
             <div className="flex flex-col gap-3 border-t border-zinc-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-xs text-zinc-500">
+                <span className={`tf-badge ${typeInfo.className}`}>
+                  {typeInfo.label}
+                </span>
+                {executionRange && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <CalendarDays size={14} aria-hidden="true" />
+                    Thực hiện: {executionRange}
+                  </span>
+                )}
                 {project.client?.name && (
                   <span className="inline-flex items-center gap-1.5">
                     <Building2 size={14} aria-hidden="true" />

@@ -7,6 +7,7 @@ import RevenueInput from "@/components/RevenueInput";
 import ClientSelect, { type ClientOption } from "@/components/ClientSelect";
 import UserPicker, { type UserPickerOption } from "@/components/UserPicker";
 import { useInteraction } from "@/components/InteractionProvider";
+import { PROJECT_TYPES } from "@/lib/types";
 
 export default function ProjectEditButton({
   project,
@@ -18,6 +19,9 @@ export default function ProjectEditButton({
     id: string;
     name: string;
     description: string | null;
+    type: string;
+    executionStartAt: string | null; // yyyy-MM-dd theo giờ VN
+    executionEndAt: string | null;
     revenue: number;
     clientId: string | null;
     clientName: string | null;
@@ -106,7 +110,24 @@ export default function ProjectEditButton({
             </label>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <label className="block sm:col-span-2">
+              <label className="block">
+                <span className="text-xs font-medium text-zinc-500">
+                  Loại hình
+                </span>
+                <select
+                  name="type"
+                  defaultValue={project.type}
+                  className="tf-field mt-1"
+                >
+                  {PROJECT_TYPES.map((t) => (
+                    <option key={t.key} value={t.key}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
                 <span className="text-xs font-medium text-zinc-500">
                   Doanh thu (VND)
                 </span>
@@ -114,6 +135,30 @@ export default function ProjectEditButton({
                   name="revenue"
                   defaultValue={project.revenue}
                   placeholder="VD: 500.000.000"
+                  className="tf-field mt-1"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-xs font-medium text-zinc-500">
+                  Ngày thực hiện
+                </span>
+                <input
+                  name="executionStartAt"
+                  type="date"
+                  defaultValue={project.executionStartAt ?? ""}
+                  className="tf-field mt-1"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-xs font-medium text-zinc-500">
+                  Đến ngày (nếu chạy nhiều ngày)
+                </span>
+                <input
+                  name="executionEndAt"
+                  type="date"
+                  defaultValue={project.executionEndAt ?? ""}
                   className="tf-field mt-1"
                 />
               </label>
