@@ -1,9 +1,15 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 
-const secret = new TextEncoder().encode(
-  process.env.SESSION_SECRET ?? "dev-secret"
-);
+const rawSecret = process.env.SESSION_SECRET;
+if (!rawSecret) {
+  // Không được phép chạy tiếp với secret mặc định: ai biết chuỗi đó sẽ tự ký
+  // được cookie phiên đăng nhập và vào app với bất kỳ vai trò nào.
+  throw new Error(
+    "Thiếu biến môi trường SESSION_SECRET. Thêm vào .env (xem .env.example) rồi khởi động lại app."
+  );
+}
+const secret = new TextEncoder().encode(rawSecret);
 
 const COOKIE_NAME = "session";
 const MAX_AGE = 60 * 60 * 24 * 7; // 7 ngày

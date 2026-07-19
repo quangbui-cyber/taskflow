@@ -141,9 +141,7 @@ export async function GET(request: Request) {
     let failed = 0;
 
     for (const project of projects) {
-      const notificationRows: Prisma.NotificationCreateManyInput[] = [];
-      const overdue: DigestTask[] = [];
-      const dueToday: DigestTask[] = [];
+      const candidates: { task: DigestTask; overdueTask: boolean; dedupeKey: string }[] = [];
 
       for (const task of project.tasks) {
         if (!task.dueDate) continue;
@@ -151,38 +149,59 @@ export async function GET(request: Request) {
         const needsReminder = overdueTask || daysUntil(task.dueDate) === 0;
         if (!needsReminder) continue;
 
-        if (overdueTask) overdue.push(task);
-        else dueToday.push(task);
-
         const recipientId = task.assigneeId ?? task.creatorId;
-        notificationRows.push({
+        candidates.push({
+          task,
+          overdueTask,
           dedupeKey: `deadline:${dateKey}:${task.id}:${recipientId}`,
-          userId: recipientId,
-          type: "DEADLINE_REMINDER",
-          message: `Nhắc hạn: [${project.name}] task “${task.title}” ${formatDue(task.dueDate)}.`,
-          taskId: task.id,
-          projectId: project.id,
         });
       }
 
-      const created = notificationRows.length
-        ? await withDatabaseRetry(() =>
-            prisma.notification.createMany({
-              data: notificationRows,
-              skipDuplicates: true,
-            })
-          )
-        : { count: 0 };
+      if (candidates.length === 0) {
+        skipped += 1;
+        continue;
+      }
+
+      // Chỉ nhắc task hôm nay CHƯA nhắc — nếu endpoint bị gọi lại trong ngày
+      // (thử thủ công, retry...), cả thông báo lẫn tin Chat đều không lặp lại
+      // những task đã nhắc buổi sáng; chỉ task mới đến hạn mới được gửi thêm.
+      const existing = await withDatabaseRetry(() =>
+        prisma.notification.findMany({
+          where: { dedupeKey: { in: candidates.map((c) => c.dedupeKey) } },
+          select: { dedupeKey: true },
+        })
+      );
+      const alreadyNotified = new Set(existing.map((row) => row.dedupeKey));
+      const fresh = candidates.filter((c) => !alreadyNotified.has(c.dedupeKey));
+
+      if (fresh.length === 0) {
+        skipped += 1;
+        continue;
+      }
+
+      const overdue = fresh.filter((c) => c.overdueTask).map((c) => c.task);
+      const dueToday = fresh.filter((c) => !c.overdueTask).map((c) => c.task);
+      const notificationRows: Prisma.NotificationCreateManyInput[] = fresh.map(
+        (c) => ({
+          dedupeKey: c.dedupeKey,
+          userId: c.task.assigneeId ?? c.task.creatorId,
+          type: "DEADLINE_REMINDER",
+          message: `Nhắc hạn: [${project.name}] task “${c.task.title}” ${formatDue(c.task.dueDate!)}.`,
+          taskId: c.task.id,
+          projectId: project.id,
+        })
+      );
+
+      const created = await withDatabaseRetry(() =>
+        prisma.notification.createMany({
+          data: notificationRows,
+          skipDuplicates: true,
+        })
+      );
       reminders += created.count;
 
       const message = buildMessage(project.name, overdue, dueToday);
-      const alreadyDeliveredToday =
-        notificationRows.length > 0 && created.count === 0;
-      if (
-        !message ||
-        !project.googleChatWebhookUrl ||
-        alreadyDeliveredToday
-      ) {
+      if (!message || !project.googleChatWebhookUrl) {
         skipped += 1;
         continue;
       }

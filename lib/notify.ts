@@ -1,9 +1,5 @@
 import { prisma } from "@/lib/prisma";
 
-function notificationDeletionCutoff() {
-  return new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-}
-
 /** Tạo thông báo cho nhiều người nhận (tự loại trùng và loại bỏ id rỗng) */
 export async function notify(
   userIds: (string | null | undefined)[],
@@ -20,10 +16,8 @@ export async function notify(
     projectId?: string;
   }
 ) {
-  await prisma.notification.deleteMany({
-    where: { createdAt: { lt: notificationDeletionCutoff() } },
-  });
-
+  // Việc dọn thông báo cũ (quá 30 ngày) do cron nhắc việc hàng ngày đảm nhiệm —
+  // không dọn ở đây để khỏi tốn một lượt database cho mỗi lần tạo thông báo.
   let unique = [...new Set(userIds.filter((id): id is string => !!id))];
   if (unique.length === 0) return;
   if (data.projectId) {
