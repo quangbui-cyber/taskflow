@@ -13,6 +13,7 @@ model User {
   name             String
   avatarUrl        String?
   passwordHash     String
+  sessionVersion   Int                 @default(0)
   role             String              @default("USER") // "ADMIN" | "ACCOUNT" | "USER"
   isActive         Boolean             @default(true)
   deactivatedAt    DateTime?
@@ -203,4 +204,16 @@ model Comment {
   authorId  String
   author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
+}
+
+// Bộ đếm đăng nhập sai, lưu theo khóa HMAC của email/IP để không lưu thêm PII.
+// Dùng database thay vì bộ nhớ tiến trình để rate limit hoạt động trên nhiều instance.
+model LoginRateLimit {
+  key             String    @id
+  failures        Int       @default(0)
+  windowStartedAt DateTime  @default(now())
+  blockedUntil    DateTime?
+  updatedAt       DateTime  @updatedAt
+
+  @@index([updatedAt])
 }

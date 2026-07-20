@@ -17,6 +17,7 @@ import {
   useActionFeedback,
   useInteraction,
 } from "@/components/InteractionProvider";
+import { MIN_PASSWORD_LENGTH } from "@/lib/password";
 import {
   AlertTriangle,
   ChevronDown,
@@ -471,8 +472,8 @@ export default function UserRow({
                       name="password"
                       type="password"
                       required
-                      minLength={6}
-                      placeholder="Mật khẩu mới"
+                      minLength={MIN_PASSWORD_LENGTH}
+                      placeholder={`Mật khẩu mới (ít nhất ${MIN_PASSWORD_LENGTH} ký tự)`}
                       className="tf-field"
                       autoComplete="new-password"
                       autoFocus

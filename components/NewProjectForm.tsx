@@ -235,18 +235,6 @@ export default function NewProjectForm({
             ))}
           </select>
         </label>
-        <label className="block">
-          <span className="text-xs font-medium text-zinc-500">
-            Doanh thu (VND)
-          </span>
-          <RevenueInput
-            key={`revenue-${draftVersion}`}
-            name="revenue"
-            defaultValue={importResult?.draft.revenue}
-            placeholder="VD: 500.000.000"
-            className="tf-field mt-1"
-          />
-        </label>
         <div className="block">
           <span className="text-xs font-medium text-zinc-500">Client</span>
           <ClientSelect
@@ -267,23 +255,38 @@ export default function NewProjectForm({
             className="mt-1"
           />
         </label>
-        <label className="block">
-          <span className="text-xs font-medium text-zinc-500">
-            Ngày thực hiện
-          </span>
-          <input
-            name="executionStartAt"
-            type="date"
-            className="tf-field mt-1"
-          />
-        </label>
-        <label className="block">
-          <span className="text-xs font-medium text-zinc-500">
-            Đến ngày (nếu chạy nhiều ngày)
-          </span>
-          <input name="executionEndAt" type="date" className="tf-field mt-1" />
-        </label>
       </div>
+
+      <fieldset>
+        <legend className="tf-label mb-2">Thời gian thực hiện</legend>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="text-xs font-medium text-zinc-500">Bắt đầu</span>
+            <input
+              name="executionStartAt"
+              type="date"
+              className="tf-field mt-1"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-medium text-zinc-500">
+              Kết thúc <span className="font-normal text-zinc-400">(nếu nhiều ngày)</span>
+            </span>
+            <input name="executionEndAt" type="date" className="tf-field mt-1" />
+          </label>
+        </div>
+      </fieldset>
+
+      <label className="block max-w-full sm:max-w-[calc(50%_-_0.375rem)]">
+        <span className="tf-label">Doanh thu (VND)</span>
+        <RevenueInput
+          key={`revenue-${draftVersion}`}
+          name="revenue"
+          defaultValue={importResult?.draft.revenue}
+          placeholder="VD: 500.000.000"
+          className="tf-field"
+        />
+      </label>
       {clients.length === 0 && accounts.length === 0 && (
         <p className="text-xs text-zinc-400">
           Chưa có Client/Account nào. Admin có thể thêm trong Cài đặt.

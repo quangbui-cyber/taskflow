@@ -1,12 +1,16 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getSessionUserId } from "@/lib/session";
+import { getSession } from "@/lib/session";
 
 export async function getCurrentUser() {
-  const userId = await getSessionUserId();
-  if (!userId) return null;
+  const session = await getSession();
+  if (!session) return null;
   return prisma.user.findFirst({
-    where: { id: userId, isActive: true },
+    where: {
+      id: session.userId,
+      isActive: true,
+      sessionVersion: session.sessionVersion,
+    },
     select: { id: true, email: true, name: true, role: true, avatarUrl: true },
   });
 }

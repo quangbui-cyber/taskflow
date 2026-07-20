@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { MIN_PASSWORD_LENGTH } from "../lib/password";
 
 const prisma = new PrismaClient();
 const DEFAULT_PASSWORD = "gasangtao1810";
@@ -231,8 +232,10 @@ async function seedAdminOnly() {
   const name = process.env.ADMIN_NAME ?? "Quản trị Creative";
   const email = (process.env.ADMIN_EMAIL ?? "admin@mycreative.vn").toLowerCase();
   const password = process.env.ADMIN_PASSWORD;
-  if (!password || password.length < 6) {
-    throw new Error("ADMIN_PASSWORD phải có ít nhất 6 ký tự khi SEED_MODE=admin.");
+  if (!password || password.length < MIN_PASSWORD_LENGTH) {
+    throw new Error(
+      `ADMIN_PASSWORD phải có ít nhất ${MIN_PASSWORD_LENGTH} ký tự khi SEED_MODE=admin.`
+    );
   }
 
   const passwordHash = await bcrypt.hash(password, 10);

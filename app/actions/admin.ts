@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 import { parseAvatarDataUrl } from "@/lib/avatarImage";
+import { passwordLengthError } from "@/lib/password";
 
 export type AdminState = { error?: string; success?: string };
 
@@ -28,9 +29,8 @@ export async function createUser(
   if (!name || !email || !password) {
     return { error: "Vui lòng điền đầy đủ thông tin." };
   }
-  if (password.length < 6) {
-    return { error: "Mật khẩu phải có ít nhất 6 ký tự." };
-  }
+  const passwordError = passwordLengthError(password);
+  if (passwordError) return { error: passwordError };
   if (avatar.error) return { error: avatar.error };
 
   const existing = await prisma.user.findUnique({ where: { email } });
@@ -130,6 +130,9 @@ export async function setUserActive(
     data: {
       isActive,
       deactivatedAt: isActive ? null : new Date(),
+      // Vô hiệu hóa phải thu hồi hẳn cookie cũ; nếu kích hoạt lại thì các phiên
+      // trước đó vẫn không thể tự sống lại.
+      ...(!isActive ? { sessionVersion: { increment: 1 } } : {}),
     },
   });
 
@@ -258,12 +261,18 @@ export async function resetPassword(
 
   const userId = String(formData.get("userId") ?? "");
   const password = String(formData.get("password") ?? "");
-  if (password.length < 6) {
-    return { error: "Mật khẩu mới phải có ít nhất 6 ký tự." };
-  }
+  const passwordError = passwordLengthError(password);
+  if (passwordError) return { error: passwordError };
 
   const passwordHash = await bcrypt.hash(password, 10);
-  await prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      passwordHash,
+      // Mọi JWT đã cấp chứa version cũ và sẽ bị từ chối ở request kế tiếp.
+      sessionVersion: { increment: 1 },
+    },
+  });
 
   revalidatePath("/admin");
   return { success: "Đã đổi mật khẩu." };

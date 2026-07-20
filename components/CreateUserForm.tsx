@@ -5,6 +5,7 @@ import { createUser, type AdminState } from "@/app/actions/admin";
 import { ChevronDown, UserPlus } from "lucide-react";
 import AvatarUploader from "@/components/AvatarUploader";
 import { useActionFeedback } from "@/components/InteractionProvider";
+import { MIN_PASSWORD_LENGTH } from "@/lib/password";
 
 export default function CreateUserForm() {
   const formRef = useRef<HTMLFormElement>(null);
@@ -47,12 +48,12 @@ export default function CreateUserForm() {
         />
         <input
           name="password"
-          type="text"
+          type="password"
           required
-          minLength={6}
-          defaultValue="gasangtao1810"
-          placeholder="Mật khẩu mặc định"
+          minLength={MIN_PASSWORD_LENGTH}
+          placeholder={`Mật khẩu (ít nhất ${MIN_PASSWORD_LENGTH} ký tự)`}
           className="tf-field"
+          autoComplete="new-password"
         />
         <div className="relative min-w-0">
           <select
