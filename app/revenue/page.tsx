@@ -183,7 +183,11 @@ export default async function RevenuePage() {
     };
   }).filter((slice) => slice.count > 0);
   const scheduleRows = projects
-    .filter((p) => p.executionStartAt)
+    .filter(
+      (p) =>
+        p.executionStartAt &&
+        (p.status === "BIDDING" || p.status === "ON_PROCESS")
+    )
     .map((p) => ({
       id: p.id,
       name: p.name,
