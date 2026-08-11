@@ -2,7 +2,13 @@
 .env.*
 .git
 .next
+.next.nosync
 node_modules
+.codex-tmp
+.codex
+outputs
+recognition-*.png
+recognition-*.jpg
 *.tsbuildinfo
 admin-accounts-*.png
 audit-navigation

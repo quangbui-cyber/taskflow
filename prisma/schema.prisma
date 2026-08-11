@@ -8,29 +8,31 @@ datasource db {
 }
 
 model User {
-  id               String              @id @default(cuid())
-  email            String              @unique
-  name             String
-  avatarUrl        String?
-  passwordHash     String
-  sessionVersion   Int                 @default(0)
-  role             String              @default("USER") // "ADMIN" | "ACCOUNT" | "USER"
-  isActive         Boolean             @default(true)
-  deactivatedAt    DateTime?
-  managerId        String? // người quản lý trực tiếp
-  manager          User?               @relation("TeamManager", fields: [managerId], references: [id], onDelete: SetNull)
-  reports          User[]              @relation("TeamManager") // nhân viên dưới quyền
-  createdAt        DateTime            @default(now())
-  memberships      ProjectMember[]
-  ownedProjects    Project[]           @relation("ProjectOwner")
-  assignedTasks    Task[]              @relation("TaskAssignee")
-  createdTasks     Task[]              @relation("TaskCreator")
-  comments         Comment[]
-  notifications    Notification[]
-  taskFollows      TaskFollower[]
-  accountProfile   Account?
-  groupMemberships MemberGroupMember[]
-  uploadedFiles    ProjectFile[]       @relation("ProjectFileUploader")
+  id                   String              @id @default(cuid())
+  email                String              @unique
+  name                 String
+  avatarUrl            String?
+  passwordHash         String
+  sessionVersion       Int                 @default(0)
+  role                 String              @default("USER") // "ADMIN" | "ACCOUNT" | "USER"
+  isActive             Boolean             @default(true)
+  deactivatedAt        DateTime?
+  managerId            String? // người quản lý trực tiếp
+  manager              User?               @relation("TeamManager", fields: [managerId], references: [id], onDelete: SetNull)
+  reports              User[]              @relation("TeamManager") // nhân viên dưới quyền
+  createdAt            DateTime            @default(now())
+  memberships          ProjectMember[]
+  ownedProjects        Project[]           @relation("ProjectOwner")
+  assignedTasks        Task[]              @relation("TaskAssignee")
+  createdTasks         Task[]              @relation("TaskCreator")
+  comments             Comment[]
+  notifications        Notification[]
+  taskFollows          TaskFollower[]
+  accountProfile       Account?
+  groupMemberships     MemberGroupMember[]
+  uploadedFiles        ProjectFile[]       @relation("ProjectFileUploader")
+  recognitionsSent     Recognition[]       @relation("RecognitionSender")
+  recognitionsReceived Recognition[]       @relation("RecognitionRecipient")
 
   @@index([isActive])
 }
@@ -179,21 +181,49 @@ model TaskFollower {
 }
 
 model Notification {
-  id        String   @id @default(cuid())
-  dedupeKey String?  @unique // chống tạo trùng cho thông báo tự động
-  userId    String // người nhận
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      String // "TASK_ASSIGNED" | "TASK_COMPLETED" | "TASK_UPDATED" | "COMMENT" | "TASK_FOLLOW" | "DEADLINE_REMINDER"
-  message   String
-  taskId    String?
-  task      Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  projectId String? // để dẫn link tới board
-  read      Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id            String       @id @default(cuid())
+  dedupeKey     String?      @unique // chống tạo trùng cho thông báo tự động
+  userId        String // người nhận
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type          String // "TASK_ASSIGNED" | "TASK_COMPLETED" | "TASK_UPDATED" | "COMMENT" | "TASK_FOLLOW" | "DEADLINE_REMINDER" | "RECOGNITION_RECEIVED"
+  message       String
+  taskId        String?
+  task          Task?        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  projectId     String? // để dẫn link tới board
+  recognitionId String?
+  recognition   Recognition? @relation("RecognitionNotification", fields: [recognitionId], references: [id], onDelete: SetNull)
+  read          Boolean      @default(false)
+  createdAt     DateTime     @default(now())
 
   @@index([userId, read])
   @@index([userId, createdAt])
   @@index([createdAt])
+  @@index([recognitionId])
+}
+
+// Lời cảm ơn độc lập với project — dùng để mọi người ghi nhận nhau trong công việc và cuộc sống.
+model Recognition {
+  id            String         @id @default(cuid())
+  senderId      String
+  recipientId   String
+  message       String
+  category      String         @default("KINDNESS") // KINDNESS | SUPPORT | INSPIRATION | CARE
+  visibility    String         @default("COMPANY") // COMPANY | PRIVATE
+  sender        User           @relation("RecognitionSender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient     User           @relation("RecognitionRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  notifications Notification[] @relation("RecognitionNotification")
+  createdAt     DateTime       @default(now())
+
+  @@index([senderId, createdAt])
+  @@index([recipientId, createdAt])
+  @@index([visibility, createdAt])
+}
+
+// Cấu hình tích hợp dùng chung. Giá trị nhạy cảm được mã hóa trước khi lưu.
+model IntegrationSetting {
+  key            String   @id
+  encryptedValue String
+  updatedAt      DateTime @updatedAt
 }
 
 model Comment {

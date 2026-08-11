@@ -13,6 +13,7 @@ import {
   Inbox,
   MessageSquare,
   RefreshCw,
+  Star,
   type LucideIcon,
 } from "lucide-react";
 import { markNotificationRead } from "@/app/actions/notifications";
@@ -23,6 +24,7 @@ export type NotificationItem = {
   message: string;
   projectId: string | null;
   taskId: string | null;
+  recognitionId: string | null;
   read: boolean;
   createdAt: string;
 };
@@ -34,6 +36,7 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   COMMENT: MessageSquare,
   TASK_FOLLOW: Eye,
   DEADLINE_REMINDER: AlarmClock,
+  RECOGNITION_RECEIVED: Star,
 };
 
 function timeAgo(value: string): string {
@@ -79,11 +82,13 @@ export default function NotificationList({
   function openNotification(notification: NotificationItem) {
     if (readingId) return;
 
-    const destination = notification.projectId
-      ? `/projects/${notification.projectId}${
-          notification.taskId ? `?task=${notification.taskId}` : ""
-        }`
-      : null;
+    const destination = notification.recognitionId
+      ? `/recognition?focus=${notification.recognitionId}#recognition-${notification.recognitionId}`
+      : notification.projectId
+        ? `/projects/${notification.projectId}${
+            notification.taskId ? `?task=${notification.taskId}` : ""
+          }`
+        : null;
 
     if (notification.read) {
       if (destination) router.push(destination);

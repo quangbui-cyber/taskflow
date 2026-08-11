@@ -13,8 +13,10 @@ import Sidebar from "@/components/Sidebar";
 import Avatar from "@/components/Avatar";
 import TaskListItem, { type TaskListItemData } from "@/components/TaskListItem";
 import DashboardSort from "@/components/DashboardSort";
+import DailyInspiration from "@/components/DailyInspiration";
 import PerformanceBar from "@/components/PerformanceBar";
 import { computePerf } from "@/lib/performance";
+import { getDailyInspiration } from "@/lib/daily-inspiration";
 import {
   ARCHIVED_PROJECT_STATUS_KEYS,
   formatVND,
@@ -221,6 +223,7 @@ export default async function DashboardPage({
   );
   const priorityTasks = [...overdue, ...dueSoon];
   const showRevenue = canManageProjects(user.role);
+  const dailyInspiration = getDailyInspiration(user.id);
 
   const toItem = (
     task: (typeof assignedToMe)[number],
@@ -293,8 +296,14 @@ export default async function DashboardPage({
                 </div>
               </div>
 
+              <DailyInspiration
+                quote={dailyInspiration.quote}
+                dateLabel={dailyInspiration.dateLabel}
+                dismissKey={dailyInspiration.dismissKey}
+              />
+
               <nav
-                className="tf-scroll-tabs mt-8 flex w-fit rounded-[8px] bg-zinc-100 p-1"
+                className="tf-scroll-tabs mt-6 flex w-fit rounded-[8px] bg-zinc-100 p-1"
                 aria-label="Bộ lọc công việc"
               >
                 {dashboardViews.map((view) => {

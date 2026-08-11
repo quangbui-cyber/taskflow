@@ -159,6 +159,18 @@ Bạn nhận thông báo khi:
 
 Bấm vào thông báo để nhảy đến project liên quan. Người thao tác không tự nhận thông báo về hành động của chính mình.
 
+### 11. Góc cảm ơn
+
+Trang `/recognition` là không gian ghi nhận độc lập với project, dành cho những điều tử tế trong công việc và cuộc sống:
+
+- Chọn một đồng đội, viết lời cảm ơn và gửi một ngôi sao.
+- Chọn chủ đề: Một điều tử tế, Hỗ trợ công việc, Truyền cảm hứng hoặc Quan tâm đồng đội.
+- Chọn chia sẻ trong công ty hoặc chỉ để người gửi và người nhận xem.
+- Xem các tab Mọi người, Dành cho tôi và Tôi đã gửi theo từng tháng.
+- Bảng “Dải ngân hà nhà mình” ghi nhận số người khác nhau đã gửi hoặc nhận sao; bảng này không dùng để đánh giá hiệu suất.
+
+Người nhận sẽ nhận được thông báo và có thể mở thẳng lời cảm ơn tương ứng.
+
 **Báo lên Google Chat (tuỳ chọn):** trong từng dự án, mở tab **Webhook** và dán URL webhook của Space tương ứng. App gửi tin khi có job mới, đổi người được giao hoặc đổi trạng thái; mỗi tin có người được giao và link mở đúng job. Hướng dẫn lấy URL xem trong [DEPLOY.md](DEPLOY.md).
 
 ## Chạy app trên máy cá nhân

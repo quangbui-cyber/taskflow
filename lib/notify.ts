@@ -10,10 +10,12 @@ export async function notify(
       | "TASK_UPDATED"
       | "COMMENT"
       | "TASK_FOLLOW"
-      | "DEADLINE_REMINDER";
+      | "DEADLINE_REMINDER"
+      | "RECOGNITION_RECEIVED";
     message: string;
     taskId?: string;
     projectId?: string;
+    recognitionId?: string;
   }
 ) {
   // Việc dọn thông báo cũ (quá 30 ngày) do cron nhắc việc hàng ngày đảm nhiệm —

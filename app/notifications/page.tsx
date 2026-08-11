@@ -101,6 +101,7 @@ export default async function NotificationsPage({
               message: notification.message,
               projectId: notification.projectId,
               taskId: notification.taskId,
+              recognitionId: notification.recognitionId,
               read: notification.read,
               createdAt: notification.createdAt.toISOString(),
             }))}

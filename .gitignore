@@ -2,6 +2,8 @@
 
 # dependencies
 /node_modules
+/node_modules.dataless-backup-*/
+/.codex-tmp/
 /.pnp
 .pnp.*
 .yarn/*
@@ -50,6 +52,8 @@ next-env.d.ts
 /audit-navigation/
 design-qa.md
 admin-accounts-*.png
+/recognition-*.png
+/recognition-*.jpg
 
 # kết quả audit / tài liệu xuất ra từ công cụ (không phải mã nguồn app)
 /outputs/

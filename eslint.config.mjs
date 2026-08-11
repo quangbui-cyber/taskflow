@@ -10,6 +10,8 @@ const eslintConfig = defineConfig([
     // Default ignores of eslint-config-next:
     ".next/**",
     ".next.nosync/**",
+    ".codex-tmp/**",
+    "node_modules.dataless-backup-*/**",
     "out/**",
     "build/**",
     "next-env.d.ts",

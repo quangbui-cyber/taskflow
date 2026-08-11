@@ -214,6 +214,7 @@ function assertLocalDatabase() {
 async function cleanDatabase() {
   await prisma.$transaction([
     prisma.notification.deleteMany(),
+    prisma.recognition.deleteMany(),
     prisma.comment.deleteMany(),
     prisma.taskFollower.deleteMany(),
     prisma.task.deleteMany(),
@@ -289,6 +290,75 @@ async function main() {
     prisma.user.update({ where: { id: userId("nam") }, data: { managerId: userId("ha") } }),
     prisma.user.update({ where: { id: userId("mai") }, data: { managerId: userId("minh") } }),
   ]);
+
+  await prisma.recognition.createMany({
+    data: [
+      {
+        senderId: userId("lan"),
+        recipientId: userId("dung"),
+        message: "Cảm ơn Dũng đã chủ động ở lại hỗ trợ team xử lý phần kỹ thuật dù đó không phải việc của bạn.",
+        category: "KINDNESS",
+        visibility: "COMPANY",
+        createdAt: daysFromNow(0),
+      },
+      {
+        senderId: userId("minh"),
+        recipientId: userId("an"),
+        message: "Cảm ơn An đã kiên nhẫn thử thêm nhiều phương án để bản thiết kế cuối cùng thật sự thuyết phục.",
+        category: "INSPIRATION",
+        visibility: "COMPANY",
+        createdAt: daysFromNow(-1),
+      },
+      {
+        senderId: userId("ha"),
+        recipientId: userId("mai"),
+        message: "Cảm ơn Mai đã luôn nhớ những chi tiết nhỏ và giúp mọi người yên tâm trong ngày chạy sự kiện.",
+        category: "SUPPORT",
+        visibility: "COMPANY",
+        createdAt: daysFromNow(-1),
+      },
+      {
+        senderId: userId("an"),
+        recipientId: userId("binh"),
+        message: "Cảm ơn Bình vì những góp ý rất chân thành và luôn tạo cảm giác thoải mái khi cùng làm việc.",
+        category: "CARE",
+        visibility: "COMPANY",
+        createdAt: daysFromNow(-2),
+      },
+      {
+        senderId: userId("binh"),
+        recipientId: userId("huong"),
+        message: "Cảm ơn Hương đã cứu mình một phen với bộ ảnh gấp và vẫn giữ năng lượng tích cực cho cả nhóm.",
+        category: "SUPPORT",
+        visibility: "COMPANY",
+        createdAt: daysFromNow(-2),
+      },
+      {
+        senderId: userId("dung"),
+        recipientId: userId("mai"),
+        message: "Cảm ơn Mai đã hỏi thăm và giúp mình sắp xếp lại lịch khi biết mình có việc gia đình.",
+        category: "CARE",
+        visibility: "PRIVATE",
+        createdAt: daysFromNow(-3),
+      },
+      {
+        senderId: userId("huong"),
+        recipientId: userId("nam"),
+        message: "Cảm ơn Nam đã chia sẻ kinh nghiệm hiện trường và luôn sẵn sàng hỗ trợ người mới.",
+        category: "INSPIRATION",
+        visibility: "COMPANY",
+        createdAt: daysFromNow(-3),
+      },
+      {
+        senderId: userId("mai"),
+        recipientId: userId("admin"),
+        message: "Cảm ơn anh đã lắng nghe và tạo không gian để mọi người có thể nói thật điều mình nghĩ.",
+        category: "KINDNESS",
+        visibility: "COMPANY",
+        createdAt: daysFromNow(-4),
+      },
+    ],
+  });
 
   const clients = await Promise.all(
     ["Nova Group", "Mộc Living", "GreenFoods", "Lumi Beauty", "TechWave"].map(
