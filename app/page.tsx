@@ -296,11 +296,7 @@ export default async function DashboardPage({
                 </div>
               </div>
 
-              <DailyInspiration
-                quote={dailyInspiration.quote}
-                dateLabel={dailyInspiration.dateLabel}
-                dismissKey={dailyInspiration.dismissKey}
-              />
+              <DailyInspiration quote={dailyInspiration.quote} />
 
               <nav
                 className="tf-scroll-tabs mt-6 flex w-fit rounded-[8px] bg-zinc-100 p-1"
