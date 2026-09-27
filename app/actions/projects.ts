@@ -330,9 +330,11 @@ async function manageableProject(projectId: string) {
   });
 
   if (!project) return { error: "Project không tồn tại." } as const;
-  if (project.ownerId !== user.id && user.role !== "ADMIN") {
+  const membership =
+    user.role === "ADMIN" ? true : await getMembership(projectId, user.id);
+  if (!membership) {
     return {
-      error: "Chỉ chủ project hoặc admin được cấu hình Google Chat.",
+      error: "Chỉ thành viên dự án hoặc admin được cấu hình Google Chat.",
     } as const;
   }
   return { project } as const;

@@ -217,7 +217,7 @@ export default async function ProjectPage({
   const isOwner = project.ownerId === user.id;
   const activeTab =
     tab === "webhook" ? "webhook" : tab === "files" ? "files" : "tasks";
-  const canManageWebhook = isOwner || user.role === "ADMIN";
+  const canManageWebhook = isMember || user.role === "ADMIN";
   const canViewRevenue = canManageProjects(user.role);
   const projectMetadata = extractProjectMetadata(project.description);
   const typeInfo = projectTypeInfo(project.type);
