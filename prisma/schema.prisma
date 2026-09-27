@@ -31,6 +31,7 @@ model User {
   accountProfile       Account?
   groupMemberships     MemberGroupMember[]
   uploadedFiles        ProjectFile[]       @relation("ProjectFileUploader")
+  uploadedTaskFiles    TaskFile[]          @relation("TaskFileUploader")
   recognitionsSent     Recognition[]       @relation("RecognitionSender")
   recognitionsReceived Recognition[]       @relation("RecognitionRecipient")
 
@@ -164,8 +165,27 @@ model Task {
   comments      Comment[]
   followers     TaskFollower[]
   notifications Notification[]
+  files         TaskFile[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
+}
+
+// Tệp đính kèm của task — BRIEF khi giao việc, RESULT khi bàn giao kết quả
+model TaskFile {
+  id         String   @id @default(cuid())
+  taskId     String
+  uploaderId String?
+  kind       String // "BRIEF" | "RESULT"
+  name       String
+  mimeType   String
+  size       Int
+  data       Bytes
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploader   User?    @relation("TaskFileUploader", fields: [uploaderId], references: [id], onDelete: SetNull)
+  createdAt  DateTime @default(now())
+
+  @@index([taskId, createdAt])
+  @@index([uploaderId])
 }
 
 // Người theo dõi task — nhận thông báo khi task có bình luận hoặc thay đổi quan trọng

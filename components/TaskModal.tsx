@@ -14,6 +14,7 @@ import { PRIORITIES, STATUSES, type MemberDTO, type TaskDTO } from "@/lib/types"
 import DeadlineField, { toDeadlineLocalValue } from "@/components/DeadlineField";
 import Avatar from "@/components/Avatar";
 import UserPicker from "@/components/UserPicker";
+import TaskFileSection from "@/components/TaskFileSection";
 import { useInteraction } from "@/components/InteractionProvider";
 
 const PRIORITY_DOT: Record<string, string> = {
@@ -414,29 +415,45 @@ export default function TaskModal({
             />
           </div>
 
-          <label className="block">
-            <span className="text-xs font-medium text-zinc-500">Mô tả</span>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={4}
-              placeholder="Thêm mô tả chi tiết..."
-              className="tf-field mt-1 resize-y"
+          <div>
+            <label className="block">
+              <span className="text-xs font-medium text-zinc-500">Mô tả</span>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={4}
+                placeholder="Thêm mô tả chi tiết..."
+                className="tf-field mt-1 resize-y"
+              />
+            </label>
+            <TaskFileSection
+              taskId={task.id}
+              kind="BRIEF"
+              initialFiles={task.files.filter((f) => f.kind === "BRIEF")}
+              currentUserId={currentUserId}
             />
-          </label>
+          </div>
 
-          <label className="block">
-            <span className="text-xs font-medium text-zinc-500">
-              Kết quả công việc
-            </span>
-            <textarea
-              value={result}
-              onChange={(event) => setResult(event.target.value)}
-              rows={4}
-              placeholder="Ghi lại nội dung đã hoàn thành, đường dẫn hoặc thông tin bàn giao..."
-              className="tf-field mt-1 resize-y border-emerald-200 bg-emerald-50/30 focus:bg-white"
+          <div>
+            <label className="block">
+              <span className="text-xs font-medium text-zinc-500">
+                Kết quả công việc
+              </span>
+              <textarea
+                value={result}
+                onChange={(event) => setResult(event.target.value)}
+                rows={4}
+                placeholder="Ghi lại nội dung đã hoàn thành, đường dẫn hoặc thông tin bàn giao..."
+                className="tf-field mt-1 resize-y border-emerald-200 bg-emerald-50/30 focus:bg-white"
+              />
+            </label>
+            <TaskFileSection
+              taskId={task.id}
+              kind="RESULT"
+              initialFiles={task.files.filter((f) => f.kind === "RESULT")}
+              currentUserId={currentUserId}
             />
-          </label>
+          </div>
 
           <div className="flex items-center justify-between">
             <button

@@ -13,6 +13,7 @@ import {
   ListPlus,
   GripVertical,
   MessageSquare,
+  Paperclip,
 } from "lucide-react";
 import { moveTask } from "@/app/actions/tasks";
 import { STATUSES, PRIORITIES, type MemberDTO, type TaskDTO } from "@/lib/types";
@@ -312,6 +313,15 @@ export default function Board({
                                   <span className="inline-flex items-center gap-1 text-[11px] text-zinc-400">
                                     <MessageSquare size={13} strokeWidth={1.8} aria-hidden="true" />
                                     {task.comments.length}
+                                  </span>
+                                )}
+                                {task.files.length > 0 && (
+                                  <span
+                                    className="inline-flex items-center gap-1 text-[11px] text-zinc-400"
+                                    title={`${task.files.length} tệp đính kèm`}
+                                  >
+                                    <Paperclip size={13} strokeWidth={1.8} aria-hidden="true" />
+                                    {task.files.length}
                                   </span>
                                 )}
                                 {task.result && (

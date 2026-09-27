@@ -17,6 +17,19 @@ export type TaskDTO = {
   assigneeId: string | null;
   comments: CommentDTO[];
   followers: { id: string; name: string; avatarUrl: string | null }[];
+  files: TaskFileDTO[];
+};
+
+export type TaskFileKind = "BRIEF" | "RESULT";
+
+export type TaskFileDTO = {
+  id: string;
+  kind: TaskFileKind;
+  name: string;
+  mimeType: string;
+  size: number;
+  createdAt: string;
+  uploader: { id: string; name: string } | null;
 };
 
 export type MemberDTO = {

@@ -82,6 +82,19 @@ export default async function ProjectPage({
               user: { select: { id: true, name: true, avatarUrl: true } },
             },
           },
+          // Chỉ lấy thông tin mô tả; nội dung tệp tải riêng qua API khi bấm tải về.
+          files: {
+            select: {
+              id: true,
+              kind: true,
+              name: true,
+              mimeType: true,
+              size: true,
+              createdAt: true,
+              uploader: { select: { id: true, name: true } },
+            },
+            orderBy: { createdAt: "asc" },
+          },
         },
         orderBy: { order: "asc" },
       },
@@ -190,6 +203,15 @@ export default async function ProjectPage({
       author: c.author,
     })),
     followers: t.followers.map((f) => f.user),
+    files: t.files.map((f) => ({
+      id: f.id,
+      kind: f.kind === "RESULT" ? "RESULT" : "BRIEF",
+      name: f.name,
+      mimeType: f.mimeType,
+      size: f.size,
+      createdAt: f.createdAt.toISOString(),
+      uploader: f.uploader,
+    })),
   }));
 
   const isOwner = project.ownerId === user.id;
