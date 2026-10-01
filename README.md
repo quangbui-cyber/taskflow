@@ -79,6 +79,8 @@ Trang project `/projects/[id]` là bảng Kanban gồm 3 cột:
 Các thao tác chính:
 
 - Tạo task nhanh ở cuối mỗi cột.
+- Khi tạo task, có thể chọn nhiều tệp giao việc và tệp kết quả, xem danh sách hoặc bỏ chọn trước khi bấm **Tạo task**. Tổng dung lượng các tệp trong một lần tạo tối đa **4 MB**; hỗ trợ PDF, hình ảnh, Word, Excel, PowerPoint, TXT và CSV.
+- Task và tệp đính kèm được lưu cùng nhau. Nếu tệp không hợp lệ, nội dung đã nhập và danh sách tệp được giữ lại để sửa và gửi lại.
 - Kéo thả task giữa các cột hoặc đổi vị trí trong cùng cột.
 - Bấm vào task để mở chi tiết.
 - Trong chi tiết task có thể sửa tiêu đề, mô tả, trạng thái, độ ưu tiên, người làm, hạn chót và bình luận.
@@ -314,3 +316,4 @@ Xem hướng dẫn triển khai từng bước trong [DEPLOY.md](DEPLOY.md). Tà
 - Khi muốn theo dõi doanh số sạch, admin tạo Client, tạo Team, rồi liên kết các user vai trò Account vào Team.
 - Khi nhân viên nghỉ việc, admin có thể xóa tài khoản. Các quan hệ dữ liệu sẽ xử lý theo schema Prisma hiện tại.
 - Nếu thay đổi `prisma/schema.prisma`, cần tạo migration và deploy migration cùng code.
+
