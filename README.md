@@ -7,6 +7,7 @@ TaskFlow là ứng dụng quản lý project và task nội bộ cho nhóm. App 
 ## Mục lục
 
 - [Công nghệ sử dụng](#công-nghệ-sử-dụng)
+- [Design system](#design-system)
 - [Vai trò người dùng](#vai-trò-người-dùng)
 - [Hướng dẫn sử dụng app](#hướng-dẫn-sử-dụng-app)
 - [Chạy app trên máy cá nhân](#chạy-app-trên-máy-cá-nhân)
@@ -24,6 +25,12 @@ TaskFlow là ứng dụng quản lý project và task nội bộ cho nhóm. App 
 - Đăng nhập bằng email/mật khẩu, mật khẩu hash bằng `bcryptjs`
 - Session cookie ký bằng JWT qua `jose`
 - Kéo thả Kanban bằng `@hello-pangea/dnd`
+
+## Design system
+
+TaskFlow dùng **myCreative UI Foundation v1** làm nền giao diện chung cho các màn mới của TaskFlow, COSTFLOW và WORKFLOW. Xem [hợp đồng sử dụng và API component](docs/DESIGN_SYSTEM.md); mở `/design-system` khi app đang chạy để thử các trạng thái form, nút, bảng và dialog bằng dữ liệu giả lập.
+
+Tokens nằm trong `app/design-system.css`, component chung trong `components/ui/`. Màn đăng nhập đã áp dụng; các màn khác chuyển dần khi triển khai tính năng liên quan. TypeScript, lint phần thay đổi, build cục bộ và browser UI đã được kiểm tra; chưa xác minh DB/nghiệp vụ hoặc triển khai production.
 
 ## Vai trò người dùng
 
