@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import "./globals.css";
+import "./design-system.css";
 import InteractionProvider from "@/components/InteractionProvider";
 
 export const metadata: Metadata = {

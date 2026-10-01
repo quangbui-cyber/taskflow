@@ -4,6 +4,9 @@ import { useActionState } from "react";
 import { LogIn } from "lucide-react";
 import { login, type AuthState } from "@/app/actions/auth";
 import Brand from "@/components/Brand";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Field";
+import { Alert } from "@/components/ui/Presentation";
 
 export default function LoginPage() {
   const [state, formAction, pending] = useActionState<AuthState, FormData>(
@@ -26,10 +29,7 @@ export default function LoginPage() {
           className="tf-panel space-y-5 p-6"
         >
           <div>
-            <label className="tf-label" htmlFor="email">
-              Email
-            </label>
-            <input
+            <Input label="Email"
               id="email"
               name="email"
               type="email"
@@ -40,13 +40,7 @@ export default function LoginPage() {
             />
           </div>
           <div>
-            <label
-              className="tf-label"
-              htmlFor="password"
-            >
-              Mật khẩu
-            </label>
-            <input
+            <Input label="Mật khẩu"
               id="password"
               name="password"
               type="password"
@@ -58,19 +52,18 @@ export default function LoginPage() {
           </div>
 
           {state.error && (
-            <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
-              {state.error}
-            </p>
+            <Alert tone="danger" title={state.error} />
           )}
 
-          <button
+          <Button
             type="submit"
-            disabled={pending}
+            loading={pending}
+            loadingLabel="Đang đăng nhập…"
             className="tf-button-primary w-full"
           >
             <LogIn size={16} aria-hidden="true" />
             {pending ? "Đang đăng nhập..." : "Đăng nhập"}
-          </button>
+          </Button>
         </form>
 
         <p className="text-center text-sm text-zinc-500 mt-4">

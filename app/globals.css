@@ -125,7 +125,7 @@ textarea:focus-visible {
 
 .tf-page {
   width: 100%;
-  max-width: 1220px;
+  max-width: var(--page-width);
   margin: 0 auto;
   padding: 32px;
 }
@@ -139,19 +139,19 @@ textarea:focus-visible {
 
 .tf-panel {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-panel);
   background: var(--surface);
   box-shadow: var(--shadow-sm);
 }
 
 .tf-panel-flat {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-panel);
   background: var(--surface);
 }
 
 .tf-page-title {
-  font-size: 30px;
+  font-size: var(--text-title);
   font-weight: 650;
   line-height: 1.16;
   letter-spacing: 0;
