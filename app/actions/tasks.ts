@@ -7,6 +7,7 @@ import { getMembership, requireUser } from "@/lib/auth";
 import { followerIds, notify } from "@/lib/notify";
 import { sendGoogleChat } from "@/lib/googleChat";
 import { PRIORITIES, STATUSES } from "@/lib/types";
+import { readTaskCreationFiles } from "@/lib/taskCreationFiles";
 
 async function projectChat(projectId: string) {
   const project = await prisma.project.findUnique({
@@ -122,6 +123,15 @@ export async function createTask(
     return { error: "Người được giao không thuộc project này." };
   }
 
+  let attachments: Awaited<ReturnType<typeof readTaskCreationFiles>>;
+  try {
+    attachments = await readTaskCreationFiles(formData);
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Tệp đính kèm không hợp lệ.",
+    };
+  }
+
   const last = await prisma.task.findFirst({
     where: { projectId, status },
     orderBy: { order: "desc" },
@@ -140,6 +150,14 @@ export async function createTask(
       creatorId: user.id,
       order: (last?.order ?? 0) + 1,
       completedAt: status === "DONE" ? new Date() : null,
+      // Nested writes commit the task and every attachment together.
+      files: {
+        create: attachments.map(({ kind, upload }) => ({
+          ...upload,
+          kind,
+          uploaderId: user.id,
+        })),
+      },
     },
     include: { assignee: { select: { name: true } } },
   });
@@ -478,3 +496,4 @@ export async function removeFollower(taskId: string, userId: string) {
   revalidatePath(`/projects/${task.projectId}`);
   revalidatePath("/");
 }
+
