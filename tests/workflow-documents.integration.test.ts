@@ -20,7 +20,7 @@ test("Catalog publication: family freshness and confirmation gates", async () =>
     const admin = await prisma.user.create({data:{name:prefix,email:`${prefix}@example.test`,passwordHash:"unused",role:"ADMIN"}});
     const employee = await prisma.user.create({data:{name:prefix,email:`${prefix}-employee@example.test`,passwordHash:"unused",managerId:admin.id}});
     ids.push(admin.id, employee.id);
-    const fields = {kind:"PROPOSAL_ADVANCE",name:prefix,category:"Thử nghiệm",purpose:"Mục đích thử",instructions:"Hướng dẫn thử",signerNames:"Test",ownerId:admin.id,accountantId:admin.id,ceoId:admin.id};
+    const fields = {kind:"PROPOSAL_ADVANCE",name:prefix,category:"Thử nghiệm",purpose:"Mục đích thử",instructions:"Hướng dẫn thử",signerNames:"Test",ownerId:admin.id,accountantId:admin.id,ceoId:admin.id,requirements:JSON.stringify({schemaVersion:1,requiredFields:["content"],requiredDocuments:[]})};
     const publish = async (parentTemplateId = "") => {
       const id = (await act(admin,"SAVE_TEMPLATE",{...fields,parentTemplateId,changeNote:parentTemplateId ? "Sửa hướng dẫn" : ""},true)).templateId!;
       const current = () => prisma.workflowTemplate.findUniqueOrThrow({where:{id}});
@@ -57,5 +57,50 @@ test("Catalog publication: family freshness and confirmation gates", async () =>
     await prisma.workflowFile.deleteMany({where:{templateId:{in:templates.map(t=>t.id)}}});
     await prisma.workflowTemplate.deleteMany({where:{id:{in:templates.map(t=>t.id)}}});
     await prisma.user.deleteMany({where:{id:{in:ids}}}); await prisma.$disconnect();
+  }
+});
+
+test("Draft supporting documents: persisted minimum draft, strict slots and server bypass rejection", async () => {
+  const {prisma} = await import("../lib/prisma");
+  const {executeWorkflow,loadDocument,downloadWorkflowFile} = await import("../lib/workflow/service");
+  const prefix = `wf4-draft-${randomUUID()}`; const ids:string[]=[]; const requestIds:string[]=[];
+  const proof={name:"proof.pdf",mimeType:"application/pdf",size:5,data:Buffer.from("%PDF-")};
+  const act=async(actor:{id:string;role:string},command:string,fields:Record<string,string>,upload:typeof proof|null=null)=>{const f=new FormData();f.set("command",command);for(const[k,v]of Object.entries(fields))f.set(k,v);return executeWorkflow(actor,f,upload);};
+  try {
+    const admin=await prisma.user.create({data:{name:prefix,email:`${prefix}@example.test`,passwordHash:"unused",role:"ADMIN"}});ids.push(admin.id);
+    const creator=await prisma.user.create({data:{name:prefix,email:`${prefix}-creator@example.test`,passwordHash:"unused",managerId:admin.id}});ids.push(creator.id);
+    const t=await prisma.workflowTemplate.create({data:{familyId:randomUUID(),version:1,kind:"PROPOSAL_ADVANCE",name:prefix,createdBy:admin.id,ownerId:admin.id,accountantId:admin.id,ceoId:admin.id,signerNames:"Test",instructions:"Test only",publishedAt:new Date(),requirements:{schemaVersion:1,requiredFields:["counterparty","amount"],requiredDocuments:[{key:"invoice",label:"Hóa đơn"}]}}});
+    const fields={templateId:t.id,title:prefix};
+    const id=(await act(creator,"SAVE_DOCUMENT",fields)).requestId!;requestIds.push(id);
+    const req=()=>prisma.workflowRequest.findUniqueOrThrow({where:{id}});
+    const run=async(command:string,extra:Record<string,string>={},upload:typeof proof|null=null)=>act(creator,command,{requestId:id,version:String((await req()).version),...extra},upload);
+    assert.equal((await loadDocument(id,creator))!.request.state,"DRAFT");
+    await assert.rejects(()=>run("SUBMIT_DOCUMENT",{complete:"true"}),/Đối tác.*Giá trị.*Tài liệu chính.*Hóa đơn/);
+    await assert.rejects(()=>run("SAVE_DOCUMENT",{...fields,amount:"invalid"}));
+    await run("SAVE_DOCUMENT",{...fields,counterparty:"Test",amount:"100.4"},proof);
+    await run("ADD_REFERENCE",{},proof);
+    await assert.rejects(()=>run("SUBMIT_DOCUMENT"),/Hóa đơn/);
+    await assert.rejects(()=>run("ADD_SUPPORTING_DOCUMENT",{supportingSlot:"foreign"},proof),/Vị trí/);
+    await assert.rejects(()=>run("ADD_SUPPORTING_DOCUMENT",{supportingSlot:"invoice"},{...proof,size:4*1024*1024+1}),/4 MB/);
+    await run("ADD_SUPPORTING_DOCUMENT",{supportingSlot:"invoice"},proof);
+    const original=(await req()).payload as unknown as import("../lib/workflow/documents").DocumentPayload;
+    const first=original.supportingFiles!.invoice;
+    await run("ADD_SUPPORTING_DOCUMENT",{supportingSlot:"invoice"},{...proof,data:Buffer.from("%PDF2")});
+    assert.ok(await downloadWorkflowFile(first,creator));
+    const replacement=(await req()).payload as unknown as import("../lib/workflow/documents").DocumentPayload;
+    assert.notEqual(replacement.supportingFiles!.invoice,first);
+    const foreign=(await act(creator,"SAVE_DOCUMENT",{...fields,title:"Foreign"},proof)).requestId!;requestIds.push(foreign);
+    const foreignBody=(await prisma.workflowRequest.findUniqueOrThrow({where:{id:foreign}})).payload as unknown as import("../lib/workflow/documents").DocumentPayload;
+    await prisma.workflowRequest.update({where:{id},data:{payload:{...replacement,supportingFiles:{invoice:foreignBody.mainFileId}}}});
+    await assert.rejects(()=>run("SUBMIT_DOCUMENT"),/đúng hồ sơ/);
+    await prisma.workflowRequest.update({where:{id},data:{payload:JSON.parse(JSON.stringify(replacement))}});
+    await run("SAVE_DOCUMENT",{...fields,counterparty:"Test",amount:"100.4"});
+    assert.deepEqual(((await req()).payload as unknown as import("../lib/workflow/documents").DocumentPayload).supportingFiles,replacement.supportingFiles);
+    await run("SUBMIT_DOCUMENT");
+    assert.equal((await req()).state,"SUBMITTED");
+    await assert.rejects(()=>run("ADD_SUPPORTING_DOCUMENT",{supportingSlot:"invoice"},proof),/nháp/);
+  } finally {
+    await prisma.workflowHistory.deleteMany({where:{requestId:{in:requestIds}}});await prisma.workflowFile.deleteMany({where:{requestId:{in:requestIds}}});await prisma.workflowRequest.deleteMany({where:{id:{in:requestIds}}});
+    await prisma.workflowTemplate.deleteMany({where:{createdBy:{in:ids}}});await prisma.user.deleteMany({where:{id:{in:ids}}});await prisma.$disconnect();
   }
 });
