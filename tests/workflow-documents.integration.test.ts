@@ -81,13 +81,14 @@ test("Catalog publication: family freshness and confirmation gates", async () =>
 
 test("Submission history: 10/12 million original bytes, late references, lineage authorization and legacy gap",async()=>{
   const {prisma}=await import("../lib/prisma");const {executeWorkflow,downloadWorkflowFile}=await import("../lib/workflow/service");const {loadSubmissionView}=await import("../lib/workflow/submissions");
-  const prefix=`wf4-history-${randomUUID()}`;const ids:string[]=[];const requestIds:string[]=[];
+  const prefix=`wf4-history-${randomUUID()}`;const ids:string[]=[];const requestIds:string[]=[];let projectId:string|undefined;
   const act=async(actor:{id:string;role:string},command:string,fields:Record<string,string>,bytes?:string)=>{const f=new FormData();f.set("command",command);for(const[k,v]of Object.entries(fields))f.set(k,v);return executeWorkflow(actor,f,bytes?{name:"same-name.pdf",mimeType:"application/pdf",size:Buffer.byteLength(bytes),data:Buffer.from(bytes)}:null);};
   try{
     const mk=async(label:string,role="USER",managerId?:string)=>{const u=await prisma.user.create({data:{name:prefix,email:`${prefix}-${label}@example.test`,passwordHash:"unused",role,managerId}});ids.push(u.id);return u;};
-    const admin=await mk("admin","ADMIN");const creator=await mk("creator","USER",admin.id);const stranger=await mk("stranger");
-    const template=await prisma.workflowTemplate.create({data:{familyId:randomUUID(),version:1,kind:"PROPOSAL",name:prefix,createdBy:admin.id,ownerId:admin.id,accountantId:admin.id,ceoId:admin.id,signerNames:"Test",instructions:"Test only",publishedAt:new Date(),requirements:{schemaVersion:1,requiredFields:["amount"],requiredDocuments:[]}}});
-    const fields={templateId:template.id,title:prefix,amount:"10000000"};
+    const admin=await mk("admin","ADMIN");const creator=await mk("creator","USER",admin.id);const stranger=await mk("stranger");const member=await mk("member");const assigned=await mk("assigned");
+    projectId=(await prisma.project.create({data:{name:prefix,ownerId:creator.id,members:{create:[creator,member].map(u=>({userId:u.id}))}}})).id;
+    const template=await prisma.workflowTemplate.create({data:{familyId:randomUUID(),version:1,kind:"PROPOSAL",name:prefix,createdBy:admin.id,ownerId:admin.id,accountantId:assigned.id,ceoId:admin.id,signerNames:"Test",instructions:"Test only",publishedAt:new Date(),requirements:{schemaVersion:1,requiredFields:["amount"],requiredDocuments:[]}}});
+    const fields={templateId:template.id,projectId,title:prefix,amount:"10000000"};
     const first=(await act(creator,"SAVE_DOCUMENT",fields,"%PDF-replaced")).requestId!;requestIds.push(first);
     const req=(id:string)=>prisma.workflowRequest.findUniqueOrThrow({where:{id}});
     const run=async(id:string,actor:typeof creator,command:string,fields:Record<string,string>={},bytes?:string)=>act(actor,command,{requestId:id,version:String((await req(id)).version),...fields},bytes);
@@ -105,11 +106,16 @@ test("Submission history: 10/12 million original bytes, late references, lineage
     assert.equal(Buffer.from(oldDownload!.data).toString(),"%PDF-first-10000000");assert.equal(Buffer.from(newDownload!.data).toString(),"%PDF-second-12000000");assert.notEqual(oldDownload!.sha256,newDownload!.sha256);
     assert.equal(await loadSubmissionView(second,"forged",creator),null);assert.equal(await loadSubmissionView(second,current!.attempts[0].id,stranger),null);assert.equal(await downloadWorkflowFile(original.mainFileId,stranger),null);
     assert.ok(await loadSubmissionView(second,current!.attempts[0].id,admin));
+    assert.ok(await loadSubmissionView(second,current!.attempts[0].id,assigned));
+    assert.ok(await loadSubmissionView(second,current!.attempts[0].id,member));
+    assert.ok(await downloadWorkflowFile(original.mainFileId,member));
+    await prisma.projectMember.delete({where:{projectId_userId:{projectId,userId:member.id}}});
+    assert.equal(await loadSubmissionView(second,current!.attempts[0].id,member),null);assert.equal(await downloadWorkflowFile(original.mainFileId,member),null);
     await prisma.user.update({where:{id:creator.id},data:{isActive:false}});await assert.rejects(()=>loadSubmissionView(second,current!.attempts[0].id,creator),/hoạt động/);await prisma.user.update({where:{id:creator.id},data:{isActive:true}});
     const history=await prisma.workflowHistory.findUniqueOrThrow({where:{id:current!.attempts[0].id}});const snapshot=history.snapshot as unknown as {payload:import("../lib/workflow/documents").DocumentPayload};delete snapshot.payload.submittedFiles;
     await prisma.workflowHistory.update({where:{id:history.id},data:{snapshot:JSON.parse(JSON.stringify(snapshot))}});
     const legacy=await loadSubmissionView(second,history.id,creator);assert.equal(legacy!.legacyMissingManifest,true);assert.ok(!legacy!.detail.request.files.some(f=>f.kind==="MAIN"));
-  }finally{await prisma.workflowDecision.deleteMany({where:{requestId:{in:requestIds}}});await prisma.workflowHistory.deleteMany({where:{requestId:{in:requestIds}}});await prisma.workflowFile.deleteMany({where:{requestId:{in:requestIds}}});await prisma.workflowRequest.deleteMany({where:{id:{in:requestIds}}});await prisma.workflowTemplate.deleteMany({where:{createdBy:{in:ids}}});await prisma.user.deleteMany({where:{id:{in:ids}}});await prisma.$disconnect();}
+  }finally{await prisma.workflowDecision.deleteMany({where:{requestId:{in:requestIds}}});await prisma.workflowHistory.deleteMany({where:{requestId:{in:requestIds}}});await prisma.workflowFile.deleteMany({where:{requestId:{in:requestIds}}});await prisma.workflowRequest.deleteMany({where:{id:{in:requestIds}}});await prisma.workflowTemplate.deleteMany({where:{createdBy:{in:ids}}});if(projectId){await prisma.projectMember.deleteMany({where:{projectId}});await prisma.project.delete({where:{id:projectId}});}await prisma.user.deleteMany({where:{id:{in:ids}}});await prisma.$disconnect();}
 });
 
 test("Draft supporting documents: persisted minimum draft, strict slots and server bypass rejection", async () => {

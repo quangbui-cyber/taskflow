@@ -1,0 +1,17 @@
+# Danh mục và phiên bản hồ sơ — Phase 4
+
+Người lập có thể vào **Danh mục mẫu** để đọc mục đích, hướng dẫn và danh sách thông tin/tài liệu bắt buộc, tải mẫu rồi lập hồ sơ; hoặc vào **Lập hồ sơ** và chọn mẫu trực tiếp. Danh mục do Admin đặt, không dùng taxonomy cố định. Mỗi họ mẫu có các phiên bản riêng; danh mục chỉ hiện phiên bản đã công bố mới nhất của mỗi họ. Admin/owner quản lý các phiên bản ở **Mẫu & phân công**. Mẫu nháp và file chưa công bố vẫn được kiểm tra quyền ở server.
+
+Admin cấu hình các trường sẵn có và vị trí tài liệu bắt buộc theo phiên bản. Lưu mẫu mới cần cấu hình checklist rõ ràng; sửa nháp bỏ xác nhận owner. Owner xác nhận đúng phiên bản rồi Admin công bố. Phiên bản kế tiếp cần ghi chú thay đổi. Mẫu cũ chưa có cấu hình dùng chính sách tương thích: nội dung và tài liệu chính.
+
+Chọn mẫu và đặt tên đã đủ để lưu nháp thật. Hồ sơ có thể độc lập hoặc thuộc project được phép truy cập. Checklist chỉ ra dữ liệu thiếu trước khi gửi; nhấn vào mục đưa focus tới trường/vị trí tương ứng. Vị trí tài liệu bổ sung chỉ tải được sau khi nháp được lưu. Chọn tệp chưa đồng nghĩa đã lưu; chỉ sau khi server trả thành công mới có tệp lưu bền vững. Server kiểm tra đủ dữ liệu, đúng parent, loại và vị trí tệp, người xử lý, phiên bản mẫu và phiên bản hồ sơ, không tin cờ hoàn tất của client. Kế toán vẫn rà soát chất lượng/nội dung ở bước duyệt.
+
+Công bố v2 giữ nguyên nháp và hồ sơ v1. Nháp v1 vẫn sửa/lưu được nhưng chưa được gửi mới; thông báo ghi v1/v2, ghi chú và link tải mẫu mới. **Tạo nháp theo mẫu mới** mở form trống: không chép nội dung, project, liên kết, tệp, quyết định hoặc bản ký. Form cũ tạm ẩn để tránh chỉnh nhầm. Nháp cũ giữ nguyên, nháp mới chỉ tồn tại sau khi người lập lưu. Hồ sơ đã gửi vẫn giữ mẫu lúc gửi.
+
+Chi tiết mặc định là **Bản hiện tại**. Bộ chọn **Lần gửi** chỉ liệt kê sự kiện gửi duyệt thật, không lấy số lần lưu làm lần gửi. Mỗi bản lịch sử giữ nội dung, số tiền, hướng dẫn/checklist mẫu và manifest ID tệp lúc gửi; chỉ đọc. Tài liệu chia thành **Tài liệu chính**, **Tài liệu bắt buộc bổ sung**, **Tham khảo**, **Bản ký**. Tham khảo có ngày thêm, tệp thêm sau lần gửi được ghi rõ trong cùng nhóm. Đường tải dùng đúng ID tệp, không thay bằng tệp mới có cùng tên. Nếu lịch sử cũ chưa có manifest thì hiện giới hạn chứng minh, không đoán tài liệu chính từ dữ liệu hiện tại.
+
+Quyền xem và tải được kiểm tra theo từng hồ sơ trong chuỗi nguồn/bản trình lại. Creator, actor được phân công, member project và Admin đọc theo quyền hiện tại; member bị gỡ mất quyền nếu không có vai trò đọc khác. Tài khoản ngừng hoạt động bị chặn. Không mở quyền chỉ vì biết ID lịch sử hay ID tệp.
+
+Giữ nền duyệt chung Quản lý → Kế toán → CEO và các ý nghĩa riêng của duyệt, ngân sách, tiền, ký, thực hiện. File tối đa 4 MiB, PDF/DOCX/XLSX/JPG/PNG, bytes và SHA-256 giữ bền vững. Mẫu hợp đồng, lịch làm việc/nhắc việc, checklist công ty, tài khoản thật và pilot vẫn theo các gate đã ghi; dữ liệu thử local không phải cấu hình được công ty nghiệm thu.
+
+Kiểm chứng local ngày 2026-10-02: 28/28 tests tích hợp không bỏ qua; lint và Next build trực tiếp đạt; migration status 30 migrations đồng bộ. Browser kiểm tra danh mục, nháp tối thiểu, reload, upload theo vị trí, checklist, mẫu mới, bản lịch sử 10/12 triệu và download hash. Lệnh `build:app` còn bị EPERM khi Prisma thay DLL đang được tiến trình khác giữ trên Windows; build Next với client đã tạo đạt. Không có migrate/deploy vận hành hoặc xác nhận production.
