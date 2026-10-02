@@ -29,7 +29,23 @@ test("Catalog publication: family freshness and confirmation gates", async () =>
       await act(admin,"PUBLISH_TEMPLATE",{templateId:id,version:String((await current()).revision)});
       return current();
     };
-    const a = await publish(); const b = await publish(); const a2 = await publish(a.id);
+    const a = await publish(); const b = await publish();
+    const oldId=(await act(employee,"SAVE_DOCUMENT",{templateId:a.id,title:prefix,content:"Old content",amount:"10000000"},true)).requestId!;
+    const before=await prisma.workflowRequest.findUniqueOrThrow({where:{id:oldId}});
+    const a2 = await publish(a.id);
+    assert.deepEqual(await prisma.workflowRequest.findUniqueOrThrow({where:{id:oldId}}),before);
+    await assert.rejects(()=>act(employee,"SAVE_DOCUMENT",{requestId:oldId,version:String(before.version),templateId:a2.id,title:prefix}),/Không đổi mẫu/);
+    await act(employee,"SAVE_DOCUMENT",{requestId:oldId,version:String(before.version),templateId:a.id,title:prefix,content:"Still editable"});
+    const saved=await prisma.workflowRequest.findUniqueOrThrow({where:{id:oldId}});
+    assert.equal(saved.state,"DRAFT"); assert.equal(saved.templateId,a.id);
+    await assert.rejects(()=>act(employee,"SUBMIT_DOCUMENT",{requestId:oldId,version:String(saved.version)}),/phiên bản mới/);
+    const blankId=(await act(employee,"SAVE_DOCUMENT",{templateId:a2.id,title:"New blank"})).requestId!;
+    const blank=await prisma.workflowRequest.findUniqueOrThrow({where:{id:blankId}});
+    assert.equal(blank.parentId,null); assert.equal(blank.projectId,null);
+    const blankBody=blank.payload as unknown as import("../lib/workflow/documents").DocumentPayload;
+    for(const key of ["content","counterparty","amount","linkedRequestId","mainFileId"] as const) assert.equal(blankBody[key],"");
+    assert.deepEqual(blankBody.supportingFiles,{}); assert.equal(blankBody.signature,undefined);
+    await assert.rejects(()=>act(employee,"SAVE_DOCUMENT",{templateId:a.id,title:"Obsolete new"}),/phiên bản hiện tại/);
     assert.equal(a2.familyId,a.familyId); assert.notEqual(a.familyId,b.familyId);
     assert.equal(a.version,1); assert.equal(b.version,1); assert.equal(a2.version,2);
     const draft = (await act(admin,"SAVE_TEMPLATE",{...fields,parentTemplateId:b.id,changeNote:"Nháp"})).templateId!;
@@ -53,6 +69,9 @@ test("Catalog publication: family freshness and confirmation gates", async () =>
     assert.equal(await downloadWorkflowFile(hidden.fileId!,employee),null);
     assert.equal(a2.category,fields.category); assert.equal(a2.purpose,fields.purpose);
   } finally {
+    const requests=await prisma.workflowRequest.findMany({where:{creatorId:{in:ids}},select:{id:true}});
+    const requestIds=requests.map(r=>r.id);
+    await prisma.workflowHistory.deleteMany({where:{requestId:{in:requestIds}}});await prisma.workflowFile.deleteMany({where:{requestId:{in:requestIds}}});await prisma.workflowRequest.deleteMany({where:{id:{in:requestIds}}});
     const templates = await prisma.workflowTemplate.findMany({where:{createdBy:{in:ids}},select:{id:true}});
     await prisma.workflowFile.deleteMany({where:{templateId:{in:templates.map(t=>t.id)}}});
     await prisma.workflowTemplate.deleteMany({where:{id:{in:templates.map(t=>t.id)}}});
