@@ -9,6 +9,9 @@ import MonthlyRevenueChart, {
   type MonthlyRevenuePoint,
 } from "@/components/MonthlyRevenueChart";
 import ProjectTypeMix from "@/components/ProjectTypeMix";
+import ClientRevenueDonut, {
+  type ClientRevenueRow,
+} from "@/components/ClientRevenueDonut";
 import ExecutionSchedule from "@/components/ExecutionSchedule";
 import {
   PROJECT_STATUSES,
@@ -18,7 +21,6 @@ import {
   projectTypeInfo,
 } from "@/lib/types";
 import {
-  Building2,
   ChevronDown,
   CircleDollarSign,
   Tags,
@@ -163,7 +165,33 @@ export default async function RevenuePage() {
     }
     return [...map.values()].sort((a, b) => b.earned - a.earned);
   }
-  const byClient = groupRevenue((p) => p.client);
+  const clientMap = new Map<string, ClientRevenueRow>();
+  for (const p of projects) {
+    const key = p.client?.id ?? "__none__";
+    const entry = clientMap.get(key) ?? {
+      key,
+      name: p.client?.name ?? "Chưa gán",
+      earned: 0,
+      bidding: 0,
+      count: 0,
+      wonCount: 0,
+      lostCount: 0,
+      projects: [],
+    };
+    entry.count += 1;
+    if (RECOGNIZED_REVENUE.includes(p.status)) entry.earned += p.revenue;
+    if (p.status === "BIDDING") entry.bidding += p.revenue;
+    if (WON.includes(p.status)) entry.wonCount += 1;
+    if (LOST.includes(p.status)) entry.lostCount += 1;
+    entry.projects.push({
+      id: p.id,
+      name: p.name,
+      status: p.status,
+      revenue: p.revenue,
+    });
+    clientMap.set(key, entry);
+  }
+  const byClient = [...clientMap.values()].sort((a, b) => b.earned - a.earned);
   const byAccount = groupRevenue((p) => p.account);
   const byTeam = groupRevenue((p) => p.account?.team ?? null);
   const byType = groupRevenue((p) => {
@@ -300,11 +328,7 @@ export default async function RevenuePage() {
             <RevenueWinRate rows={byAccount} />
           </div>
 
-          <RevenueBreakdown
-            title="Doanh số theo Client"
-            rows={byClient}
-            icon={Building2}
-          />
+          <ClientRevenueDonut rows={byClient} />
 
           <section className="tf-panel overflow-hidden">
             <div className="border-b border-zinc-100 px-5 py-3">
