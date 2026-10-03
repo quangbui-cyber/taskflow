@@ -25,8 +25,10 @@ function formatCompactVND(value: number) {
 
 export default function MonthlyRevenueChart({
   data,
+  periodLabel = "12 tháng gần nhất",
 }: {
   data: MonthlyRevenuePoint[];
+  periodLabel?: string;
 }) {
   const max = Math.max(1, ...data.map((point) => point.value));
   const total = data.reduce((sum, point) => sum + point.value, 0);
@@ -47,7 +49,7 @@ export default function MonthlyRevenueChart({
           </p>
         </div>
         <div className="text-right">
-          <p className="text-xs text-zinc-400">12 tháng gần nhất</p>
+          <p className="text-xs text-zinc-400">{periodLabel}</p>
           <p className="mt-1 text-sm font-semibold tabular-nums text-zinc-900">
             {formatVND(total)}
           </p>
@@ -57,7 +59,7 @@ export default function MonthlyRevenueChart({
       <div
         ref={scrollRef}
         className="overflow-x-auto overscroll-x-contain px-5 pb-5 pt-6"
-        aria-label="Biểu đồ doanh thu 12 tháng gần nhất"
+        aria-label={`Biểu đồ doanh thu ${periodLabel}`}
       >
         <div className="min-w-[640px] sm:min-w-[720px]">
           <div className="grid h-44 grid-cols-12 items-end gap-3 border-b border-zinc-200 sm:h-52">

@@ -23,21 +23,22 @@ export type ClientRevenueRow = {
   projects: ClientRevenueProject[];
 };
 
-// Màu múi theo thứ hạng doanh số; client ngoài top dùng lại màu theo vòng.
-const SLICE_COLORS = [
-  "#2563eb",
-  "#0d9488",
-  "#f59e0b",
-  "#8b5cf6",
-  "#ef4444",
-  "#10b981",
-  "#ec4899",
-  "#0ea5e9",
-  "#84cc16",
-  "#f97316",
-  "#6366f1",
-  "#71717a",
-];
+// Màu theo cấp bậc doanh số ghi nhận của client: cùng một tông xanh,
+// càng đậm doanh số càng lớn. Thứ tự từ cấp cao xuống thấp.
+const REVENUE_TIERS = [
+  { min: 5_000_000_000, label: "Từ 5 tỷ", color: "#172554" },
+  { min: 2_000_000_000, label: "2 – 5 tỷ", color: "#1e3a8a" },
+  { min: 1_000_000_000, label: "1 – 2 tỷ", color: "#1d4ed8" },
+  { min: 500_000_000, label: "500 triệu – 1 tỷ", color: "#3b82f6" },
+  { min: 0, label: "Dưới 500 triệu", color: "#93c5fd" },
+] as const;
+
+function revenueTier(earned: number) {
+  return (
+    REVENUE_TIERS.find((tier) => earned >= tier.min) ??
+    REVENUE_TIERS[REVENUE_TIERS.length - 1]
+  );
+}
 
 // Bán kính + nửa nét (kể cả khi múi được chọn dày thêm) phải nằm trong viewBox 100.
 const RADIUS = 38;
@@ -75,9 +76,9 @@ export default function ClientRevenueDonut({
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   const total = rows.reduce((sum, row) => sum + row.earned, 0);
-  const colored = rows.map((row, index) => ({
+  const colored = rows.map((row) => ({
     ...row,
-    color: SLICE_COLORS[index % SLICE_COLORS.length],
+    color: revenueTier(row.earned).color,
   }));
   const active = colored.filter((row) => row.earned > 0);
   const selected = colored.find((row) => row.key === selectedKey) ?? null;
@@ -177,6 +178,21 @@ export default function ClientRevenueDonut({
           </div>
 
           <div className="min-w-0">
+            <ul
+              className="mb-3 flex flex-wrap gap-x-4 gap-y-1.5 px-2 text-[11px] text-zinc-500"
+              aria-label="Cấp bậc doanh số"
+            >
+              {[...REVENUE_TIERS].reverse().map((tier) => (
+                <li key={tier.label} className="flex items-center gap-1.5">
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: tier.color }}
+                    aria-hidden="true"
+                  />
+                  {tier.label}
+                </li>
+              ))}
+            </ul>
             <ul>
               {colored.map((row) => {
                 const isSelected = row.key === selectedKey;
