@@ -27,6 +27,7 @@ model User {
   createdTasks         Task[]              @relation("TaskCreator")
   comments             Comment[]
   notifications        Notification[]
+  pushSubscriptions    PushSubscription[]
   taskFollows          TaskFollower[]
   accountProfile       Account?
   groupMemberships     MemberGroupMember[]
@@ -38,10 +39,32 @@ model User {
   @@index([isActive])
 }
 
+// Mỗi trình duyệt/thiết bị đăng ký riêng; endpoint chỉ thuộc một tài khoản.
+model PushSubscription {
+  id             String    @id @default(cuid())
+  endpoint       String    @unique
+  p256dh         String
+  auth           String
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionVersion Int
+  lastTestAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+enum ProjectCategory {
+  CLIENT
+  INTERNAL
+}
+
 model Project {
   id                   String          @id @default(cuid())
   name                 String
   description          String?
+  category             ProjectCategory @default(CLIENT)
   purchaseOrderNumber  String?         @unique
   color                String          @default("#6366f1")
   status               String          @default("BIDDING") // "BIDDING" | "ON_PROCESS" | "PENDING" | "DONE" | "CANCEL" | "FAIL"
@@ -56,6 +79,10 @@ model Project {
   client               Client?         @relation(fields: [clientId], references: [id], onDelete: SetNull)
   accountId            String?
   account              Account?        @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  responsibleTeamId    String?
+  responsibleTeam      SalesTeam?      @relation(fields: [responsibleTeamId], references: [id], onDelete: SetNull)
+  responsibleGroupId   String?
+  responsibleGroup     MemberGroup?    @relation(fields: [responsibleGroupId], references: [id], onDelete: SetNull)
   members              ProjectMember[]
   tasks                Task[]
   files                ProjectFile[]
@@ -66,6 +93,8 @@ model Project {
   @@index([status, onProcessAt])
   @@index([status, completedAt])
   @@index([executionStartAt])
+  @@index([responsibleTeamId])
+  @@index([responsibleGroupId])
 }
 
 // Danh mục khách hàng — do admin tạo sẵn
@@ -96,14 +125,16 @@ model SalesTeam {
   name      String    @unique
   createdAt DateTime  @default(now())
   accounts  Account[]
+  projects  Project[]
 }
 
-// Nhóm nhân sự cố định để thêm nhiều người vào project trong một lần
+// Phòng ban / nhóm phụ trách dự án và thêm nhiều thành viên trong một lần
 model MemberGroup {
   id        String              @id @default(cuid())
   name      String              @unique
   createdAt DateTime            @default(now())
   members   MemberGroupMember[]
+  projects  Project[]
 }
 
 model MemberGroupMember {

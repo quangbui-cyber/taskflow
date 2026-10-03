@@ -1,4 +1,6 @@
 import { Prisma } from "@prisma/client";
+import { after } from "next/server";
+import { deliverPush } from "@/lib/webPush";
 import { prisma } from "@/lib/prisma";
 import { sendGoogleChat } from "@/lib/googleChat";
 import { daysUntil, formatDue, isOverdue } from "@/lib/dates";
@@ -193,12 +195,25 @@ export async function GET(request: Request) {
       );
 
       const created = await withDatabaseRetry(() =>
-        prisma.notification.createMany({
+        prisma.notification.createManyAndReturn({
           data: notificationRows,
           skipDuplicates: true,
         })
       );
-      reminders += created.count;
+      reminders += created.length;
+      if (created.length > 0) {
+        after(async () => {
+          const results = await Promise.allSettled(created.map((notification) =>
+            deliverPush([notification.userId], {
+              type: notification.type,
+              message: notification.message,
+              projectId: notification.projectId ?? undefined,
+              taskId: notification.taskId ?? undefined,
+            })
+          ));
+          if (results.some((result) => result.status === "rejected")) console.warn("Some deadline push notifications could not be sent.");
+        });
+      }
 
       const message = buildMessage(project.name, overdue, dueToday);
       if (!message || !project.googleChatWebhookUrl) {

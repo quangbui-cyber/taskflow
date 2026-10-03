@@ -153,9 +153,9 @@ export default function MemberGroupManager({
             <UsersRound size={18} aria-hidden="true" />
           </span>
           <div>
-            <h2 className="font-semibold">Nhóm cố định</h2>
+            <h2 className="font-semibold">Phòng ban / Nhóm</h2>
             <p className="text-xs text-zinc-400">
-              Tạo một lần, dùng lại khi thêm thành viên vào các dự án.
+              Nhóm nhân sự theo phòng ban, dùng lại khi thêm thành viên vào dự án.
             </p>
           </div>
         </div>
@@ -167,7 +167,7 @@ export default function MemberGroupManager({
             type="text"
             value={newName}
             onChange={(event) => setNewName(event.target.value)}
-            placeholder="Tên nhóm, ví dụ: Thiết kế"
+            placeholder="Tên phòng ban / nhóm, ví dụ: Creative"
             className="tf-field min-w-0 flex-1"
           />
           <button
@@ -185,7 +185,7 @@ export default function MemberGroupManager({
 
       <ul className="divide-y divide-zinc-100">
         {groups.length === 0 && (
-          <li className="px-5 py-4 text-sm text-zinc-400">Chưa có nhóm cố định.</li>
+          <li className="px-5 py-4 text-sm text-zinc-400">Chưa có phòng ban hoặc nhóm.</li>
         )}
         {groups.map((group) => {
           const memberUsers = group.memberIds

@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
 import NotificationList from "@/components/NotificationList";
+import PushNotificationSettings from "@/components/PushNotificationSettings";
+import { pushConfiguration } from "@/lib/webPush";
 
 const PAGE_SIZE = 20;
 
@@ -49,9 +51,10 @@ export default async function NotificationsPage({
         name: true,
         color: true,
         status: true,
-        account: {
-          select: { team: { select: { id: true, name: true } } },
-        },
+        category: true,
+        responsibleTeam: { select: { id: true, name: true } },
+        responsibleGroup: { select: { id: true, name: true } },
+        account: { select: { team: { select: { id: true, name: true } } } },
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -90,6 +93,8 @@ export default async function NotificationsPage({
               Theo dõi các cập nhật mới và mở từng thông báo khi bạn sẵn sàng xử lý.
             </p>
           </div>
+
+          <PushNotificationSettings publicKey={pushConfiguration()?.publicKey ?? null} />
 
           <NotificationList
             key={`${view}-${requestedPage}`}

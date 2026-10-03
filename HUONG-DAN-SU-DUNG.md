@@ -12,7 +12,7 @@ Tài liệu này dành cho người dùng cuối của TaskFlow (myCreative), ba
 | --- | :---: | :---: | :---: |
 | Xem dự án mình tham gia | Có | Có | Có |
 | Tạo, sửa và cập nhật task trong dự án | Có | Có | Có |
-| Tạo dự án | Không | Có | Có |
+| Tạo dự án | Có | Có | Có |
 | Xem doanh số | Không | Dự án mình tham gia | Toàn công ty |
 | Xem hiệu suất cá nhân | Có | Có | Có |
 | Xem nhân viên trực tiếp | Khi được gán làm quản lý | Khi được gán làm quản lý | Toàn bộ nhân viên |
@@ -46,7 +46,7 @@ Các mục chính gồm:
 - **Thông báo:** cập nhật về giao việc, bình luận, theo dõi và hạn chót.
 - **Hiệu suất:** thống kê công việc cá nhân hoặc nhân viên.
 - **Doanh số:** chỉ hiển thị cho `ACCOUNT` và `ADMIN`.
-- **Dự án:** danh sách dự án đang hoạt động, được nhóm theo Team.
+- **Dự án:** danh sách dự án đang hoạt động, được nhóm theo Team/phòng ban phụ trách. Team kinh doanh có hai mục con **Khách hàng** và **Nội bộ**; các **Phòng ban / Nhóm** chỉ có mục **Nội bộ**. Các mục có số lượng dự án và có thể mở hoặc thu gọn. Dự án Khách hàng tự xếp theo Team của Account; dự án Nội bộ chưa chọn nhóm phụ trách nằm trong **Chưa gán Team**. Dự án Khách hàng cũ thiếu Account nằm trong **Cần gán Account**. Các nhóm trạng thái trong **Lưu trữ** cũng được chia theo hai loại này.
 - **Lưu trữ:** các dự án `Done`, `Fail`, `Cancel` hoặc `Pending`.
 - **Cài đặt:** chỉ hiển thị cho `ADMIN`.
 
@@ -77,25 +77,27 @@ Khu vực ưu tiên hiển thị:
 - Dự án `On Process` và `Bidding` xuất hiện trong nhóm đang hoạt động.
 - Dự án `Done`, `Fail`, `Cancel` và `Pending` được chuyển vào **Lưu trữ**.
 - Bấm tên dự án để mở bảng công việc.
-- `ACCOUNT` và `ADMIN` có thể bấm dấu **+** cạnh tiêu đề Dự án để tạo dự án mới.
+- Mọi người dùng có thể bấm dấu **+** cạnh tiêu đề Dự án để tạo dự án mới.
 
 ## 5. Tạo dự án
 
-Chỉ `ACCOUNT` và `ADMIN` có thể tạo dự án.
+Mọi người dùng đang hoạt động đều có thể tạo dự án Nội bộ hoặc Khách hàng. Quyền tạo/sở hữu dự án không cấp quyền xem hoặc sửa doanh thu.
 
 ### Tạo thủ công
 
 1. Bấm dấu **+** cạnh mục Dự án hoặc mở **Tạo dự án mới**.
-2. Nhập **Tên dự án** và mô tả nếu cần.
-3. Chọn **Loại hình**: Teambuilding, MICE, Activation, Event, Pur hoặc Other.
-4. Chọn **Client** và **Account**.
+2. Ở màn hình lựa chọn, bấm **Nội bộ** hoặc **Khách hàng** để mở form riêng. Có thể bấm **Chọn lại loại dự án** để quay lại.
+3. Nhập tên và mô tả nếu cần. Dự án Khách hàng có thêm **Loại hình**: Teambuilding, MICE, Activation, Event, Pur hoặc Other; dự án Nội bộ không cần chọn loại hình.
+4. Với dự án Khách hàng, bắt buộc chọn **Account phụ trách**; **Team kinh doanh** tự hiển thị theo Account và không chọn riêng. Chọn Client nếu cần. Với dự án Nội bộ, chọn **Team/phòng ban phụ trách** nếu cần.
 5. Điền ngày bắt đầu, ngày kết thúc nếu dự án chạy nhiều ngày.
-6. Nhập doanh thu dự kiến bằng VND.
+6. Với dự án Khách hàng, Admin/Account có thể nhập doanh thu dự kiến bằng VND.
 7. Bấm **Tạo dự án**.
 
-Dự án tạo thủ công có trạng thái ban đầu là `Bidding`. Người tạo trở thành chủ dự án. Nếu chọn Account, người dùng gắn với Account đó cũng được thêm vào dự án.
+Dự án Khách hàng tạo thủ công bắt đầu ở `Bidding`. Dự án Nội bộ bắt đầu ở `On Process`, không dùng Client/Account/PO và không tính vào doanh số. Dự án cũ mặc định là Khách hàng. Người tạo trở thành chủ dự án. Nếu chọn Account, người dùng gắn với Account đó cũng được thêm vào dự án.
 
 ### Tạo dự án từ PO PDF
+
+Chỉ Admin/Account được nhập PO, cho dự án có mục đích Khách hàng.
 
 1. Trong màn hình tạo dự án, bấm **Nhập PO PDF**.
 2. Chọn PO PDF của Jabil, dung lượng dưới 4 MB.
@@ -111,7 +113,9 @@ Khi tạo từ PO Jabil:
 
 ## 6. Thông tin và trạng thái dự án
 
-Phần đầu trang dự án hiển thị trạng thái, loại hình, lịch thực hiện, Client, Account, số PO, doanh thu và thành viên. Doanh thu chỉ hiển thị cho `ACCOUNT` và `ADMIN`.
+Phần đầu trang dự án hiển thị mục đích Nội bộ/Khách hàng, trạng thái, loại hình, lịch thực hiện, Client, Account, số PO, doanh thu và thành viên. Doanh thu chỉ hiển thị cho `ACCOUNT` và `ADMIN`.
+
+Dự án Khách hàng luôn xếp theo Team của Account: đổi Account hoặc đổi Team của Account sẽ cập nhật nhóm dự án trên thanh bên và báo cáo doanh số. Dự án cũ thiếu Account được đánh dấu **Cần gán Account** và phải chọn Account trước khi lưu thông tin. Dự án Nội bộ chọn nhóm phụ trách riêng; gán nhóm không tự thêm thành viên.
 
 ### Ý nghĩa trạng thái
 
@@ -131,10 +135,14 @@ Chỉ chủ dự án hoặc Admin có thể đổi trạng thái. Việc chuyể
 Chủ dự án hoặc Admin bấm biểu tượng **Sửa** cạnh tên dự án để cập nhật:
 
 - Tên và mô tả.
-- Loại hình.
+- Team/phòng ban phụ trách: chọn từ **Team kinh doanh** hoặc **Phòng ban / Nhóm** đã tạo trong Cài đặt; chỉ áp dụng cho Nội bộ. Chọn **Chưa gán** để bỏ nhóm phụ trách.
+- Loại hình (chỉ dự án Khách hàng).
 - Ngày thực hiện.
-- Doanh thu.
-- Client và Account.
+- Mục đích Nội bộ/Khách hàng (dự án có PO giữ mục đích Khách hàng).
+- Doanh thu: chỉ Admin/Account, với dự án Khách hàng.
+- Client và Account: với dự án Khách hàng, Account bắt buộc và Team tự cập nhật theo Account. Account mới được thêm vào thành viên dự án; Account cũ vẫn có thể tiếp tục tham gia.
+
+Chuyển sang Nội bộ xoá Client, Account và doanh thu. USER không được chuyển dự án đang có doanh thu; cần liên hệ Admin hoặc Account.
 
 Bấm **Lưu thay đổi** để xác nhận.
 
@@ -151,7 +159,7 @@ Chỉ chủ dự án có thể xóa dự án. Mở menu **Thao tác khác**, ch�
 Để thêm nhiều người cùng lúc:
 
 1. Mở danh sách thành viên.
-2. Ở mục **Thêm nhóm cố định**, chọn một nhóm.
+2. Ở mục **Thêm phòng ban / nhóm**, chọn một nhóm.
 3. Bấm **Thêm nhóm**.
 
 Lưu ý:
@@ -353,33 +361,43 @@ Trong tab **Quản lý tài khoản**, Admin có thể:
 
 Nên ưu tiên **Vô hiệu hóa** thay vì xóa để giữ lịch sử công việc. Khi vô hiệu hóa, người dùng bị đăng xuất và không thể đăng nhập. Muốn xóa vĩnh viễn, tài khoản phải được vô hiệu hóa trước và không còn sở hữu/tham gia dự án, task hoặc liên kết Account.
 
-### Tạo nhóm
+### Phòng ban / Nhóm
 
-Tab **Tạo nhóm** dùng để tạo nhóm nhân sự cố định:
+Tab **Phòng ban / Nhóm** dùng để tạo nhóm nhân sự theo phòng ban (Creative, Operations…) hoặc nhóm phối hợp:
 
 1. Đặt tên nhóm.
 2. Tìm và chọn thành viên.
 3. Lưu nhóm.
 
-Nhóm có thể sửa hoặc xóa và được dùng để thêm nhiều người vào dự án cùng lúc.
+Nhóm có thể sửa hoặc xóa và được dùng để thêm nhiều người vào dự án cùng lúc. Nếu xóa nhóm đang phụ trách dự án, dự án sẽ trở thành chưa gán nhóm phụ trách; thành viên và dữ liệu dự án vẫn được giữ. Thành viên được thêm tại thời điểm thao tác; sửa nhóm sau đó không tự thay đổi thành viên các dự án trước đó.
 
 ### Client
 
 Tab **Client** dùng để thêm, đổi tên hoặc xóa khách hàng. Xóa Client không xóa dự án; các dự án liên quan sẽ chuyển thành chưa gán Client.
 
-### Team
+### Team & Account
 
-Tạo Team kinh doanh trước khi tạo Account. Nếu Team đang được Account sử dụng, hãy chuyển Account sang Team khác trước khi xóa.
+Mở **Cài đặt → Team & Account** để quản lý Team kinh doanh và Account trong cùng một màn hình.
 
-### Account
+Ở phần **Team kinh doanh** phía trên, tạo Team trước khi thêm Account. Team mới sẽ xuất hiện ngay trong danh sách chọn Team ở phần Account bên dưới. Nếu Team đang được Account sử dụng, hãy chuyển Account sang Team khác trước khi xóa.
+
+Ở phần **Account** phía dưới:
 
 1. Chọn một người dùng có vai trò `Account` hoặc `Admin`.
 2. Chọn Team bắt buộc.
 3. Bấm **Lưu**.
 
-Sau khi tạo, có thể đổi Team hoặc xóa liên kết Account. Xóa Account không xóa tài khoản người dùng, nhưng các dự án đang gắn Account đó có thể trở thành chưa gán.
+Sau khi tạo, có thể đổi Team của Account; các dự án Khách hàng gắn với Account đó sẽ tự chuyển về Team mới. Nếu Account đang gắn với dự án, cần đổi Account của các dự án đó trước khi xóa.
 
 ## 15. Quy trình sử dụng đề xuất
+
+### Nhận thông báo trên điện thoại
+
+- **iPhone/iPad:** dùng iOS 16.4 trở lên. Mở địa chỉ HTTPS của app trong Safari → Chia sẻ → Thêm vào Màn hình chính. Mở app bằng biểu tượng mới và đăng nhập.
+- **Android/máy tính:** mở app bằng trình duyệt hỗ trợ Web Push, chẳng hạn Chrome.
+- Vào **Thông báo → Thông báo trên thiết bị → Bật thông báo**, rồi chọn cho phép. Bấm **Gửi thông báo thử** để kiểm tra. Nếu chưa thấy, kiểm tra quyền thông báo và chế độ Không làm phiền của điện thoại.
+- Mỗi thiết bị bật/tắt riêng. Đăng xuất sẽ ngừng nhận trên thiết bị đó; đăng nhập lại cần bật lại thông báo. Chạm thông báo để mở đúng công việc hoặc lời cảm ơn.
+
 
 ### Đầu ngày
 

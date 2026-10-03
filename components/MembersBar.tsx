@@ -259,7 +259,7 @@ export default function MembersBar({
           <div className="space-y-2 border-t border-zinc-100 pt-3">
             <div className="flex items-center gap-2 text-xs font-medium text-zinc-500">
               <UsersRound size={14} aria-hidden="true" />
-              Thêm nhóm cố định
+              Thêm phòng ban / nhóm
             </div>
             {memberGroups.length > 0 ? (
               <div className="flex gap-2">
@@ -270,9 +270,9 @@ export default function MembersBar({
                     setGroupMessage("");
                   }}
                   className="tf-field !min-h-9 !py-1.5"
-                  aria-label="Chọn nhóm cố định"
+                  aria-label="Chọn phòng ban / nhóm"
                 >
-                  <option value="">Chọn nhóm</option>
+                  <option value="">Chọn phòng ban / nhóm</option>
                   {memberGroups.map((group) => (
                     <option key={group.id} value={group.id}>
                       {group.name} · thêm {group.members.length} người

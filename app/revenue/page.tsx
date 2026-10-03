@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { requireProjectManager } from "@/lib/auth";
+import { requireRevenueViewer } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
 import RevenueBreakdown, { type RevenueRow } from "@/components/RevenueBreakdown";
 import RevenuePipeline from "@/components/RevenuePipeline";
@@ -71,7 +71,7 @@ function recentRevenueMonths(now = new Date()): MonthlyRevenuePoint[] {
 }
 
 export default async function RevenuePage() {
-  const user = await requireProjectManager();
+  const user = await requireRevenueViewer();
   const isAdmin = user.role === "ADMIN";
 
   // Admin thấy toàn bộ; Account chỉ thấy project mình tham gia
@@ -81,7 +81,7 @@ export default async function RevenuePage() {
 
   const [projects, sidebarProjects] = await Promise.all([
     prisma.project.findMany({
-      where: projectScope,
+      where: { ...projectScope, category: "CLIENT" },
       select: {
         id: true,
         name: true,
@@ -110,9 +110,10 @@ export default async function RevenuePage() {
         name: true,
         color: true,
         status: true,
-        account: {
-          select: { team: { select: { id: true, name: true } } },
-        },
+        category: true,
+        responsibleTeam: { select: { id: true, name: true } },
+        responsibleGroup: { select: { id: true, name: true } },
+        account: { select: { team: { select: { id: true, name: true } } } },
       },
       orderBy: { createdAt: "desc" },
     }),

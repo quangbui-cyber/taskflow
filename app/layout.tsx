@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { connection } from "next/server";
 import "./globals.css";
 import InteractionProvider from "@/components/InteractionProvider";
@@ -6,7 +6,11 @@ import InteractionProvider from "@/components/InteractionProvider";
 export const metadata: Metadata = {
   title: "myCreative — Quản lý công việc",
   description: "Không gian quản lý dự án và công việc của Creative Station",
+  appleWebApp: { capable: true, title: "myCreative", statusBarStyle: "default" },
+  icons: { apple: "/api/pwa-icon?size=180" },
 };
+
+export const viewport: Viewport = { themeColor: "#a5d522" };
 
 export default async function RootLayout({
   children,

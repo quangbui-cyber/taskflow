@@ -10,7 +10,7 @@ import {
   loginRateLimitStatus,
   recordFailedLogin,
 } from "@/lib/loginRateLimit";
-import { createSession, destroySession } from "@/lib/session";
+import { createSession, destroySession, getSession } from "@/lib/session";
 
 export type AuthState = { error?: string };
 
@@ -55,7 +55,16 @@ export async function login(
   redirect("/");
 }
 
-export async function logout() {
+export async function logout(formData?: FormData) {
+  const endpoint = formData?.get("pushEndpoint");
+  const session = await getSession();
+  if (session && typeof endpoint === "string" && endpoint.length <= 4096) {
+    try {
+      await prisma.pushSubscription.deleteMany({ where: { userId: session.userId, endpoint } });
+    } catch {
+      console.warn("Could not remove the device registration during logout.");
+    }
+  }
   await destroySession();
   redirect("/login");
 }

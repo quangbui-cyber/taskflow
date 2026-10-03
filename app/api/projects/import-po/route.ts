@@ -1,4 +1,4 @@
-import { canManageProjects, getCurrentUser } from "@/lib/auth";
+import { canViewRevenue, getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { MAX_PROJECT_FILE_SIZE } from "@/lib/projectFiles";
 import { parsePurchaseOrderPdf } from "@/lib/purchaseOrderPdf";
@@ -13,7 +13,7 @@ export async function POST(request: Request) {
       { status: 401 }
     );
   }
-  if (!canManageProjects(user.role)) {
+  if (!canViewRevenue(user.role)) {
     return Response.json(
       { error: "Bạn không có quyền tạo dự án từ PO." },
       { status: 403 }

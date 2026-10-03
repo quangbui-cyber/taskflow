@@ -51,6 +51,8 @@ git push -u origin main
 
 ## Bước 3 — Deploy lên Vercel
 
+Thông báo đẩy cần thêm ba biến môi trường Production: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (ví dụ `mailto:admin@congty.com`). Tạo khóa một lần bằng thư viện `web-push`; lưu private key dưới dạng Sensitive trên Vercel và giữ cặp khóa cố định qua các lần deploy. Sau khi thêm biến, triển khai lại app để bật tính năng. Migration tạo bảng thiết bị được chạy cùng quy trình production migrations hiện có. iPhone kiểm thử bằng bản HTTPS đã thêm vào Màn hình chính, tại **Thông báo → Bật thông báo → Gửi thông báo thử**.
+
 1. Vào Vercel → **Add New → Project** → chọn repository `taskflow` vừa đẩy lên.
 2. Vercel tự nhận diện Next.js. **Trước khi bấm Deploy**, mở phần **Environment Variables** và thêm:
 

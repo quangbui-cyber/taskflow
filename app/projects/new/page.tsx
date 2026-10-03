@@ -1,12 +1,12 @@
 import { prisma } from "@/lib/prisma";
-import { requireProjectManager } from "@/lib/auth";
+import { canViewRevenue, requireUser } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
 import NewProjectForm from "@/components/NewProjectForm";
 
 export default async function NewProjectPage() {
-  const user = await requireProjectManager();
+  const user = await requireUser();
 
-  const [sidebarProjects, clients, accounts] = await Promise.all([
+  const [sidebarProjects, clients, accounts, teams, groups] = await Promise.all([
     prisma.project.findMany({
       where: { members: { some: { userId: user.id } } },
       select: {
@@ -14,9 +14,10 @@ export default async function NewProjectPage() {
         name: true,
         color: true,
         status: true,
-        account: {
-          select: { team: { select: { id: true, name: true } } },
-        },
+        category: true,
+        responsibleTeam: { select: { id: true, name: true } },
+        responsibleGroup: { select: { id: true, name: true } },
+        account: { select: { team: { select: { id: true, name: true } } } },
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -25,13 +26,16 @@ export default async function NewProjectPage() {
       orderBy: { name: "asc" },
     }),
     prisma.account.findMany({
-      where: { user: { isActive: true } },
+      where: { user: { isActive: true, role: { in: ["ADMIN", "ACCOUNT"] } } },
       select: {
         id: true,
         user: { select: { name: true, email: true, avatarUrl: true } },
+        team: { select: { name: true } },
       },
       orderBy: { user: { name: "asc" } },
     }),
+    prisma.salesTeam.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.memberGroup.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
 
   return (
@@ -43,16 +47,20 @@ export default async function NewProjectPage() {
           <div>
             <h1 className="tf-page-title">Tạo dự án mới</h1>
             <p className="tf-page-subtitle">
-              Client và Account chọn từ Cài đặt.
+              Chọn Nội bộ hoặc Khách hàng để mở form tạo dự án tương ứng.
             </p>
           </div>
           <NewProjectForm
+            canEditRevenue={canViewRevenue(user.role)}
             clients={clients}
+            responsibilityOptions={{ teams, groups }}
             accounts={accounts.map((account) => ({
               id: account.id,
               name: account.user?.name ?? "",
               email: account.user?.email ?? null,
               avatarUrl: account.user?.avatarUrl ?? null,
+              teamName: account.team.name,
+              meta: account.team.name,
             }))}
           />
         </div>

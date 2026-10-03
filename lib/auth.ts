@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
+import { canViewRevenue } from "@/lib/projectPolicy";
+
+export { canCreateProjects, canViewRevenue } from "@/lib/projectPolicy";
 
 export async function getCurrentUser() {
   const session = await getSession();
@@ -27,15 +30,10 @@ export async function requireAdmin() {
   return user;
 }
 
-/** ADMIN và ACCOUNT được tạo project & xem doanh số; USER thì không */
-export function canManageProjects(role: string) {
-  return role === "ADMIN" || role === "ACCOUNT";
-}
-
-/** Như requireUser nhưng chặn luôn role USER (dùng cho trang doanh số, tạo project) */
-export async function requireProjectManager() {
+/** Quyền tài chính tách biệt với quyền tạo và sở hữu dự án. */
+export async function requireRevenueViewer() {
   const user = await requireUser();
-  if (!canManageProjects(user.role)) redirect("/");
+  if (!canViewRevenue(user.role)) redirect("/");
   return user;
 }
 

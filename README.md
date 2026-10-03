@@ -33,7 +33,7 @@ TaskFlow có 3 vai trò:
 | --- | --- |
 | `ADMIN` | Quản trị toàn bộ hệ thống: tạo/xóa user, tạo nhóm cố định, quản lý Client/Team/Account, xem hiệu suất và doanh số toàn công ty, sửa mọi project. |
 | `ACCOUNT` | Tạo project, quản lý project mình tham gia, xem trang doanh số trong phạm vi project mình tham gia. |
-| `USER` | Xem project mình là thành viên, nhận việc, cập nhật task, kéo thả task, bình luận. Không tạo project và không xem doanh số. |
+| `USER` | Tạo dự án Nội bộ hoặc Khách hàng, quản lý dự án mình sở hữu, nhận việc, cập nhật task và bình luận. Không xem/sửa doanh thu và không nhập PO. |
 
 Lưu ý: chỉ chủ project mới xóa được project. Chủ project hoặc admin có thể sửa thông tin project.
 
@@ -52,19 +52,20 @@ Trang chủ `/` là nơi xem nhanh công việc cá nhân:
 - "Nhắc nhở": hiển thị việc quá hạn, việc đến hạn trong 3 ngày và số việc còn ở trạng thái Cần làm.
 - "Projects của tôi": danh sách project bạn đang tham gia, kèm tiến độ task hoàn thành và số thành viên.
 
-Nếu bạn là `ADMIN` hoặc `ACCOUNT`, nút `+ Tạo project` sẽ xuất hiện trên dashboard.
+Mọi vai trò (`USER`, `ACCOUNT`, `ADMIN`) đều có nút `+ Tạo project` trên dashboard.
 
 ### 3. Tạo project mới
 
-Chỉ `ADMIN` và `ACCOUNT` tạo được project.
+Mọi user đang hoạt động đều tạo được project. Người tạo tự động trở thành chủ dự án.
 
-Vào `/projects/new`, điền:
+Vào `/projects/new`, chọn **Nội bộ** hoặc **Khách hàng** ở màn hình đầu tiên để mở form tương ứng. Bấm **Chọn lại loại dự án** để quay lại màn hình lựa chọn. Sau đó điền:
 
-- Tên project
-- Mô tả
-- Tình trạng: `Bidding`, `On Process`, `Done`, `Fail`
-- Doanh thu dự kiến/thực tế
-- Client và Account từ Cài đặt
+- Mục đích: **Nội bộ** hoặc **Khách hàng**
+- Tên project và mô tả
+- Thời gian thực hiện; loại hình chỉ dành cho dự án Khách hàng
+- Với dự án Khách hàng: Client và Account từ Cài đặt; doanh thu và nhập PO dành cho Admin/Account.
+
+Dự án Nội bộ bắt đầu ở `On Process`, không dùng Client/Account/PO và không tính vào báo cáo doanh số. Dự án Khách hàng tạo thủ công bắt đầu ở `Bidding`; nhập PO Jabil bắt đầu ở `On Process`. Dữ liệu dự án cũ mặc định là Khách hàng.
 
 Sau khi tạo, người tạo tự động trở thành chủ project và thành viên đầu tiên.
 
@@ -95,7 +96,7 @@ Các thao tác chính:
 
 - Bấm vào cụm avatar để mở danh sách thành viên.
 - Nhập email để mời thêm thành viên. Người được mời phải có tài khoản sẵn trong hệ thống.
-- Chọn một **nhóm cố định** để thêm toàn bộ người trong nhóm vào project trong một lần.
+- Chọn một **phòng ban / nhóm** để thêm toàn bộ người trong nhóm vào project trong một lần.
 - Chủ project có thể xóa thành viên khỏi project.
 - Thành viên có thể tự rời project.
 - Không thể xóa chủ project khỏi project.
@@ -142,10 +143,9 @@ Các tab được sắp theo luồng sử dụng:
 - **Quản lý tài khoản**: đổi quản lý, đổi mật khẩu hoặc xoá tài khoản.
 - **Tạo nhóm**: tạo, sửa và xoá nhóm nhân sự cố định dùng lại trong nhiều project.
 - **Client**: quản lý danh sách khách hàng.
-- **Team**: tạo nhóm kinh doanh trước khi gán Account.
-- **Account**: chọn user vai trò `ACCOUNT` và bắt buộc gán vào một Team.
+- **Team & Account**: quản lý Team kinh doanh và Account trong cùng một tab. Tạo Team ở phần trên, sau đó chọn user vai trò `ACCOUNT` hoặc `ADMIN` và gán vào Team ở phần dưới.
 
-Các thay đổi chỉ được xác nhận sau khi bấm **Lưu thay đổi**. Đường dẫn cũ `/admin/catalog` tự chuyển về tab Client trong Cài đặt.
+Các thay đổi chỉ được xác nhận sau khi bấm **Lưu thay đổi**. Đường dẫn cũ `/admin/catalog` tự chuyển về tab Client trong Cài đặt; `/admin?tab=team` vẫn mở tab **Team & Account**.
 
 Lưu ý: trang "Toàn cảnh công việc" (`/admin/overview`) đã được gộp vào **Hiệu suất** (`/team`); đường dẫn cũ tự chuyển hướng sang trang mới.
 
@@ -160,6 +160,8 @@ Bạn nhận thông báo khi:
 - Có bình luận mới trong task bạn làm, bạn giao hoặc bạn theo dõi.
 
 Bấm vào thông báo để nhảy đến project liên quan. Người thao tác không tự nhận thông báo về hành động của chính mình.
+
+**Thông báo đẩy trên điện thoại/máy tính:** vào **Thông báo → Thông báo trên thiết bị → Bật thông báo** và cho phép trình duyệt. Mỗi thiết bị đăng ký riêng; có thể gửi thông báo thử hoặc tắt trên thiết bị đó. iPhone/iPad cần iOS 16.4+ và mở app đã thêm vào Màn hình chính. Server cần `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (xem `.env.example`). Khóa phải được giữ cố định qua các lần triển khai. Đăng xuất sẽ hủy đăng ký trên thiết bị hiện tại. Thông báo thường và nhắc hạn hằng ngày đều gửi thêm Web Push; lỗi push không làm mất thông báo trong app. Service worker chỉ xử lý push, không lưu trang hay tài liệu đăng nhập để dùng offline.
 
 ### 11. Góc cảm ơn
 
@@ -290,7 +292,7 @@ Xem hướng dẫn triển khai từng bước trong [DEPLOY.md](DEPLOY.md). Tà
 
 - Người dùng đăng nhập qua `app/actions/auth.ts`.
 - `lib/session.ts` tạo cookie `session` có thời hạn 7 ngày.
-- Các trang server gọi `requireUser`, `requireAdmin` hoặc `requireProjectManager` trong `lib/auth.ts` để chặn truy cập không đúng quyền.
+- Các trang server gọi `requireUser`, `requireAdmin` hoặc `requireRevenueViewer` trong `lib/auth.ts` để chặn truy cập không đúng quyền.
 - Dữ liệu được đọc/ghi bằng Prisma qua `lib/prisma.ts`.
 - Các thao tác tạo/sửa/xóa nằm trong `app/actions/*`.
 - Sau khi cập nhật dữ liệu, Server Actions gọi `revalidatePath` để làm mới màn hình liên quan.
@@ -317,3 +319,15 @@ Xem hướng dẫn triển khai từng bước trong [DEPLOY.md](DEPLOY.md). Tà
 - Khi nhân viên nghỉ việc, admin có thể xóa tài khoản. Các quan hệ dữ liệu sẽ xử lý theo schema Prisma hiện tại.
 - Nếu thay đổi `prisma/schema.prisma`, cần tạo migration và deploy migration cùng code.
 
+
+### Phòng ban / Nhóm và mục đích dự án
+
+Admin quản lý nhóm nhân sự trong **Cài đặt → Phòng ban / Nhóm** (ví dụ Creative, Operations). Trong một dự án, dùng **Thêm phòng ban / nhóm** để thêm các tài khoản đang hoạt động chưa có trong dự án. Danh sách được sao chép tại thời điểm thêm; đổi nhóm sau đó không tự thay đổi thành viên dự án. **Team kinh doanh** vẫn phục vụ thống kê theo Account.
+
+Thanh bên chia dự án theo nhóm phụ trách: **Team kinh doanh → Khách hàng / Nội bộ**, còn **Phòng ban / Nhóm → Nội bộ**. Các mục con có số lượng và có thể thu gọn. Dự án Nội bộ chưa chọn nhóm phụ trách nằm trong **Chưa gán Team**; dự án Khách hàng cũ thiếu Account nằm trong **Cần gán Account**. Trong **Lưu trữ**, các nhóm trạng thái cũng có hai mục con tương ứng. Cấu trúc này áp dụng trên cả máy tính và điện thoại.
+
+Dự án Khách hàng bắt buộc chọn **Account phụ trách** đang hoạt động và có hồ sơ Account hợp lệ. Team được lấy trực tiếp từ `Account.team`, áp dụng cho cả thanh bên và báo cáo doanh số; đổi Account hoặc Team của Account sẽ cập nhật nhóm hiển thị. Form không cho chọn nhóm phụ trách độc lập cho dự án Khách hàng. Migration xóa các liên kết nhóm phụ trách riêng của dự án Khách hàng; dự án cũ thiếu Account được giữ và đánh dấu để bổ sung.
+
+Trường **Team/phòng ban phụ trách** chỉ dành cho Nội bộ, cho phép chọn một Team kinh doanh hoặc Phòng ban / Nhóm. `Project.responsibleTeamId` và `responsibleGroupId` là hai liên kết tùy chọn; chỉ một được gán tại mỗi thời điểm và cả hai phải trống với Khách hàng. Gán nhóm Nội bộ không cấp quyền truy cập hay tự thêm thành viên. Khi đổi Account của dự án Khách hàng, Account mới được thêm vào thành viên trong cùng transaction; thành viên cũ được giữ.
+
+Chủ dự án hoặc Admin có thể sửa mục đích. Chuyển sang Nội bộ xoá Client, Account và doanh thu; USER không được chuyển dự án đang có doanh thu. Dự án có PO giữ mục đích Khách hàng. Quyền tạo/sở hữu dự án không cấp thêm quyền tài chính.

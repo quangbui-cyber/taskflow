@@ -17,10 +17,9 @@ import {
 const SETTINGS_TABS = [
   { key: "create-user", label: "Tạo tài khoản" },
   { key: "users", label: "Quản lý tài khoản" },
-  { key: "groups", label: "Tạo nhóm" },
+  { key: "groups", label: "Phòng ban / Nhóm" },
   { key: "client", label: "Client" },
-  { key: "team", label: "Team" },
-  { key: "account", label: "Account" },
+  { key: "account", label: "Team & Account" },
 ] as const;
 
 type SettingsTab = (typeof SETTINGS_TABS)[number]["key"];
@@ -135,29 +134,6 @@ async function SettingsContent({
     );
   }
 
-  if (activeTab === "team") {
-    const salesTeams = await prisma.salesTeam.findMany({
-      include: { _count: { select: { accounts: true } } },
-      orderBy: { name: "asc" },
-    });
-
-    return (
-      <CatalogManager
-        title="Team"
-        hint="Tạo Team trước khi phân Account vào nhóm kinh doanh."
-        placeholder="Tên team, ví dụ: Team Sales 1"
-        items={salesTeams.map((team) => ({
-          id: team.id,
-          name: team.name,
-          projectCount: team._count.accounts,
-        }))}
-        createAction={createSalesTeam}
-        deleteAction={deleteSalesTeam}
-        countLabel="account"
-      />
-    );
-  }
-
   const [accounts, salesTeams, accountUsers] = await Promise.all([
     prisma.account.findMany({
       include: {
@@ -166,7 +142,10 @@ async function SettingsContent({
       },
       orderBy: { name: "asc" },
     }),
-    prisma.salesTeam.findMany({ orderBy: { name: "asc" } }),
+    prisma.salesTeam.findMany({
+      include: { _count: { select: { accounts: true } } },
+      orderBy: { name: "asc" },
+    }),
     prisma.user.findMany({
       where: {
         role: { in: ["ADMIN", "ACCOUNT"] },
@@ -179,19 +158,34 @@ async function SettingsContent({
   ]);
 
   return (
-    <AccountCatalogManager
-      accounts={accounts.map((account) => ({
-        id: account.id,
-        name: account.user?.name ?? account.name,
-        email: account.user?.email ?? null,
-        avatarUrl: account.user?.avatarUrl ?? null,
-        projectCount: account._count.projects,
-        teamId: account.teamId,
-        linked: Boolean(account.userId),
-      }))}
-      accountUsers={accountUsers}
-      teams={salesTeams.map((team) => ({ id: team.id, name: team.name }))}
-    />
+    <div className="space-y-6">
+      <CatalogManager
+        title="Team kinh doanh"
+        hint="Tạo Team tại đây, sau đó thêm hoặc chuyển Account ở phần bên dưới."
+        placeholder="Tên team, ví dụ: Team Sales 1"
+        items={salesTeams.map((team) => ({
+          id: team.id,
+          name: team.name,
+          projectCount: team._count.accounts,
+        }))}
+        createAction={createSalesTeam}
+        deleteAction={deleteSalesTeam}
+        countLabel="Account"
+      />
+      <AccountCatalogManager
+        accounts={accounts.map((account) => ({
+          id: account.id,
+          name: account.user?.name ?? account.name,
+          email: account.user?.email ?? null,
+          avatarUrl: account.user?.avatarUrl ?? null,
+          projectCount: account._count.projects,
+          teamId: account.teamId,
+          linked: Boolean(account.userId),
+        }))}
+        accountUsers={accountUsers}
+        teams={salesTeams.map((team) => ({ id: team.id, name: team.name }))}
+      />
+    </div>
   );
 }
 
@@ -201,8 +195,9 @@ export default async function AdminPage({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const [admin, params] = await Promise.all([requireAdmin(), searchParams]);
-  const activeTab: SettingsTab = isSettingsTab(params.tab)
-    ? params.tab
+  const requestedTab = params.tab === "team" ? "account" : params.tab;
+  const activeTab: SettingsTab = isSettingsTab(requestedTab)
+    ? requestedTab
     : "create-user";
   const sidebarProjects = await prisma.project.findMany({
     where: { members: { some: { userId: admin.id } } },
@@ -211,9 +206,10 @@ export default async function AdminPage({
       name: true,
       color: true,
       status: true,
-      account: {
-        select: { team: { select: { id: true, name: true } } },
-      },
+      category: true,
+      responsibleTeam: { select: { id: true, name: true } },
+      responsibleGroup: { select: { id: true, name: true } },
+      account: { select: { team: { select: { id: true, name: true } } } },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -246,6 +242,7 @@ export default async function AdminPage({
                 key={tab.key}
                 href={`/admin?tab=${tab.key}`}
                 prefetch={false}
+                aria-current={activeTab === tab.key ? "page" : undefined}
                 className={`shrink-0 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
                   activeTab === tab.key
                     ? "border-brand-500 text-zinc-950"

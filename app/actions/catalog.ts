@@ -174,7 +174,7 @@ export async function setAccountTeam(
     where: { id: accountId },
     data: { teamId },
   });
-  revalidatePath("/admin");
+  revalidatePath("/", "layout");
   revalidatePath("/revenue");
   return {};
 }
@@ -191,7 +191,7 @@ export async function createSalesTeam(
   if (existing) return { error: "Team này đã tồn tại." };
 
   await prisma.salesTeam.create({ data: { name } });
-  revalidatePath("/admin");
+  revalidatePath("/", "layout");
   return { success: `Đã thêm team "${name}".` };
 }
 
@@ -208,7 +208,7 @@ export async function deleteSalesTeam(id: string): Promise<CatalogState> {
     };
   }
   await prisma.salesTeam.delete({ where: { id } });
-  revalidatePath("/admin");
+  revalidatePath("/", "layout");
   revalidatePath("/revenue");
   return { success: `Đã xoá Team "${team.name}".` };
 }

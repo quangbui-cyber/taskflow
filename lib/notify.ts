@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { after } from "next/server";
+import { deliverPush } from "@/lib/webPush";
 
 /** Tạo thông báo cho nhiều người nhận (tự loại trùng và loại bỏ id rỗng) */
 export async function notify(
@@ -37,6 +39,10 @@ export async function notify(
 
   await prisma.notification.createMany({
     data: unique.map((userId) => ({ userId, ...data })),
+  });
+  after(async () => {
+    try { await deliverPush(unique, data); }
+    catch { console.warn("Web push delivery could not be completed."); }
   });
 }
 
