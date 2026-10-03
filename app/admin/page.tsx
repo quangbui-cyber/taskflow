@@ -6,13 +6,9 @@ import Sidebar from "@/components/Sidebar";
 import CreateUserForm from "@/components/CreateUserForm";
 import UserAccountManager from "@/components/UserAccountManager";
 import MemberGroupManager from "@/components/MemberGroupManager";
-import CatalogManager from "@/components/CatalogManager";
+import SalesTeamManager from "@/components/SalesTeamManager";
 import AccountCatalogManager from "@/components/AccountCatalogManager";
 import ClientCatalogManager from "@/components/ClientCatalogManager";
-import {
-  createSalesTeam,
-  deleteSalesTeam,
-} from "@/app/actions/catalog";
 
 const SETTINGS_TABS = [
   { key: "create-user", label: "Tạo tài khoản" },
@@ -143,8 +139,14 @@ async function SettingsContent({
       orderBy: { name: "asc" },
     }),
     prisma.salesTeam.findMany({
-      include: { _count: { select: { accounts: true } } },
-      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        name: true,
+        leaderId: true,
+        accounts: {
+          select: { id: true, name: true, user: { select: { name: true } } },
+        },
+      },
     }),
     prisma.user.findMany({
       where: {
@@ -157,23 +159,34 @@ async function SettingsContent({
     }),
   ]);
 
+  // Xếp theo ABC kiểu tiếng Việt; Account gom theo team rồi mới theo tên.
+  const compareVi = (a: string, b: string) =>
+    a.localeCompare(b, "vi", { sensitivity: "base", numeric: true });
+  const sortedTeams = [...salesTeams].sort((a, b) => compareVi(a.name, b.name));
+  const teamOrder = new Map(sortedTeams.map((team, index) => [team.id, index]));
+  const sortedAccounts = [...accounts].sort(
+    (a, b) =>
+      (teamOrder.get(a.teamId) ?? 0) - (teamOrder.get(b.teamId) ?? 0) ||
+      compareVi(a.user?.name ?? a.name, b.user?.name ?? b.name)
+  );
+
   return (
     <div className="space-y-6">
-      <CatalogManager
-        title="Team kinh doanh"
-        hint="Tạo Team tại đây, sau đó thêm hoặc chuyển Account ở phần bên dưới."
-        placeholder="Tên team, ví dụ: Team Sales 1"
-        items={salesTeams.map((team) => ({
+      <SalesTeamManager
+        teams={sortedTeams.map((team) => ({
           id: team.id,
           name: team.name,
-          projectCount: team._count.accounts,
+          leaderId: team.leaderId,
+          accounts: team.accounts
+            .map((account) => ({
+              id: account.id,
+              name: account.user?.name ?? account.name,
+            }))
+            .sort((a, b) => compareVi(a.name, b.name)),
         }))}
-        createAction={createSalesTeam}
-        deleteAction={deleteSalesTeam}
-        countLabel="Account"
       />
       <AccountCatalogManager
-        accounts={accounts.map((account) => ({
+        accounts={sortedAccounts.map((account) => ({
           id: account.id,
           name: account.user?.name ?? account.name,
           email: account.user?.email ?? null,
@@ -183,7 +196,7 @@ async function SettingsContent({
           linked: Boolean(account.userId),
         }))}
         accountUsers={accountUsers}
-        teams={salesTeams.map((team) => ({ id: team.id, name: team.name }))}
+        teams={sortedTeams.map((team) => ({ id: team.id, name: team.name }))}
       />
     </div>
   );

@@ -288,7 +288,6 @@ export default async function KpiPage({
                   teams={overview.teams.map((team) => ({
                     id: team.id,
                     name: team.name,
-                    leaderId: team.leaderId,
                     months: team.target,
                     accounts: team.accounts.map((account) => ({
                       id: account.id,
@@ -322,6 +321,19 @@ export default async function KpiPage({
                           </Chip>
                         ))}
                       </nav>
+                    )}
+                    {isAdmin && (
+                      <p className="text-xs text-zinc-500">
+                        Manager của team (người chia KPI team) được chỉ định ở{" "}
+                        <Link
+                          href="/admin?tab=account"
+                          prefetch={false}
+                          className="font-medium text-blue-700 hover:underline"
+                        >
+                          Cài đặt → Team &amp; Account
+                        </Link>
+                        .
+                      </p>
                     )}
                     <KpiTeamAllocationEditor
                       key={`${year}-${selectedTeam.id}`}
@@ -413,7 +425,7 @@ export default async function KpiPage({
                         <p className="mt-0.5 text-xs text-zinc-400">
                           {scopeTeam.accounts.length} Account
                           {scopeLeader
-                            ? ` · Trưởng team: ${scopeLeader.name}`
+                            ? ` · Manager: ${scopeLeader.name}`
                             : ""}
                         </p>
                       )}
@@ -549,7 +561,7 @@ export default async function KpiPage({
                                 </p>
                                 <p className="truncate text-xs text-zinc-400">
                                   {team.accounts.length} Account
-                                  {leader ? ` · Trưởng team: ${leader.name}` : ""}
+                                  {leader ? ` · Manager: ${leader.name}` : ""}
                                 </p>
                               </div>
                               <p className="col-start-1 text-xs tabular-nums text-zinc-500 sm:col-start-auto sm:text-right">
@@ -604,7 +616,7 @@ export default async function KpiPage({
                               {account.name}
                               {account.id === scopeTeam.leaderId && (
                                 <span className="ml-2 text-xs font-normal text-zinc-400">
-                                  Trưởng team
+                                  Manager
                                 </span>
                               )}
                             </p>

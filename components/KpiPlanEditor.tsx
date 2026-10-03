@@ -6,7 +6,6 @@ import {
   saveCompanyKpiPlan,
   saveTeamKpiAllocation,
   setKpiPlanLocked,
-  setSalesTeamLeader,
   type KpiState,
 } from "@/app/actions/kpi";
 import KpiMonthGrid, {
@@ -59,12 +58,11 @@ function useSave() {
 export type KpiPlanTeam = {
   id: string;
   name: string;
-  leaderId: string | null;
   months: number[];
   accounts: Array<{ id: string; name: string }>;
 };
 
-/** Admin: KPI năm của công ty, giao chỉ tiêu tháng cho team và chỉ định trưởng team. */
+/** Admin: KPI năm của công ty và chỉ tiêu tháng giao cho từng team. */
 export function KpiCompanyPlanEditor({
   year,
   companyTarget: initialCompanyTarget,
@@ -81,7 +79,6 @@ export function KpiCompanyPlanEditor({
     Object.fromEntries(teams.map((team) => [team.id, team.months]))
   );
   const save = useSave();
-  const leader = useSave();
 
   const assigned = teams.reduce(
     (sum, team) => sum + sumMonths(values[team.id] ?? []),
@@ -188,41 +185,6 @@ export function KpiCompanyPlanEditor({
         )}
       </form>
 
-      {teams.length > 0 && (
-        <div className="border-t border-zinc-100 p-5">
-          <h3 className="text-sm font-semibold">Trưởng team</h3>
-          <p className="mt-0.5 text-xs text-zinc-400">
-            Trưởng team được chia chỉ tiêu của team xuống từng Account.
-          </p>
-          <ul className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {teams.map((team) => (
-              <li key={team.id}>
-                <label className="block">
-                  <span className="text-xs font-medium text-zinc-500">
-                    {team.name}
-                  </span>
-                  <select
-                    className="tf-field mt-1.5"
-                    defaultValue={team.leaderId ?? ""}
-                    disabled={leader.pending}
-                    onChange={(event) => {
-                      const accountId = event.target.value;
-                      leader.run(() => setSalesTeamLeader(team.id, accountId));
-                    }}
-                  >
-                    <option value="">Chưa chỉ định</option>
-                    {team.accounts.map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </section>
   );
 }

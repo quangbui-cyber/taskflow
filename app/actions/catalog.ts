@@ -182,6 +182,7 @@ export async function setAccountTeam(
     }),
   ]);
   revalidatePath("/", "layout");
+  revalidatePath("/admin");
   revalidatePath("/revenue");
   revalidatePath("/kpi");
   return {};
@@ -219,4 +220,60 @@ export async function deleteSalesTeam(id: string): Promise<CatalogState> {
   revalidatePath("/", "layout");
   revalidatePath("/revenue");
   return { success: `Đã xoá Team "${team.name}".` };
+}
+
+export async function renameSalesTeam(
+  id: string,
+  rawName: string
+): Promise<CatalogState> {
+  await requireAdmin();
+  const name = rawName.trim();
+  if (!name) return { error: "Tên team không được để trống." };
+
+  const duplicate = await prisma.salesTeam.findFirst({
+    where: { name, id: { not: id } },
+    select: { id: true },
+  });
+  if (duplicate) return { error: "Team này đã tồn tại." };
+
+  const updated = await prisma.salesTeam.updateMany({
+    where: { id },
+    data: { name },
+  });
+  if (updated.count === 0) return { error: "Team không tồn tại." };
+  // Tên team hiện ở sidebar, Doanh số và KPI.
+  revalidatePath("/", "layout");
+  return { success: `Đã đổi tên team thành "${name}".` };
+}
+
+/** Trưởng team (manager): Account được chia KPI của team xuống từng Account. */
+export async function setSalesTeamLeader(
+  teamId: string,
+  accountId: string
+): Promise<CatalogState> {
+  await requireAdmin();
+  const team = await prisma.salesTeam.findUnique({
+    where: { id: teamId },
+    select: { name: true, accounts: { select: { id: true, name: true } } },
+  });
+  if (!team) return { error: "Team không tồn tại." };
+
+  const leader = accountId
+    ? team.accounts.find((account) => account.id === accountId)
+    : null;
+  if (accountId && !leader) {
+    return { error: "Manager phải là Account thuộc team đó." };
+  }
+
+  await prisma.salesTeam.update({
+    where: { id: teamId },
+    data: { leaderId: leader?.id ?? null },
+  });
+  revalidatePath("/admin");
+  revalidatePath("/kpi");
+  return {
+    success: leader
+      ? `${leader.name} là Manager của ${team.name}.`
+      : `Đã bỏ Manager của ${team.name}.`,
+  };
 }

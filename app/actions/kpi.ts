@@ -144,7 +144,7 @@ export async function saveTeamKpiAllocation(
       team
     )
   ) {
-    return { error: "Chỉ Admin hoặc trưởng team được chia KPI của team." };
+    return { error: "Chỉ Admin hoặc Manager của team được chia KPI của team." };
   }
   if (!plan) {
     return { error: `Admin chưa lập kế hoạch KPI năm ${year}.` };
@@ -219,36 +219,5 @@ export async function setKpiPlanLocked(
     success: locked
       ? `Đã chốt kế hoạch KPI năm ${year}.`
       : `Đã mở lại kế hoạch KPI năm ${year}.`,
-  };
-}
-
-/** Admin chỉ định trưởng team — người được chia KPI team xuống Account. */
-export async function setSalesTeamLeader(
-  teamId: string,
-  accountId: string
-): Promise<KpiState> {
-  await requireAdmin();
-  const team = await prisma.salesTeam.findUnique({
-    where: { id: teamId },
-    select: { name: true, accounts: { select: { id: true, name: true } } },
-  });
-  if (!team) return { error: "Team không tồn tại." };
-
-  const leader = accountId
-    ? team.accounts.find((account) => account.id === accountId)
-    : null;
-  if (accountId && !leader) {
-    return { error: "Trưởng team phải là Account thuộc team đó." };
-  }
-
-  await prisma.salesTeam.update({
-    where: { id: teamId },
-    data: { leaderId: leader?.id ?? null },
-  });
-  revalidatePath("/kpi");
-  return {
-    success: leader
-      ? `${leader.name} là trưởng team ${team.name}.`
-      : `Đã bỏ trưởng team của ${team.name}.`,
   };
 }

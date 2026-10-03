@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef, useState, useTransition } from "reac
 import { useRouter } from "next/navigation";
 import {
   Check,
+  ChevronDown,
   Download,
   File,
   FileImage,
@@ -159,6 +160,8 @@ function DocumentSetPanel({
   const { notify } = useInteraction();
   const inputRef = useRef<HTMLInputElement>(null);
   const [pending, startTransition] = useTransition();
+  // Mặc định thu gọn để trang không rối; mở khi bấm vào tên hoặc khi thêm mới.
+  const [open, setOpen] = useState(false);
   const [renamingSet, setRenamingSet] = useState(false);
   const [renamingFileId, setRenamingFileId] = useState<string | null>(null);
   // File đã chọn nhưng chưa tải lên: chờ người dùng đặt tên.
@@ -247,8 +250,11 @@ function DocumentSetPanel({
 
   return (
     <section className="tf-panel overflow-hidden">
-      <div className="flex flex-wrap items-center gap-3 border-b border-zinc-100 px-5 py-3">
-        <FolderOpen size={18} className="shrink-0 text-zinc-500" aria-hidden="true" />
+      <div
+        className={`flex flex-wrap items-center gap-3 px-5 py-3 ${
+          open || draft || linkDraft ? "border-b border-zinc-100" : ""
+        }`}
+      >
         {renamingSet ? (
           <InlineRename
             initial={set.name}
@@ -263,13 +269,32 @@ function DocumentSetPanel({
             }
           />
         ) : (
-          <div className="min-w-0 flex-1">
-            <h2 className="truncate font-semibold">{set.name}</h2>
-            <p className="truncate text-xs text-zinc-400">
-              {set.description ? `${set.description} · ` : ""}
-              {set.files.length} tài liệu
-            </p>
-          </div>
+          <button
+            type="button"
+            onClick={() => setOpen((current) => !current)}
+            aria-expanded={open}
+            className="-my-1 flex min-w-0 flex-1 items-center gap-3 rounded-[7px] py-1 text-left transition-colors hover:bg-zinc-50"
+          >
+            <ChevronDown
+              size={16}
+              className={`shrink-0 text-zinc-400 transition-transform ${
+                open ? "" : "-rotate-90"
+              }`}
+              aria-hidden="true"
+            />
+            <FolderOpen
+              size={18}
+              className="shrink-0 text-zinc-500"
+              aria-hidden="true"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-semibold">{set.name}</span>
+              <span className="block truncate text-xs text-zinc-400">
+                {set.description ? `${set.description} · ` : ""}
+                {set.files.length} tài liệu
+              </span>
+            </span>
+          </button>
         )}
         {canManage && !renamingSet && (
           <div className="flex shrink-0 items-center gap-1">
@@ -280,7 +305,10 @@ function DocumentSetPanel({
               accept={ACCEPTED_FILES}
               onChange={(event) => {
                 const file = event.target.files?.[0];
-                if (file) setDraft({ file, title: titleFromFileName(file.name) });
+                if (file) {
+                  setDraft({ file, title: titleFromFileName(file.name) });
+                  setOpen(true);
+                }
               }}
             />
             <button
@@ -295,7 +323,10 @@ function DocumentSetPanel({
             <button
               type="button"
               className="tf-button-secondary"
-              onClick={() => setLinkDraft({ title: "", url: "" })}
+              onClick={() => {
+                setLinkDraft({ title: "", url: "" });
+                setOpen(true);
+              }}
             >
               <Link2 size={16} aria-hidden="true" />
               Thêm link
@@ -450,7 +481,7 @@ function DocumentSetPanel({
         </form>
       )}
 
-      {set.files.length === 0 ? (
+      {!open ? null : set.files.length === 0 ? (
         <p className="px-5 py-6 text-sm text-zinc-400">
           Bộ hồ sơ này chưa có tài liệu nào.
         </p>
