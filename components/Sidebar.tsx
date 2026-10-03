@@ -7,9 +7,11 @@ import {
   CheckCircle2,
   ChevronDown,
   CircleDollarSign,
+  FolderOpen,
   Plus,
   Settings,
   Star,
+  Target,
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
@@ -44,6 +46,8 @@ type ActiveSection =
   | "recognition"
   | "team"
   | "revenue"
+  | "kpi"
+  | "documents"
   | "admin";
 
 const ARCHIVED_PROJECT_GROUPS = [
@@ -403,6 +407,8 @@ export default async function Sidebar({
               {showRevenue && (
                 <MenuLink href="/revenue" label="Doanh số" icon={CircleDollarSign} active={activeSection === "revenue"} />
               )}
+              <MenuLink href="/kpi" label="KPI" icon={Target} active={activeSection === "kpi"} />
+              <MenuLink href="/documents" label="Tài liệu" icon={FolderOpen} active={activeSection === "documents"} />
             </nav>
 
             <div className="mt-6">
@@ -468,6 +474,8 @@ export default async function Sidebar({
               <MenuLink href="/recognition" label="Góc cảm ơn" icon={Star} active={activeSection === "recognition"} />
               <MenuLink href="/team" label="Hiệu suất" icon={UsersRound} active={activeSection === "team"} />
               {showRevenue && <MenuLink href="/revenue" label="Doanh số" icon={CircleDollarSign} active={activeSection === "revenue"} />}
+              <MenuLink href="/kpi" label="KPI" icon={Target} active={activeSection === "kpi"} />
+              <MenuLink href="/documents" label="Tài liệu" icon={FolderOpen} active={activeSection === "documents"} />
             </div>
             <div className="my-3 border-t border-zinc-200" />
             <div className="mb-2 flex items-center justify-between px-3">

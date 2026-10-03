@@ -170,12 +170,20 @@ export async function setAccountTeam(
   const account = await prisma.account.findUnique({ where: { id: accountId } });
   if (!account) return { error: "Account không tồn tại." };
 
-  await prisma.account.update({
-    where: { id: accountId },
-    data: { teamId },
-  });
+  await prisma.$transaction([
+    // Trưởng team phải thuộc team mình dẫn dắt: rời team thì thôi làm trưởng.
+    prisma.salesTeam.updateMany({
+      where: { leaderId: accountId, id: { not: teamId } },
+      data: { leaderId: null },
+    }),
+    prisma.account.update({
+      where: { id: accountId },
+      data: { teamId },
+    }),
+  ]);
   revalidatePath("/", "layout");
   revalidatePath("/revenue");
+  revalidatePath("/kpi");
   return {};
 }
 

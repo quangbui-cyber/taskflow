@@ -35,6 +35,9 @@ model User {
   uploadedTaskFiles    TaskFile[]          @relation("TaskFileUploader")
   recognitionsSent     Recognition[]       @relation("RecognitionSender")
   recognitionsReceived Recognition[]       @relation("RecognitionRecipient")
+  kpiPlanChanges       KpiPlanChange[]
+  uploadedDocuments    DocumentFile[]      @relation("DocumentFileUploader")
+  createdDocumentLinks DocumentLink[]      @relation("DocumentLinkCreator")
 
   @@index([isActive])
 }
@@ -107,25 +110,87 @@ model Client {
 
 // Danh mục account (đầu mối phụ trách) — do admin tạo sẵn
 model Account {
-  id        String    @id @default(cuid())
-  name      String
-  userId    String?   @unique
-  user      User?     @relation(fields: [userId], references: [id], onDelete: Restrict)
-  teamId    String
-  team      SalesTeam @relation(fields: [teamId], references: [id], onDelete: Restrict)
-  createdAt DateTime  @default(now())
-  projects  Project[]
+  id         String             @id @default(cuid())
+  name       String
+  userId     String?            @unique
+  user       User?              @relation(fields: [userId], references: [id], onDelete: Restrict)
+  teamId     String
+  team       SalesTeam          @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  createdAt  DateTime           @default(now())
+  projects   Project[]
+  ledTeam    SalesTeam?         @relation("SalesTeamLeader")
+  kpiTargets KpiAccountTarget[]
 
   @@index([teamId])
 }
 
 // Team kinh doanh — dùng nhóm các Account để theo dõi hiệu suất
 model SalesTeam {
-  id        String    @id @default(cuid())
-  name      String    @unique
-  createdAt DateTime  @default(now())
-  accounts  Account[]
-  projects  Project[]
+  id         String          @id @default(cuid())
+  name       String          @unique
+  createdAt  DateTime        @default(now())
+  accounts   Account[]
+  projects   Project[]
+  // Trưởng team: Account được quyền chia KPI team xuống từng Account
+  leaderId   String?         @unique
+  leader     Account?        @relation("SalesTeamLeader", fields: [leaderId], references: [id], onDelete: SetNull)
+  kpiTargets KpiTeamTarget[]
+}
+
+// Kế hoạch KPI doanh số theo năm. Chỉ tiêu tháng của công ty = tổng chỉ tiêu các team.
+model KpiPlan {
+  id             String             @id @default(cuid())
+  year           Int                @unique
+  companyTarget  Float              @default(0) // KPI doanh số cả năm của công ty (VND)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  // Đã chốt: không ai sửa được chỉ tiêu cho tới khi Admin mở lại
+  lockedAt       DateTime?
+  changes        KpiPlanChange[]
+  teamTargets    KpiTeamTarget[]
+  accountTargets KpiAccountTarget[]
+}
+
+// Nhật ký thay đổi kế hoạch KPI: ai lưu, chốt hay mở lại, lúc nào
+model KpiPlanChange {
+  id        String   @id @default(cuid())
+  planId    String
+  plan      KpiPlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userName  String // giữ tên tại thời điểm thay đổi, kể cả khi user bị xoá
+  summary   String
+  createdAt DateTime @default(now())
+
+  @@index([planId, createdAt])
+}
+
+// Admin giao KPI cho team theo tháng
+model KpiTeamTarget {
+  id     String    @id @default(cuid())
+  planId String
+  plan   KpiPlan   @relation(fields: [planId], references: [id], onDelete: Cascade)
+  teamId String
+  team   SalesTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  month  Int // 1-12
+  amount Float     @default(0)
+
+  @@unique([planId, teamId, month])
+  @@index([teamId])
+}
+
+// Trưởng team chia KPI team xuống từng Account theo tháng
+model KpiAccountTarget {
+  id        String  @id @default(cuid())
+  planId    String
+  plan      KpiPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  month     Int // 1-12
+  amount    Float   @default(0)
+
+  @@unique([planId, accountId, month])
+  @@index([accountId])
 }
 
 // Phòng ban / nhóm phụ trách dự án và thêm nhiều thành viên trong một lần
@@ -297,4 +362,45 @@ model LoginRateLimit {
   updatedAt       DateTime  @updatedAt
 
   @@index([updatedAt])
+}
+
+// Bộ hồ sơ dùng chung toàn công ty (hồ sơ mẫu, hồ sơ thanh toán...)
+model DocumentSet {
+  id          String         @id @default(cuid())
+  name        String         @unique
+  description String?
+  createdAt   DateTime       @default(now())
+  files       DocumentFile[]
+  links       DocumentLink[]
+}
+
+model DocumentFile {
+  id         String      @id @default(cuid())
+  setId      String
+  set        DocumentSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  title      String // tên hiển thị do người tải đặt
+  fileName   String // tên file gốc, giữ phần mở rộng khi tải về
+  mimeType   String
+  size       Int
+  data       Bytes
+  uploaderId String?
+  uploader   User?       @relation("DocumentFileUploader", fields: [uploaderId], references: [id], onDelete: SetNull)
+  createdAt  DateTime    @default(now())
+
+  @@index([setId, createdAt])
+  @@index([uploaderId])
+}
+
+// Tài liệu dạng đường dẫn (Google Drive, Docs...) trong một bộ hồ sơ
+model DocumentLink {
+  id        String      @id @default(cuid())
+  setId     String
+  set       DocumentSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  title     String
+  url       String
+  creatorId String?
+  creator   User?       @relation("DocumentLinkCreator", fields: [creatorId], references: [id], onDelete: SetNull)
+  createdAt DateTime    @default(now())
+
+  @@index([setId, createdAt])
 }
