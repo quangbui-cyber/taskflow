@@ -11,6 +11,7 @@ export async function notify(
       | "TASK_COMPLETED"
       | "TASK_UPDATED"
       | "COMMENT"
+      | "COMMENT_MENTION"
       | "TASK_FOLLOW"
       | "DEADLINE_REMINDER"
       | "RECOGNITION_RECEIVED";

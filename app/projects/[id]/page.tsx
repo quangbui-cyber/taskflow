@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { parseCommentMentions } from "@/lib/commentMentions";
 import {
   BriefcaseBusiness,
   Building2,
@@ -68,7 +69,7 @@ export default async function ProjectPage({
       members: {
         include: {
           user: {
-            select: { id: true, name: true, email: true, avatarUrl: true },
+            select: { id: true, name: true, email: true, avatarUrl: true, isActive: true },
           },
         },
         orderBy: { createdAt: "asc" },
@@ -201,6 +202,7 @@ export default async function ProjectPage({
     comments: t.comments.map((c) => ({
       id: c.id,
       body: c.body,
+      mentions: parseCommentMentions(c.mentions, c.body),
       createdAt: c.createdAt.toISOString(),
       author: c.author,
     })),

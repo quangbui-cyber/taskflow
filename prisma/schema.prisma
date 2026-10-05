@@ -301,7 +301,7 @@ model Notification {
   dedupeKey     String?      @unique // chống tạo trùng cho thông báo tự động
   userId        String // người nhận
   user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type          String // "TASK_ASSIGNED" | "TASK_COMPLETED" | "TASK_UPDATED" | "COMMENT" | "TASK_FOLLOW" | "DEADLINE_REMINDER" | "RECOGNITION_RECEIVED"
+  type          String // "TASK_ASSIGNED" | "TASK_COMPLETED" | "TASK_UPDATED" | "COMMENT" | "COMMENT_MENTION" | "TASK_FOLLOW" | "DEADLINE_REMINDER" | "RECOGNITION_RECEIVED"
   message       String
   taskId        String?
   task          Task?        @relation(fields: [taskId], references: [id], onDelete: Cascade)
@@ -344,6 +344,7 @@ model IntegrationSetting {
 
 model Comment {
   id        String   @id @default(cuid())
+  mentions  Json     @default("[]")
   body      String
   taskId    String
   task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)

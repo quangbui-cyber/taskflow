@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { getMembership, requireUser } from "@/lib/auth";
 import { followerIds, notify } from "@/lib/notify";
+import { parseCommentMentions } from "@/lib/commentMentions";
 import { sendGoogleChat } from "@/lib/googleChat";
 import { PRIORITIES, STATUSES } from "@/lib/types";
 import { readTaskCreationFiles } from "@/lib/taskCreationFiles";
@@ -60,7 +61,7 @@ async function sendTaskChat(
   );
 }
 
-export type ActionState = { error?: string };
+export type ActionState = { error?: string; success?: string };
 
 const STATUS_KEYS: ReadonlySet<string> = new Set(STATUSES.map((s) => s.key));
 const PRIORITY_KEYS: ReadonlySet<string> = new Set(
@@ -414,8 +415,19 @@ export async function addComment(
   formData: FormData
 ): Promise<ActionState> {
   const taskId = String(formData.get("taskId") ?? "");
-  const body = String(formData.get("body") ?? "").trim();
+  const rawBody = String(formData.get("body") ?? "");
+  const body = rawBody.trim();
   if (!body) return { error: "Bình luận không được để trống." };
+  if (body.length > 5000) return { error: "Bình luận không được dài quá 5.000 ký tự." };
+  let rawMentions: unknown;
+  try {
+    rawMentions = JSON.parse(String(formData.get("mentions") ?? "[]"));
+  } catch {
+    return { error: "Danh sách người được nhắc không hợp lệ." };
+  }
+  const leadingWhitespace = rawBody.length - rawBody.trimStart().length;
+  const mentions = parseCommentMentions(rawMentions, rawBody)
+    .map((mention) => ({ ...mention, start: mention.start - leadingWhitespace, end: mention.end - leadingWhitespace }));
 
   const task = await prisma.task.findUnique({
     where: { id: taskId },
@@ -424,8 +436,23 @@ export async function addComment(
   if (!task) return { error: "Task không tồn tại." };
   const user = await assertMember(task.projectId);
 
+  const mentionedIds = [...new Set(mentions.map((mention) => mention.userId))];
+  if (mentionedIds.length) {
+    const members = await prisma.projectMember.findMany({
+      where: { projectId: task.projectId, userId: { in: mentionedIds }, user: { isActive: true } },
+      select: { userId: true, user: { select: { name: true } } },
+    });
+    if (members.length !== mentionedIds.length) {
+      return { error: "Người được nhắc phải là thành viên đang hoạt động của dự án. Hãy chọn lại từ danh sách @." };
+    }
+    const names = new Map(members.map((member) => [member.userId, member.user.name]));
+    if (mentions.some((mention) => names.get(mention.userId) !== mention.name)) {
+      return { error: "Tên người được nhắc đã thay đổi. Hãy chọn lại từ danh sách @." };
+    }
+  }
+
   await prisma.comment.create({
-    data: { body, taskId, authorId: user.id },
+    data: { body, taskId, authorId: user.id, mentions },
   });
 
   // 🔔 Bình luận: báo người làm, người giao và người theo dõi (trừ người viết)
@@ -433,7 +460,7 @@ export async function addComment(
   const snippet = body.length > 60 ? body.slice(0, 60) + "…" : body;
   await notify(
     [task.assigneeId, task.creatorId, ...followers].filter(
-      (id) => id !== user.id
+      (id) => id !== user.id && !mentionedIds.includes(id ?? "")
     ),
     {
       type: "COMMENT",
@@ -442,6 +469,13 @@ export async function addComment(
       projectId: task.projectId,
     }
   );
+
+  await notify(mentionedIds.filter((id) => id !== user.id), {
+    type: "COMMENT_MENTION",
+    message: `${user.name} đã nhắc đến bạn trong bình luận task “${task.title}”: ${snippet}`,
+    taskId,
+    projectId: task.projectId,
+  });
 
   const chatSnippet =
     body.length > 300 ? `${body.slice(0, 300).trimEnd()}…` : body;
@@ -453,8 +487,10 @@ export async function addComment(
   ]);
 
   revalidatePath(`/projects/${task.projectId}`);
-  return {};
+  revalidatePath("/notifications");
+  return { success: "Đã gửi bình luận." };
 }
+
 
 /** Thêm một người vào danh sách theo dõi task (phải là thành viên project) */
 export async function addFollower(taskId: string, userId: string) {

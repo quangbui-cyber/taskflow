@@ -1,6 +1,9 @@
+import type { CommentMention } from "@/lib/commentMentions";
+
 export type CommentDTO = {
   id: string;
   body: string;
+  mentions: CommentMention[];
   createdAt: string;
   author: { id: string; name: string; avatarUrl: string | null };
 };
@@ -35,7 +38,7 @@ export type TaskFileDTO = {
 export type MemberDTO = {
   userId: string;
   role: string;
-  user: { id: string; name: string; email: string; avatarUrl: string | null };
+  user: { id: string; name: string; email: string; avatarUrl: string | null; isActive?: boolean };
 };
 
 export const STATUSES = [

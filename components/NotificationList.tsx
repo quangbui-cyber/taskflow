@@ -34,6 +34,7 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   TASK_COMPLETED: CheckCircle2,
   TASK_UPDATED: RefreshCw,
   COMMENT: MessageSquare,
+  COMMENT_MENTION: MessageSquare,
   TASK_FOLLOW: Eye,
   DEADLINE_REMINDER: AlarmClock,
   RECOGNITION_RECEIVED: Star,
