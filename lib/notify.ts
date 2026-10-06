@@ -14,7 +14,9 @@ export async function notify(
       | "COMMENT_MENTION"
       | "TASK_FOLLOW"
       | "DEADLINE_REMINDER"
-      | "RECOGNITION_RECEIVED";
+      | "RECOGNITION_RECEIVED"
+      | "LEAVE_REQUEST"
+      | "LEAVE_DECISION";
     message: string;
     taskId?: string;
     projectId?: string;

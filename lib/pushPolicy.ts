@@ -37,7 +37,8 @@ export function parsePushRegistration(value: unknown): PushRegistration | null {
   }
 }
 
-export function notificationDestination(data: { projectId?: string; taskId?: string; recognitionId?: string }) {
+export function notificationDestination(data: { type?: string; projectId?: string; taskId?: string; recognitionId?: string }) {
+  if (data.type?.startsWith("LEAVE_")) return "/leave";
   if (data.recognitionId) return `/recognition?focus=${encodeURIComponent(data.recognitionId)}#recognition-${encodeURIComponent(data.recognitionId)}`;
   if (data.projectId) return `/projects/${encodeURIComponent(data.projectId)}${data.taskId ? `?task=${encodeURIComponent(data.taskId)}` : ""}`;
   return "/notifications";

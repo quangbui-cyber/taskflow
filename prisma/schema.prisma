@@ -38,6 +38,11 @@ model User {
   kpiPlanChanges       KpiPlanChange[]
   uploadedDocuments    DocumentFile[]      @relation("DocumentFileUploader")
   createdDocumentLinks DocumentLink[]      @relation("DocumentLinkCreator")
+  annualLeaveDays      Float               @default(12) // số ngày phép năm do Admin đặt
+  // Quản lý nghỉ phép: duyệt đơn của người chưa có quản lý, nhận thông báo kết quả mọi đơn
+  isLeaveManager       Boolean             @default(false)
+  leaveRequests        LeaveRequest[]      @relation("LeaveRequester")
+  leaveDecisions       LeaveRequest[]      @relation("LeaveDecider")
 
   @@index([isActive])
 }
@@ -404,4 +409,26 @@ model DocumentLink {
   createdAt DateTime    @default(now())
 
   @@index([setId, createdAt])
+}
+
+// Đơn xin nghỉ phép: quản lý trực tiếp duyệt; chưa có quản lý thì quản lý nghỉ phép duyệt
+model LeaveRequest {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation("LeaveRequester", fields: [userId], references: [id], onDelete: Cascade)
+  type         String // "ANNUAL" | "UNPAID"
+  startDate    DateTime  @db.Date
+  endDate      DateTime  @db.Date
+  halfDay      String? // "AM" | "PM" — chỉ khi nghỉ một ngày
+  days         Float // số ngày làm việc được tính (0,5 nếu nghỉ nửa ngày)
+  reason       String?
+  status       String    @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED"
+  deciderId    String?
+  decider      User?     @relation("LeaveDecider", fields: [deciderId], references: [id], onDelete: SetNull)
+  decidedAt    DateTime?
+  decisionNote String?
+  createdAt    DateTime  @default(now())
+
+  @@index([userId, startDate])
+  @@index([status, startDate])
 }

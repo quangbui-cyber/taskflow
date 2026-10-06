@@ -4,6 +4,7 @@ import {
   Bell,
   BriefcaseBusiness,
   Building2,
+  CalendarDays,
   CheckCircle2,
   ChevronDown,
   CircleDollarSign,
@@ -48,6 +49,8 @@ type ActiveSection =
   | "revenue"
   | "kpi"
   | "documents"
+  | "leave"
+  | "profile"
   | "admin";
 
 const ARCHIVED_PROJECT_GROUPS = [
@@ -409,6 +412,7 @@ export default async function Sidebar({
               )}
               <MenuLink href="/kpi" label="KPI" icon={Target} active={activeSection === "kpi"} />
               <MenuLink href="/documents" label="Tài liệu" icon={FolderOpen} active={activeSection === "documents"} />
+              <MenuLink href="/leave" label="Nghỉ phép" icon={CalendarDays} active={activeSection === "leave"} />
             </nav>
 
             <div className="mt-6">
@@ -452,10 +456,16 @@ export default async function Sidebar({
                 avatarUrl={user.avatarUrl}
                 className="h-9 w-9 text-sm"
               />
-              <div className="min-w-0 flex-1" title={user.email}>
+              <Link
+                href="/profile"
+                prefetch={false}
+                aria-current={activeSection === "profile" ? "page" : undefined}
+                className="min-w-0 flex-1 rounded-[6px] px-1 py-0.5 transition-colors hover:bg-zinc-100"
+                title="Tài khoản của tôi: đổi tên, ảnh đại diện, mật khẩu"
+              >
                 <p className="truncate text-sm font-medium text-zinc-800">{user.name}</p>
                 <p className="truncate text-xs text-zinc-400">{user.email}</p>
-              </div>
+              </Link>
               <LogoutButton />
             </div>
           </div>
@@ -476,6 +486,7 @@ export default async function Sidebar({
               {showRevenue && <MenuLink href="/revenue" label="Doanh số" icon={CircleDollarSign} active={activeSection === "revenue"} />}
               <MenuLink href="/kpi" label="KPI" icon={Target} active={activeSection === "kpi"} />
               <MenuLink href="/documents" label="Tài liệu" icon={FolderOpen} active={activeSection === "documents"} />
+              <MenuLink href="/leave" label="Nghỉ phép" icon={CalendarDays} active={activeSection === "leave"} />
             </div>
             <div className="my-3 border-t border-zinc-200" />
             <div className="mb-2 flex items-center justify-between px-3">
@@ -506,10 +517,16 @@ export default async function Sidebar({
                 avatarUrl={user.avatarUrl}
                 className="h-9 w-9 text-sm"
               />
-              <div className="min-w-0 flex-1">
+              <Link
+                href="/profile"
+                prefetch={false}
+                aria-current={activeSection === "profile" ? "page" : undefined}
+                className="min-w-0 flex-1 rounded-[6px] px-1 py-0.5 transition-colors hover:bg-zinc-100"
+                title="Tài khoản của tôi: đổi tên, ảnh đại diện, mật khẩu"
+              >
                 <p className="truncate text-sm font-medium">{user.name}</p>
                 <p className="truncate text-xs text-zinc-400">{user.email}</p>
-              </div>
+              </Link>
               <LogoutButton />
             </div>
           </div>

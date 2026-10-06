@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
+  CalendarDays,
   AlarmClock,
   Bell,
   CheckCircle2,
@@ -38,6 +39,8 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   TASK_FOLLOW: Eye,
   DEADLINE_REMINDER: AlarmClock,
   RECOGNITION_RECEIVED: Star,
+  LEAVE_REQUEST: CalendarDays,
+  LEAVE_DECISION: CalendarDays,
 };
 
 function timeAgo(value: string): string {
@@ -83,7 +86,9 @@ export default function NotificationList({
   function openNotification(notification: NotificationItem) {
     if (readingId) return;
 
-    const destination = notification.recognitionId
+    const destination = notification.type.startsWith("LEAVE_")
+      ? "/leave"
+      : notification.recognitionId
       ? `/recognition?focus=${notification.recognitionId}#recognition-${notification.recognitionId}`
       : notification.projectId
         ? `/projects/${notification.projectId}${
