@@ -1,4 +1,4 @@
-export const MIN_PASSWORD_LENGTH = 10;
+export const MIN_PASSWORD_LENGTH = 6;
 
 export function passwordLengthError(password: string) {
   return password.length < MIN_PASSWORD_LENGTH
