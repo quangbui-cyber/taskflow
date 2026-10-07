@@ -17,7 +17,9 @@
 
 # next.js
 /.next/
-/.next.nosync/
+# Local verification uses TASKFLOW_DIST_DIR to create disposable .next.* trees.
+/.next.*/
+/.tmp/
 /out/
 
 # production
