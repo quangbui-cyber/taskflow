@@ -522,3 +522,17 @@ textarea:focus-visible {
     animation-iteration-count: 1 !important;
   }
 }
+@media print {
+  @page costflow { size: A4 landscape; margin: 10mm; }
+  .tf-costflow-print { page: costflow; }
+  .tf-costflow-no-print { display: none !important; }
+  .tf-costflow-print { width: 100%; max-width: none; padding: 0; font-family: "Times New Roman", serif; }
+  .tf-costflow-print table { font-size: 10pt; }
+  .tf-costflow-print .overflow-x-auto { overflow: visible; }
+  .tf-costflow-print .tf-customer-hierarchy-table { font-size: 9pt; line-height: 1.2; }
+  .tf-costflow-print .tf-customer-hierarchy-table td:nth-child(7),
+  .tf-costflow-print .tf-customer-hierarchy-table td:nth-child(8) { white-space: nowrap; }
+  .tf-costflow-print .tf-customer-hierarchy-table tfoot { display: table-row-group; }
+  .tf-costflow-print .tf-customer-hierarchy-table tr { break-inside: avoid; page-break-inside: avoid; }
+  .tf-costflow-print .tf-customer-hierarchy-table .tf-customer-group-row { break-after: avoid; page-break-after: avoid; }
+}
