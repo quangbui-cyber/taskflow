@@ -64,24 +64,30 @@ export default function MeetingRoomManager({ rooms }: { rooms: RoomItem[] }) {
         action={formAction}
         className="flex flex-col gap-2 border-b border-zinc-100 p-4 sm:flex-row"
       >
-        <input
-          name="name"
-          type="text"
-          required
-          maxLength={60}
-          placeholder="Tên phòng, ví dụ: Phòng họp tầng 3"
-          className="tf-field min-w-0 flex-1"
-        />
-        <input
-          name="capacity"
-          type="number"
-          min={1}
-          max={1000}
-          placeholder="Sức chứa"
-          className="tf-field sm:w-32"
-          aria-label="Sức chứa"
-        />
-        <button type="submit" disabled={pending} className="tf-button-primary" aria-busy={pending}>
+        {/* .tf-field luôn rộng 100% nên phải đặt kích thước ở khung bọc, không đặt trên ô nhập. */}
+        <div className="min-w-0 flex-1">
+          <input
+            name="name"
+            type="text"
+            required
+            maxLength={60}
+            placeholder="Tên phòng, ví dụ: Phòng họp tầng 3"
+            className="tf-field"
+            aria-label="Tên phòng họp"
+          />
+        </div>
+        <div className="shrink-0 sm:w-28">
+          <input
+            name="capacity"
+            type="number"
+            min={1}
+            max={1000}
+            placeholder="Sức chứa"
+            className="tf-field"
+            aria-label="Sức chứa"
+          />
+        </div>
+        <button type="submit" disabled={pending} className="tf-button-primary shrink-0" aria-busy={pending}>
           {pending ? (
             <span className="tf-spinner" aria-hidden="true" />
           ) : (
