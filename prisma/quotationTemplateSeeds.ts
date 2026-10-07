@@ -2,10 +2,10 @@ import type { PrismaClient } from "@prisma/client";
 import type { PairedRow } from "../lib/costflow/types";
 import type { FormulaNode, ParameterBinding, QuotationParameterSnapshot } from "../lib/costflow/quotationParameters";
 
-export const TEAMBUILDING_TEMPLATE_ID = "quotation-template-teambuilding-v1";
-export const TEAMBUILDING_TEMPLATE_NAME = "Báo giá mẫu — Teambuilding";
+export const TEAMBUILDING_TEMPLATE_ID = "quotation-template-teambuilding-parameters-v2";
+export const TEAMBUILDING_TEMPLATE_NAME = "Báo giá mẫu — Teambuilding (tham số)";
 export const TEAMBUILDING_TEMPLATE_DESCRIPTION =
-  "Loại project: Teambuilding. Khung báo giá tham khảo cho chương trình 2 ngày; Account phải rà soát lại số lượng, số ngày, đơn giá và VAT trước khi sử dụng.";
+  "Loại project: Teambuilding. Template Event Pricing Parameters v2 cho chương trình 2 ngày; Account phải rà soát lại số người, số ngày, số đêm, số phòng, đơn giá và VAT trước khi sử dụng.";
 
 const blankBuy = () => ({
   unit: "",

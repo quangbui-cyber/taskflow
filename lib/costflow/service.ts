@@ -112,7 +112,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
     };
     const createRequest = async (kind: string, body: RequestPayload, chain: ApprovalStep[], state = "SUBMITTED") => {
       const parentId = text(form, "parentRequestId");
-      const parent = parentId ? requests.find(r => r.id === parentId && r.kind === kind && r.creatorId === actor.id && ["RETURNED", "REJECTED"].includes(r.state)) : undefined;
+      const parent = parentId ? requests.find(r => r.id === parentId && r.kind === kind && r.creatorId === actor.id && ["RETURNED", "REJECTED", "WITHDRAWN"].includes(r.state)) : undefined;
       if (parentId && !parent) throw new Error("Hồ sơ nguồn không thuộc đúng loại/project/người lập hoặc chưa ở trạng thái được gửi lại.");
       if (parent) {
         const response = String(body.explanation ?? "").trim();

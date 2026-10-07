@@ -7,7 +7,7 @@ import { evaluateFormula, normalizeParameterSnapshot } from "../lib/costflow/quo
 
 test("Teambuilding quotation template preserves hierarchy, source quantities and billable day multiplication", () => {
   const rows = normalizePairedRows(TEAMBUILDING_TEMPLATE_SNAPSHOT.rows);
-  assert.equal(TEAMBUILDING_TEMPLATE_NAME, "Báo giá mẫu — Teambuilding");
+  assert.equal(TEAMBUILDING_TEMPLATE_NAME, "Báo giá mẫu — Teambuilding (tham số)");
   assert.match(TEAMBUILDING_TEMPLATE_DESCRIPTION, /Loại project: Teambuilding/);
   assert.match(TEAMBUILDING_TEMPLATE_SNAPSHOT.notes, /LOẠI PROJECT: TEAMBUILDING/);
   assert.equal(rows.length, 42);
