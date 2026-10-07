@@ -1,4 +1,3 @@
-import Link from "next/link";
 import {
   BriefcaseBusiness,
   Building2,
@@ -18,6 +17,7 @@ import ProjectDescriptionDisclosure from "@/components/ProjectDescriptionDisclos
 import ProjectWebhookPanel from "@/components/ProjectWebhookPanel";
 import ProjectFilesPanel from "@/components/ProjectFilesPanel";
 import ProjectStatusSelect from "@/components/ProjectStatusSelect";
+import ProjectTabs from "@/components/ProjectTabs";
 import {
   formatVND,
   projectStatusColor,
@@ -377,46 +377,7 @@ export default async function ProjectPage({
             )}
           </div>
 
-          <nav
-            className="tf-scroll-tabs mt-3 flex gap-1 border-t border-zinc-100 py-3"
-            aria-label="Project tabs"
-          >
-            <Link
-              href={`/projects/${project.id}`}
-              className={`rounded-[7px] px-3 py-1.5 text-sm font-medium transition-colors ${
-                activeTab === "tasks"
-                  ? "bg-brand-50 text-brand-800"
-                  : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
-              }`}
-            >
-              Task
-            </Link>
-            <Link
-              href={`/projects/${project.id}?tab=files`}
-              className={`rounded-[7px] px-3 py-1.5 text-sm font-medium transition-colors ${
-                activeTab === "files"
-                  ? "bg-brand-50 text-brand-800"
-                  : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
-              }`}
-            >
-              Tài liệu
-              {project.files.length > 0 && (
-                <span className="ml-1.5 text-xs text-zinc-400">
-                  {project.files.length}
-                </span>
-              )}
-            </Link>
-            <Link
-              href={`/projects/${project.id}?tab=webhook`}
-              className={`rounded-[7px] px-3 py-1.5 text-sm font-medium transition-colors ${
-                activeTab === "webhook"
-                  ? "bg-brand-50 text-brand-800"
-                  : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
-              }`}
-            >
-              Webhook
-            </Link>
-          </nav>
+          <div className="mt-3"><ProjectTabs projectId={project.id} active={activeTab} fileCount={project.files.length} /></div>
         </header>
 
         {activeTab === "webhook" ? (

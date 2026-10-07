@@ -19,6 +19,7 @@ import { assertEligibleApprovalReceiver } from "@/lib/workflow/permissions";
 import { initializeQuotationReuseDraft } from "./quotationReuse";
 import { blankPairedRow } from "./pairedDraft";
 import { normalizeParameterBinding, parameterFinalizationIssues } from "./quotationParameters";
+import { effectiveBaseline, icDecisionPolicy } from "./icEffectiveness";
 
 type Actor = { id: string; role: string };
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -90,7 +91,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
     if (workspace.version !== expectedVersion) throw new Error("Dữ liệu đã thay đổi. Tải lại trang trước khi thao tác.");
     const steps = request?.steps as ApprovalStep[] | undefined;
     const canReadRequest = !!request && (member || isAdmin || request.creatorId === actor.id || request.cashAssigneeId === actor.id || !!steps?.some(s => s.assigneeId === actor.id));
-    if (!member && !isAdmin && (!canReadRequest || !["DECIDE", "CASH", "TRANSFER"].includes(command))) throw new Error("Bạn chỉ được xử lý hồ sơ được phân công.");
+    if (!member && !isAdmin && (!canReadRequest || !["DECIDE", "CASH", "TRANSFER", "IC_MANAGER_EXPLANATION"].includes(command))) throw new Error("Bạn chỉ được xử lý hồ sơ được phân công.");
     if (data.closed && command !== "CONFIGURE" && !(command === "CREATE_REQUEST" && text(form, "kind") === "REOPEN") && !(["DECIDE", "TRANSFER"].includes(command) && request?.kind === "REOPEN")) throw new Error("Tài chính đã đóng. Cần yêu cầu Quản lý mở lại.");
     const needCreator = () => { if (!canCreate) throw new Error("Chỉ Account/người lập được phân công mới được lập hoặc sửa hồ sơ tài chính."); };
     const activeUser = async (id: string) => {
@@ -112,7 +113,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
     };
     const createRequest = async (kind: string, body: RequestPayload, chain: ApprovalStep[], state = "SUBMITTED") => {
       const parentId = text(form, "parentRequestId");
-      const parent = parentId ? requests.find(r => r.id === parentId && r.kind === kind && r.creatorId === actor.id && ["RETURNED", "REJECTED", "WITHDRAWN"].includes(r.state)) : undefined;
+      const parent = parentId ? requests.find(r => r.id === parentId && r.kind === kind && r.creatorId === actor.id && ["RETURNED", "REJECTED", "WITHDRAWN", "CANCELLED"].includes(r.state)) : undefined;
       if (parentId && !parent) throw new Error("Hồ sơ nguồn không thuộc đúng loại/project/người lập hoặc chưa ở trạng thái được gửi lại.");
       if (parent) {
         const response = String(body.explanation ?? "").trim();
@@ -274,7 +275,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         const existing = data.revisions.find(r => r.requestId === request?.id);
         const working = workingIcRevision(data, requests);
         const parentRequest = requests.find(q => q.id === copySource?.requestId);
-        const handoff = !!copySource && ["RETURNED", "WITHDRAWN"].includes(parentRequest?.state ?? "") && parentRequest?.creatorId === actor.id;
+        const handoff = !!copySource && ["RETURNED", "WITHDRAWN", "CANCELLED"].includes(parentRequest?.state ?? "") && parentRequest?.creatorId === actor.id;
         if (working && working.id !== existing?.id && !(handoff && working.id === copySource?.id)) throw new Error("Project đã có revision đang xử lý; tiếp tục bản đó trước.");
         if (request && (!existing || request.state !== "DRAFT" || request.creatorId !== actor.id)) throw new Error("Chỉ sửa được IC nháp của người lập. Bản đã trình cần rút trước.");
         const rows = JSON.parse(text(form, "lines")) as Partial<IcLine>[];
@@ -310,7 +311,11 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         } else {
           const id = randomUUID();
           const saved = await createRequest("IC", { revisionId: id, explanation: text(form, "explanation") }, [], "DRAFT");
-          const revision = { id, number: data.revisions.length + 1, requestId: saved.id, effective: false, lines, poIds, briefIds, evidenceIds, createdBy: actor.id, ...(copySource ? { parentRevisionId: copySource.id, parameterConfig: copySource.parameterConfig ? structuredClone(copySource.parameterConfig) : undefined } : {}) };
+          const withdrawalReason = parentRequest ? (await tx.workflowDecision.findFirst({ where: { requestId: parentRequest.id, action: "WITHDRAW" }, orderBy: { createdAt: "desc" }, select: { reason: true } }))?.reason : undefined;
+          const cancellationReason = parentRequest?.state === "CANCELLED" ? String((requests.find(candidate => candidate.kind === "CANCEL" && candidate.state === "APPROVED" && (candidate.payload as RequestPayload).targetRequestId === parentRequest.id)?.payload as RequestPayload | undefined)?.explanation ?? "") : undefined;
+          const lineageReason = text(form, "explanation") || withdrawalReason || cancellationReason || undefined;
+          if (handoff && !lineageReason) throw new Error("Thiếu lý do rút/hủy/trả để liên kết revision mới.");
+          const revision = { id, number: data.revisions.length + 1, requestId: saved.id, effective: false, lines, poIds, briefIds, evidenceIds, createdBy: actor.id, ...(copySource ? { parentRevisionId: copySource.id, lineageReason, parameterConfig: copySource.parameterConfig ? structuredClone(copySource.parameterConfig) : undefined } : {}) };
           if (handoff && copySource) {
             if (!copySource.submissions?.length && parentRequest) copySource.submissions = [{ requestId: parentRequest.id, requestVersion: parentRequest.version, submittedAt: null, title: parentRequest.title, parameterConfig: copySource.parameterConfig ? structuredClone(copySource.parameterConfig) : undefined, lines: structuredClone(copySource.lines), poIds: [...copySource.poIds], briefIds: [...(copySource.briefIds ?? [])], evidenceIds: [...(copySource.evidenceIds ?? [])] }];
             copySource.supersededByRevisionId = id;
@@ -334,6 +339,8 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         if (!request || request.state !== "DRAFT" || request.creatorId !== actor.id || request.kind !== "IC") throw new Error("Chỉ người lập được gửi IC nháp.");
         const revision = data.revisions.find(r => r.requestId === request.id);
         if (!revision?.lines.length) throw new Error("IC cần ít nhất một dòng hợp lệ.");
+        const explanation = requireValue(text(form, "explanation"), "lý do hoặc tóm tắt thay đổi");
+        const baseline = effectiveBaseline(data.revisions);
         const parameterRows = revision.lines.map(line => {
           const row = blankPairedRow(line.itemId ?? line.id);
           row.name = line.description;
@@ -351,12 +358,12 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         const proofs = await tx.costFlowEvidence.findMany({ where: { projectId, id: { in: ids } }, select: { id: true, sha256: true } });
         if (proofs.length !== ids.length) throw new Error("Minh chứng đã thay đổi hoặc không thuộc project.");
         revision.evidenceHashes = Object.fromEntries(proofs.map(p => [p.id, p.sha256]));
-        revision.submissions = [...(revision.submissions ?? []), { requestId: request.id, requestVersion: request.version + 1, submittedAt: new Date().toISOString(), title: request.title, parameterConfig: revision.parameterConfig ? structuredClone(revision.parameterConfig) : undefined, tree: structuredClone(revision.tree ?? []), evidenceHashes: { ...revision.evidenceHashes }, lines: structuredClone(revision.lines), poIds: [...revision.poIds], briefIds: [...(revision.briefIds ?? [])], evidenceIds: [...(revision.evidenceIds ?? [])] }];
+        revision.submissions = [...(revision.submissions ?? []), { requestId: request.id, requestVersion: request.version + 1, submittedAt: new Date().toISOString(), title: request.title, explanation, baselineRevisionId: baseline?.id ?? null, parameterConfig: revision.parameterConfig ? structuredClone(revision.parameterConfig) : undefined, tree: structuredClone(revision.tree ?? []), evidenceHashes: { ...revision.evidenceHashes }, lines: structuredClone(revision.lines), poIds: [...revision.poIds], briefIds: [...(revision.briefIds ?? [])], evidenceIds: [...(revision.evidenceIds ?? [])] }];
         const chain = await ordinarySteps();
         const attemptId = randomUUID();
         const submittedVersion = request.version + 1;
         if ((await tx.workflowRequest.updateMany({ where: { id: request.id, version: request.version }, data: { state: "SUBMITTED", steps: json(chain), currentStep: 0, currentAttemptId: attemptId, currentStepArrivedAt: new Date(), version: { increment: 1 }, payload: json(revision) } })).count !== 1) throw new Error("Dữ liệu đã thay đổi. Tải lại trang trước khi thao tác.");
-        await recordApprovalEvent(tx, { requestId: request.id, module: request.module, attemptId, submittedVersion, mutationVersion: submittedVersion, stepIndex: 0, role: chain[0].role, actorId: actor.id, action: "SUBMIT", recipients: [chain[0].assigneeId] });
+        await recordApprovalEvent(tx, { requestId: request.id, module: request.module, attemptId, submittedVersion, mutationVersion: submittedVersion, stepIndex: 0, role: chain[0].role, actorId: actor.id, action: "SUBMIT", reason: explanation, details: json({ explanation, baselineRevisionId: baseline?.id ?? null }), recipients: [chain[0].assigneeId] });
         break;
       }
       case "IC_NOTES": {
@@ -474,7 +481,9 @@ export async function executeFinance(projectId: string, expectedVersion: number,
           if (kind === "CLOSE") assertClose();
           if (kind === "REOPEN" && !data.closed) throw new Error("Tài chính chưa đóng.");
           const target = kind === "CANCEL" ? requests.find(r => r.id === text(form, "targetRequestId")) : null;
-          if (kind === "CANCEL" && (!target || target.state !== "APPROVED" || cash.some(c => c.requestId === target.id))) throw new Error("Chỉ yêu cầu hủy hồ sơ đã duyệt, chưa chi.");
+          const targetRevision = target ? data.revisions.find(revision => revision.requestId === target.id) : undefined;
+          const cancellableIc = !!targetRevision?.effective && ["SUBMITTED", "APPROVED", "RETURNED", "REJECTED"].includes(target?.state ?? "");
+          if (kind === "CANCEL" && (!target || (!cancellableIc && target.state !== "APPROVED") || cash.some(c => c.requestId === target.id))) throw new Error("Chỉ yêu cầu hủy hồ sơ đã duyệt hoặc IC đang hiệu lực, chưa chi.");
           const managerId = await activeUser(target ? (target.steps as ApprovalStep[])[0]?.assigneeId : data.config.managerId);
           await createRequest(kind, { explanation: text(form, "explanation"), targetRequestId: target?.id }, [{ role: "MANAGER", assigneeId: managerId }]);
           break;
@@ -511,10 +520,11 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         if (!request || !steps) throw new Error("Không tìm thấy hồ sơ.");
         const submittedVersion = await approvalSubmittedVersion();
         assertApprovalToken(request, form, submittedVersion);
-        const action = text(form, "decision") as Decision;
-        const corrections = correctionItems(form, action);
-        const next = decide({ ...request, steps }, actor.id, action, text(form, "reason"));
         const role = steps[request.currentStep]?.role;
+        const action = text(form, "decision") as Decision;
+        const policy = icDecisionPolicy(request.kind, role, action);
+        const corrections = correctionItems(form, action, { optional: policy.correctionsOptional });
+        const next = decide({ ...request, steps }, actor.id, action, text(form, "reason"), { reasonOptional: policy.reasonOptional });
         if (action === "APPROVE" && role === "ACCOUNTANT" && text(form, "reviewConfirmed") !== "yes") throw new Error("Kế toán cần xác nhận đã kiểm tra thông tin, chứng từ và phiên bản trước khi chuyển CEO.");
         if (action === "APPROVE" && role === "ACCOUNTANT" && payload?.recipientKey?.startsWith("VENDOR:")) {
           const beneficiary = data.beneficiaries.find(b => `VENDOR:${b.id}` === payload.recipientKey);
@@ -531,8 +541,9 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         }
         if (action === "APPROVE" && request.kind === "CANCEL") {
           const target = requests.find(r => r.id === payload?.targetRequestId);
-          if (!target || target.state !== "APPROVED" || cash.some(c => c.requestId === target.id)) throw new Error("Hồ sơ đã thay đổi hoặc đã có giao dịch tiền, không được hủy theo nhánh chưa chi.");
-          const revision = data.revisions.find(r => r.requestId === target.id);
+          const revision = target ? data.revisions.find(r => r.requestId === target.id) : undefined;
+          const cancellableIc = !!revision?.effective && ["SUBMITTED", "APPROVED", "RETURNED", "REJECTED"].includes(target?.state ?? "");
+          if (!target || (!cancellableIc && target.state !== "APPROVED") || cash.some(c => c.requestId === target.id)) throw new Error("Hồ sơ đã thay đổi hoặc đã có giao dịch tiền, không được hủy theo nhánh chưa chi.");
           if (revision && cash.some(c => (requests.find(r => r.id === c.requestId)?.payload as RequestPayload)?.revisionId === revision.id)) throw new Error("Đã chi theo IC này, không được hủy theo nhánh chưa chi.");
           if (revision) revision.effective = false;
           await tx.workflowRequest.update({ where: { id: target.id }, data: { state: "CANCELLED", version: { increment: 1 } } });
@@ -547,9 +558,35 @@ export async function executeFinance(projectId: string, expectedVersion: number,
           // CEO RETURN/REJECT changes approval only; never revoke budget or cash.
         }
         const nextAssignee = action === "APPROVE" && next.state === "SUBMITTED" ? steps[next.currentStep]?.assigneeId : undefined;
+        const ceoRecipients = request.kind === "IC" && role === "CEO" && ["RETURN", "REJECT"].includes(action)
+          ? [request.creatorId, steps.find(step => step.role === "MANAGER")?.assigneeId, steps.find(step => step.role === "ACCOUNTANT")?.assigneeId].filter((id): id is string => !!id)
+          : [];
         if ((await tx.workflowRequest.updateMany({ where: { id: request.id, version: request.version }, data: { ...next, currentStepArrivedAt: next.state === "SUBMITTED" && action === "APPROVE" ? new Date() : next.state === "SUBMITTED" ? request.currentStepArrivedAt : null, version: { increment: 1 } } })).count !== 1) throw new Error("Dữ liệu đã thay đổi. Tải lại trang trước khi thao tác.");
         await tx.workflowDecision.create({ data: { requestId: request.id, version: request.version + 1, step: request.currentStep, actorId: actor.id, action, reason: text(form, "reason") } });
-        await recordApprovalEvent(tx, { requestId: request.id, module: request.module, attemptId: request.currentAttemptId, submittedVersion, mutationVersion: request.version + 1, stepIndex: request.currentStep, role: role ?? "CREATOR", actorId: actor.id, action, reason: text(form, "reason"), details: corrections.length ? json({ correctionItems: corrections }) : undefined, recipients: nextAssignee ? [nextAssignee] : [] });
+        await recordApprovalEvent(tx, { requestId: request.id, module: request.module, attemptId: request.currentAttemptId, submittedVersion, mutationVersion: request.version + 1, stepIndex: request.currentStep, role: role ?? "CREATOR", actorId: actor.id, action, reason: text(form, "reason"), details: corrections.length ? json({ correctionItems: corrections }) : undefined, recipients: ceoRecipients.length ? ceoRecipients : nextAssignee ? [nextAssignee] : [] });
+        if (request.kind === "IC" && role === "CEO" && action === "RETURN") {
+          const reviewed = data.revisions.find(revision => revision.requestId === request.id);
+          if (!reviewed) throw new Error("Thiếu revision IC đã xét.");
+          if (reviewed.supersededByRevisionId) throw new Error("Revision sửa lại đã tồn tại. Tải lại trang.");
+          const correctionId = randomUUID();
+          const correctionRequest = await tx.workflowRequest.create({ data: { projectId, module: "COSTFLOW", kind: "IC", title: `${request.title} · bản sửa`, creatorId: request.creatorId, cashAssigneeId: request.creatorId, parentId: request.id, steps: json([]), payload: json({ revisionId: correctionId, explanation: text(form, "reason") }), state: "DRAFT" } });
+          const correction = { ...structuredClone(reviewed), id: correctionId, number: data.revisions.length + 1, requestId: correctionRequest.id, effective: false, createdBy: request.creatorId, parentRevisionId: reviewed.id, lineageReason: text(form, "reason") || "CEO trả để sửa", supersededByRevisionId: undefined, submissions: [] };
+          reviewed.supersededByRevisionId = correction.id;
+          data.revisions.push(correction);
+          data.workingRevisionId = correction.id;
+          await tx.workflowRequest.update({ where: { id: correctionRequest.id }, data: { payload: json(correction) } });
+          savedRevisionId = correction.id;
+        }
+        break;
+      }
+      case "IC_MANAGER_EXPLANATION": {
+        if (!request || request.kind !== "IC" || !steps || !["RETURNED", "REJECTED"].includes(request.state)) throw new Error("Chỉ ghi giải trình cho IC sau quyết định CEO trả hoặc từ chối.");
+        const managerId = steps.find(step => step.role === "MANAGER")?.assigneeId;
+        if (!managerId || actor.id !== managerId) throw new Error("Chỉ Quản lý được phân công của IC này có thể ghi giải trình.");
+        const explanation = requireValue(text(form, "explanation"), "giải trình của Quản lý");
+        const submittedVersion = await approvalSubmittedVersion();
+        if ((await tx.workflowRequest.updateMany({ where: { id: request.id, version: request.version }, data: { version: { increment: 1 } } })).count !== 1) throw new Error("Dữ liệu đã thay đổi. Tải lại trang trước khi thao tác.");
+        await recordApprovalEvent(tx, { requestId: request.id, module: request.module, attemptId: request.currentAttemptId, submittedVersion, mutationVersion: request.version + 1, stepIndex: request.currentStep, role: "MANAGER", actorId: actor.id, action: "IC_MANAGER_EXPLANATION", reason: explanation });
         break;
       }
       case "TRANSFER": {

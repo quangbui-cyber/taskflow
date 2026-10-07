@@ -25,6 +25,8 @@ export type NotificationItem = {
   projectId: string | null;
   taskId: string | null;
   recognitionId: string | null;
+  workflowRequestId: string | null;
+  workflowModule: string | null;
   read: boolean;
   createdAt: string;
 };
@@ -82,7 +84,11 @@ export default function NotificationList({
   function openNotification(notification: NotificationItem) {
     if (readingId) return;
 
-    const destination = notification.recognitionId
+    const destination = notification.workflowRequestId
+      ? notification.workflowModule === "COSTFLOW" && notification.projectId
+        ? `/projects/${notification.projectId}/costflow#request-${notification.workflowRequestId}`
+        : `/workflow/${notification.workflowRequestId}`
+      : notification.recognitionId
       ? `/recognition?focus=${notification.recognitionId}#recognition-${notification.recognitionId}`
       : notification.projectId
         ? `/projects/${notification.projectId}${

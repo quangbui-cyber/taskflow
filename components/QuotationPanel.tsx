@@ -24,7 +24,7 @@ import { Badge, EmptyState, Panel, Table } from "@/components/ui/Presentation";
 import { Dialog } from "@/components/ui/Dialog";
 import { displayMoney, totals } from "@/lib/costflow/money";
 import { projectQuotation } from "@/lib/costflow/quotationProjection";
-import type { IcLine, Quotation } from "@/lib/costflow/types";
+import type { Quotation } from "@/lib/costflow/types";
 import CustomerQuotationView from "./CustomerQuotationView";
 import QuotationTemplateProposalButton from "./QuotationTemplateProposalButton";
 
@@ -32,10 +32,9 @@ type Props = {
   finance: Finance;
   canCreate: boolean;
   userId?: string;
-  onCreateIc: (lines: Partial<IcLine>[], poIds: string[], title: string, briefIds: string[]) => void;
 };
 
-export default function QuotationPanel({ finance, canCreate, userId, onCreateIc }: Props) {
+export default function QuotationPanel({ finance, canCreate, userId }: Props) {
   const quotations = useMemo(() => finance.data.quotations ?? [], [finance.data.quotations]);
   const [selectedId, setSelectedId] = useState<string>("");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -73,20 +72,6 @@ export default function QuotationPanel({ finance, canCreate, userId, onCreateIc 
   const pos = finance.data.pos ?? [];
   const files = finance.files ?? [];
   const totalSourcesCount = briefs.length + pos.length + files.length;
-
-  const handleCreateIcFromQuote = (q: Quotation) => {
-    const lines: Partial<IcLine>[] = q.lines.map(line => ({
-      description: line.description,
-      unit: line.unit,
-      quantity: line.quantity,
-      unitPrice: "",
-      basis: "NET",
-      vatPercent: line.vatPercent || "8",
-      quotationId: q.id,
-      quotationLineId: line.id
-    }));
-    onCreateIc(lines, q.poIds, q.title, q.briefIds ?? []);
-  };
 
   return (
     <div className="space-y-6">
@@ -392,13 +377,10 @@ export default function QuotationPanel({ finance, canCreate, userId, onCreateIc 
 
             <div className="flex flex-wrap items-center gap-2">
               {canCreate && !finance.data.closed && (
-                <Button
-                  variant="secondary"
-                  onClick={() => handleCreateIcFromQuote(selected)}
-                >
+                <Link className="tf-button-secondary" href={`/projects/${finance.project.id}/costflow/quotations/${selected.id}/ic`}>
                   <Layers3 size={14} className="mr-1.5" aria-hidden="true" />
                   Lập IC từ bản này
-                </Button>
+                </Link>
               )}
               <QuotationTemplateProposalButton
                 projectId={finance.project.id}

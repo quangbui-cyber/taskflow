@@ -72,7 +72,7 @@ test("parameter snapshots survive template drift, CAS, finalization, submit and 
     assert.equal(race.filter(result => result.status === "fulfilled").length, 1);
     assert.equal(await version(), raceVersion + 1);
 
-    await act("SUBMIT", { requestId: revision.requestId });
+    await act("SUBMIT", { requestId: revision.requestId, explanation: "Submit parameterized IC" });
     data = await state();
     const submitted = data.revisions.find(item => item.id === revision.id)!;
     assert.equal(submitted.submissions!.at(-1)!.parameterConfig!.sharedValues.participants, "12");

@@ -312,7 +312,17 @@ export async function deleteProject(projectId: string) {
   if (!project || project.ownerId !== user.id) {
     return { error: "Chỉ chủ project mới được xoá." };
   }
-  await prisma.project.delete({ where: { id: projectId } });
+  if (await prisma.costFlowWorkspace.findUnique({ where: { projectId }, select: { projectId: true } })) {
+    return { error: "Không thể xoá project có hồ sơ hoặc lịch sử CostFlow." };
+  }
+  try {
+    await prisma.project.delete({ where: { id: projectId } });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+      return { error: "Project có lịch sử được bảo vệ, không thể xoá." };
+    }
+    throw error;
+  }
   revalidatePath("/");
   redirect("/");
 }

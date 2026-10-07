@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { MIN_PASSWORD_LENGTH } from "../lib/password";
+import { seedQuotationTemplates } from "./quotationTemplateSeeds";
 
 const prisma = new PrismaClient();
 const DEFAULT_PASSWORD = "gasangtao1810";
@@ -213,6 +214,8 @@ function assertLocalDatabase() {
 
 async function cleanDatabase() {
   await prisma.$transaction([
+    prisma.quotationTemplateProposal.deleteMany(),
+    prisma.quotationTemplate.deleteMany(),
     prisma.notification.deleteMany(),
     prisma.recognition.deleteMany(),
     prisma.comment.deleteMany(),
@@ -278,6 +281,8 @@ async function main() {
     if (!user) throw new Error(`Missing seeded user: ${key}`);
     return user.id;
   };
+
+  await seedQuotationTemplates(prisma, userId("admin"));
 
   await Promise.all([
     prisma.user.update({ where: { id: userId("lan") }, data: { managerId: userId("admin") } }),
@@ -557,7 +562,7 @@ async function main() {
       role: user.role,
     }))
   );
-  console.log(`Đã tạo ${USERS.length} tài khoản và ${PROJECTS.length} dự án.`);
+  console.log(`Đã tạo ${USERS.length} tài khoản, ${PROJECTS.length} dự án và template báo giá Teambuilding.`);
 }
 
 main()

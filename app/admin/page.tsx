@@ -9,6 +9,7 @@ import MemberGroupManager from "@/components/MemberGroupManager";
 import CatalogManager from "@/components/CatalogManager";
 import AccountCatalogManager from "@/components/AccountCatalogManager";
 import ClientCatalogManager from "@/components/ClientCatalogManager";
+import QuotationTemplateAdmin from "@/components/QuotationTemplateAdmin";
 import {
   createSalesTeam,
   deleteSalesTeam,
@@ -21,6 +22,7 @@ const SETTINGS_TABS = [
   { key: "client", label: "Client" },
   { key: "team", label: "Team" },
   { key: "account", label: "Account" },
+  { key: "quotation-templates", label: "Mẫu báo giá" },
 ] as const;
 
 type SettingsTab = (typeof SETTINGS_TABS)[number]["key"];
@@ -156,6 +158,20 @@ async function SettingsContent({
         countLabel="account"
       />
     );
+  }
+
+  if (activeTab === "quotation-templates") {
+    const [proposals, templates] = await Promise.all([
+      prisma.quotationTemplateProposal.findMany({ orderBy: { createdAt: "desc" } }),
+      prisma.quotationTemplate.findMany({ orderBy: { createdAt: "desc" } }),
+    ]);
+    const userIds = [...new Set([...proposals.map(item => item.proposedBy), ...templates.map(item => item.createdBy)])];
+    const users = await prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } });
+    const names = new Map(users.map(user => [user.id, user.name]));
+    return <QuotationTemplateAdmin
+      proposals={proposals.map(item => ({ id: item.id, proposedName: item.proposedName, note: item.note, status: item.status, proposedByName: names.get(item.proposedBy) ?? "Tài khoản không còn hoạt động", createdAt: item.createdAt.toISOString(), rejectionReason: item.rejectionReason }))}
+      templates={templates.map(item => ({ id: item.id, name: item.name, description: item.description, status: item.status, createdByName: names.get(item.createdBy) ?? "Tài khoản không còn hoạt động", createdAt: item.createdAt.toISOString(), archivedAt: item.archivedAt?.toISOString() ?? null }))}
+    />;
   }
 
   const [accounts, salesTeams, accountUsers] = await Promise.all([

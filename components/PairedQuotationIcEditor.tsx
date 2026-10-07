@@ -56,6 +56,7 @@ import {
   type QuotationReadinessIssue
 } from "@/lib/costflow/quotationProjection";
 import IcEvidencePanel from "./IcEvidencePanel";
+import IcLineTransform from "./IcLineProvenance";
 import ActionForm from "./CostFlowActionForm";
 import CustomerQuotationView from "./CustomerQuotationView";
 import { Dialog } from "./ui/Dialog";
@@ -119,7 +120,8 @@ export default function PairedQuotationIcEditor({
   mode = "paired",
   embedded = false,
   versionAction,
-  targetRevenue
+  targetRevenue,
+  revisionId
 }: {
   mode?: "quote" | "paired" | "ic";
   finance: Finance;
@@ -129,6 +131,7 @@ export default function PairedQuotationIcEditor({
   embedded?: boolean;
   versionAction?: ReactNode;
   targetRevenue?: number;
+  revisionId?: string;
 }) {
   const router = useRouter();
   const capabilities = WORKSPACE_CAPABILITIES[mode];
@@ -138,7 +141,7 @@ export default function PairedQuotationIcEditor({
       : finance.data.revisions.find(
           r =>
             r.id ===
-            (initial?.icRevisionId ??
+            (revisionId ?? initial?.icRevisionId ??
               (mode === "ic"
                 ? finance.data.revisions.find(value => value.quotationId === source?.id)?.id
                 : finance.data.workingRevisionId))
@@ -716,15 +719,28 @@ export default function PairedQuotationIcEditor({
         locked={locked}
       />
 
-      {locked && revision && draftId && (
+      {locked && revision && (
         <details className="tf-paired-revision">
           <summary>Điều chỉnh IC đã gửi</summary>
           <ActionForm finance={{ ...finance, version }} command="COPY_IC" label="Tạo revision IC điều chỉnh" onSuccess={onClose}>
             <input type="hidden" name="sourceRevisionId" value={revision.id} />
-            <input type="hidden" name="pairedDraftId" value={draftId} />
+            {draftId && <input type="hidden" name="pairedDraftId" value={draftId} />}
             <input type="hidden" name="title" value={"IC — " + title} />
             <p>Bản đang chờ duyệt cần rút tại tab Trình duyệt trước. Bản hiệu lực cũ được giữ khi lập điều chỉnh.</p>
           </ActionForm>
+        </details>
+      )}
+
+      {!locked && revision && mode !== "quote" && (
+        <details className="tf-paired-revision">
+          <summary>Cấu trúc dòng IC</summary>
+          {dirty ? (
+            <Alert tone="warning" title="Lưu thay đổi trước khi tách hoặc gộp dòng">
+              Tách/gộp cập nhật revision trực tiếp trên máy chủ. Lưu Worksheet trước để không ghi đè dữ liệu đang chỉnh.
+            </Alert>
+          ) : (
+            <IcLineTransform finance={{ ...finance, version }} revision={revision} />
+          )}
         </details>
       )}
 

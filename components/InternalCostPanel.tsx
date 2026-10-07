@@ -12,7 +12,6 @@ import {
   Wallet,
   History,
   ExternalLink,
-  Split,
   FileSpreadsheet,
   Clock,
   FileCheck2,
@@ -23,7 +22,7 @@ import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Field";
 import { Alert, Badge, EmptyState, Panel, Table } from "@/components/ui/Presentation";
 import ActionForm from "@/components/CostFlowActionForm";
-import IcLineTransform, { IcLineProvenance } from "@/components/IcLineProvenance";
+import { IcLineProvenance } from "@/components/IcLineProvenance";
 import IcRevisionDiff, { IcQuotationUpdates } from "@/components/IcRevisionDiff";
 import PairedQuotationIcEditor from "@/components/PairedQuotationIcEditor";
 import { workingIcRevision } from "@/lib/costflow/budgetRevisions";
@@ -31,7 +30,7 @@ import { icStatusProjection, effectiveBaseline } from "@/lib/costflow/icEffectiv
 import { calculateCost, displayMoney, totals, type CalculatedCost } from "@/lib/costflow/money";
 import { completeIcLines } from "@/lib/costflow/budgetDraft";
 import { currentPurchaseOrders } from "@/lib/costflow/budgetSources";
-import type { IcLine } from "@/lib/costflow/types";
+import type { IcRevision } from "@/lib/costflow/types";
 
 const STATE: Record<string, string> = {
   DRAFT: "Nháp",
@@ -49,8 +48,7 @@ type Props = {
   canCreate: boolean;
   working?: ReturnType<typeof workingIcRevision>;
   workingError?: string;
-  onOpenWizard: (sourceId?: string, seed?: { lines: Partial<IcLine>[]; poIds: string[]; title: string; briefIds: string[] }) => void;
-  onSelectTab: (tabId: string) => void;
+  onOpenApproval: (requestId: string) => void;
 };
 
 export default function InternalCostPanel({
@@ -59,8 +57,7 @@ export default function InternalCostPanel({
   canCreate,
   working,
   workingError,
-  onOpenWizard,
-  onSelectTab,
+  onOpenApproval,
 }: Props) {
   const revisions = finance.data.revisions;
   const quotations = finance.data.quotations ?? [];
@@ -195,6 +192,21 @@ export default function InternalCostPanel({
   const pairedHref = `/projects/${finance.project.id}/costflow/paired${
     latestQuotation ? `?quotationId=${encodeURIComponent(latestQuotation.id)}` : ""
   }`;
+  const worksheetHref = (revision: IcRevision) => {
+    const draft = (finance.data.quotationDrafts ?? []).find(
+      value =>
+        value.createdBy === user.id &&
+        (value.id === revision.pairedDraftId || value.icRevisionId === revision.id)
+    );
+    if (draft) {
+      const sourceQuotationId = draft.sourceQuotationId ?? draft.latestQuotationId ?? revision.quotationId;
+      if (draft.workspaceMode === "ic" && sourceQuotationId) {
+        return `/projects/${finance.project.id}/costflow/quotations/${sourceQuotationId}/ic?draftId=${encodeURIComponent(draft.id)}`;
+      }
+      return `/projects/${finance.project.id}/costflow/paired?draftId=${encodeURIComponent(draft.id)}`;
+    }
+    return `/projects/${finance.project.id}/costflow/paired?revisionId=${encodeURIComponent(revision.id)}`;
+  };
 
   return (
     <div className="space-y-6">
@@ -227,14 +239,10 @@ export default function InternalCostPanel({
               </Link>
             )}
 
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => onOpenWizard(working?.id ?? effective?.id)}
-            >
+            <Link className="tf-button-secondary text-sm flex items-center gap-1.5" href={working || effective ? worksheetHref(working ?? effective!) : pairedHref}>
               <Plus size={15} className="mr-1" aria-hidden="true" />
               Tạo IC độc lập
-            </Button>
+            </Link>
           </div>
         )}
       </div>
@@ -332,13 +340,10 @@ export default function InternalCostPanel({
                 Xem chi tiết IC-R{effective.number}
               </Button>
               {canCreate && !finance.data.closed && (
-                <Button
-                  size="sm"
-                  onClick={() => onOpenWizard(effective.id)}
-                >
+                <Link className="tf-button-primary text-sm flex items-center gap-1" href={worksheetHref(effective)}>
                   <Plus size={14} className="mr-1" aria-hidden="true" />
                   Tạo Revision điều chỉnh
-                </Button>
+                </Link>
               )}
             </div>
           )}
@@ -403,10 +408,10 @@ export default function InternalCostPanel({
               Khi chưa có IC hiệu lực, dự án chưa thể tạo phát sinh Actual Cost mới dựa trên IC.
             </p>
             {canCreate && !finance.data.closed && (
-              <Button size="sm" onClick={() => onOpenWizard()}>
+              <Link className="tf-button-primary text-sm flex items-center gap-1" href={pairedHref}>
                 <Plus size={15} className="mr-1" aria-hidden="true" />
                 Lập dự toán đầu tiên
-              </Button>
+              </Link>
             )}
           </div>
         )}
@@ -537,36 +542,17 @@ export default function InternalCostPanel({
             {/* Quick Actions for Selected Revision */}
             <div className="flex flex-wrap items-center gap-2">
               {isEditableDraft ? (
-                <>
-                  <Link
-                    className="tf-button-primary text-sm flex items-center gap-1"
-                    href={`/projects/${finance.project.id}/costflow/paired?quotationId=${
-                      visibleRevision.lines.find(l => l.quotationId)?.quotationId ?? latestQuotation?.id ?? ""
-                    }`}
-                  >
-                    <FileSpreadsheet size={14} aria-hidden="true" />
-                    Sửa trong Worksheet
-                  </Link>
-
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => onOpenWizard(visibleRevision.id)}
-                  >
-                    Sửa qua Wizard
-                  </Button>
-                </>
+                <Link className="tf-button-primary text-sm flex items-center gap-1" href={worksheetHref(visibleRevision)}>
+                  <FileSpreadsheet size={14} aria-hidden="true" />
+                  Tiếp tục chỉnh IC-R{visibleRevision.number}
+                </Link>
               ) : (
                 canCreate &&
                 !finance.data.closed && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => onOpenWizard(visibleRevision.id)}
-                  >
+                  <Link className="tf-button-secondary text-sm flex items-center gap-1" href={worksheetHref(visibleRevision)}>
                     <Plus size={14} className="mr-1" aria-hidden="true" />
                     Tạo revision từ IC-R{visibleRevision.number}
-                  </Button>
+                  </Link>
                 )
               )}
 
@@ -574,7 +560,7 @@ export default function InternalCostPanel({
               <button
                 type="button"
                 className="tf-button-secondary text-sm flex items-center gap-1"
-                onClick={() => onSelectTab("approvals")}
+                onClick={() => onOpenApproval(visibleRequest.id)}
               >
                 <span>Hồ sơ trình duyệt</span>
                 <ExternalLink size={13} aria-hidden="true" />
@@ -633,19 +619,7 @@ export default function InternalCostPanel({
             editable={isEditableDraft}
           />
 
-          {/* D. LINE TRANSFORM TOOLS (SPLIT / MERGE) */}
-          {isEditableDraft && (
-            <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-2">
-                <Split size={16} className="text-[var(--text-secondary)]" aria-hidden="true" />
-                <span className="text-sm font-medium text-[var(--foreground)]">Cấu trúc dòng IC:</span>
-                <span className="text-xs text-[var(--text-secondary)]">Tách hoặc gộp các dòng chi phí mà không làm mất lịch sử</span>
-              </div>
-              <IcLineTransform finance={finance} revision={visibleRevision} />
-            </div>
-          )}
-
-          {/* E. SEARCH & TABLE OF COST ITEMS */}
+          {/* D. SEARCH & TABLE OF COST ITEMS */}
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>

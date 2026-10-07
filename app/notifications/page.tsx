@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
 import NotificationList from "@/components/NotificationList";
+import { dispatchWorkflowNotifications } from "@/lib/workflow/notifications";
 
 const PAGE_SIZE = 20;
 
@@ -19,6 +20,7 @@ export default async function NotificationsPage({
   searchParams: Promise<{ view?: string; page?: string }>;
 }) {
   const user = await requireUser();
+  await dispatchWorkflowNotifications();
   const params = await searchParams;
   const view: NotificationView =
     params.view === "unread" || params.view === "archive" ? params.view : "all";
@@ -64,6 +66,7 @@ export default async function NotificationsPage({
 
   const notifications = await prisma.notification.findMany({
     where: notificationWhere,
+    include: { workflowRequest: { select: { module: true } } },
     orderBy: { createdAt: "desc" },
     skip: (requestedPage - 1) * PAGE_SIZE,
     take: PAGE_SIZE,
@@ -102,6 +105,8 @@ export default async function NotificationsPage({
               projectId: notification.projectId,
               taskId: notification.taskId,
               recognitionId: notification.recognitionId,
+              workflowRequestId: notification.workflowRequestId,
+              workflowModule: notification.workflowRequest?.module ?? null,
               read: notification.read,
               createdAt: notification.createdAt.toISOString(),
             }))}

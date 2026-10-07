@@ -24,7 +24,7 @@ const nextConfig: NextConfig = {
   // make the dev server repeatedly invalidate and rebuild the current route.
   // Vercel's Next.js builder expects the standard .next artifact directory.
   // Keep the non-synced directory only for local macOS development/builds.
-  distDir: process.env.VERCEL === "1" ? ".next" : ".next.nosync",
+  distDir: process.env.TASKFLOW_DIST_DIR || (process.env.VERCEL === "1" ? ".next" : ".next.nosync"),
   serverExternalPackages: ["pdf-parse"],
   experimental: {
     serverActions: {
@@ -36,6 +36,10 @@ const nextConfig: NextConfig = {
       {
         source: "/:path*",
         headers: securityHeaders,
+      },
+      {
+        source: "/api/projects/:id/costflow/evidence/:evidenceId/preview",
+        headers: [{ key: "X-Frame-Options", value: "SAMEORIGIN" }],
       },
     ];
   },

@@ -1,0 +1,94 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
+import { blankPairedRow } from "../lib/costflow/pairedDraft";
+import type { FinanceData } from "../lib/costflow/types";
+
+test("paired atomic save reload, ownership, rollback and concurrent compare-and-swap", { skip: !process.env.COSTFLOW_TEST_DATABASE_URL }, async () => {
+  const url = new URL(process.env.COSTFLOW_TEST_DATABASE_URL!);
+  assert.ok(["localhost", "127.0.0.1"].includes(url.hostname) && url.pathname === "/costflow_test");
+  process.env.DATABASE_URL = process.env.COSTFLOW_TEST_DATABASE_URL;
+  const { prisma } = await import("../lib/prisma"); const { executeFinance } = await import("../lib/costflow/service");
+  const prefix = randomUUID();
+  try {
+    const actor = await prisma.user.create({ data: { name: "Paired Account", email: `${prefix}@example.test`, passwordHash: "unused", role: "ACCOUNT" } });
+    const reader = await prisma.user.create({ data: { name: "Paired Reader", email: `${prefix}-r@example.test`, passwordHash: "unused", role: "USER" } });
+    const project = await prisma.project.create({ data: { name: "Paired local fixture", ownerId: actor.id, revenue: 777, members: { create: [{ userId: actor.id }, { userId: reader.id }] } } });
+    const state = async () => (await prisma.costFlowWorkspace.findUniqueOrThrow({ where: { projectId: project.id } })).data as unknown as FinanceData;
+    const version = async () => (await prisma.costFlowWorkspace.findUnique({ where: { projectId: project.id } }))?.version ?? 0;
+    const act = async (rows: unknown, fields: Record<string, string> = {}, user = actor, expected?: number) => {
+      const form = new FormData(); form.set("command", "SAVE_PAIRED_DRAFT"); form.set("rows", JSON.stringify(rows)); form.set("title", "Paired quote");
+      for (const [k, v] of Object.entries(fields)) form.set(k, v);
+      return executeFinance(project.id, expected ?? await version(), user, form, null);
+    };
+    const row = blankPairedRow("one"); row.name = "Unknown price"; row.sell.quantity = "3"; row.buy.quantity = "7";
+    await assert.rejects(() => act([row], {}, reader), /Chỉ Account/);
+    const saved = await act([row]); const loaded = await state();
+    assert.equal(saved.requestId, loaded.revisions[0].requestId);
+    assert.equal(loaded.quotationDrafts![0].rows[0].sell.unitPrice, ""); assert.equal(loaded.revisions[0].lines[0].cost, null);
+    assert.equal(loaded.revisions[0].lines[0].quantity, "7"); assert.equal(loaded.quotations!.length, 0);
+    const before = await state(), v = await version();
+    await assert.rejects(() => act([row], { draftId: saved.draftId!, clientId: randomUUID() }), /Khách hàng/);
+    assert.deepEqual(await state(), before); assert.equal(await version(), v);
+    const input = before.quotationDrafts![0].rows;
+    const results = await Promise.allSettled([act(input, { draftId: saved.draftId! }, actor, v), act(input, { draftId: saved.draftId! }, actor, v)]);
+    assert.equal(results.filter(r => r.status === "fulfilled").length, 1);
+    assert.equal(await version(), v + 1);
+    assert.equal((await prisma.project.findUniqueOrThrow({ where: { id: project.id } })).revenue, 777);
+    assert.equal(await prisma.costFlowCash.count({ where: { projectId: project.id } }), 0);
+    assert.equal((await state()).revisions[0].effective, false);
+  } finally { await prisma.$disconnect(); }
+});
+test("paired export, evidence ownership, frozen submit, supplements retry and revision isolation", async () => {
+  const url = new URL(process.env.COSTFLOW_TEST_DATABASE_URL!); assert.ok(["localhost","127.0.0.1"].includes(url.hostname) && url.pathname==="/costflow_test");
+  process.env.DATABASE_URL=url.href;
+  const {prisma}=await import("../lib/prisma"); const {executeFinance,loadFinance}=await import("../lib/costflow/service");
+  const prefix=randomUUID();
+  try {
+    const manager=await prisma.user.create({data:{name:"Assigned reviewer",email:`${prefix}-manager@example.test`,role:"USER",passwordHash:"unused"}});
+    const actor=await prisma.user.create({data:{name:"Account",email:`${prefix}@example.test`,role:"ACCOUNT",passwordHash:"unused",managerId:manager.id}});
+    const admin=await prisma.user.create({data:{name:"Admin",email:`${prefix}-admin@example.test`,role:"ADMIN",passwordHash:"unused"}});
+    const intruder=await prisma.user.create({data:{name:"Intruder",email:`${prefix}-other@example.test`,role:"USER",passwordHash:"unused"}});
+    const client=await prisma.client.create({data:{name:`Synthetic Customer ${prefix}`}});
+    const project=await prisma.project.create({data:{name:"Paired evidence fixture",ownerId:actor.id,revenue:777,members:{create:{userId:actor.id}}}});
+    const other=await prisma.project.create({data:{name:"Foreign fixture",ownerId:actor.id}});
+    const bytes=Buffer.from("immutable source"); const sha=createHash("sha256").update(bytes).digest("hex");
+    const source=await prisma.projectFile.create({data:{projectId:project.id,name:"source.txt",mimeType:"text/plain",size:bytes.length,data:bytes}});
+    const proof=await prisma.costFlowEvidence.create({data:{projectId:project.id,sourceFileId:source.id,kind:"IC_ESTIMATE",name:source.name,mimeType:source.mimeType,data:bytes,sha256:sha,createdBy:actor.id}});
+    const foreign=await prisma.costFlowEvidence.create({data:{projectId:other.id,sourceFileId:"",kind:"IC_ESTIMATE",name:"foreign",mimeType:"text/plain",data:bytes,sha256:sha,createdBy:actor.id}});
+    const state=async()=>(await prisma.costFlowWorkspace.findUniqueOrThrow({where:{projectId:project.id}})).data as unknown as FinanceData;
+    const version=async()=>(await prisma.costFlowWorkspace.findUnique({where:{projectId:project.id}}))?.version??0;
+    const act=async(command:string,fields:Record<string,string>={},user=actor,expected?:number)=>{const form=new FormData();form.set("command",command);for(const[k,v]of Object.entries(fields))form.set(k,v);if(command==="DECIDE"&&fields.requestId){const request=await prisma.workflowRequest.findUniqueOrThrow({where:{id:fields.requestId}});const submitted=await prisma.workflowApprovalEvent.findFirst({where:{requestId:request.id,attemptId:request.currentAttemptId,action:"SUBMIT"},orderBy:{createdAt:"desc"}});form.set("module",request.module);form.set("attemptId",request.currentAttemptId??"");form.set("stepIndex",String(request.currentStep));form.set("submittedVersion",String(submitted?.submittedVersion??""));if(fields.decision==="APPROVE")form.set("reviewConfirmed","yes");}return executeFinance(project.id,expected??await version(),user,form,null);};
+    await act("CONFIGURE",{managerId:manager.id,accountantId:manager.id,ceoId:manager.id},admin);
+    let rows=["one","two","three"].map(id=>{const r=blankPairedRow(id);r.name=id;r.sell={...r.sell,quantity:"1",unitPrice:"100.4",vatPercent:"0"};r.buy.quantity="3";return r;});
+    const saved=await act("FINALIZE_PAIRED_QUOTATION",{rows:JSON.stringify(rows),clientId:client.id,title:"Sales complete, costs pending"});
+    assert.equal((await state()).quotations![0].lines.length,3); assert.equal((await state()).revisions[0].lines[0].cost,null);
+    const before=await state(),v=await version();
+    await assert.rejects(act("FINALIZE_PAIRED_QUOTATION",{draftId:saved.draftId!,rows:JSON.stringify(rows.map(r=>({...r,sell:{...r.sell,unitPrice:""}}))),clientId:client.id,title:"Fail late"}));
+    assert.deepEqual(await state(),before);assert.equal(await version(),v);
+    rows=(await state()).quotationDrafts![0].rows.map(r=>({...r,buy:{...r.buy,quantity:"1",unitPrice:"20",vatPercent:"0"}}));
+    const fields=()=>({draftId:saved.draftId!,rows:JSON.stringify(rows),clientId:client.id,title:"Evidence draft",globalEvidenceIds:JSON.stringify([proof.id])});
+    await act("SAVE_PAIRED_DRAFT",fields()); const requestId=(await state()).revisions[0].requestId;
+    await assert.rejects(act("SUBMIT",{requestId,explanation:"Validate paired IC"}),/Mỗi dòng IC/);
+    rows[0].buy.evidenceIds=[foreign.id];await assert.rejects(act("SAVE_PAIRED_DRAFT",fields()),/Minh chứng/);
+    rows=rows.map(r=>({...r,buy:{...r.buy,evidenceIds:[proof.id],notes:"IC_INTERNAL_NOTE"}}));await act("SAVE_PAIRED_DRAFT",fields());
+    await prisma.projectFile.delete({where:{id:source.id}});assert.equal((await prisma.costFlowEvidence.findUniqueOrThrow({where:{id:proof.id}})).sha256,sha);
+    await act("SUBMIT",{requestId,explanation:"Submit paired IC"});
+    const original=(await state()).revisions[0];const request=await prisma.workflowRequest.findUniqueOrThrow({where:{id:requestId}});const frozen=JSON.stringify(request.payload);
+    assert.equal(original.evidenceHashes![proof.id],sha); assert.equal(original.lines.filter(l=>l.evidenceIds?.includes(proof.id)).length,3);
+    assert.equal(await prisma.costFlowEvidence.count({where:{projectId:project.id}}),1);
+    const review=await loadFinance(project.id,manager);assert.equal(review!.fullAccess,false);assert.equal(review!.evidence.length,1);assert.deepEqual(review!.data.quotationDrafts,undefined);assert.equal(await loadFinance(project.id,intruder),null);
+    await assert.rejects(act("SAVE_IC",{requestId,title:"Forged edit",lines:JSON.stringify(original.lines)}));
+    const operationId=randomUUID();const supplement={requestId,requestVersion:String(request.version),lineId:original.lines[0].id,operationId,evidenceIds:JSON.stringify([proof.id]),reason:"Supplier confirmed"};const oldVersion=await version();
+    await act("SUPPLEMENT_IC_EVIDENCE",supplement);await act("SUPPLEMENT_IC_EVIDENCE",supplement,actor,oldVersion);
+    assert.equal((await state()).evidenceSupplements!.length,1);assert.equal(JSON.stringify((await prisma.workflowRequest.findUniqueOrThrow({where:{id:requestId}})).payload),frozen);assert.deepEqual((await state()).revisions[0],original);
+    await assert.rejects(act("SUPPLEMENT_IC_EVIDENCE",{...supplement,reason:"Different body"}));
+    await assert.rejects(act("SUPPLEMENT_IC_EVIDENCE",{...supplement,operationId:randomUUID(),lineId:"foreign"}));
+    const rv=await version();const race=await Promise.allSettled([act("SUPPLEMENT_IC_EVIDENCE",{...supplement,operationId:randomUUID(),reason:"A"},actor,rv),act("SUPPLEMENT_IC_EVIDENCE",{...supplement,operationId:randomUUID(),reason:"B"},actor,rv)]);assert.equal(race.filter(r=>r.status==="fulfilled").length,1);
+    const patched=rows.map(r=>({...r,buy:{...r.buy,unitPrice:"9999"},sell:{...r.sell,unitPrice:"200"}}));await act("SAVE_PAIRED_DRAFT",{...fields(),rows:JSON.stringify(patched)});assert.deepEqual((await state()).revisions[0],original);
+    await act("DECIDE",{requestId,decision:"RETURN",reason:"Revise estimate",correctionItems:"Update supplier estimate"},manager);
+    await act("COPY_IC",{sourceRevisionId:original.id,pairedDraftId:saved.draftId!,title:"IC adjusted",explanation:"Updated supplier estimate after review"});const data=await state();assert.equal(data.quotationDrafts![0].icRevisionId,data.revisions[1].id);assert.deepEqual(data.revisions[0].submissions,original.submissions);assert.equal(data.revisions[1].lines[0].unitPrice,"20");
+    assert.equal(await prisma.costFlowCash.count({where:{projectId:project.id}}),0);assert.equal((await prisma.project.findUniqueOrThrow({where:{id:project.id}})).revenue,777);assert.equal(data.expenses.length,0);
+  } finally {await prisma.$disconnect();}
+});

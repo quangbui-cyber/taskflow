@@ -8,60 +8,70 @@ datasource db {
 }
 
 model User {
-  id                   String              @id @default(cuid())
-  email                String              @unique
+  id                   String                         @id @default(cuid())
+  email                String                         @unique
   name                 String
   avatarUrl            String?
   passwordHash         String
-  sessionVersion       Int                 @default(0)
-  role                 String              @default("USER") // "ADMIN" | "ACCOUNT" | "USER"
-  isActive             Boolean             @default(true)
+  sessionVersion       Int                            @default(0)
+  role                 String                         @default("USER") // "ADMIN" | "ACCOUNT" | "USER"
+  isActive             Boolean                        @default(true)
   deactivatedAt        DateTime?
   managerId            String? // người quản lý trực tiếp
-  manager              User?               @relation("TeamManager", fields: [managerId], references: [id], onDelete: SetNull)
-  reports              User[]              @relation("TeamManager") // nhân viên dưới quyền
-  createdAt            DateTime            @default(now())
+  manager              User?                          @relation("TeamManager", fields: [managerId], references: [id], onDelete: SetNull)
+  reports              User[]                         @relation("TeamManager") // nhân viên dưới quyền
+  createdAt            DateTime                       @default(now())
   memberships          ProjectMember[]
-  ownedProjects        Project[]           @relation("ProjectOwner")
-  assignedTasks        Task[]              @relation("TaskAssignee")
-  createdTasks         Task[]              @relation("TaskCreator")
+  ownedProjects        Project[]                      @relation("ProjectOwner")
+  assignedTasks        Task[]                         @relation("TaskAssignee")
+  createdTasks         Task[]                         @relation("TaskCreator")
   comments             Comment[]
   notifications        Notification[]
   taskFollows          TaskFollower[]
   accountProfile       Account?
   groupMemberships     MemberGroupMember[]
-  uploadedFiles        ProjectFile[]       @relation("ProjectFileUploader")
-  uploadedTaskFiles    TaskFile[]          @relation("TaskFileUploader")
-  recognitionsSent     Recognition[]       @relation("RecognitionSender")
-  recognitionsReceived Recognition[]       @relation("RecognitionRecipient")
+  uploadedFiles        ProjectFile[]                  @relation("ProjectFileUploader")
+  uploadedTaskFiles    TaskFile[]                     @relation("TaskFileUploader")
+  recognitionsSent     Recognition[]                  @relation("RecognitionSender")
+  recognitionsReceived Recognition[]                  @relation("RecognitionRecipient")
+  workflowRoleGrants   WorkflowRoleGrant[]            @relation("WorkflowRoleGrantUser")
+  grantedWorkflowRoles WorkflowRoleGrant[]            @relation("WorkflowRoleGrantAdmin")
+  workflowReaders      WorkflowRequestReader[]
+  workflowEvents       WorkflowApprovalEvent[]        @relation("WorkflowApprovalEventActor")
+  workflowDeliveries   WorkflowNotificationDelivery[]
 
   @@index([isActive])
 }
 
 model Project {
-  id                   String          @id @default(cuid())
+  id                   String             @id @default(cuid())
   name                 String
   description          String?
-  purchaseOrderNumber  String?         @unique
-  color                String          @default("#6366f1")
-  status               String          @default("BIDDING") // "BIDDING" | "ON_PROCESS" | "PENDING" | "DONE" | "CANCEL" | "FAIL"
-  type                 String          @default("OTHER") // "TEAMBUILDING" | "MICE" | "ACTIVATION" | "EVENT" | "PUR" | "OTHER"
+  purchaseOrderNumber  String?            @unique
+  color                String             @default("#6366f1")
+  status               String             @default("BIDDING") // "BIDDING" | "ON_PROCESS" | "PENDING" | "DONE" | "CANCEL" | "FAIL"
+  type                 String             @default("OTHER") // "TEAMBUILDING" | "MICE" | "ACTIVATION" | "EVENT" | "PUR" | "OTHER"
   executionStartAt     DateTime? // ngày bắt đầu thực hiện (chạy event)
   executionEndAt       DateTime? // ngày kết thúc — null nếu chỉ 1 ngày
-  revenue              Float           @default(0) // doanh thu dự kiến/thực tế (VND)
+  revenue              Float              @default(0) // doanh thu dự kiến/thực tế (VND)
   googleChatWebhookUrl String?
   ownerId              String
-  owner                User            @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  owner                User               @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   clientId             String?
-  client               Client?         @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  client               Client?            @relation(fields: [clientId], references: [id], onDelete: SetNull)
   accountId            String?
-  account              Account?        @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  account              Account?           @relation(fields: [accountId], references: [id], onDelete: SetNull)
   members              ProjectMember[]
   tasks                Task[]
   files                ProjectFile[]
   onProcessAt          DateTime? // thời điểm đầu tiên chuyển sang ON_PROCESS - dùng ghi nhận doanh thu
   completedAt          DateTime? // thời điểm chuyển sang DONE
-  createdAt            DateTime        @default(now())
+  createdAt            DateTime           @default(now())
+  costFlow             CostFlowWorkspace?
+  workflowRequests     WorkflowRequest[]
+  costFlowCash         CostFlowCash[]
+  costFlowEvidence     CostFlowEvidence[]
+  costFlowHistory      CostFlowHistory[]
 
   @@index([status, onProcessAt])
   @@index([status, completedAt])
@@ -201,24 +211,27 @@ model TaskFollower {
 }
 
 model Notification {
-  id            String       @id @default(cuid())
-  dedupeKey     String?      @unique // chống tạo trùng cho thông báo tự động
-  userId        String // người nhận
-  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type          String // "TASK_ASSIGNED" | "TASK_COMPLETED" | "TASK_UPDATED" | "COMMENT" | "TASK_FOLLOW" | "DEADLINE_REMINDER" | "RECOGNITION_RECEIVED"
-  message       String
-  taskId        String?
-  task          Task?        @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  projectId     String? // để dẫn link tới board
-  recognitionId String?
-  recognition   Recognition? @relation("RecognitionNotification", fields: [recognitionId], references: [id], onDelete: SetNull)
-  read          Boolean      @default(false)
-  createdAt     DateTime     @default(now())
+  id                String           @id @default(cuid())
+  dedupeKey         String?          @unique // chống tạo trùng cho thông báo tự động
+  userId            String // người nhận
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type              String // "TASK_ASSIGNED" | "TASK_COMPLETED" | "TASK_UPDATED" | "COMMENT" | "TASK_FOLLOW" | "DEADLINE_REMINDER" | "RECOGNITION_RECEIVED"
+  message           String
+  taskId            String?
+  task              Task?            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  projectId         String? // để dẫn link tới board
+  recognitionId     String?
+  recognition       Recognition?     @relation("RecognitionNotification", fields: [recognitionId], references: [id], onDelete: SetNull)
+  workflowRequestId String?
+  workflowRequest   WorkflowRequest? @relation(fields: [workflowRequestId], references: [id], onDelete: SetNull)
+  read              Boolean          @default(false)
+  createdAt         DateTime         @default(now())
 
   @@index([userId, read])
   @@index([userId, createdAt])
   @@index([createdAt])
   @@index([recognitionId])
+  @@index([workflowRequestId])
 }
 
 // Lời cảm ơn độc lập với project — dùng để mọi người ghi nhận nhau trong công việc và cuộc sống.
@@ -266,4 +279,291 @@ model LoginRateLimit {
   updatedAt       DateTime  @updatedAt
 
   @@index([updatedAt])
+}
+
+// Shared Workflow foundation; finance consumes this rather than owning approval states.
+model WorkflowRequest {
+  id                          String                  @id @default(cuid())
+  projectId                   String?
+  project                     Project?                @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  templateId                  String?
+  template                    WorkflowTemplate?       @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  module                      String
+  kind                        String
+  title                       String
+  creatorId                   String
+  cashAssigneeId              String
+  parentId                    String?
+  state                       String                  @default("DRAFT")
+  steps                       Json
+  currentStep                 Int                     @default(0)
+  version                     Int                     @default(0)
+  currentAttemptId            String?
+  currentStepArrivedAt        DateTime?
+  replacesRequestId           String?
+  replacedByRequestId         String?
+  pendingReplacementRequestId String?
+  supersededAt                DateTime?
+  payload                     Json
+  createdAt                   DateTime                @default(now())
+  updatedAt                   DateTime                @updatedAt
+  decisions                   WorkflowDecision[]
+  cash                        CostFlowCash[]
+  evidence                    CostFlowEvidence[]
+  files                       WorkflowFile[]
+  history                     WorkflowHistory[]
+  approvalEvents              WorkflowApprovalEvent[]
+  readers                     WorkflowRequestReader[]
+  notifications               Notification[]
+
+  @@index([projectId, module, createdAt])
+  @@index([creatorId, state])
+  @@index([cashAssigneeId])
+  @@index([state, currentStepArrivedAt])
+  @@index([replacesRequestId])
+  @@index([replacedByRequestId])
+  @@index([pendingReplacementRequestId])
+}
+
+model WorkflowApprovalEvent {
+  id               String                         @id @default(cuid())
+  requestId        String
+  request          WorkflowRequest                @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  module           String
+  attemptId        String?
+  submittedVersion Int?
+  mutationVersion  Int
+  stepIndex        Int
+  role             String
+  actorId          String
+  actor            User                           @relation("WorkflowApprovalEventActor", fields: [actorId], references: [id], onDelete: Restrict)
+  action           String
+  reason           String                         @default("")
+  details          Json?
+  fromAssigneeId   String?
+  toAssigneeId     String?
+  createdAt        DateTime                       @default(now())
+  deliveries       WorkflowNotificationDelivery[]
+
+  @@unique([requestId, mutationVersion, action])
+  @@index([actorId, createdAt])
+  @@index([requestId, attemptId, createdAt])
+}
+
+model WorkflowRoleGrant {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation("WorkflowRoleGrantUser", fields: [userId], references: [id], onDelete: Restrict)
+  role        String
+  grantedById String
+  grantedBy   User      @relation("WorkflowRoleGrantAdmin", fields: [grantedById], references: [id], onDelete: Restrict)
+  createdAt   DateTime  @default(now())
+  revokedAt   DateTime?
+
+  @@index([userId, role, revokedAt])
+}
+
+model WorkflowRequestReader {
+  id        String          @id @default(cuid())
+  requestId String
+  request   WorkflowRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  reason    String
+  createdAt DateTime        @default(now())
+
+  @@unique([requestId, userId])
+  @@index([userId, createdAt])
+}
+
+model WorkflowNotificationDelivery {
+  id            String                @id @default(cuid())
+  eventId       String
+  event         WorkflowApprovalEvent @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  userId        String
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  status        String                @default("PENDING")
+  attempts      Int                   @default(0)
+  lastError     String?
+  nextAttemptAt DateTime?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  @@unique([eventId, userId])
+  @@index([status, nextAttemptAt])
+  @@index([userId, createdAt])
+}
+
+model WorkflowTemplate {
+  id               String            @id @default(cuid())
+  familyId         String
+  category         String            @default("")
+  purpose          String            @default("")
+  changeNote       String            @default("")
+  requirements     Json?
+  kind             String
+  name             String
+  version          Int
+  parentId         String?
+  ownerId          String
+  accountantId     String
+  ceoId            String
+  signerNames      String
+  instructions     String
+  fileId           String?
+  ownerConfirmedAt DateTime?
+  publishedAt      DateTime?
+  revision         Int               @default(0)
+  createdBy        String
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  requests         WorkflowRequest[]
+  files            WorkflowFile[]
+
+  @@unique([familyId, version])
+  @@index([ownerId, publishedAt])
+}
+
+// Append-only bytes: exactly one template/request parent is enforced by the service.
+model WorkflowFile {
+  id             String            @id @default(cuid())
+  templateId     String?
+  template       WorkflowTemplate? @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  requestId      String?
+  request        WorkflowRequest?  @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  kind           String
+  supportingSlot String?
+  name           String
+  mimeType       String
+  size           Int
+  data           Bytes
+  sha256         String
+  uploadedBy     String
+  createdAt      DateTime          @default(now())
+
+  @@index([requestId, createdAt])
+  @@index([templateId])
+}
+
+model WorkflowHistory {
+  id        String          @id @default(cuid())
+  requestId String
+  request   WorkflowRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  version   Int
+  actorId   String
+  action    String
+  snapshot  Json
+  createdAt DateTime        @default(now())
+
+  @@unique([requestId, version])
+}
+
+model WorkflowDecision {
+  id        String          @id @default(cuid())
+  requestId String
+  request   WorkflowRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  version   Int
+  step      Int
+  actorId   String
+  action    String
+  reason    String
+  createdAt DateTime        @default(now())
+
+  @@unique([requestId, version])
+}
+
+model CostFlowWorkspace {
+  projectId String   @id
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  version   Int      @default(0)
+  data      Json
+  updatedAt DateTime @updatedAt
+}
+
+// Standalone, immutable customer-safe quotation snapshots. Replacing content means
+// publishing another template; archived templates stay available for administration.
+model QuotationTemplate {
+  id          String    @id @default(cuid())
+  name        String
+  description String    @default("")
+  snapshot    Json
+  status      String    @default("ACTIVE") // "ACTIVE" | "ARCHIVED"
+  proposalId  String?   @unique
+  createdBy   String
+  createdAt   DateTime  @default(now())
+  archivedAt  DateTime?
+
+  @@index([status, createdAt])
+}
+
+// Account proposals freeze the exact finalized quotation projection reviewed by Admin.
+model QuotationTemplateProposal {
+  id                String    @id @default(cuid())
+  sourceProjectId   String
+  sourceQuotationId String
+  proposedName      String
+  note              String    @default("")
+  snapshot          Json
+  status            String    @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED"
+  proposedBy        String
+  reviewedBy        String?
+  reviewedAt        DateTime?
+  rejectionReason   String?
+  templateId        String?   @unique
+  createdAt         DateTime  @default(now())
+
+  @@index([status, createdAt])
+  @@index([sourceProjectId, sourceQuotationId])
+}
+
+model CostFlowCash {
+  id           String          @id @default(cuid())
+  projectId    String
+  project      Project         @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  requestId    String
+  request      WorkflowRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  recipientKey String
+  direction    String
+  amount       String // actual source decimal, never IEEE Float or auto-rounded receipt
+  reference    String
+  allocations  Json
+  evidenceId   String
+  occurredAt   DateTime
+  confirmedBy  String
+  createdAt    DateTime        @default(now())
+
+  @@unique([projectId, reference])
+  @@index([projectId, recipientKey])
+}
+
+// Copies evidence bytes at use time; deleting a project upload cannot change a submitted dossier.
+model CostFlowEvidence {
+  id           String           @id @default(cuid())
+  projectId    String
+  project      Project          @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  requestId    String?
+  request      WorkflowRequest? @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  sourceFileId String
+  kind         String
+  name         String
+  mimeType     String
+  data         Bytes
+  sha256       String
+  createdBy    String
+  createdAt    DateTime         @default(now())
+
+  @@index([projectId, requestId])
+}
+
+model CostFlowHistory {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  version   Int
+  actorId   String
+  action    String
+  snapshot  Json
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, version])
 }
