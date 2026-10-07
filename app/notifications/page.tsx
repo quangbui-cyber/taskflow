@@ -97,7 +97,11 @@ export default async function NotificationsPage({
           <PushNotificationSettings publicKey={pushConfiguration()?.publicKey ?? null} />
 
           <NotificationList
-            key={`${view}-${requestedPage}`}
+            // Danh sách giữ trạng thái "đã đọc" tạm ở client; đổi key khi dữ liệu
+            // server thay đổi để thông báo mới hiện ra sau mỗi lần tải lại.
+            key={`${view}-${requestedPage}-${totalUnread}-${notifications
+              .map((notification) => `${notification.id}${notification.read ? "r" : "u"}`)
+              .join("")}`}
             activeView={view}
             currentPage={requestedPage}
             initialNotifications={notifications.map((notification) => ({

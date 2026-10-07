@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   CalendarCheck,
@@ -83,6 +83,35 @@ export default function NotificationList({
   const [totalUnread, setTotalUnread] = useState(initialTotalUnread);
   const [readingId, setReadingId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+
+  // Trang này không tự tải lại: trên điện thoại, mở lại trình duyệt chỉ hiện bản
+  // cũ đang lưu. Lấy dữ liệu mới khi quay lại tab và định kỳ khi đang mở.
+  useEffect(() => {
+    const REFRESH_MS = 60_000;
+    let lastRefresh = Date.now();
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      lastRefresh = Date.now();
+      router.refresh();
+    };
+    const onReturn = () => {
+      // Quay lại ngay sau vài giây thì chưa cần tải lại.
+      if (Date.now() - lastRefresh > 5_000) refresh();
+    };
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) refresh();
+    };
+    const timer = window.setInterval(refresh, REFRESH_MS);
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("focus", onReturn);
+    window.addEventListener("pageshow", onPageShow);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("focus", onReturn);
+      window.removeEventListener("pageshow", onPageShow);
+    };
+  }, [router]);
 
   const pageHref = (page: number) => {
     const params = new URLSearchParams();
