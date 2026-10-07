@@ -919,7 +919,22 @@
 .tf-workspace-paired .tf-paired-save-scope-group legend { font-size:12px; letter-spacing:0; text-transform:none; }
 .tf-workspace-paired .tf-paired-save-scope-group label { min-height:36px; }
 
+.tf-ic-status-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.tf-ic-status-grid > div { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; padding:12px; border:1px solid var(--border); border-radius:var(--radius-panel); background:var(--surface); }
+.tf-ic-status-grid > div > span { color:var(--text-secondary); font-size:13px; font-weight:700; }
+.tf-ic-status-grid > p { grid-column:1 / -1; margin:0; font-size:14px; }
+.tf-approval-timeline { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-top:12px; }
+.tf-approval-timeline li { display:grid; align-content:start; gap:4px; min-width:0; padding:12px; border:1px solid var(--border); border-radius:var(--radius-panel); background:var(--surface); font-size:12px; overflow-wrap:anywhere; }
+.tf-approval-timeline li strong { font-size:13px; }
+.tf-approval-timeline li span { color:var(--text-secondary); }
+.tf-approval-timeline li p { margin:4px 0 0; }
+
 @media(max-width:640px) {
+  .tf-ic-status-grid,
+  .tf-approval-timeline { grid-template-columns:minmax(0,1fr); }
+  .tf-ic-status-grid > p { grid-column:auto; }
+  .tf-approval-timeline button,
+  .tf-ic-status-grid button { min-height:44px; }
   .tf-paired-table-hint { display:none; }
   .tf-module-page .tf-paired-workspace .tf-paired-comparison-table tbody .tf-quotation-structure-cell { position:static; }
   .tf-paired-comparison-group-band { grid-template-columns:28px 28px 42px minmax(0,1fr); gap:4px; padding:8px; }
@@ -943,4 +958,232 @@
   .tf-workspace-paired .tf-paired-totals { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
   .tf-workspace-paired .tf-paired-totals strong { font-size:13px; }
   .tf-workspace-paired { padding-bottom:320px; }
+}
+
+/* ==========================================================================
+   SHARED WORKSHEET (V2 UNIFIED) - UI FOUNDATION V1 TOKENS
+   ========================================================================== */
+
+.tf-worksheet-table-container {
+  position: relative;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  margin-bottom: 16px;
+  box-shadow: var(--shadow-sm);
+}
+
+.tf-worksheet-table-container thead th {
+  position: sticky;
+  top: 0;
+  z-index: 25;
+  background: var(--surface-soft);
+  border-bottom: 2px solid var(--border-strong);
+  box-shadow: 0 2px 4px rgb(17 24 39 / 0.04);
+}
+
+.tf-worksheet-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  margin-bottom: 12px;
+}
+
+.tf-worksheet-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tf-worksheet-view-segmented {
+  display: inline-flex;
+  background: var(--surface-muted);
+  padding: 3px;
+  border-radius: var(--radius-control);
+  gap: 2px;
+}
+
+.tf-worksheet-view-btn {
+  padding: 4px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.tf-worksheet-view-btn.is-active {
+  background: var(--surface);
+  color: var(--foreground);
+  box-shadow: 0 1px 3px rgb(17 24 39 / 0.08);
+  font-weight: 600;
+}
+
+.tf-worksheet-btn-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--foreground);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.tf-worksheet-btn-pill:hover {
+  background: var(--surface-muted);
+  border-color: var(--border-strong);
+}
+
+.tf-worksheet-outline-badge {
+  display: inline-block;
+  min-width: 24px;
+  padding: 1px 5px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  text-align: center;
+  border-radius: 4px;
+  background: var(--surface-muted);
+  color: var(--foreground);
+}
+
+.tf-worksheet-outline-level-1 {
+  background: var(--color-brand-200);
+  color: var(--color-brand-900);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 7px;
+}
+
+.tf-worksheet-outline-level-2 {
+  background: var(--surface-muted);
+  color: var(--foreground);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tf-worksheet-outline-level-3 {
+  background: transparent;
+  color: var(--muted-strong);
+  font-size: 11px;
+}
+
+.tf-worksheet-margin-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.tf-worksheet-margin-badge.is-high {
+  background: var(--success-soft);
+  color: var(--success);
+  border: 1px solid rgba(22, 132, 91, 0.25);
+}
+
+.tf-worksheet-margin-badge.is-medium {
+  background: var(--warning-soft);
+  color: var(--warning);
+  border: 1px solid rgba(184, 106, 8, 0.25);
+}
+
+.tf-worksheet-margin-badge.is-low {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border: 1px solid rgba(220, 38, 38, 0.25);
+}
+
+/* Slide-over Right Drawer Sheet */
+dialog.tf-ui-dialog:not([open]) {
+  display: none !important;
+}
+
+dialog.tf-ui-dialog[open]:has(.tf-paired-detail),
+dialog.tf-ui-dialog[open]:has(.tf-ic-evidence-panel),
+dialog.tf-ui-dialog[open]:has(.tf-quotation-settings-panel) {
+  position: fixed !important;
+  top: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  left: auto !important;
+  margin: 0 0 0 auto !important;
+  width: min(520px, 100vw) !important;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+  border-radius: 0 !important;
+  border: none !important;
+  border-left: 1px solid var(--border-strong) !important;
+  background: var(--surface) !important;
+  box-shadow: -10px 0 36px rgba(17, 24, 39, 0.12) !important;
+  padding: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+dialog.tf-ui-dialog:has(.tf-paired-detail)::backdrop,
+dialog.tf-ui-dialog:has(.tf-ic-evidence-panel)::backdrop,
+dialog.tf-ui-dialog:has(.tf-quotation-settings-panel)::backdrop {
+  background: rgba(17, 24, 39, 0.35) !important;
+  backdrop-filter: blur(2px) !important;
+}
+
+dialog.tf-ui-dialog:has(.tf-paired-detail) .tf-ui-dialog-header,
+dialog.tf-ui-dialog:has(.tf-ic-evidence-panel) .tf-ui-dialog-header,
+dialog.tf-ui-dialog:has(.tf-quotation-settings-panel) .tf-ui-dialog-header {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 10 !important;
+  background: var(--surface) !important;
+  border-bottom: 1px solid var(--border) !important;
+  padding: 16px 20px !important;
+  margin: 0 !important;
+}
+
+dialog.tf-ui-dialog:has(.tf-paired-detail) > fieldset,
+dialog.tf-ui-dialog:has(.tf-paired-detail) > form,
+dialog.tf-ui-dialog:has(.tf-paired-detail) > div:not(.tf-ui-dialog-header):not(.tf-ui-actions),
+dialog.tf-ui-dialog:has(.tf-ic-evidence-panel) > div:not(.tf-ui-dialog-header):not(.tf-ui-actions),
+dialog.tf-ui-dialog:has(.tf-quotation-settings-panel) > div:not(.tf-ui-dialog-header):not(.tf-ui-actions),
+dialog.tf-ui-dialog:has(.tf-quotation-settings-panel) > fieldset {
+  flex: 1 1 auto !important;
+  overflow-y: auto !important;
+  padding: 20px !important;
+  margin: 0 !important;
+}
+
+dialog.tf-ui-dialog:has(.tf-paired-detail) .tf-ui-actions,
+dialog.tf-ui-dialog:has(.tf-ic-evidence-panel) .tf-ui-actions,
+dialog.tf-ui-dialog:has(.tf-quotation-settings-panel) .tf-ui-actions {
+  position: sticky !important;
+  bottom: 0 !important;
+  z-index: 10 !important;
+  background: var(--surface) !important;
+  border-top: 1px solid var(--border) !important;
+  padding: 14px 20px !important;
+  margin: 0 !important;
+  box-shadow: 0 -4px 12px rgba(17, 24, 39, 0.05) !important;
 }
