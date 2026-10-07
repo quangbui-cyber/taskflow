@@ -1,5 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth";
+import { attachmentDisposition } from "@/lib/contentDisposition";
 import { prisma } from "@/lib/prisma";
 import { findAccessibleTask } from "@/lib/taskFiles";
 
@@ -39,12 +40,11 @@ export async function GET(_request: Request, context: Context) {
   if ("error" in result) return result.error;
   const { file } = result;
 
-  const fallbackName = file.name.replace(/["\r\n]/g, "_");
   return new Response(file.data, {
     headers: {
       "Content-Type": file.mimeType,
       "Content-Length": String(file.size),
-      "Content-Disposition": `attachment; filename="${fallbackName}"; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+      "Content-Disposition": attachmentDisposition(file.name),
       "Cache-Control": "private, no-store",
     },
   });
