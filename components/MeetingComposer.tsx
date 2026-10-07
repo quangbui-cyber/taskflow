@@ -77,9 +77,6 @@ type FormValues = {
 };
 
 const INITIAL_STATE: MeetingActionState = {};
-const HALF_HOUR_MS = 30 * 60 * 1000;
-
-const LAST_SLOT = MEETING_TIME_SLOTS[MEETING_TIME_SLOTS.length - 1];
 
 /** Mốc sau `time` đúng `steps` lần 30 phút, không vượt quá mốc cuối ngày (23:30) */
 function slotAfter(time: string, steps: number): string {
@@ -87,19 +84,27 @@ function slotAfter(time: string, steps: number): string {
   return MEETING_TIME_SLOTS[Math.min(index + steps, MEETING_TIME_SLOTS.length - 1)];
 }
 
-/** Mặc định: mốc nửa giờ kế tiếp, họp 1 tiếng */
-function defaultValues(): FormValues {
-  const start = new Date(Math.ceil((Date.now() + 5 * 60 * 1000) / HALF_HOUR_MS) * HALF_HOUR_MS);
-  const startTime = formatHour(start);
-  // Cuộc họp nằm trọn trong một ngày: quá muộn để còn mốc kết thúc trong hôm nay
-  // thì gợi ý 09:00 sáng hôm sau.
-  const tooLate = startTime === LAST_SLOT;
+const DEFAULT_START_TIME = "09:00";
+const DEFAULT_END_TIME = "10:00";
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Mặc định: 09:00 – 10:00. Chưa tới 9 giờ sáng thì gợi ý hôm nay; đã qua thì gợi ý
+ * ngày làm việc kế tiếp (bỏ qua Thứ Bảy, Chủ nhật) vì không đặt được lịch trong quá khứ.
+ */
+function defaultValues(now = new Date()): FormValues {
+  let day = now;
+  if (formatHour(now) >= DEFAULT_START_TIME) {
+    do {
+      day = new Date(day.getTime() + DAY_MS);
+    } while ([0, 6].includes(new Date(`${toDateInputVN(day)}T00:00:00Z`).getUTCDay()));
+  }
   return {
     title: "",
     description: "",
-    date: toDateInputVN(tooLate ? new Date(start.getTime() + HALF_HOUR_MS) : start),
-    startTime: tooLate ? "09:00" : startTime,
-    endTime: tooLate ? "10:00" : slotAfter(startTime, 2),
+    date: toDateInputVN(day),
+    startTime: DEFAULT_START_TIME,
+    endTime: DEFAULT_END_TIME,
     roomId: "",
     meetingUrl: "",
     attendeeIds: [],
@@ -239,11 +244,27 @@ export default function MeetingComposer({
     set("attendeeIds", [...next]);
   }
 
-  function addGroup(group: MeetingGroupOption) {
+  /** Thành viên của nhóm có thể mời được (bỏ người đã bị vô hiệu hoá, người tổ chức...). */
+  function groupMemberIds(group: MeetingGroupOption) {
     const allowed = new Set(invitable.map((person) => person.id));
-    set("attendeeIds", [
-      ...new Set([...values.attendeeIds, ...group.memberIds.filter((id) => allowed.has(id))]),
-    ]);
+    return group.memberIds.filter((id) => allowed.has(id));
+  }
+
+  /** Nhóm coi như đang được chọn khi mọi thành viên mời được của nhóm đều đã chọn. */
+  function isGroupSelected(group: MeetingGroupOption) {
+    const memberIds = groupMemberIds(group);
+    return memberIds.length > 0 && memberIds.every((id) => selected.has(id));
+  }
+
+  /** Bấm lần đầu chọn cả nhóm, bấm lần nữa bỏ chọn cả nhóm. */
+  function toggleGroup(group: MeetingGroupOption) {
+    const memberIds = groupMemberIds(group);
+    if (isGroupSelected(group)) {
+      const remove = new Set(memberIds);
+      set("attendeeIds", values.attendeeIds.filter((id) => !remove.has(id)));
+    } else {
+      set("attendeeIds", [...new Set([...values.attendeeIds, ...memberIds])]);
+    }
   }
 
   function openDialog() {
@@ -527,18 +548,30 @@ export default function MeetingComposer({
                   ))}
                   {groups.length > 0 && (
                     <div className="mb-2 flex flex-wrap gap-1.5">
-                      {groups.map((group) => (
-                        <button
-                          key={group.id}
-                          type="button"
-                          onClick={() => addGroup(group)}
-                          className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-2.5 text-xs font-medium text-zinc-600 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-800"
-                          title={`Thêm cả nhóm ${group.name}`}
-                        >
-                          <UsersRound size={13} aria-hidden="true" />
-                          {group.name}
-                        </button>
-                      ))}
+                      {groups.map((group) => {
+                        const active = isGroupSelected(group);
+                        return (
+                          <button
+                            key={group.id}
+                            type="button"
+                            onClick={() => toggleGroup(group)}
+                            aria-pressed={active}
+                            className={`inline-flex min-h-8 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors ${
+                              active
+                                ? "border-brand-400 bg-brand-100 text-brand-900 hover:bg-brand-50"
+                                : "border-zinc-200 bg-white text-zinc-600 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-800"
+                            }`}
+                            title={
+                              active
+                                ? `Bỏ chọn cả nhóm ${group.name}`
+                                : `Thêm cả nhóm ${group.name}`
+                            }
+                          >
+                            <UsersRound size={13} aria-hidden="true" />
+                            {group.name}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                   <div className="overflow-hidden rounded-[8px] border border-zinc-200">
