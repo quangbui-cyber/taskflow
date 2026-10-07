@@ -153,8 +153,8 @@ export function normalizeParameterSnapshot(value: unknown): QuotationParameterSn
 function parameterValue(snapshot: QuotationParameterSnapshot, key: string, moduleId?: string): FormulaEvaluation {
   const definition = snapshot.definitions.find(item => item.key === key);
   if (!definition) return { issue: { code: "UNKNOWN_PARAMETER", message: `Không nhận diện tham số ${key}.` } };
-  const module = moduleId ? snapshot.modules.find(item => item.id === moduleId) : undefined;
-  const value = module?.overrides[key] ?? snapshot.sharedValues[key] ?? definition.defaultValue;
+  const eventModule = moduleId ? snapshot.modules.find(item => item.id === moduleId) : undefined;
+  const value = eventModule?.overrides[key] ?? snapshot.sharedValues[key] ?? definition.defaultValue;
   if (value === undefined || value === "") return { issue: { code: "MISSING_PARAMETER", message: `Thiếu giá trị tham số ${definition.label || key}.` } };
   return { value };
 }
