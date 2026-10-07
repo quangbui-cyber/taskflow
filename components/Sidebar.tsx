@@ -4,6 +4,7 @@ import {
   Bell,
   BriefcaseBusiness,
   Building2,
+  CalendarClock,
   CalendarDays,
   CheckCircle2,
   ChevronDown,
@@ -45,6 +46,7 @@ type ActiveSection =
   | "home"
   | "notifications"
   | "recognition"
+  | "meetings"
   | "team"
   | "revenue"
   | "kpi"
@@ -405,6 +407,7 @@ export default async function Sidebar({
             <nav className="space-y-1" aria-label="Không gian làm việc">
               <MenuLink href="/" label="Công việc" icon={CheckCircle2} active={activeSection === "home" && !activeProjectId} />
               <MenuLink href="/notifications" label="Thông báo" icon={Bell} active={activeSection === "notifications"} badge={unreadCount} />
+              <MenuLink href="/meetings" label="Lịch họp" icon={CalendarClock} active={activeSection === "meetings"} />
               <MenuLink href="/recognition" label="Góc cảm ơn" icon={Star} active={activeSection === "recognition"} />
               <MenuLink href="/team" label="Hiệu suất" icon={UsersRound} active={activeSection === "team"} />
               {showRevenue && (
@@ -481,6 +484,7 @@ export default async function Sidebar({
             <div className="space-y-1">
               <MenuLink href="/" label="Công việc" icon={CheckCircle2} active={activeSection === "home" && !activeProjectId} />
               <MenuLink href="/notifications" label="Thông báo" icon={Bell} active={activeSection === "notifications"} badge={unreadCount} />
+              <MenuLink href="/meetings" label="Lịch họp" icon={CalendarClock} active={activeSection === "meetings"} />
               <MenuLink href="/recognition" label="Góc cảm ơn" icon={Star} active={activeSection === "recognition"} />
               <MenuLink href="/team" label="Hiệu suất" icon={UsersRound} active={activeSection === "team"} />
               {showRevenue && <MenuLink href="/revenue" label="Doanh số" icon={CircleDollarSign} active={activeSection === "revenue"} />}

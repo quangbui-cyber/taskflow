@@ -31,6 +31,7 @@ test("notification destinations open the relevant task, recognition or bell with
   assert.equal(notificationDestination({ projectId: "p1", taskId: "t1" }), "/projects/p1?task=t1");
   assert.equal(notificationDestination({ projectId: "p?evil=x", taskId: "a&b" }), "/projects/p%3Fevil%3Dx?task=a%26b");
   assert.equal(notificationDestination({ recognitionId: "r1" }), "/recognition?focus=r1#recognition-r1");
+  assert.equal(notificationDestination({ type: "MEETING_INVITED", meetingId: "m1" }), "/meetings?focus=m1#meeting-m1");
   assert.equal(notificationDestination({}), "/notifications");
   assert.equal(notificationDestination({ type: "LEAVE_REQUEST" }), "/leave");
 });

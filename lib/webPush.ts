@@ -17,6 +17,7 @@ type PushMessage = {
   projectId?: string;
   taskId?: string;
   recognitionId?: string;
+  meetingId?: string;
 };
 
 /** Failure to deliver push never reverses the user's task or saved bell notification. */
@@ -49,7 +50,7 @@ export async function deliverPush(userIds: string[], data: PushMessage, endpoint
             title: data.type === "TEST" ? "myCreative · Thông báo thử" : "myCreative",
             body: data.message.slice(0, 240),
             url: notificationDestination(data),
-            tag: `${data.type}:${data.taskId ?? data.recognitionId ?? "general"}`,
+            tag: `${data.type}:${data.taskId ?? data.recognitionId ?? data.meetingId ?? "general"}`,
           }),
           { vapidDetails: config, timeout: 8_000, TTL: 3600, urgency: "normal" });
         sent += 1;

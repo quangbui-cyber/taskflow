@@ -25,7 +25,7 @@ const nextConfig: NextConfig = {
   // Vercel's Next.js builder expects the standard .next artifact directory.
   // Keep the non-synced directory only for local macOS development/builds.
   distDir: process.env.VERCEL === "1" ? ".next" : ".next.nosync",
-  serverExternalPackages: ["pdf-parse"],
+  serverExternalPackages: ["pdf-parse", "nodemailer"],
   experimental: {
     serverActions: {
       bodySizeLimit: "4.2mb",

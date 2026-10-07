@@ -9,6 +9,7 @@ import MemberGroupManager from "@/components/MemberGroupManager";
 import SalesTeamManager from "@/components/SalesTeamManager";
 import AccountCatalogManager from "@/components/AccountCatalogManager";
 import ClientCatalogManager from "@/components/ClientCatalogManager";
+import MeetingRoomManager from "@/components/MeetingRoomManager";
 
 const SETTINGS_TABS = [
   { key: "create-user", label: "Tạo tài khoản" },
@@ -16,6 +17,7 @@ const SETTINGS_TABS = [
   { key: "groups", label: "Phòng ban / Nhóm" },
   { key: "client", label: "Client" },
   { key: "account", label: "Team & Account" },
+  { key: "rooms", label: "Phòng họp" },
 ] as const;
 
 type SettingsTab = (typeof SETTINGS_TABS)[number]["key"];
@@ -130,6 +132,33 @@ async function SettingsContent({
     );
   }
 
+  if (activeTab === "rooms") {
+    const rooms = await prisma.meetingRoom.findMany({
+      include: {
+        _count: {
+          select: {
+            meetings: {
+              where: { status: "SCHEDULED", endAt: { gte: new Date() } },
+            },
+          },
+        },
+      },
+      orderBy: { name: "asc" },
+    });
+
+    return (
+      <MeetingRoomManager
+        rooms={rooms.map((room) => ({
+          id: room.id,
+          name: room.name,
+          capacity: room.capacity,
+          isActive: room.isActive,
+          upcomingCount: room._count.meetings,
+        }))}
+      />
+    );
+  }
+
   const [accounts, salesTeams, accountUsers] = await Promise.all([
     prisma.account.findMany({
       include: {
@@ -237,7 +266,7 @@ export default async function AdminPage({
             <div>
               <h1 className="tf-page-title">Cài đặt</h1>
               <p className="tf-page-subtitle">
-                Quản lý tài khoản, nhóm nhân sự và danh mục kinh doanh.
+                Quản lý tài khoản, nhóm nhân sự, danh mục kinh doanh và phòng họp.
               </p>
             </div>
             <Link href="/team" prefetch={false} className="tf-button-secondary">
