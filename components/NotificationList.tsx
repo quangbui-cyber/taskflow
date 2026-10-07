@@ -4,7 +4,10 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
+  CalendarCheck,
+  CalendarClock,
   CalendarDays,
+  CalendarX2,
   AlarmClock,
   Bell,
   CheckCircle2,
@@ -26,6 +29,7 @@ export type NotificationItem = {
   projectId: string | null;
   taskId: string | null;
   recognitionId: string | null;
+  meetingId: string | null;
   read: boolean;
   createdAt: string;
 };
@@ -39,6 +43,11 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   TASK_FOLLOW: Eye,
   DEADLINE_REMINDER: AlarmClock,
   RECOGNITION_RECEIVED: Star,
+  MEETING_INVITED: CalendarClock,
+  MEETING_UPDATED: CalendarClock,
+  MEETING_CANCELLED: CalendarX2,
+  MEETING_RESPONSE: CalendarCheck,
+  MEETING_REMINDER: CalendarClock,
   LEAVE_REQUEST: CalendarDays,
   LEAVE_DECISION: CalendarDays,
 };
@@ -90,6 +99,8 @@ export default function NotificationList({
       ? "/leave"
       : notification.recognitionId
       ? `/recognition?focus=${notification.recognitionId}#recognition-${notification.recognitionId}`
+      : notification.meetingId
+      ? `/meetings?focus=${notification.meetingId}#meeting-${notification.meetingId}`
       : notification.projectId
         ? `/projects/${notification.projectId}${
             notification.taskId ? `?task=${notification.taskId}` : ""

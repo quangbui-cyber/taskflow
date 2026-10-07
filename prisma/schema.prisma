@@ -35,6 +35,8 @@ model User {
   uploadedTaskFiles    TaskFile[]          @relation("TaskFileUploader")
   recognitionsSent     Recognition[]       @relation("RecognitionSender")
   recognitionsReceived Recognition[]       @relation("RecognitionRecipient")
+  organizedMeetings    Meeting[]           @relation("MeetingOrganizer")
+  meetingInvites       MeetingAttendee[]
   kpiPlanChanges       KpiPlanChange[]
   uploadedDocuments    DocumentFile[]      @relation("DocumentFileUploader")
   createdDocumentLinks DocumentLink[]      @relation("DocumentLinkCreator")
@@ -313,6 +315,8 @@ model Notification {
   projectId     String? // để dẫn link tới board
   recognitionId String?
   recognition   Recognition? @relation("RecognitionNotification", fields: [recognitionId], references: [id], onDelete: SetNull)
+  meetingId     String? // để dẫn link tới lịch họp
+  meeting       Meeting?     @relation(fields: [meetingId], references: [id], onDelete: Cascade)
   read          Boolean      @default(false)
   createdAt     DateTime     @default(now())
 
@@ -320,6 +324,7 @@ model Notification {
   @@index([userId, createdAt])
   @@index([createdAt])
   @@index([recognitionId])
+  @@index([meetingId])
 }
 
 // Lời cảm ơn độc lập với project — dùng để mọi người ghi nhận nhau trong công việc và cuộc sống.
@@ -431,4 +436,54 @@ model LeaveRequest {
 
   @@index([userId, startDate])
   @@index([status, startDate])
+}
+
+// Phòng họp dùng chung của công ty. Phòng ngừng dùng (isActive = false) không đặt mới được
+// nhưng các cuộc họp đã đặt vẫn giữ nguyên.
+model MeetingRoom {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  capacity  Int? // sức chứa, chỉ để tham khảo khi chọn phòng
+  isActive  Boolean   @default(true)
+  meetings  Meeting[]
+  createdAt DateTime  @default(now())
+}
+
+// Cuộc họp nội bộ. Huỷ họp chỉ đổi status chứ không xoá dòng, nên phòng được trả lại
+// ngay (kiểm tra trùng phòng chỉ xét các cuộc họp SCHEDULED) mà vẫn giữ lịch sử.
+model Meeting {
+  id            String            @id @default(cuid())
+  title         String
+  description   String?
+  startAt       DateTime
+  endAt         DateTime
+  status        String            @default("SCHEDULED") // "SCHEDULED" | "CANCELLED"
+  sequence      Int               @default(0) // tăng mỗi lần sửa/huỷ để lịch trong email cập nhật đúng bản mới nhất
+  meetingUrl    String? // link họp online (Meet, Zoom...) do người đặt tự dán
+  roomId        String?
+  room          MeetingRoom?      @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  organizerId   String
+  organizer     User              @relation("MeetingOrganizer", fields: [organizerId], references: [id], onDelete: Cascade)
+  attendees     MeetingAttendee[]
+  notifications Notification[]
+  cancelledAt   DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([status, startAt])
+  @@index([roomId, status, startAt])
+  @@index([organizerId, startAt])
+}
+
+model MeetingAttendee {
+  id        String   @id @default(cuid())
+  meetingId String
+  meeting   Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  response  String   @default("PENDING") // "PENDING" | "ACCEPTED" | "DECLINED"
+  createdAt DateTime @default(now())
+
+  @@unique([meetingId, userId])
+  @@index([userId])
 }

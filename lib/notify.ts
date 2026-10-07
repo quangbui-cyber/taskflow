@@ -16,11 +16,17 @@ export async function notify(
       | "DEADLINE_REMINDER"
       | "RECOGNITION_RECEIVED"
       | "LEAVE_REQUEST"
-      | "LEAVE_DECISION";
+      | "LEAVE_DECISION"
+      | "MEETING_INVITED"
+      | "MEETING_UPDATED"
+      | "MEETING_CANCELLED"
+      | "MEETING_RESPONSE"
+      | "MEETING_REMINDER";
     message: string;
     taskId?: string;
     projectId?: string;
     recognitionId?: string;
+    meetingId?: string;
   }
 ) {
   // Việc dọn thông báo cũ (quá 30 ngày) do cron nhắc việc hàng ngày đảm nhiệm —
