@@ -107,8 +107,10 @@ export default function CostFlowPanel({ finance, user, projectHeading, initialTa
     setTabState(resolved);
     const url = new URL(window.location.href);
     url.searchParams.set("tab", resolved);
-    if (resolved !== "approvals" && url.hash.startsWith("#request-")) url.hash = "";
+    const clearedRequestAnchor = resolved !== "approvals" && url.hash.startsWith("#request-");
+    if (clearedRequestAnchor) url.hash = "";
     window.history.pushState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    if (clearedRequestAnchor) window.dispatchEvent(new HashChangeEvent("hashchange"));
   };
 
   const openApproval = (requestId: string) => {
@@ -117,6 +119,7 @@ export default function CostFlowPanel({ finance, user, projectHeading, initialTa
     url.searchParams.set("tab", "approvals");
     url.hash = `request-${requestId}`;
     window.history.pushState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
   };
 
   const worksheetHref = (revision?: IcRevision) => {

@@ -239,9 +239,9 @@ export default function InternalCostPanel({
               </Link>
             )}
 
-            <Link className="tf-button-secondary text-sm flex items-center gap-1.5" href={working || effective ? worksheetHref(working ?? effective!) : pairedHref}>
+            <Link className="tf-button-secondary text-sm flex items-center gap-1.5" href={working ? worksheetHref(working) : effective ? worksheetHref(effective) : pairedHref}>
               <Plus size={15} className="mr-1" aria-hidden="true" />
-              Tạo IC độc lập
+              {working ? `Tiếp tục IC-R${working.number}` : effective ? `Tạo revision từ IC-R${effective.number}` : "Tạo IC độc lập"}
             </Link>
           </div>
         )}
