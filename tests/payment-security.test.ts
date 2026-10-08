@@ -52,6 +52,7 @@ test("payment security: Server Action takes actor from session and never browser
   assert.match(action, /const actor = await requireUser\(\)/);
   assert.doesNotMatch(action, /form\.get\(["'](?:role|actorId|userId)["']\)/);
   assert.match(action, /publicPaymentErrorMessage\(error\)/);
+  assert.match(action, /execute(?:PaymentCash|Finance)[\s\S]*dispatchWorkflowNotifications\(result\.requestId\)\.catch\(\(\) => undefined\)/);
 });
 
 test("payment security: broad ledger omits bank account and raw evidence bytes", () => {

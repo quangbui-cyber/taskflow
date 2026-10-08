@@ -320,12 +320,19 @@ test("payment-integration: one-recipient cash is authorized, idempotent and race
   const prefix = `phase7-cash-${randomUUID()}`;
   const userIds: string[] = [];
   let projectId = "";
+  let foreignProjectId = "";
   try {
     const account = await prisma.user.create({ data: { email: `${prefix}-account@example.test`, name: "Account", role: "ACCOUNT", passwordHash: "unused" } });
     const outsider = await prisma.user.create({ data: { email: `${prefix}-outsider@example.test`, name: "Outsider", role: "ACCOUNT", passwordHash: "unused" } });
     userIds.push(account.id, outsider.id);
     const project = await prisma.project.create({ data: { name: prefix, ownerId: account.id, members: { create: { userId: account.id } } } });
     projectId = project.id;
+    const foreignProject = await prisma.project.create({ data: { name: `${prefix}-foreign`, ownerId: account.id } });
+    foreignProjectId = foreignProject.id;
+    const foreignRequest = await prisma.workflowRequest.create({ data: { projectId: foreignProject.id, module: "COSTFLOW", kind: "ADVANCE", title: "Foreign advance", creatorId: account.id, cashAssigneeId: account.id, state: "APPROVED", steps: [], payload: { amount: "1000000" } } });
+    const foreignRecipient = await prisma.paymentRecipientSnapshot.create({ data: { projectId: foreignProject.id, requestId: foreignRequest.id, recipientKey: `USER:${account.id}`, recipientType: "EMPLOYEE", displayName: "Account", totalAmount: "1000000" } });
+    const foreignLine = await prisma.paymentRequestLine.create({ data: { projectId: foreignProject.id, requestId: foreignRequest.id, stableKey: "foreign-line", position: 0, description: "Foreign", amount: "1000000", icRevisionId: "foreign-revision", icLineId: "foreign-ic-line", sourceSnapshot: { effective: true }, recipientKey: foreignRecipient.recipientKey, evidenceManifest: [] } });
+    const foreignFile = await prisma.projectFile.create({ data: { projectId: foreignProject.id, uploaderId: account.id, name: "foreign-proof.pdf", mimeType: "application/pdf", size: 3, data: Buffer.from([9, 8, 7]) } });
     await prisma.costFlowWorkspace.create({ data: { projectId, data: emptyFinance() } });
     const request = await prisma.workflowRequest.create({ data: { projectId, module: "COSTFLOW", kind: "ADVANCE", title: "Approved advance", creatorId: account.id, cashAssigneeId: account.id, state: "APPROVED", steps: [], payload: { amount: "45000000" } } });
     const employeeKey = `USER:${account.id}`;
@@ -353,6 +360,10 @@ test("payment-integration: one-recipient cash is authorized, idempotent and race
     });
     const employeeLines = lines.slice(0, 3);
     const employeeForm = makeForm(employeeKey, employeeLines, `${prefix}-employee`, `${prefix}-employee-ref`);
+    await prisma.user.update({ where: { id: account.id }, data: { isActive: false } });
+    await assert.rejects(() => executePaymentCash(projectId, 0, account, employeeForm, upload), /đang hoạt động/i);
+    await prisma.user.update({ where: { id: account.id }, data: { isActive: true } });
+    assert.deepEqual(await effects(), { cash: 0, allocations: 0, evidence: 0, history: 0 });
     await assert.rejects(() => executePaymentCash(projectId, 0, outsider, employeeForm, upload), /được giao|quyền/i);
     assert.deepEqual(await effects(), { cash: 0, allocations: 0, evidence: 0, history: 0 });
     await prisma.workflowRequest.update({ where: { id: request.id }, data: { state: "RETURNED" } });
@@ -360,6 +371,12 @@ test("payment-integration: one-recipient cash is authorized, idempotent and race
     assert.deepEqual(await effects(), { cash: 0, allocations: 0, evidence: 0, history: 0 });
     await prisma.workflowRequest.update({ where: { id: request.id }, data: { state: "APPROVED" } });
     await assert.rejects(() => executePaymentCash(projectId, 0, account, makeForm(employeeKey, [lines[3]], `${prefix}-cross`, `${prefix}-cross-ref`), upload), /cùng người nhận/i);
+    assert.deepEqual(await effects(), { cash: 0, allocations: 0, evidence: 0, history: 0 });
+    await assert.rejects(() => executePaymentCash(projectId, 0, account, makeForm(employeeKey, [foreignLine], `${prefix}-foreign-line`, `${prefix}-foreign-line-ref`), upload), /đúng hồ sơ và Project/i);
+    assert.deepEqual(await effects(), { cash: 0, allocations: 0, evidence: 0, history: 0 });
+    const foreignEvidenceForm = makeForm(employeeKey, employeeLines, `${prefix}-foreign-evidence`, `${prefix}-foreign-evidence-ref`);
+    foreignEvidenceForm.set("sourceFileId", foreignFile.id);
+    await assert.rejects(() => executePaymentCash(projectId, 0, account, foreignEvidenceForm, null), /Chứng từ không thuộc Project/i);
     assert.deepEqual(await effects(), { cash: 0, allocations: 0, evidence: 0, history: 0 });
 
     const saved = await executePaymentCash(projectId, 0, account, employeeForm, upload);
@@ -370,6 +387,9 @@ test("payment-integration: one-recipient cash is authorized, idempotent and race
     assert.equal(replay.cashId, saved.cashId);
     assert.deepEqual(await effects(), { cash: 1, allocations: 3, evidence: 1, history: 1 });
     await assert.rejects(() => executePaymentCash(projectId, 1, account, makeForm(employeeKey, employeeLines, `${prefix}-employee`, `${prefix}-different-ref`), upload), /đã được dùng/i);
+    assert.deepEqual(await effects(), { cash: 1, allocations: 3, evidence: 1, history: 1 });
+    const substitutedUpload = { ...upload, data: new Uint8Array([5, 4, 3, 2, 1]) };
+    await assert.rejects(() => executePaymentCash(projectId, 1, account, employeeForm, substitutedUpload), /đã được dùng/i);
     assert.deepEqual(await effects(), { cash: 1, allocations: 3, evidence: 1, history: 1 });
 
     const race = await Promise.allSettled([
@@ -409,6 +429,13 @@ test("payment-integration: one-recipient cash is authorized, idempotent and race
       await assert.rejects(() => executeFinance(projectId, 2, account, blocked, null), /Phase 8/i);
       assert.deepEqual({ dossiers: await prisma.workflowRequest.count({ where: { projectId } }), applications: await prisma.advanceApplication.count({ where: { projectId } }), ...await effects() }, blockedBaseline);
     }
+    const concurrentApplications = await Promise.allSettled([0, 1].map(async attempt => {
+      const blocked = new FormData();
+      blocked.set("command", "ADVANCE_SETTLEMENT"); blocked.set("recipientKey", employeeKey); blocked.set("acVersionId", `claimed-ac-${attempt}`); blocked.set("acApprovalEventId", "claimed-event"); blocked.set("acApprovalAttemptId", "claimed-attempt"); blocked.append("acLineIds", "expense-evidence-complete");
+      return executeFinance(projectId, 2, account, blocked, null);
+    }));
+    assert.equal(concurrentApplications.every(result => result.status === "rejected"), true);
+    assert.deepEqual({ dossiers: await prisma.workflowRequest.count({ where: { projectId } }), applications: await prisma.advanceApplication.count({ where: { projectId } }), ...await effects() }, blockedBaseline);
 
     const authorized = await loadFinance(projectId, account);
     assert.ok(authorized);
@@ -431,6 +458,13 @@ test("payment-integration: one-recipient cash is authorized, idempotent and race
       await prisma.costFlowHistory.deleteMany({ where: { projectId } });
       await prisma.costFlowWorkspace.deleteMany({ where: { projectId } });
       await prisma.project.deleteMany({ where: { id: projectId } });
+    }
+    if (foreignProjectId) {
+      await prisma.projectFile.deleteMany({ where: { projectId: foreignProjectId } });
+      await prisma.paymentRequestLine.deleteMany({ where: { projectId: foreignProjectId } });
+      await prisma.paymentRecipientSnapshot.deleteMany({ where: { projectId: foreignProjectId } });
+      await prisma.workflowRequest.deleteMany({ where: { projectId: foreignProjectId } });
+      await prisma.project.deleteMany({ where: { id: foreignProjectId } });
     }
     if (userIds.length) await prisma.user.deleteMany({ where: { id: { in: userIds } } });
   }
