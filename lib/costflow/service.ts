@@ -24,6 +24,7 @@ import { normalizePaymentDraft } from "./paymentPolicy";
 import type { PaymentDraftLineInput } from "./paymentTypes";
 import { diffPaymentDossiers, type PaymentDossierSnapshot, type PaymentDocumentSnapshot } from "./paymentDiff";
 import { derivePaymentProgress } from "./paymentCash";
+import { projectPaymentLedger, type BeneficiaryVerification } from "./paymentReadModel";
 
 type Actor = { id: string; role: string };
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -106,7 +107,29 @@ export async function loadFinance(projectId: string, actor: Actor) {
       diff: parent ? diffPaymentDossiers(paymentSnapshot(parent), paymentSnapshot(request)) : null,
     };
   });
-  return { project: { ...project, members: fullAccess ? project.members : [], client: fullAccess ? project.client : null }, clients, fullAccess, version: workspace?.version ?? 0, data: fullAccess && savedData ? savedData : { ...emptyFinance(), closed: savedData?.closed ?? false }, requests: visible, cash, users, files, evidence, supplements, history, paymentDossiers };
+  const paymentLedger = projectPaymentLedger({
+    normalized: normalizedPaymentRequests.map(request => ({
+      requestId: request.id,
+      projectId,
+      kind: request.kind,
+      title: request.title,
+      milestone: typeof (request.payload as Record<string, unknown> | null)?.milestone === "string" ? String((request.payload as Record<string, unknown>).milestone) : "",
+      approvalState: request.state,
+      recipients: request.paymentRecipients.map(recipient => {
+        let beneficiaryVerification: BeneficiaryVerification = recipient.recipientType === "VENDOR" ? "UNVERIFIED" : "NOT_APPLICABLE";
+        if (recipient.recipientType === "VENDOR" && recipient.recipientKey.startsWith("VENDOR:")) {
+          const beneficiary = savedData?.beneficiaries.find(item => `VENDOR:${item.id}` === recipient.recipientKey);
+          if (beneficiary && beneficiary.version === recipient.sourceVersion && beneficiary.verifiedVersion === beneficiary.version) beneficiaryVerification = "VERIFIED";
+        }
+        return { recipientKey: recipient.recipientKey, recipientType: recipient.recipientType, displayName: recipient.displayName, totalAmount: recipient.totalAmount, beneficiaryVerification };
+      }),
+      lines: request.paymentLines.map(line => ({ id: line.id, recipientKey: line.recipientKey, amount: line.amount })),
+    })),
+    legacy: visible.map(request => ({ id: request.id, projectId: request.projectId, kind: request.kind, title: request.title, state: request.state, payload: request.payload })),
+    cash: cash.map(item => ({ id: item.id, projectId: item.projectId, requestId: item.requestId, recipientKey: item.recipientKey, direction: item.direction, amount: item.amount, evidenceId: item.evidenceId, normalizedAllocations: item.normalizedAllocations })),
+    financialCloseState: savedData?.closed ? "CLOSED" : "OPEN",
+  });
+  return { project: { ...project, members: fullAccess ? project.members : [], client: fullAccess ? project.client : null }, clients, fullAccess, version: workspace?.version ?? 0, data: fullAccess && savedData ? savedData : { ...emptyFinance(), closed: savedData?.closed ?? false }, requests: visible, cash, users, files, evidence, supplements, history, paymentDossiers, paymentLedger };
 }
 
 export async function executeFinance(projectId: string, expectedVersion: number, actor: Actor, form: FormData, upload: ProjectUpload | null) {

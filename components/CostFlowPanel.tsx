@@ -66,6 +66,7 @@ export type Finance = {
     discussions: { id: string; lineId: string; authorId: string; body: string; createdAt: string; author: { name: string } }[];
     diff: import("@/lib/costflow/paymentDiff").PaymentDossierDiff | null;
   }[];
+  paymentLedger?: import("@/lib/costflow/paymentReadModel").PaymentLedgerRow[];
 };
 
 const KIND: Record<string, string> = { IC: "IC", AC_REVISION: "Sửa chi phí AC", ADVANCE: "Đề nghị tạm ứng", VENDOR_PAYMENT: "Đề nghị thanh toán NCC", REIMBURSEMENT: "Đề nghị Hoàn Tạm Ứng", CLOSE: "Đóng tài chính", REOPEN: "Mở lại tài chính", CANCEL: "Hủy hồ sơ" };

@@ -22,6 +22,7 @@ import ActionForm from "@/components/CostFlowActionForm";
 import { displayMoney } from "@/lib/costflow/money";
 import { isExpenseApproved } from "@/lib/costflow/reconciliation";
 import type { RequestPayload } from "@/lib/costflow/types";
+import PaymentLedgerTable from "@/components/costflow/payments/PaymentLedgerTable";
 
 type Props = {
   finance: Finance;
@@ -548,6 +549,10 @@ export default function PaymentCashPanel({
       {/* SUB-TAB 2: SỔ QUỸ & GIAO DỊCH TIỀN THỰC TẾ */}
       {activeSubTab === "cash" && (
         <div className="space-y-6">
+          <Panel className="space-y-4">
+            <div><h3 className="font-bold text-base text-[var(--foreground)]">Đối soát theo hồ sơ và người nhận</h3><p className="text-xs text-[var(--text-secondary)]">Projection chuẩn hóa, legacy-safe và không chứa số tài khoản ngân hàng.</p></div>
+            <PaymentLedgerTable projectId={finance.project.id} rows={finance.paymentLedger ?? []} />
+          </Panel>
           {/* A. HỒ SƠ ĐÃ DUYỆT ĐANG CHỜ GIẢI NGÂN */}
           {cashStats.pendingDisbursements.length > 0 && (
             <Panel className="space-y-3 border-[var(--warning)] bg-[var(--warning-soft)]">

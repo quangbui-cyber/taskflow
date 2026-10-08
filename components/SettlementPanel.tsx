@@ -26,6 +26,7 @@ import { Alert, Badge, EmptyState, Panel, Table } from "@/components/ui/Presenta
 import { Dialog } from "@/components/ui/Dialog";
 import ActionForm from "@/components/CostFlowActionForm";
 import CashConfirmationEditor from "@/components/costflow/payments/CashConfirmationEditor";
+import PaymentLedgerTable from "@/components/costflow/payments/PaymentLedgerTable";
 import { reconcile, isExpenseApproved } from "@/lib/costflow/reconciliation";
 import { displayMoney } from "@/lib/costflow/money";
 
@@ -326,6 +327,11 @@ export default function SettlementPanel({ finance, user, canCreate }: Props) {
       )}
 
       {/* 3. SECTION: SỔ QUỸ & LỊCH SỬ GIAO DỊCH TIỀN THỰC TẾ (CASHBOOK) */}
+      <Panel className="space-y-4">
+        <div><h3 className="font-bold text-base text-[var(--foreground)]">Đối soát theo hồ sơ và người nhận</h3><p className="text-xs text-[var(--text-secondary)] mt-0.5">Các trục duyệt, xác minh NCC, tiền thật, AC và đóng tài chính được hiển thị riêng.</p></div>
+        <PaymentLedgerTable projectId={finance.project.id} rows={finance.paymentLedger ?? []} />
+      </Panel>
+
       <Panel className="space-y-4">
         <div className="flex items-center justify-between">
           <div>

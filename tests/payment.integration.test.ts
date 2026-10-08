@@ -315,6 +315,7 @@ test("payment-integration: one-recipient cash is authorized, idempotent and race
   approvedDatabaseUrl();
   const { prisma } = await import("../lib/prisma");
   const { executePaymentCash } = await import("../lib/costflow/paymentCash");
+  const { loadFinance } = await import("../lib/costflow/service");
   const { emptyFinance } = await import("../lib/costflow/types");
   const prefix = `phase7-cash-${randomUUID()}`;
   const userIds: string[] = [];
@@ -387,6 +388,17 @@ test("payment-integration: one-recipient cash is authorized, idempotent and race
     unavailable.set("direction", "OUT");
     await assert.rejects(() => executePaymentCash(projectId, 2, account, unavailable, upload), /Phase 8/i);
     assert.deepEqual(await effects(), { cash: 2, allocations: 4, evidence: 2, history: 2 });
+
+    const authorized = await loadFinance(projectId, account);
+    assert.ok(authorized);
+    assert.equal(authorized.paymentLedger.filter(row => row.requestId === request.id).length, 2);
+    assert.equal(authorized.paymentLedger.filter(row => row.requestId === postAc.id).length, 1);
+    assert.equal(authorized.paymentLedger.find(row => row.requestId === postAc.id)?.provenance, "legacy");
+    const ledgerJson = JSON.stringify(authorized.paymentLedger);
+    assert.equal(ledgerJson.includes("bankName"), false);
+    assert.equal(ledgerJson.includes("accountLast4"), false);
+    assert.equal(ledgerJson.includes("proof.pdf"), false);
+    assert.equal(await loadFinance(projectId, outsider), null);
   } finally {
     if (projectId) {
       await prisma.costFlowCashAllocation.deleteMany({ where: { projectId } });
