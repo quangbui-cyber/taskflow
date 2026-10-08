@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { normalizePaymentDraft } from "../lib/costflow/paymentPolicy";
+import { projectPaymentDossiers } from "../lib/costflow/paymentCompatibility";
 import type { PaymentDraftInput } from "../lib/costflow/paymentTypes";
 
 const projectId = "project-phase-7";
@@ -129,3 +130,34 @@ test("payment-policy: duplicate stable line keys are rejected", () => {
   );
 });
 
+test("payment-read-model: normalized rows win and legacy rows appear once with explicit provenance gap", () => {
+  const normalized = [{
+    requestId: "request-new",
+    projectId,
+    kind: "ADVANCE",
+    milestone: "Mốc chuẩn hóa",
+    totalAmount: "75000000",
+    recipientTotals: { "VENDOR:vendor-a": "25000000" },
+  }];
+  const legacy = [
+    { id: "request-new", projectId, kind: "ADVANCE", payload: { amount: "1", recipientKey: "USER:wrong" } },
+    { id: "request-legacy", projectId, kind: "ADVANCE", payload: { amount: "1000000", recipientKey: "USER:legacy" } },
+  ];
+  const projected = projectPaymentDossiers(normalized, legacy);
+
+  assert.equal(projected.length, 2);
+  assert.equal(projected.filter(item => item.requestId === "request-new").length, 1);
+  assert.deepEqual(projected.find(item => item.requestId === "request-new"), {
+    ...normalized[0], provenance: "normalized", needsReview: false,
+  });
+  assert.deepEqual(projected.find(item => item.requestId === "request-legacy"), {
+    requestId: "request-legacy",
+    projectId,
+    kind: "ADVANCE",
+    milestone: null,
+    totalAmount: "1000000",
+    recipientTotals: { "USER:legacy": "1000000" },
+    provenance: "legacy",
+    needsReview: true,
+  });
+});

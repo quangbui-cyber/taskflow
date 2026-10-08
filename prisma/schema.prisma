@@ -40,6 +40,7 @@ model User {
   workflowReaders      WorkflowRequestReader[]
   workflowEvents       WorkflowApprovalEvent[]        @relation("WorkflowApprovalEventActor")
   workflowDeliveries   WorkflowNotificationDelivery[]
+  paymentDiscussions   PaymentLineDiscussion[]
   organizedMeetings    Meeting[]                      @relation("MeetingOrganizer")
   meetingInvites       MeetingAttendee[]
   kpiPlanChanges       KpiPlanChange[]
@@ -76,39 +77,44 @@ enum ProjectCategory {
 }
 
 model Project {
-  id                   String             @id @default(cuid())
+  id                   String                     @id @default(cuid())
   name                 String
   description          String?
-  category             ProjectCategory    @default(CLIENT)
-  purchaseOrderNumber  String?            @unique
-  color                String             @default("#6366f1")
-  status               String             @default("BIDDING") // "BIDDING" | "ON_PROCESS" | "PENDING" | "DONE" | "CANCEL" | "FAIL"
-  type                 String             @default("OTHER") // "TEAMBUILDING" | "MICE" | "ACTIVATION" | "EVENT" | "PUR" | "OTHER"
+  category             ProjectCategory            @default(CLIENT)
+  purchaseOrderNumber  String?                    @unique
+  color                String                     @default("#6366f1")
+  status               String                     @default("BIDDING") // "BIDDING" | "ON_PROCESS" | "PENDING" | "DONE" | "CANCEL" | "FAIL"
+  type                 String                     @default("OTHER") // "TEAMBUILDING" | "MICE" | "ACTIVATION" | "EVENT" | "PUR" | "OTHER"
   executionStartAt     DateTime? // ngày bắt đầu thực hiện (chạy event)
   executionEndAt       DateTime? // ngày kết thúc — null nếu chỉ 1 ngày
-  revenue              Float              @default(0) // doanh thu dự kiến/thực tế (VND)
+  revenue              Float                      @default(0) // doanh thu dự kiến/thực tế (VND)
   googleChatWebhookUrl String?
   ownerId              String
-  owner                User               @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  owner                User                       @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   clientId             String?
-  client               Client?            @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  client               Client?                    @relation(fields: [clientId], references: [id], onDelete: SetNull)
   accountId            String?
-  account              Account?           @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  account              Account?                   @relation(fields: [accountId], references: [id], onDelete: SetNull)
   responsibleTeamId    String?
-  responsibleTeam      SalesTeam?         @relation(fields: [responsibleTeamId], references: [id], onDelete: SetNull)
+  responsibleTeam      SalesTeam?                 @relation(fields: [responsibleTeamId], references: [id], onDelete: SetNull)
   responsibleGroupId   String?
-  responsibleGroup     MemberGroup?       @relation(fields: [responsibleGroupId], references: [id], onDelete: SetNull)
+  responsibleGroup     MemberGroup?               @relation(fields: [responsibleGroupId], references: [id], onDelete: SetNull)
   members              ProjectMember[]
   tasks                Task[]
   files                ProjectFile[]
   onProcessAt          DateTime? // thời điểm đầu tiên chuyển sang ON_PROCESS - dùng ghi nhận doanh thu
   completedAt          DateTime? // thời điểm chuyển sang DONE
-  createdAt            DateTime           @default(now())
+  createdAt            DateTime                   @default(now())
   costFlow             CostFlowWorkspace?
   workflowRequests     WorkflowRequest[]
   costFlowCash         CostFlowCash[]
   costFlowEvidence     CostFlowEvidence[]
   costFlowHistory      CostFlowHistory[]
+  paymentRequestLines  PaymentRequestLine[]
+  paymentRecipients    PaymentRecipientSnapshot[]
+  cashAllocations      CostFlowCashAllocation[]
+  paymentDiscussions   PaymentLineDiscussion[]
+  advanceApplications  AdvanceApplication[]
 
   @@index([status, onProcessAt])
   @@index([status, completedAt])
@@ -390,21 +396,21 @@ model LoginRateLimit {
 
 // Shared Workflow foundation; finance consumes this rather than owning approval states.
 model WorkflowRequest {
-  id                          String                  @id @default(cuid())
+  id                          String                     @id @default(cuid())
   projectId                   String?
-  project                     Project?                @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  project                     Project?                   @relation(fields: [projectId], references: [id], onDelete: Restrict)
   templateId                  String?
-  template                    WorkflowTemplate?       @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  template                    WorkflowTemplate?          @relation(fields: [templateId], references: [id], onDelete: Restrict)
   module                      String
   kind                        String
   title                       String
   creatorId                   String
   cashAssigneeId              String
   parentId                    String?
-  state                       String                  @default("DRAFT")
+  state                       String                     @default("DRAFT")
   steps                       Json
-  currentStep                 Int                     @default(0)
-  version                     Int                     @default(0)
+  currentStep                 Int                        @default(0)
+  version                     Int                        @default(0)
   currentAttemptId            String?
   currentStepArrivedAt        DateTime?
   replacesRequestId           String?
@@ -412,8 +418,8 @@ model WorkflowRequest {
   pendingReplacementRequestId String?
   supersededAt                DateTime?
   payload                     Json
-  createdAt                   DateTime                @default(now())
-  updatedAt                   DateTime                @updatedAt
+  createdAt                   DateTime                   @default(now())
+  updatedAt                   DateTime                   @updatedAt
   decisions                   WorkflowDecision[]
   cash                        CostFlowCash[]
   evidence                    CostFlowEvidence[]
@@ -422,6 +428,11 @@ model WorkflowRequest {
   approvalEvents              WorkflowApprovalEvent[]
   readers                     WorkflowRequestReader[]
   notifications               Notification[]
+  paymentLines                PaymentRequestLine[]
+  paymentRecipients           PaymentRecipientSnapshot[]
+  cashAllocations             CostFlowCashAllocation[]
+  paymentDiscussions          PaymentLineDiscussion[]
+  advanceApplications         AdvanceApplication[]       @relation("AdvanceApplicationRequest")
 
   @@index([projectId, module, createdAt])
   @@index([creatorId, state])
@@ -624,23 +635,133 @@ model QuotationTemplateProposal {
 }
 
 model CostFlowCash {
-  id           String          @id @default(cuid())
-  projectId    String
-  project      Project         @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  requestId    String
-  request      WorkflowRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
-  recipientKey String
-  direction    String
-  amount       String // actual source decimal, never IEEE Float or auto-rounded receipt
-  reference    String
-  allocations  Json
-  evidenceId   String
-  occurredAt   DateTime
-  confirmedBy  String
-  createdAt    DateTime        @default(now())
+  id                    String                   @id @default(cuid())
+  projectId             String
+  project               Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  requestId             String
+  request               WorkflowRequest          @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  recipientKey          String
+  direction             String
+  channel               String                   @default("LEGACY")
+  amount                String // actual source decimal, never IEEE Float or auto-rounded receipt
+  reference             String
+  idempotencyKey        String                   @default(uuid())
+  commandFingerprint    String                   @default("LEGACY")
+  allocations           Json
+  evidenceId            String
+  occurredAt            DateTime
+  confirmedBy           String
+  createdAt             DateTime                 @default(now())
+  normalizedAllocations CostFlowCashAllocation[]
 
+  @@unique([projectId, idempotencyKey])
   @@unique([projectId, reference])
   @@index([projectId, recipientKey])
+  @@index([projectId, requestId, recipientKey, direction])
+}
+
+model PaymentRequestLine {
+  id                  String                   @id @default(cuid())
+  projectId           String
+  project             Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  requestId           String
+  request             WorkflowRequest          @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  stableKey           String
+  position            Int
+  description         String
+  amount              String
+  icRevisionId        String
+  icLineId            String
+  sourceSnapshot      Json
+  recipientKey        String
+  recipient           PaymentRecipientSnapshot @relation(fields: [requestId, recipientKey], references: [requestId, recipientKey], onDelete: Restrict)
+  evidenceManifest    Json
+  createdAt           DateTime                 @default(now())
+  cashAllocations     CostFlowCashAllocation[]
+  discussions         PaymentLineDiscussion[]
+  advanceApplications AdvanceApplication[]
+
+  @@unique([requestId, stableKey])
+  @@index([projectId, requestId])
+  @@index([icRevisionId, icLineId])
+  @@index([requestId, recipientKey])
+}
+
+model PaymentRecipientSnapshot {
+  id            String               @id @default(cuid())
+  projectId     String
+  project       Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  requestId     String
+  request       WorkflowRequest      @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  recipientKey  String
+  recipientType String
+  displayName   String
+  bankName      String?
+  accountLast4  String?
+  sourceVersion Int?
+  totalAmount   String
+  createdAt     DateTime             @default(now())
+  lines         PaymentRequestLine[]
+
+  @@unique([requestId, recipientKey])
+  @@index([projectId, requestId])
+}
+
+model CostFlowCashAllocation {
+  id            String             @id @default(cuid())
+  projectId     String
+  project       Project            @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  cashId        String
+  cash          CostFlowCash       @relation(fields: [cashId], references: [id], onDelete: Restrict)
+  requestId     String
+  request       WorkflowRequest    @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  requestLineId String
+  requestLine   PaymentRequestLine @relation(fields: [requestLineId], references: [id], onDelete: Restrict)
+  recipientKey  String
+  direction     String
+  amount        String
+  createdAt     DateTime           @default(now())
+
+  @@unique([cashId, requestLineId])
+  @@index([projectId, requestId, recipientKey, direction])
+  @@index([requestLineId, direction])
+}
+
+model PaymentLineDiscussion {
+  id        String             @id @default(cuid())
+  projectId String
+  project   Project            @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  requestId String
+  request   WorkflowRequest    @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  lineId    String
+  line      PaymentRequestLine @relation(fields: [lineId], references: [id], onDelete: Restrict)
+  authorId  String
+  author    User               @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  body      String
+  createdAt DateTime           @default(now())
+
+  @@index([requestId, lineId, createdAt])
+  @@index([authorId, createdAt])
+}
+
+model AdvanceApplication {
+  id               String             @id @default(cuid())
+  projectId        String
+  project          Project            @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  advanceRequestId String
+  advanceRequest   WorkflowRequest    @relation("AdvanceApplicationRequest", fields: [advanceRequestId], references: [id], onDelete: Restrict)
+  advanceLineId    String
+  advanceLine      PaymentRequestLine @relation(fields: [advanceLineId], references: [id], onDelete: Restrict)
+  expenseId        String
+  recipientKey     String
+  amount           String
+  createdBy        String
+  createdAt        DateTime           @default(now())
+
+  @@unique([advanceLineId, expenseId])
+  @@index([projectId, recipientKey])
+  @@index([advanceRequestId, createdAt])
+  @@index([expenseId])
 }
 
 // Copies evidence bytes at use time; deleting a project upload cannot change a submitted dossier.
