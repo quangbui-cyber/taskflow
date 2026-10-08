@@ -8,7 +8,7 @@ import { IcEvidenceError } from "@/lib/costflow/icEvidence";
 import { executeFinance } from "@/lib/costflow/service";
 import { dispatchWorkflowNotifications } from "@/lib/workflow/notifications";
 
-export type CostFlowActionState = { error?: string; success?: string; requestId?: string; revisionId?: string; quotationId?: string; draftId?: string; savedScopes?: string[]; version?: number; lineErrors?: { lineId: string; message: string }[] };
+export type CostFlowActionState = { error?: string; success?: string; requestId?: string; revisionId?: string; quotationId?: string; draftId?: string; beneficiaryId?: string; savedScopes?: string[]; version?: number; lineErrors?: { lineId: string; message: string }[] };
 export async function costFlowAction(_previous: CostFlowActionState, form: FormData): Promise<CostFlowActionState> {
   const actor = await requireUser();
   const projectId = String(form.get("projectId") ?? "");

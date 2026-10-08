@@ -196,6 +196,14 @@ export default function PairedQuotationIcEditor({
   const [insertMenuId, setInsertMenuId] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [drop, setDrop] = useState<{ id: string; position: "before" | "inside" | "after" } | null>(null);
+  const [createdBeneficiaries, setCreatedBeneficiaries] = useState<{ id: string; name: string }[]>([]);
+  const [newBeneficiary, setNewBeneficiary] = useState<{
+    itemId: string;
+    name: string;
+    bank: string;
+    account: string;
+    sourceFileId: string;
+  } | null>(null);
 
   // View Filter: mode="quote" is SELL-only, mode="ic" is BUY-focused, mode="paired" allows ALL | SELL | BUY
   const [viewFilter, setViewFilter] = useState<"ALL" | "SELL" | "BUY">(
@@ -225,6 +233,13 @@ export default function PairedQuotationIcEditor({
   const detailRole = detail ? outline.find(entry => entry.row.itemId === detail.itemId)?.role : undefined;
   const customerName =
     finance.clients?.find(c => c.id === clientId)?.name ?? initial?.customer ?? source?.customer ?? "";
+  const beneficiaryOptions = useMemo(() => {
+    const merged = new Map(
+      finance.data.beneficiaries.map(beneficiary => [beneficiary.id, { id: beneficiary.id, name: beneficiary.name }])
+    );
+    for (const beneficiary of createdBeneficiaries) merged.set(beneficiary.id, beneficiary);
+    return [...merged.values()];
+  }, [createdBeneficiaries, finance.data.beneficiaries]);
   const readinessIssues = mode === "ic" ? [] : quotationReadinessIssues(rows, title, customerName, totalLines);
   const ordered = useMemo(() => orderedRows(rows), [rows]);
   const hasLegacyDeepRows = ordered.some(entry => entry.depth > 2);
@@ -1978,14 +1993,27 @@ export default function PairedQuotationIcEditor({
                               label="Nhà cung cấp"
                               value={detail.buy.vendorId}
                               disabled={locked}
-                              onChange={e => side(detail, "buy", "vendorId", e.target.value)}
+                              onChange={e => {
+                                if (e.target.value === "__CREATE_BENEFICIARY__") {
+                                  setNewBeneficiary({
+                                    itemId: detail.itemId,
+                                    name: "",
+                                    bank: "",
+                                    account: "",
+                                    sourceFileId: ""
+                                  });
+                                  return;
+                                }
+                                side(detail, "buy", "vendorId", e.target.value);
+                              }}
                             >
                               <option value="">Chưa chọn</option>
-                              {finance.data.beneficiaries.map(b => (
+                              {beneficiaryOptions.map(b => (
                                 <option key={b.id} value={b.id}>
                                   {b.name}
                                 </option>
                               ))}
+                              <option value="__CREATE_BENEFICIARY__">＋ Tạo nhà cung cấp mới…</option>
                             </Select>
                             <Textarea
                               label="Ghi chú nội bộ · không xuất cho khách"
@@ -2171,6 +2199,92 @@ export default function PairedQuotationIcEditor({
               </div>
             )}
           </fieldset>
+        )}
+      </Dialog>
+
+      <Dialog
+        open={!!newBeneficiary}
+        onClose={() => setNewBeneficiary(null)}
+        title="Tạo nhà cung cấp mới"
+        description="Nhà cung cấp được lưu vào danh bạ của project và tự chọn cho hạng mục đang sửa. Kế toán vẫn cần xác minh thông tin trước khi thanh toán."
+      >
+        {newBeneficiary && (
+          <ActionForm
+            finance={{ project: finance.project, version }}
+            command="BENEFICIARY"
+            label="Tạo và chọn nhà cung cấp"
+            onSuccess={result => {
+              if (!result.beneficiaryId) {
+                setState({ error: "Đã lưu nhà cung cấp nhưng chưa nhận được mã để chọn cho hạng mục." });
+                return;
+              }
+              const beneficiaryId = result.beneficiaryId;
+              const beneficiaryName = newBeneficiary.name.trim();
+              setCreatedBeneficiaries(current => [
+                ...current.filter(beneficiary => beneficiary.id !== beneficiaryId),
+                { id: beneficiaryId, name: beneficiaryName }
+              ]);
+              setRows(current =>
+                current.map(row =>
+                  row.itemId === newBeneficiary.itemId
+                    ? { ...row, buy: { ...row.buy, vendorId: beneficiaryId } }
+                    : row
+                )
+              );
+              if (result.version !== undefined) setVersion(result.version);
+              setState({ success: `Đã tạo và chọn nhà cung cấp “${beneficiaryName}” cho hạng mục.` });
+              setNewBeneficiary(null);
+            }}
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                name="name"
+                label="Tên người nhận / Tên NCC"
+                placeholder="Công ty TNHH..."
+                required
+                value={newBeneficiary.name}
+                onChange={event => setNewBeneficiary(current => current ? { ...current, name: event.target.value } : current)}
+              />
+              <Input
+                name="bank"
+                label="Ngân hàng"
+                placeholder="Vietcombank, MB, ACB..."
+                required
+                value={newBeneficiary.bank}
+                onChange={event => setNewBeneficiary(current => current ? { ...current, bank: event.target.value } : current)}
+              />
+              <Input
+                name="account"
+                label="Số tài khoản"
+                placeholder="0123456789..."
+                required
+                value={newBeneficiary.account}
+                onChange={event => setNewBeneficiary(current => current ? { ...current, account: event.target.value } : current)}
+              />
+              <Select
+                name="sourceFileId"
+                label="Dùng tài liệu đã có trong project"
+                value={newBeneficiary.sourceFileId}
+                onChange={event => setNewBeneficiary(current => current ? { ...current, sourceFileId: event.target.value } : current)}
+              >
+                <option value="">Không chọn tài liệu có sẵn</option>
+                {finance.files.map(file => (
+                  <option key={file.id} value={file.id}>{file.name}</option>
+                ))}
+              </Select>
+              <Input
+                type="file"
+                name="proof"
+                label="Hoặc tải tài liệu căn cứ mới"
+                required={!newBeneficiary.sourceFileId}
+                accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
+                hint="Chọn một trong hai nguồn · tối đa 4 MiB. File chỉ được lưu sau khi tạo NCC thành công."
+              />
+            </div>
+            <p className="tf-ui-help">
+              Căn cứ có thể là hợp đồng, hóa đơn VAT, báo giá chính thức hoặc email xác nhận từ đối tác.
+            </p>
+          </ActionForm>
         )}
       </Dialog>
 

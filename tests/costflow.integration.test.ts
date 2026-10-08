@@ -119,8 +119,9 @@ test("standard finance flow persists correctly in an isolated PostgreSQL databas
     assert.equal(await prisma.costFlowCash.count({ where: { projectId: project.id } }), 2);
     const finalIc = await createIc(); await act(creator, "SUBMIT", { requestId: finalIc.id, explanation: "Final IC" }); await approve(finalIc.id);
     const vendorRevision = (await state()).revisions.find(r => r.effective)!;
-    await act(creator, "BENEFICIARY", { name: "NCC Test", bank: "Test bank", account: "0001", sourceFileId: proof.id });
+    const createdVendor = await act(creator, "BENEFICIARY", { name: "NCC Test", bank: "Test bank", account: "0001" }, undefined, { name: "vendor-proof.pdf", mimeType: "application/pdf", size: 15, data: new Uint8Array(Buffer.from("%PDF vendor test")) });
     const vendor = (await state()).beneficiaries[0];
+    assert.equal(createdVendor.beneficiaryId, vendor.id);
     await act(creator, "CREATE_REQUEST", { kind: "VENDOR_PAYMENT", title: "NCC 5 triệu", recipientKey: `VENDOR:${vendor.id}`, revisionId: vendorRevision.id, amount: "5000000" });
     const vendorRequest = await latest("VENDOR_PAYMENT"); await approve(vendorRequest.id);
     assert.equal((await state()).beneficiaries[0].verifiedVersion, 1);

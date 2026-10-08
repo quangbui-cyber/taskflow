@@ -73,6 +73,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
     let savedRevisionId: string | undefined;
     let savedQuotationId: string | undefined;
     let savedDraftId: string | undefined;
+    let savedBeneficiaryId: string | undefined;
     let savedScopes: string[] | undefined;
     const request = requests.find(r => r.id === text(form, "requestId"));
     let affectedRequestId = request?.id;
@@ -433,9 +434,13 @@ export async function executeFinance(projectId: string, expectedVersion: number,
       case "BENEFICIARY": {
         needCreator();
         const existing = data.beneficiaries.find(b => b.id === text(form, "beneficiaryId"));
-        const proofId = await snapshotFile(requireValue(text(form, "sourceFileId"), "căn cứ tài khoản"), "BENEFICIARY");
+        const proofId = upload
+          ? (await tx.costFlowEvidence.create({ data: { projectId, sourceFileId: "uploaded-beneficiary-proof", kind: "BENEFICIARY", name: upload.name, mimeType: upload.mimeType, data: upload.data, sha256: createHash("sha256").update(upload.data).digest("hex"), createdBy: actor.id } })).id
+          : await snapshotFile(text(form, "sourceFileId"), "BENEFICIARY");
+        if (!proofId) throw new Error("Cần tài liệu căn cứ tên người nhận và số tài khoản.");
         const updated = { id: existing?.id ?? randomUUID(), name: requireValue(text(form, "name"), "tên người nhận"), bank: requireValue(text(form, "bank"), "ngân hàng"), account: requireValue(text(form, "account"), "số tài khoản"), version: (existing?.version ?? 0) + 1, verifiedVersion: null, proofId: proofId! };
         if (existing) Object.assign(existing, updated); else data.beneficiaries.push(updated);
+        savedBeneficiaryId = updated.id;
         break;
       }
       case "EXPENSE": {
@@ -649,7 +654,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
     const updated = await tx.costFlowWorkspace.updateMany({ where: { projectId, version: expectedVersion }, data: { version: { increment: 1 }, data: json(data) } });
     if (updated.count !== 1) throw new Error("Dữ liệu đã thay đổi. Tải lại để tránh ghi trùng.");
     await tx.costFlowHistory.create({ data: { projectId, version: expectedVersion + 1, actorId: actor.id, action: command, snapshot: json(data) } });
-    return { success: savedScopes ? `Đã lưu ${savedScopes.join(" và ")}.` : "Đã lưu hồ sơ và lịch sử.", requestId: affectedRequestId, revisionId: savedRevisionId, quotationId: savedQuotationId, draftId: savedDraftId, savedScopes, version: expectedVersion + 1 };
+    return { success: savedScopes ? `Đã lưu ${savedScopes.join(" và ")}.` : "Đã lưu hồ sơ và lịch sử.", requestId: affectedRequestId, revisionId: savedRevisionId, quotationId: savedQuotationId, draftId: savedDraftId, beneficiaryId: savedBeneficiaryId, savedScopes, version: expectedVersion + 1 };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15000 });
 }
 
