@@ -1,18 +1,18 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState, useTransition } from "react";
-import { Bell, Check, ChevronDown, Eye, Save, Send, Trash2, X } from "lucide-react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { Bell, Check, ChevronDown, Eye, Save, Trash2, X } from "lucide-react";
 import {
-  addComment,
   addFollower,
   deleteTask,
   removeFollower,
   updateTask,
-  type ActionState,
 } from "@/app/actions/tasks";
 import { PRIORITIES, STATUSES, type MemberDTO, type TaskDTO } from "@/lib/types";
 import DeadlineField, { toDeadlineLocalValue } from "@/components/DeadlineField";
 import Avatar from "@/components/Avatar";
+import CommentBody from "@/components/CommentBody";
+import CommentComposer from "@/components/CommentComposer";
 import UserPicker from "@/components/UserPicker";
 import TaskFileSection from "@/components/TaskFileSection";
 import { useInteraction } from "@/components/InteractionProvider";
@@ -51,19 +51,6 @@ export default function TaskModal({
   const [following, startFollowing] = useTransition();
   const followersPickerRef = useRef<HTMLDivElement>(null);
   const priorityPickerRef = useRef<HTMLDivElement>(null);
-
-  const [commentState, commentAction, commentPending] = useActionState<
-    ActionState,
-    FormData
-  >(async (prev, formData) => {
-    const response = await addComment(prev, formData);
-    if (response.error) {
-      notify({ message: response.error, tone: "error" });
-    } else {
-      notify({ message: "Đã gửi bình luận.", tone: "success" });
-    }
-    return response;
-  }, {});
 
   const followerIds = new Set(task.followers.map((f) => f.id));
   const isFollowing = followerIds.has(currentUserId);
@@ -513,9 +500,7 @@ export default function TaskModal({
                         minute: "2-digit",
                       })}
                     </p>
-                    <p className="text-sm text-zinc-700 whitespace-pre-wrap">
-                      {c.body}
-                    </p>
+                    <CommentBody body={c.body} mentions={c.mentions} />
                   </div>
                 </li>
               ))}
@@ -524,32 +509,7 @@ export default function TaskModal({
               )}
             </ul>
 
-            <form action={commentAction} className="flex gap-2">
-              <input type="hidden" name="taskId" value={task.id} />
-              <input
-                name="body"
-                type="text"
-                required
-                placeholder="Viết bình luận..."
-                className="tf-field flex-1"
-              />
-              <button
-                type="submit"
-                disabled={commentPending}
-                className="tf-button-primary"
-                aria-busy={commentPending}
-              >
-                {commentPending ? (
-                  <span className="tf-spinner" aria-hidden="true" />
-                ) : (
-                  <Send size={15} aria-hidden="true" />
-                )}
-                {commentPending ? "Đang gửi..." : "Gửi"}
-              </button>
-            </form>
-            {commentState.error && (
-              <p className="text-xs text-red-600">{commentState.error}</p>
-            )}
+            <CommentComposer key={task.id} taskId={task.id} members={members} />
           </div>
         </div>
       </div>

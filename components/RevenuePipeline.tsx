@@ -25,15 +25,20 @@ function formatCompactVND(value: number) {
 export default function RevenuePipeline({ stages }: { stages: PipelineStage[] }) {
   const total = stages.reduce((sum, stage) => sum + stage.value, 0);
   const activeStages = stages.filter((stage) => stage.value > 0);
-  const chartStops = activeStages.map((stage, index) => {
-      const startValue = activeStages
-        .slice(0, index)
-        .reduce((sum, item) => sum + item.value, 0);
-      const endValue = startValue + stage.value;
-      const start = total > 0 ? (startValue / total) * 100 : 0;
-      const end = total > 0 ? (endValue / total) * 100 : 0;
-      return `${stage.color} ${start}% ${end}%`;
-    });
+  // Khe trắng mảnh giữa các múi: các trạng thái dùng chung tông màu nên cần tách bằng khe.
+  const GAP = activeStages.length > 1 ? 0.7 : 0;
+  const chartStops = activeStages.flatMap((stage, index) => {
+    const startValue = activeStages
+      .slice(0, index)
+      .reduce((sum, item) => sum + item.value, 0);
+    const endValue = startValue + stage.value;
+    const start = total > 0 ? (startValue / total) * 100 : 0;
+    const end = total > 0 ? (endValue / total) * 100 : 0;
+    const fillEnd = Math.max(start, end - GAP);
+    return GAP > 0
+      ? [`${stage.color} ${start}% ${fillEnd}%`, `#ffffff ${fillEnd}% ${end}%`]
+      : [`${stage.color} ${start}% ${end}%`];
+  });
   const chartBackground =
     chartStops.length > 0
       ? `conic-gradient(${chartStops.join(", ")})`

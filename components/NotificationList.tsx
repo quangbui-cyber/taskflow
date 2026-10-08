@@ -1,9 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
+  CalendarCheck,
+  CalendarClock,
+  CalendarDays,
+  CalendarX2,
   AlarmClock,
   Bell,
   CheckCircle2,
@@ -27,6 +31,7 @@ export type NotificationItem = {
   recognitionId: string | null;
   workflowRequestId: string | null;
   workflowModule: string | null;
+  meetingId: string | null;
   read: boolean;
   createdAt: string;
 };
@@ -36,9 +41,17 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   TASK_COMPLETED: CheckCircle2,
   TASK_UPDATED: RefreshCw,
   COMMENT: MessageSquare,
+  COMMENT_MENTION: MessageSquare,
   TASK_FOLLOW: Eye,
   DEADLINE_REMINDER: AlarmClock,
   RECOGNITION_RECEIVED: Star,
+  MEETING_INVITED: CalendarClock,
+  MEETING_UPDATED: CalendarClock,
+  MEETING_CANCELLED: CalendarX2,
+  MEETING_RESPONSE: CalendarCheck,
+  MEETING_REMINDER: CalendarClock,
+  LEAVE_REQUEST: CalendarDays,
+  LEAVE_DECISION: CalendarDays,
 };
 
 function timeAgo(value: string): string {
@@ -73,6 +86,35 @@ export default function NotificationList({
   const [readingId, setReadingId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
+  // Trang này không tự tải lại: trên điện thoại, mở lại trình duyệt chỉ hiện bản
+  // cũ đang lưu. Lấy dữ liệu mới khi quay lại tab và định kỳ khi đang mở.
+  useEffect(() => {
+    const REFRESH_MS = 60_000;
+    let lastRefresh = Date.now();
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      lastRefresh = Date.now();
+      router.refresh();
+    };
+    const onReturn = () => {
+      // Quay lại ngay sau vài giây thì chưa cần tải lại.
+      if (Date.now() - lastRefresh > 5_000) refresh();
+    };
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) refresh();
+    };
+    const timer = window.setInterval(refresh, REFRESH_MS);
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("focus", onReturn);
+    window.addEventListener("pageshow", onPageShow);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("focus", onReturn);
+      window.removeEventListener("pageshow", onPageShow);
+    };
+  }, [router]);
+
   const pageHref = (page: number) => {
     const params = new URLSearchParams();
     if (activeView !== "all") params.set("view", activeView);
@@ -84,12 +126,16 @@ export default function NotificationList({
   function openNotification(notification: NotificationItem) {
     if (readingId) return;
 
-    const destination = notification.workflowRequestId
+    const destination = notification.type.startsWith("LEAVE_")
+      ? "/leave"
+      : notification.workflowRequestId
       ? notification.workflowModule === "COSTFLOW" && notification.projectId
         ? `/projects/${notification.projectId}/costflow#request-${notification.workflowRequestId}`
         : `/workflow/${notification.workflowRequestId}`
       : notification.recognitionId
       ? `/recognition?focus=${notification.recognitionId}#recognition-${notification.recognitionId}`
+      : notification.meetingId
+      ? `/meetings?focus=${notification.meetingId}#meeting-${notification.meetingId}`
       : notification.projectId
         ? `/projects/${notification.projectId}${
             notification.taskId ? `?task=${notification.taskId}` : ""

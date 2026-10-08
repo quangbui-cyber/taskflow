@@ -4,14 +4,16 @@ import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { canManageProjects, getMembership, requireUser } from "@/lib/auth";
+import { canCreateProjects, canViewRevenue, getMembership, requireUser } from "@/lib/auth";
+import { readProjectBusinessFields } from "@/lib/projectPolicy";
+import { readProjectResponsibility, type ProjectResponsibility } from "@/lib/projectResponsibility";
 import {
   sendGoogleChat,
   validateGoogleChatWebhookUrl,
 } from "@/lib/googleChat";
 import { readProjectUpload } from "@/lib/projectFiles";
 import { parsePurchaseOrderPdf } from "@/lib/purchaseOrderPdf";
-import { projectStatusColor } from "@/lib/types";
+import { projectStatusColor, type ProjectCategory } from "@/lib/types";
 
 export type ActionState = { error?: string; success?: string };
 
@@ -41,10 +43,10 @@ function parseExecutionDate(raw: string): Date | null | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
-function parseExecutionFields(formData: FormData):
+function parseExecutionFields(formData: FormData, category: ProjectCategory):
   | { error: string }
   | { type: string; executionStartAt: Date | null; executionEndAt: Date | null } {
-  const type = String(formData.get("type") ?? "OTHER");
+  const type = category === "INTERNAL" ? "OTHER" : String(formData.get("type") ?? "OTHER");
   if (!PROJECT_TYPE_KEYS.includes(type)) {
     return { error: "Loại hình dự án không hợp lệ." };
   }
@@ -66,24 +68,30 @@ function parseExecutionFields(formData: FormData):
   return { type, executionStartAt, executionEndAt };
 }
 
-function parseRevenue(raw: string): number | null {
-  // Chấp nhận "500000000", "500.000.000", "500,000,000"
-  const cleaned = raw.replace(/[.,\s₫đ]/gi, "");
-  if (cleaned === "") return 0;
-  const value = Number(cleaned);
-  if (!Number.isFinite(value) || value < 0) return null;
-  return value;
-}
-
 async function findValidAccount(accountId: string | null) {
   if (!accountId) return null;
   return prisma.account.findFirst({
     where: {
       id: accountId,
-      user: { isActive: true },
+      user: { isActive: true, role: { in: ["ADMIN", "ACCOUNT"] } },
     },
     select: { id: true, userId: true },
   });
+}
+
+async function validateResponsibility(assignment: ProjectResponsibility) {
+  const exists = assignment.responsibleTeamId
+    ? await prisma.salesTeam.findUnique({
+        where: { id: assignment.responsibleTeamId },
+        select: { id: true },
+      })
+    : assignment.responsibleGroupId
+      ? await prisma.memberGroup.findUnique({
+          where: { id: assignment.responsibleGroupId },
+          select: { id: true },
+        })
+      : true;
+  return exists ? null : { error: "Team/phòng ban không còn tồn tại. Vui lòng chọn lại." };
 }
 
 export async function createProject(
@@ -91,24 +99,29 @@ export async function createProject(
   formData: FormData
 ): Promise<ActionState> {
   const user = await requireUser();
-  if (!canManageProjects(user.role)) {
-    return { error: "Bạn không có quyền tạo project. Liên hệ Admin hoặc Account." };
+  if (!canCreateProjects(user.role)) {
+    return { error: "Bạn không có quyền tạo dự án." };
   }
   const name = String(formData.get("name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
-  const revenue = parseRevenue(String(formData.get("revenue") ?? ""));
-  const clientId = String(formData.get("clientId") ?? "") || null;
-  const accountId = String(formData.get("accountId") ?? "") || null;
+  const business = readProjectBusinessFields(formData, user.role);
+  if ("error" in business) return business;
+  const { category, revenue, clientId, accountId } = business;
   const projectSource = String(formData.get("projectSource") ?? "");
   let purchaseOrderNumber: string | null = null;
   let projectFile: Awaited<ReturnType<typeof readProjectUpload>> = null;
 
   if (!name) return { error: "Tên project không được để trống." };
-  if (revenue === null) return { error: "Doanh thu không hợp lệ." };
-  const execution = parseExecutionFields(formData);
+  const assignment = readProjectResponsibility(formData, undefined, category);
+  if ("error" in assignment) return assignment;
+  const assignmentError = await validateResponsibility(assignment);
+  if (assignmentError) return assignmentError;
+  const execution = parseExecutionFields(formData, category);
   if ("error" in execution) return execution;
   try {
-    projectFile = await readProjectUpload(formData.get("projectFile"));
+    projectFile = category === "CLIENT"
+      ? await readProjectUpload(formData.get("projectFile"))
+      : null;
   } catch (error) {
     return {
       error:
@@ -137,7 +150,7 @@ export async function createProject(
   }
   const account = await findValidAccount(accountId);
   if (accountId && !account) {
-    return { error: "Account chưa liên kết user hoặc chưa được gán Team." };
+    return { error: "Hãy chọn Account đang hoạt động, đã liên kết tài khoản và Team kinh doanh." };
   }
   if (purchaseOrderNumber) {
     const existingProject = await prisma.project.findUnique({
@@ -155,7 +168,7 @@ export async function createProject(
     initialMembers.push({ userId: account.userId, role: "member" });
   }
   const initialStatus =
-    projectSource === "JABIL_PO" && projectFile?.mimeType === "application/pdf"
+    category === "INTERNAL" || (projectSource === "JABIL_PO" && projectFile?.mimeType === "application/pdf")
       ? "ON_PROCESS"
       : "BIDDING";
   let project;
@@ -164,6 +177,8 @@ export async function createProject(
       data: {
         name,
         description: description || null,
+        category,
+        ...assignment,
         purchaseOrderNumber,
         color: projectStatusColor(initialStatus),
         status: initialStatus,
@@ -201,6 +216,7 @@ export async function createProject(
     throw error;
   }
 
+  revalidatePath("/", "layout");
   redirect(`/projects/${project.id}`);
 }
 
@@ -213,9 +229,6 @@ export async function updateProject(
   const projectId = String(formData.get("projectId") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
-  const revenue = parseRevenue(String(formData.get("revenue") ?? ""));
-  const clientId = String(formData.get("clientId") ?? "") || null;
-  const accountId = String(formData.get("accountId") ?? "") || null;
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
@@ -225,31 +238,45 @@ export async function updateProject(
     return { error: "Chỉ chủ project hoặc admin mới được sửa." };
   }
   if (!name) return { error: "Tên project không được để trống." };
-  if (revenue === null) return { error: "Doanh thu không hợp lệ." };
-  const execution = parseExecutionFields(formData);
+  const business = readProjectBusinessFields(formData, user.role, project);
+  if ("error" in business) return business;
+  const { category, revenue, clientId, accountId } = business;
+  const assignment = readProjectResponsibility(formData, project, category);
+  if ("error" in assignment) return assignment;
+  const assignmentError = await validateResponsibility(assignment);
+  if (assignmentError) return assignmentError;
+  const execution = parseExecutionFields(formData, category);
   if ("error" in execution) return execution;
-  if (
-    accountId !== project.accountId &&
-    accountId &&
-    !(await findValidAccount(accountId))
-  ) {
-    return { error: "Account chưa liên kết user hoặc chưa được gán Team." };
+  const account = await findValidAccount(accountId);
+  if (accountId && !account) {
+    return { error: "Hãy chọn Account đang hoạt động, đã liên kết tài khoản và Team kinh doanh." };
   }
-  await prisma.project.update({
-    where: { id: projectId },
-    data: {
-      name,
-      description: description || null,
-      type: execution.type,
-      executionStartAt: execution.executionStartAt,
-      executionEndAt: execution.executionEndAt,
-      revenue,
-      clientId,
-      accountId,
-    },
+  await prisma.$transaction(async (tx) => {
+    await tx.project.update({
+      where: { id: projectId },
+      data: {
+        name,
+        description: description || null,
+        category,
+        ...assignment,
+        type: execution.type,
+        executionStartAt: execution.executionStartAt,
+        executionEndAt: execution.executionEndAt,
+        revenue: canViewRevenue(user.role) ? revenue : undefined,
+        clientId,
+        accountId,
+      },
+    });
+    if (account?.userId) {
+      await tx.projectMember.upsert({
+        where: { projectId_userId: { projectId, userId: account.userId } },
+        create: { projectId, userId: account.userId },
+        update: {},
+      });
+    }
   });
 
-  revalidatePath("/");
+  revalidatePath("/", "layout");
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/revenue");
   return {};

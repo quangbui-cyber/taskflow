@@ -314,7 +314,7 @@ export async function createMemberGroup(
       members: { create: validIds.map((userId) => ({ userId })) },
     },
   });
-  revalidatePath("/admin");
+  revalidatePath("/", "layout");
   return { success: `Đã tạo nhóm "${name}".` };
 }
 
@@ -355,7 +355,7 @@ export async function updateMemberGroup(
       data: validIds.map((userId) => ({ groupId, userId })),
     });
   });
-  revalidatePath("/admin");
+  revalidatePath("/", "layout");
   return { success: `Đã cập nhật nhóm "${normalizedName}".` };
 }
 
@@ -368,6 +368,6 @@ export async function deleteMemberGroup(groupId: string): Promise<AdminState> {
   if (!group) return { error: "Nhóm không tồn tại." };
 
   await prisma.memberGroup.delete({ where: { id: groupId } });
-  revalidatePath("/admin");
+  revalidatePath("/", "layout");
   return { success: `Đã xoá nhóm "${group.name}".` };
 }

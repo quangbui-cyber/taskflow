@@ -51,6 +51,8 @@ git push -u origin main
 
 ## Bước 3 — Deploy lên Vercel
 
+Thông báo đẩy cần thêm ba biến môi trường Production: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (ví dụ `mailto:admin@congty.com`). Tạo khóa một lần bằng thư viện `web-push`; lưu private key dưới dạng Sensitive trên Vercel và giữ cặp khóa cố định qua các lần deploy. Sau khi thêm biến, triển khai lại app để bật tính năng. Migration tạo bảng thiết bị được chạy cùng quy trình production migrations hiện có. iPhone kiểm thử bằng bản HTTPS đã thêm vào Màn hình chính, tại **Thông báo → Bật thông báo → Gửi thông báo thử**.
+
 1. Vào Vercel → **Add New → Project** → chọn repository `taskflow` vừa đẩy lên.
 2. Vercel tự nhận diện Next.js. **Trước khi bấm Deploy**, mở phần **Environment Variables** và thêm:
 
@@ -193,3 +195,28 @@ curl -H "Authorization: Bearer <CRON_SECRET>" \
 
 > ⚠️ Endpoint này gửi tin **thật** vào group Chat của mọi dự án có việc trễ hạn.
 > Đừng gọi thử trên production nếu chưa muốn cả công ty nhận tin nhắn.
+
+## Lịch họp: gửi email mời họp qua Gmail (tuỳ chọn)
+
+Trang **Lịch họp** luôn gửi thông báo trong app. Muốn người tham dự nhận thêm
+**email kèm lịch (.ics)** khi được mời, khi đổi giờ/phòng và khi huỷ họp thì khai báo
+một hộp thư Gmail để gửi:
+
+1. Tạo (hoặc chọn) một tài khoản Gmail **dùng riêng cho app** — mail mời họp sẽ gửi
+   đi từ địa chỉ này.
+2. Bật **xác minh 2 bước** cho tài khoản đó, rồi tạo **Mật khẩu ứng dụng** tại
+   <https://myaccount.google.com/apppasswords>.
+3. Vercel → Settings → Environment Variables → thêm:
+   - `SMTP_USER` = địa chỉ Gmail ở bước 1
+   - `SMTP_APP_PASSWORD` = mật khẩu ứng dụng 16 ký tự ở bước 2
+   - `APP_URL` = địa chỉ app (không bắt buộc trên Vercel) để email có nút mở app
+4. **Redeploy.**
+
+Chưa khai báo thì app vẫn chạy bình thường, chỉ không gửi email.
+
+- **Giới hạn của Gmail:** khoảng 500 người nhận/ngày với Gmail thường (2.000 với
+  Google Workspace). Vượt mức, Google tạm khoá gửi khoảng 24 giờ.
+- **Phản hồi tham dự** tính theo nút *Tham dự / Từ chối* trong app. Nút Yes/No trong
+  Gmail chỉ gửi thư trả lời về hộp thư ở bước 1, không cập nhật vào app.
+- **Phòng họp** do Admin thêm trong *Cài đặt → Phòng họp*.
+- Cron 9h sáng (mục trên) nhắc thêm trong app các cuộc họp diễn ra trong ngày.

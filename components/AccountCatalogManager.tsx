@@ -214,7 +214,7 @@ function LinkedAccountRow({
           )}
         </span>
       </span>
-      <div className="relative min-w-[180px]">
+      <div className="relative w-52 shrink-0">
         <select
           value={teamId}
           disabled={pending}

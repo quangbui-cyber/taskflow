@@ -4,36 +4,49 @@ import { useActionState, useState } from "react";
 import { Pencil, X } from "lucide-react";
 import { updateProject, type ActionState } from "@/app/actions/projects";
 import RevenueInput from "@/components/RevenueInput";
+import ProjectResponsibilitySelect from "@/components/ProjectResponsibilitySelect";
+import { responsibilityValue, type ProjectResponsibility, type ResponsibilityOptions } from "@/lib/projectResponsibility";
 import ClientSelect, { type ClientOption } from "@/components/ClientSelect";
-import UserPicker, { type UserPickerOption } from "@/components/UserPicker";
+import ProjectAccountSelect, { preventMissingProjectAccount, type ProjectAccountOption } from "@/components/ProjectAccountSelect";
 import { useInteraction } from "@/components/InteractionProvider";
-import { PROJECT_TYPES } from "@/lib/types";
+import {
+  PROJECT_CATEGORIES,
+  PROJECT_TYPES,
+  type ProjectCategory,
+} from "@/lib/types";
 
 export default function ProjectEditButton({
   project,
   clients,
   accounts,
+  responsibilityOptions,
   canEdit,
+  canEditRevenue,
 }: {
-  project: {
+  project: ProjectResponsibility & {
     id: string;
     name: string;
     description: string | null;
     type: string;
+    category: ProjectCategory;
+    hasPurchaseOrder: boolean;
     executionStartAt: string | null; // yyyy-MM-dd theo giờ VN
     executionEndAt: string | null;
-    revenue: number;
+    revenue: number | null;
     clientId: string | null;
     clientName: string | null;
     accountId: string | null;
     accountName: string | null;
   };
   clients: ClientOption[];
-  accounts: UserPickerOption[];
+  accounts: ProjectAccountOption[];
+  responsibilityOptions: ResponsibilityOptions;
   canEdit: boolean;
+  canEditRevenue: boolean;
 }) {
   const { notify } = useInteraction();
   const [open, setOpen] = useState(false);
+  const [category, setCategory] = useState(project.category);
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     async (prev, formData) => {
       const result = await updateProject(prev, formData);
@@ -45,7 +58,7 @@ export default function ProjectEditButton({
       }
       return result;
     },
-    {}
+    {},
   );
 
   return (
@@ -53,7 +66,10 @@ export default function ProjectEditButton({
       {canEdit && (
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            setCategory(project.category);
+            setOpen(true);
+          }}
           className="tf-button-secondary !min-h-9 !px-3 !py-1.5 text-sm"
         >
           <Pencil size={15} strokeWidth={1.8} aria-hidden="true" />
@@ -68,6 +84,11 @@ export default function ProjectEditButton({
         >
           <form
             action={formAction}
+            onSubmit={(event) => {
+              if (preventMissingProjectAccount(event)) {
+                notify({ message: "Dự án Khách hàng bắt buộc chọn Account phụ trách.", tone: "error" });
+              }
+            }}
             onClick={(e) => e.stopPropagation()}
             className="tf-modal-enter my-auto w-full max-w-lg space-y-4 rounded-[10px] border border-zinc-200 bg-white p-6 shadow-xl"
           >
@@ -84,6 +105,39 @@ export default function ProjectEditButton({
             </div>
 
             <input type="hidden" name="projectId" value={project.id} />
+
+            <label className="block">
+              <span className="text-xs font-medium text-zinc-500">
+                Mục đích dự án
+              </span>
+              <select
+                name="category"
+                value={category}
+                disabled={project.hasPurchaseOrder}
+                onChange={(event) =>
+                  setCategory(event.target.value as ProjectCategory)
+                }
+                className="tf-field mt-1"
+              >
+                {PROJECT_CATEGORIES.map((item) => (
+                  <option key={item.key} value={item.key}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+              {project.hasPurchaseOrder && (
+                <span className="mt-1 block text-xs text-zinc-500">
+                  Dự án có PO giữ mục đích Khách hàng.
+                </span>
+              )}
+              {category === "INTERNAL" && (
+                <span className="mt-1 block text-xs text-zinc-500">
+                  {project.category === "CLIENT"
+                    ? "Chuyển sang Nội bộ sẽ xoá Client, Account và doanh thu của dự án."
+                    : "Dự án nội bộ không dùng Client, Account hoặc doanh thu."}
+                </span>
+              )}
+            </label>
 
             <label className="block">
               <span className="text-xs font-medium text-zinc-500">
@@ -110,34 +164,47 @@ export default function ProjectEditButton({
             </label>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <label className="block">
-                <span className="text-xs font-medium text-zinc-500">
-                  Loại hình
-                </span>
-                <select
-                  name="type"
-                  defaultValue={project.type}
-                  className="tf-field mt-1"
-                >
-                  {PROJECT_TYPES.map((t) => (
-                    <option key={t.key} value={t.key}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {category === "INTERNAL" && (
+                <div className="sm:col-span-2">
+                  <ProjectResponsibilitySelect
+                    {...responsibilityOptions}
+                    defaultValue={responsibilityValue(project)}
+                    disabled={pending}
+                  />
+                </div>
+              )}
+              {category === "CLIENT" && (
+                <label className="block">
+                  <span className="text-xs font-medium text-zinc-500">
+                    Loại hình
+                  </span>
+                  <select
+                    name="type"
+                    defaultValue={project.type}
+                    className="tf-field mt-1"
+                  >
+                    {PROJECT_TYPES.map((t) => (
+                      <option key={t.key} value={t.key}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
 
-              <label className="block">
-                <span className="text-xs font-medium text-zinc-500">
-                  Doanh thu (VND)
-                </span>
-                <RevenueInput
-                  name="revenue"
-                  defaultValue={project.revenue}
-                  placeholder="VD: 500.000.000"
-                  className="tf-field mt-1"
-                />
-              </label>
+              {category === "CLIENT" && canEditRevenue && (
+                <label className="block">
+                  <span className="text-xs font-medium text-zinc-500">
+                    Doanh thu (VND)
+                  </span>
+                  <RevenueInput
+                    name="revenue"
+                    defaultValue={project.revenue ?? 0}
+                    placeholder="VD: 500.000.000"
+                    className="tf-field mt-1"
+                  />
+                </label>
+              )}
 
               <label className="block">
                 <span className="text-xs font-medium text-zinc-500">
@@ -163,31 +230,26 @@ export default function ProjectEditButton({
                 />
               </label>
 
-              <div className="block">
-                <span className="text-xs font-medium text-zinc-500">
-                  Client
-                </span>
-                <ClientSelect
-                  clients={clients}
-                  defaultValue={project.clientId ?? ""}
-                  className="mt-1"
-                />
-              </div>
+              {category === "CLIENT" && (
+                <div className="block">
+                  <span className="text-xs font-medium text-zinc-500">
+                    Client
+                  </span>
+                  <ClientSelect
+                    clients={clients}
+                    defaultValue={project.clientId ?? ""}
+                    className="mt-1"
+                  />
+                </div>
+              )}
 
-              <label className="block">
-                <span className="text-xs font-medium text-zinc-500">
-                  Account
-                </span>
-                <UserPicker
-                  name="accountId"
+              {category === "CLIENT" && (
+                <ProjectAccountSelect
+                  accounts={accounts}
                   defaultValue={project.accountId ?? ""}
-                  options={accounts}
-                  placeholder="— Chưa chọn —"
-                  emptyLabel="— Chưa chọn —"
-                  ariaLabel="Account"
-                  className="mt-1"
+                  disabled={pending}
                 />
-              </label>
+              )}
             </div>
 
             {state.error && (

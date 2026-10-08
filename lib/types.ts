@@ -1,6 +1,9 @@
+import type { CommentMention } from "@/lib/commentMentions";
+
 export type CommentDTO = {
   id: string;
   body: string;
+  mentions: CommentMention[];
   createdAt: string;
   author: { id: string; name: string; avatarUrl: string | null };
 };
@@ -35,7 +38,7 @@ export type TaskFileDTO = {
 export type MemberDTO = {
   userId: string;
   role: string;
-  user: { id: string; name: string; email: string; avatarUrl: string | null };
+  user: { id: string; name: string; email: string; avatarUrl: string | null; isActive?: boolean };
 };
 
 export const STATUSES = [
@@ -55,6 +58,17 @@ export const PROJECT_STATUSES = [
 
 // Bảng màu 6 loại hình đã qua validator dataviz (phân biệt được với người
 // mù màu, đủ tương phản trên nền trắng) — đừng đổi tuỳ tiện từng màu lẻ.
+export const PROJECT_CATEGORIES = [
+  { key: "INTERNAL", label: "Nội bộ", className: "bg-violet-50 text-violet-700" },
+  { key: "CLIENT", label: "Khách hàng", className: "bg-blue-50 text-blue-700" },
+] as const;
+
+export type ProjectCategory = (typeof PROJECT_CATEGORIES)[number]["key"];
+
+export function projectCategoryInfo(key: string) {
+  return PROJECT_CATEGORIES.find((category) => category.key === key) ?? PROJECT_CATEGORIES[1];
+}
+
 export const PROJECT_TYPES = [
   { key: "TEAMBUILDING", label: "Teambuilding", color: "#0d9488", className: "bg-teal-100 text-teal-700" },
   { key: "MICE", label: "MICE", color: "#4f46e5", className: "bg-indigo-100 text-indigo-700" },

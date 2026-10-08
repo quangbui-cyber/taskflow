@@ -5,6 +5,8 @@ import { requireUser } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
 import NotificationList from "@/components/NotificationList";
 import { dispatchWorkflowNotifications } from "@/lib/workflow/notifications";
+import PushNotificationSettings from "@/components/PushNotificationSettings";
+import { pushConfiguration } from "@/lib/webPush";
 
 const PAGE_SIZE = 20;
 
@@ -51,9 +53,10 @@ export default async function NotificationsPage({
         name: true,
         color: true,
         status: true,
-        account: {
-          select: { team: { select: { id: true, name: true } } },
-        },
+        category: true,
+        responsibleTeam: { select: { id: true, name: true } },
+        responsibleGroup: { select: { id: true, name: true } },
+        account: { select: { team: { select: { id: true, name: true } } } },
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -94,8 +97,14 @@ export default async function NotificationsPage({
             </p>
           </div>
 
+          <PushNotificationSettings publicKey={pushConfiguration()?.publicKey ?? null} />
+
           <NotificationList
-            key={`${view}-${requestedPage}`}
+            // Danh sách giữ trạng thái "đã đọc" tạm ở client; đổi key khi dữ liệu
+            // server thay đổi để thông báo mới hiện ra sau mỗi lần tải lại.
+            key={`${view}-${requestedPage}-${totalUnread}-${notifications
+              .map((notification) => `${notification.id}${notification.read ? "r" : "u"}`)
+              .join("")}`}
             activeView={view}
             currentPage={requestedPage}
             initialNotifications={notifications.map((notification) => ({
@@ -107,6 +116,7 @@ export default async function NotificationsPage({
               recognitionId: notification.recognitionId,
               workflowRequestId: notification.workflowRequestId,
               workflowModule: notification.workflowRequest?.module ?? null,
+              meetingId: notification.meetingId,
               read: notification.read,
               createdAt: notification.createdAt.toISOString(),
             }))}

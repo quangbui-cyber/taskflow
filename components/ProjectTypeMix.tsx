@@ -3,8 +3,9 @@ import { formatVND } from "@/lib/types";
 export type TypeSlice = {
   key: string;
   label: string;
-  color: string;
+  color: string; // màu nhận diện loại hình (badge); biểu đồ tô theo thứ hạng doanh số
   value: number; // doanh số ghi nhận (On Process + Done)
+  bidding: number; // giá trị đang Bidding
   count: number; // tổng số dự án thuộc loại hình
 };
 
@@ -22,8 +23,32 @@ function formatCompactVND(value: number) {
   return formatVND(value);
 }
 
-/** Donut cơ cấu doanh số ghi nhận theo loại hình dự án */
-export default function ProjectTypeMix({ slices }: { slices: TypeSlice[] }) {
+/** Donut cơ cấu doanh số ghi nhận theo loại hình dự án, kèm giá trị đang Bidding */
+// Một tông xanh đậm dần theo doanh số: loại hình lớn nhất đậm nhất.
+const RANK_COLORS = [
+  "#1e3a8a",
+  "#1d4ed8",
+  "#3b82f6",
+  "#60a5fa",
+  "#93c5fd",
+  "#bfdbfe",
+];
+const NO_REVENUE_COLOR = "#e4e4e7";
+
+export default function ProjectTypeMix({
+  slices: unsortedSlices,
+}: {
+  slices: TypeSlice[];
+}) {
+  const slices = [...unsortedSlices]
+    .sort((a, b) => b.value - a.value)
+    .map((slice, index) => ({
+      ...slice,
+      color:
+        slice.value > 0
+          ? RANK_COLORS[Math.min(index, RANK_COLORS.length - 1)]
+          : NO_REVENUE_COLOR,
+    }));
   const total = slices.reduce((sum, slice) => sum + slice.value, 0);
   const active = slices.filter((slice) => slice.value > 0);
 
@@ -46,7 +71,7 @@ export default function ProjectTypeMix({ slices }: { slices: TypeSlice[] }) {
   return (
     <section className="tf-panel p-5">
       <div>
-        <h2 className="font-semibold">Cơ cấu loại hình</h2>
+        <h2 className="font-semibold">Doanh số theo loại hình</h2>
         <p className="mt-1 text-xs text-zinc-400">
           Tỷ trọng doanh số ghi nhận (On Process + Done) theo loại hình dự án.
         </p>
@@ -89,11 +114,19 @@ export default function ProjectTypeMix({ slices }: { slices: TypeSlice[] }) {
                   style={{ backgroundColor: slice.color }}
                   aria-hidden="true"
                 />
-                <span className="min-w-0 flex-1 truncate text-xs font-medium uppercase text-zinc-500">
+                <span className="min-w-[6.5rem] flex-1 truncate text-xs font-medium uppercase text-zinc-500">
                   {slice.label}
                 </span>
-                <span className="shrink-0 text-xs text-zinc-400">
+                <span className="hidden shrink-0 text-xs text-zinc-400 sm:inline">
                   {slice.count} dự án
+                </span>
+                <span
+                  className="hidden w-36 shrink-0 text-right text-xs tabular-nums text-amber-600 xl:inline"
+                  title={`Đang Bidding: ${formatVND(slice.bidding)}`}
+                >
+                  {slice.bidding > 0
+                    ? `Bidding ${formatCompactVND(slice.bidding)}`
+                    : ""}
                 </span>
                 <span className="w-24 shrink-0 text-right text-sm font-semibold tabular-nums text-zinc-950">
                   {formatCompactVND(slice.value)}

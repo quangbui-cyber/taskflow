@@ -7,7 +7,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { canManageProjects, requireUser } from "@/lib/auth";
+import { canCreateProjects, canViewRevenue, requireUser } from "@/lib/auth";
 import { daysUntil, isOverdue } from "@/lib/dates";
 import Sidebar from "@/components/Sidebar";
 import Avatar from "@/components/Avatar";
@@ -81,9 +81,9 @@ export default async function DashboardPage({
       include: {
         _count: { select: { tasks: true, members: true } },
         tasks: { where: { status: "DONE" }, select: { id: true } },
-        account: {
-          select: { team: { select: { id: true, name: true } } },
-        },
+        responsibleTeam: { select: { id: true, name: true } },
+        responsibleGroup: { select: { id: true, name: true } },
+        account: { select: { team: { select: { id: true, name: true } } } },
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -222,7 +222,7 @@ export default async function DashboardPage({
     (task) => !priorityTaskIds.has(task.id)
   );
   const priorityTasks = [...overdue, ...dueSoon];
-  const showRevenue = canManageProjects(user.role);
+  const showRevenue = canViewRevenue(user.role);
   const dailyInspiration = getDailyInspiration(user.id);
 
   const toItem = (
@@ -270,6 +270,9 @@ export default async function DashboardPage({
           name: project.name,
           color: project.color,
           status: project.status,
+          category: project.category,
+          responsibleTeam: project.responsibleTeam,
+          responsibleGroup: project.responsibleGroup,
           account: project.account,
         }))}
         activeSection="home"
@@ -286,7 +289,7 @@ export default async function DashboardPage({
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   <DashboardSort value={sort} />
-                  {showRevenue && (
+                  {canCreateProjects(user.role) && (
                     <Link href="/projects/new" prefetch={false} className="tf-button-primary">
                       <Plus size={18} strokeWidth={2} aria-hidden="true" />
                       <span className="hidden sm:inline">Tạo dự án</span>
@@ -659,7 +662,10 @@ export default async function DashboardPage({
                                       {group.label}
                                     </span>
                                   </div>
-                                  {showRevenue && project.revenue > 0 && (
+                                  <span className="mt-2 inline-block text-xs text-zinc-500">
+                                    {project.category === "INTERNAL" ? "Nội bộ" : "Khách hàng"}
+                                  </span>
+                                  {showRevenue && project.category === "CLIENT" && project.revenue > 0 && (
                                     <p className="mt-4 text-sm font-semibold text-zinc-600">
                                       {formatVND(project.revenue)}
                                     </p>

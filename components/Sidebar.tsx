@@ -2,39 +2,60 @@ import Link from "next/link";
 import {
   Archive,
   Bell,
+  BriefcaseBusiness,
+  Building2,
+  CalendarClock,
+  CalendarDays,
   CheckCircle2,
   ChevronDown,
   CircleDollarSign,
   FileCheck2,
-  LogOut,
+  FolderOpen,
   Plus,
   Settings,
   Star,
+  Target,
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
-import { logout } from "@/app/actions/auth";
+import LogoutButton from "@/components/LogoutButton";
+import PushDeviceSync from "@/components/PushDeviceSync";
 import Brand from "@/components/Brand";
 import Avatar from "@/components/Avatar";
 import MobileSidebarMenu from "@/components/MobileSidebarMenu";
-import { canManageProjects } from "@/lib/auth";
+import { canCreateProjects, canViewRevenue } from "@/lib/auth";
+import { meetingsEnabled } from "@/lib/features";
 import { prisma } from "@/lib/prisma";
-import { isArchivedProjectStatus, projectStatusColor } from "@/lib/types";
+import { projectResponsibilityGroup } from "@/lib/projectResponsibility";
+import {
+  isArchivedProjectStatus,
+  projectCategoryInfo,
+  projectStatusColor,
+  type ProjectCategory,
+} from "@/lib/types";
 
 type ProjectItem = {
   id: string;
   name: string;
   color: string;
   status: string;
+  category: ProjectCategory;
+  responsibleTeam: { id: string; name: string } | null;
+  responsibleGroup: { id: string; name: string } | null;
   account: { team: { id: string; name: string } } | null;
 };
 type ActiveSection =
   | "home"
   | "notifications"
   | "recognition"
+  | "meetings"
   | "team"
   | "revenue"
   | "workflow"
+  | "kpi"
+  | "documents"
+  | "leave"
+  | "profile"
   | "admin";
 
 const ARCHIVED_PROJECT_GROUPS = [
@@ -48,6 +69,11 @@ const PROJECT_STATUS_ORDER: Record<string, number> = {
   ON_PROCESS: 0,
   BIDDING: 1,
 };
+
+const PROJECT_CATEGORY_GROUPS = [
+  { category: "CLIENT", icon: BriefcaseBusiness, iconClassName: "text-blue-500" },
+  { category: "INTERNAL", icon: Building2, iconClassName: "text-violet-500" },
+] as const;
 
 function compareProjects(a: ProjectItem, b: ProjectItem) {
   const statusOrder =
@@ -115,6 +141,8 @@ function ProjectLinks({
           <Link
             href={`/projects/${project.id}`}
             prefetch={false}
+            aria-current={project.id === activeProjectId ? "page" : undefined}
+            title={project.name}
             className={`flex min-h-10 items-center gap-3 rounded-[7px] px-3 py-2 text-sm transition-colors ${
               project.id === activeProjectId
                 ? "bg-brand-50 font-medium text-brand-700"
@@ -134,6 +162,62 @@ function ProjectLinks({
   );
 }
 
+function ProjectCategoryLinks({
+  projects,
+  activeProjectId,
+  internalOnly = false,
+}: {
+  projects: ProjectItem[];
+  activeProjectId?: string;
+  internalOnly?: boolean;
+}) {
+  return (
+    <div className="space-y-1">
+      {PROJECT_CATEGORY_GROUPS.map(({ category, icon: Icon, iconClassName }) => {
+        if (internalOnly && category !== "INTERNAL") return null;
+        const categoryProjects = projects.filter(
+          (project) => project.category === category
+        );
+
+        return (
+          <details
+            key={category}
+            open={categoryProjects.length > 0}
+            className="group/project-category"
+            data-project-category={category}
+          >
+            <summary className="flex min-h-8 cursor-pointer list-none items-center gap-2 rounded-[6px] px-3 py-1.5 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900">
+              <Icon
+                size={14}
+                strokeWidth={1.8}
+                className={iconClassName}
+                aria-hidden="true"
+              />
+              <span className="min-w-0 flex-1 truncate">
+                {projectCategoryInfo(category).label}
+              </span>
+              <span className="text-[10px] tabular-nums text-zinc-400">
+                {categoryProjects.length}
+              </span>
+              <ChevronDown
+                size={13}
+                className="text-zinc-400 transition-transform group-open/project-category:rotate-180"
+                aria-hidden="true"
+              />
+            </summary>
+            <div className="ml-3 border-l border-zinc-200 pl-1">
+              <ProjectLinks
+                projects={categoryProjects}
+                activeProjectId={activeProjectId}
+              />
+            </div>
+          </details>
+        );
+      })}
+    </div>
+  );
+}
+
 function ActiveProjectLinks({
   projects,
   activeProjectId,
@@ -148,8 +232,8 @@ function ActiveProjectLinks({
   const teams = projects.reduce<
     Array<{ id: string; name: string; projects: ProjectItem[] }>
   >((groups, project) => {
-    const team = project.account?.team;
-    const teamId = team?.id ?? "unassigned";
+    const team = projectResponsibilityGroup(project);
+    const teamId = team.id;
     const existingGroup = groups.find((group) => group.id === teamId);
 
     if (existingGroup) {
@@ -164,15 +248,16 @@ function ActiveProjectLinks({
       ...groups,
       {
         id: teamId,
-        name: team?.name ?? "Chưa gán Team",
+        name: team.name,
         projects: [project],
       },
     ];
   }, []);
 
   teams.sort((a, b) => {
-    if (a.id === "unassigned") return 1;
-    if (b.id === "unassigned") return -1;
+    const aUnassigned = a.id === "unassigned" || a.id === "needs-account";
+    const bUnassigned = b.id === "unassigned" || b.id === "needs-account";
+    if (aUnassigned !== bUnassigned) return aUnassigned ? 1 : -1;
     return a.name.localeCompare(b.name, "vi");
   });
 
@@ -198,9 +283,10 @@ function ActiveProjectLinks({
             />
           </summary>
           <div className="ml-3 border-l border-zinc-200 pl-1">
-            <ProjectLinks
+            <ProjectCategoryLinks
               projects={team.projects}
               activeProjectId={activeProjectId}
+              internalOnly={team.id.startsWith("group:")}
             />
           </div>
         </details>
@@ -220,7 +306,7 @@ function ArchivedProjectLinks({
 
   return (
     <details
-      className="group mt-3"
+      className="group/archive mt-3"
       open={projects.some((project) => project.id === activeProjectId)}
     >
       <summary className="flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-[7px] px-3 py-2 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800">
@@ -231,7 +317,7 @@ function ArchivedProjectLinks({
         </span>
         <ChevronDown
           size={14}
-          className="transition-transform group-open:rotate-180"
+          className="transition-transform group-open/archive:rotate-180"
           aria-hidden="true"
         />
       </summary>
@@ -267,7 +353,7 @@ function ArchivedProjectLinks({
                 />
               </summary>
               <div className="ml-2 mt-1 border-l border-zinc-200 pl-2">
-                <ProjectLinks
+                <ProjectCategoryLinks
                   projects={groupProjects}
                   activeProjectId={activeProjectId}
                 />
@@ -300,7 +386,9 @@ export default async function Sidebar({
   const unreadCount = await prisma.notification.count({
     where: { userId: user.id, read: false },
   });
-  const canManage = canManageProjects(user.role ?? "");
+  const canCreate = canCreateProjects(user.role ?? "");
+  const showRevenue = canViewRevenue(user.role ?? "");
+  const showMeetings = meetingsEnabled();
   const activeProjects = projects.filter(
     (project) => !isArchivedProjectStatus(project.status)
   );
@@ -310,6 +398,7 @@ export default async function Sidebar({
 
   return (
     <>
+      <PushDeviceSync userId={user.id} />
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-zinc-200 bg-white md:flex">
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex h-[72px] shrink-0 items-center border-b border-zinc-200 px-5">
@@ -323,17 +412,21 @@ export default async function Sidebar({
               <MenuLink href="/" label="Công việc" icon={CheckCircle2} active={activeSection === "home" && !activeProjectId} />
               <MenuLink href="/notifications" label="Thông báo" icon={Bell} active={activeSection === "notifications"} badge={unreadCount} />
               <MenuLink href="/workflow" label="Hồ sơ của tôi" icon={FileCheck2} active={activeSection === "workflow"} />
+              {showMeetings && <MenuLink href="/meetings" label="Lịch họp" icon={CalendarClock} active={activeSection === "meetings"} />}
               <MenuLink href="/recognition" label="Góc cảm ơn" icon={Star} active={activeSection === "recognition"} />
               <MenuLink href="/team" label="Hiệu suất" icon={UsersRound} active={activeSection === "team"} />
-              {canManage && (
+              {showRevenue && (
                 <MenuLink href="/revenue" label="Doanh số" icon={CircleDollarSign} active={activeSection === "revenue"} />
               )}
+              <MenuLink href="/kpi" label="KPI" icon={Target} active={activeSection === "kpi"} />
+              <MenuLink href="/documents" label="Tài liệu" icon={FolderOpen} active={activeSection === "documents"} />
+              <MenuLink href="/leave" label="Nghỉ phép" icon={CalendarDays} active={activeSection === "leave"} />
             </nav>
 
             <div className="mt-6">
               <div className="mb-2 flex items-center justify-between px-3">
                 <span className="text-xs font-semibold uppercase text-zinc-400">Dự án</span>
-                {canManage && (
+                {canCreate && (
                   <Link
                     href="/projects/new"
                     prefetch={false}
@@ -371,20 +464,17 @@ export default async function Sidebar({
                 avatarUrl={user.avatarUrl}
                 className="h-9 w-9 text-sm"
               />
-              <div className="min-w-0 flex-1" title={user.email}>
+              <Link
+                href="/profile"
+                prefetch={false}
+                aria-current={activeSection === "profile" ? "page" : undefined}
+                className="min-w-0 flex-1 rounded-[6px] px-1 py-0.5 transition-colors hover:bg-zinc-100"
+                title="Tài khoản của tôi: đổi tên, ảnh đại diện, mật khẩu"
+              >
                 <p className="truncate text-sm font-medium text-zinc-800">{user.name}</p>
                 <p className="truncate text-xs text-zinc-400">{user.email}</p>
-              </div>
-              <form action={logout}>
-                <button
-                  type="submit"
-                  className="flex h-9 w-9 items-center justify-center rounded-[7px] text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
-                  title="Đăng xuất"
-                  aria-label="Đăng xuất"
-                >
-                  <LogOut size={17} aria-hidden="true" />
-                </button>
-              </form>
+              </Link>
+              <LogoutButton />
             </div>
           </div>
         </div>
@@ -400,14 +490,18 @@ export default async function Sidebar({
               <MenuLink href="/" label="Công việc" icon={CheckCircle2} active={activeSection === "home" && !activeProjectId} />
               <MenuLink href="/notifications" label="Thông báo" icon={Bell} active={activeSection === "notifications"} badge={unreadCount} />
               <MenuLink href="/workflow" label="Hồ sơ của tôi" icon={FileCheck2} active={activeSection === "workflow"} />
+              {showMeetings && <MenuLink href="/meetings" label="Lịch họp" icon={CalendarClock} active={activeSection === "meetings"} />}
               <MenuLink href="/recognition" label="Góc cảm ơn" icon={Star} active={activeSection === "recognition"} />
               <MenuLink href="/team" label="Hiệu suất" icon={UsersRound} active={activeSection === "team"} />
-              {canManage && <MenuLink href="/revenue" label="Doanh số" icon={CircleDollarSign} active={activeSection === "revenue"} />}
+              {showRevenue && <MenuLink href="/revenue" label="Doanh số" icon={CircleDollarSign} active={activeSection === "revenue"} />}
+              <MenuLink href="/kpi" label="KPI" icon={Target} active={activeSection === "kpi"} />
+              <MenuLink href="/documents" label="Tài liệu" icon={FolderOpen} active={activeSection === "documents"} />
+              <MenuLink href="/leave" label="Nghỉ phép" icon={CalendarDays} active={activeSection === "leave"} />
             </div>
             <div className="my-3 border-t border-zinc-200" />
             <div className="mb-2 flex items-center justify-between px-3">
               <span className="text-xs font-semibold uppercase text-zinc-400">Dự án</span>
-              {canManage && (
+              {canCreate && (
                 <Link href="/projects/new" prefetch={false} className="tf-icon-button !h-8 !min-h-8 !w-8" aria-label="Tạo dự án" title="Tạo dự án">
                   <Plus size={16} aria-hidden="true" />
                 </Link>
@@ -433,15 +527,17 @@ export default async function Sidebar({
                 avatarUrl={user.avatarUrl}
                 className="h-9 w-9 text-sm"
               />
-              <div className="min-w-0 flex-1">
+              <Link
+                href="/profile"
+                prefetch={false}
+                aria-current={activeSection === "profile" ? "page" : undefined}
+                className="min-w-0 flex-1 rounded-[6px] px-1 py-0.5 transition-colors hover:bg-zinc-100"
+                title="Tài khoản của tôi: đổi tên, ảnh đại diện, mật khẩu"
+              >
                 <p className="truncate text-sm font-medium">{user.name}</p>
                 <p className="truncate text-xs text-zinc-400">{user.email}</p>
-              </div>
-              <form action={logout}>
-                <button type="submit" className="tf-icon-button !h-9 !min-h-9 !w-9" aria-label="Đăng xuất" title="Đăng xuất">
-                  <LogOut size={16} aria-hidden="true" />
-                </button>
-              </form>
+              </Link>
+              <LogoutButton />
             </div>
           </div>
         </MobileSidebarMenu>

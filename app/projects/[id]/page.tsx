@@ -1,3 +1,4 @@
+import { parseCommentMentions } from "@/lib/commentMentions";
 import {
   BriefcaseBusiness,
   Building2,
@@ -7,7 +8,7 @@ import {
 } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { canManageProjects, requireUser } from "@/lib/auth";
+import { canViewRevenue as hasRevenueAccess, requireUser } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
 import Board from "@/components/Board";
 import MembersBar from "@/components/MembersBar";
@@ -22,6 +23,7 @@ import {
   formatVND,
   projectStatusColor,
   projectTypeInfo,
+  projectCategoryInfo,
   type MemberDTO,
   type TaskDTO,
 } from "@/lib/types";
@@ -54,17 +56,20 @@ export default async function ProjectPage({
     where: { id },
     include: {
       client: { select: { id: true, name: true } },
+      responsibleTeam: { select: { id: true, name: true } },
+      responsibleGroup: { select: { id: true, name: true } },
       account: {
         select: {
           id: true,
           name: true,
           user: { select: { name: true, email: true, avatarUrl: true } },
+          team: { select: { id: true, name: true } },
         },
       },
       members: {
         include: {
           user: {
-            select: { id: true, name: true, email: true, avatarUrl: true },
+            select: { id: true, name: true, email: true, avatarUrl: true, isActive: true },
           },
         },
         orderBy: { createdAt: "asc" },
@@ -118,7 +123,7 @@ export default async function ProjectPage({
   const isMember = project.members.some((m) => m.userId === user.id);
   if (!isMember && user.role !== "ADMIN") redirect("/");
 
-  const [sidebarProjects, clients, accounts, availableUsers, memberGroups] = await Promise.all([
+  const [sidebarProjects, clients, accounts, availableUsers, memberGroups, teams] = await Promise.all([
     prisma.project.findMany({
       where: { members: { some: { userId: user.id } } },
       select: {
@@ -126,9 +131,10 @@ export default async function ProjectPage({
         name: true,
         color: true,
         status: true,
-        account: {
-          select: { team: { select: { id: true, name: true } } },
-        },
+        category: true,
+        responsibleTeam: { select: { id: true, name: true } },
+        responsibleGroup: { select: { id: true, name: true } },
+        account: { select: { team: { select: { id: true, name: true } } } },
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -137,17 +143,13 @@ export default async function ProjectPage({
       orderBy: { name: "asc" },
     }),
     prisma.account.findMany({
-      where: {
-        OR: [
-          { user: { isActive: true } },
-          ...(project.accountId ? [{ id: project.accountId }] : []),
-        ],
-      },
+      where: { user: { isActive: true, role: { in: ["ADMIN", "ACCOUNT"] } } },
       select: {
         id: true,
         name: true,
         userId: true,
         user: { select: { name: true, email: true, avatarUrl: true } },
+        team: { select: { name: true } },
       },
       orderBy: { user: { name: "asc" } },
     }),
@@ -178,6 +180,7 @@ export default async function ProjectPage({
       },
       orderBy: { name: "asc" },
     }),
+    prisma.salesTeam.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
 
   const members: MemberDTO[] = project.members.map((m) => ({
@@ -199,6 +202,7 @@ export default async function ProjectPage({
     comments: t.comments.map((c) => ({
       id: c.id,
       body: c.body,
+      mentions: parseCommentMentions(c.mentions, c.body),
       createdAt: c.createdAt.toISOString(),
       author: c.author,
     })),
@@ -218,7 +222,8 @@ export default async function ProjectPage({
   const activeTab =
     tab === "webhook" ? "webhook" : tab === "files" ? "files" : "tasks";
   const canManageWebhook = isMember || user.role === "ADMIN";
-  const canViewRevenue = canManageProjects(user.role);
+  const canViewRevenue = hasRevenueAccess(user.role) && project.category === "CLIENT";
+  const categoryInfo = projectCategoryInfo(project.category);
   const projectMetadata = extractProjectMetadata(project.description);
   const typeInfo = projectTypeInfo(project.type);
   const executionRange = formatExecutionRange(
@@ -270,13 +275,17 @@ export default async function ProjectPage({
                     name: project.name,
                     description: project.description,
                     type: project.type,
+                    category: project.category,
+                    responsibleTeamId: project.responsibleTeamId,
+                    responsibleGroupId: project.responsibleGroupId,
+                    hasPurchaseOrder: Boolean(project.purchaseOrderNumber),
                     executionStartAt: project.executionStartAt
                       ? toDateInputVN(project.executionStartAt)
                       : null,
                     executionEndAt: project.executionEndAt
                       ? toDateInputVN(project.executionEndAt)
                       : null,
-                    revenue: project.revenue,
+                    revenue: hasRevenueAccess(user.role) ? project.revenue : null,
                     clientId: project.clientId,
                     clientName: project.client?.name ?? null,
                     accountId: project.accountId,
@@ -286,6 +295,10 @@ export default async function ProjectPage({
                       null,
                   }}
                   clients={clients}
+                  responsibilityOptions={{
+                    teams,
+                    groups: memberGroups.map(({ id, name }) => ({ id, name })),
+                  }}
                   accounts={accounts.map((account) => ({
                     id: account.id,
                     name:
@@ -293,9 +306,11 @@ export default async function ProjectPage({
                       `${account.name} (dữ liệu cũ - cần liên kết)`,
                     email: account.user?.email ?? null,
                     avatarUrl: account.user?.avatarUrl ?? null,
-                    meta: account.user ? null : "Dữ liệu cũ",
+                    meta: account.team.name,
+                    teamName: account.team.name,
                   }))}
                   canEdit={isOwner || user.role === "ADMIN"}
+                  canEditRevenue={hasRevenueAccess(user.role)}
                 />
                 {isOwner && <ProjectActionsMenu projectId={project.id} />}
               </div>
@@ -303,15 +318,26 @@ export default async function ProjectPage({
 
             <div className="flex flex-col gap-3 border-t border-zinc-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-xs text-zinc-500">
-                <span className={`tf-badge ${typeInfo.className}`}>
-                  {typeInfo.label}
+                <span className={`tf-badge ${categoryInfo.className}`}>
+                  {categoryInfo.label}
                 </span>
+                {project.category === "CLIENT" && (
+                  <span className={`tf-badge ${typeInfo.className}`}>
+                    {typeInfo.label}
+                  </span>
+                )}
                 {executionRange && (
                   <span className="inline-flex items-center gap-1.5">
                     <CalendarDays size={14} aria-hidden="true" />
                     Thực hiện: {executionRange}
                   </span>
                 )}
+                <span className="inline-flex items-center gap-1.5">
+                  <UsersRound size={14} aria-hidden="true" />
+                  {project.category === "CLIENT"
+                    ? project.account?.team.name ?? "Cần gán Account"
+                    : project.responsibleGroup?.name ?? project.responsibleTeam?.name ?? "Chưa gán Team/phòng ban"}
+                </span>
                 {project.client?.name && (
                   <span className="inline-flex items-center gap-1.5">
                     <Building2 size={14} aria-hidden="true" />
@@ -330,14 +356,16 @@ export default async function ProjectPage({
                     {projectMetadata.poDate}
                   </span>
                 )}
-                <span
-                  className={`inline-flex items-center gap-1.5 ${
-                    accountName ? "" : "font-medium text-amber-600"
-                  }`}
-                >
-                  <BriefcaseBusiness size={14} aria-hidden="true" />
-                  {accountName ?? "Chưa gán Account"}
-                </span>
+                {project.category === "CLIENT" && (
+                  <span
+                    className={`inline-flex items-center gap-1.5 ${
+                      accountName ? "" : "font-medium text-amber-600"
+                    }`}
+                  >
+                    <BriefcaseBusiness size={14} aria-hidden="true" />
+                    {accountName ?? "Cần gán Account"}
+                  </span>
+                )}
               </div>
 
               <div className="flex shrink-0 items-center gap-2">

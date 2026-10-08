@@ -180,9 +180,10 @@ export default async function TeamPage({
           name: true,
           color: true,
           status: true,
-          account: {
-            select: { team: { select: { id: true, name: true } } },
-          },
+          category: true,
+          responsibleTeam: { select: { id: true, name: true } },
+          responsibleGroup: { select: { id: true, name: true } },
+          account: { select: { team: { select: { id: true, name: true } } } },
         },
         orderBy: { createdAt: "desc" },
       }),

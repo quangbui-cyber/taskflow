@@ -25,7 +25,7 @@ const nextConfig: NextConfig = {
   // Vercel's Next.js builder expects the standard .next artifact directory.
   // Keep the non-synced directory only for local macOS development/builds.
   distDir: process.env.TASKFLOW_DIST_DIR || (process.env.VERCEL === "1" ? ".next" : ".next.nosync"),
-  serverExternalPackages: ["pdf-parse"],
+  serverExternalPackages: ["pdf-parse", "nodemailer"],
   experimental: {
     serverActions: {
       bodySizeLimit: "4.2mb",
@@ -33,6 +33,14 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
+      {
+        source: "/sw.js",
+        headers: [
+          { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Content-Security-Policy", value: "default-src 'self'; script-src 'self'" },
+        ],
+      },
       {
         source: "/:path*",
         headers: securityHeaders,

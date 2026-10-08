@@ -1,7 +1,11 @@
 import { Prisma } from "@prisma/client";
+import { after } from "next/server";
+import { deliverPush } from "@/lib/webPush";
 import { prisma } from "@/lib/prisma";
 import { sendGoogleChat } from "@/lib/googleChat";
 import { daysUntil, formatDue, isOverdue } from "@/lib/dates";
+import { meetingsEnabled } from "@/lib/features";
+import { formatMeetingTime, vnDayRange } from "@/lib/meetings";
 import { ARCHIVED_PROJECT_STATUS_KEYS } from "@/lib/types";
 
 // Đọc/ghi database nên phải chạy trên Node runtime, không dùng edge.
@@ -193,12 +197,25 @@ export async function GET(request: Request) {
       );
 
       const created = await withDatabaseRetry(() =>
-        prisma.notification.createMany({
+        prisma.notification.createManyAndReturn({
           data: notificationRows,
           skipDuplicates: true,
         })
       );
-      reminders += created.count;
+      reminders += created.length;
+      if (created.length > 0) {
+        after(async () => {
+          const results = await Promise.allSettled(created.map((notification) =>
+            deliverPush([notification.userId], {
+              type: notification.type,
+              message: notification.message,
+              projectId: notification.projectId ?? undefined,
+              taskId: notification.taskId ?? undefined,
+            })
+          ));
+          if (results.some((result) => result.status === "rejected")) console.warn("Some deadline push notifications could not be sent.");
+        });
+      }
 
       const message = buildMessage(project.name, overdue, dueToday);
       if (!message || !project.googleChatWebhookUrl) {
@@ -209,6 +226,70 @@ export async function GET(request: Request) {
       const result = await sendGoogleChat(project.googleChatWebhookUrl, message);
       if (result.ok) sent += 1;
       else failed += 1;
+    }
+
+    // Nhắc mọi người về các cuộc họp diễn ra trong hôm nay (một lần mỗi ngày cho mỗi người).
+    const today = vnDayRange();
+    // Lịch họp đang tạm ẩn thì không nhắc họp.
+    const meetingsToday = !meetingsEnabled()
+      ? []
+      : await withDatabaseRetry(() =>
+      prisma.meeting.findMany({
+        where: {
+          status: "SCHEDULED",
+          startAt: { gte: today.start, lt: today.end },
+          endAt: { gt: new Date() },
+        },
+        select: {
+          id: true,
+          title: true,
+          startAt: true,
+          endAt: true,
+          organizerId: true,
+          room: { select: { name: true } },
+          attendees: {
+            where: { response: { not: "DECLINED" } },
+            select: { userId: true },
+          },
+        },
+      })
+    );
+    const meetingRows: Prisma.NotificationCreateManyInput[] = meetingsToday.flatMap(
+      (meeting) =>
+        [meeting.organizerId, ...meeting.attendees.map((attendee) => attendee.userId)].map(
+          (userId) => ({
+            dedupeKey: `meeting:${dateKey}:${meeting.id}:${userId}`,
+            userId,
+            type: "MEETING_REMINDER",
+            message: `Hôm nay bạn có họp “${meeting.title}” lúc ${formatMeetingTime(
+              meeting.startAt,
+              meeting.endAt
+            )}${meeting.room ? ` tại ${meeting.room.name}` : ""}.`,
+            meetingId: meeting.id,
+          })
+        )
+    );
+    const createdMeetingReminders =
+      meetingRows.length > 0
+        ? await withDatabaseRetry(() =>
+            prisma.notification.createManyAndReturn({
+              data: meetingRows,
+              skipDuplicates: true,
+            })
+          )
+        : [];
+    const meetingReminders = createdMeetingReminders.length;
+    if (meetingReminders > 0) {
+      after(async () => {
+        const results = await Promise.allSettled(createdMeetingReminders.map((notification) =>
+          deliverPush([notification.userId], {
+            type: notification.type,
+            message: notification.message,
+            meetingId: notification.meetingId ?? undefined,
+          })
+        ));
+        if (results.some((result) => result.status === "rejected")) console.warn("Some meeting push notifications could not be sent.");
+      });
     }
 
     await withDatabaseRetry(() =>
@@ -225,6 +306,7 @@ export async function GET(request: Request) {
       ok: true,
       projects: projects.length,
       reminders,
+      meetingReminders,
       chat: { sent, skipped, failed },
     });
   } catch (error) {

@@ -1,0 +1,1 @@
+ALTER TABLE "Comment" ADD COLUMN "mentions" JSONB NOT NULL DEFAULT '[]';

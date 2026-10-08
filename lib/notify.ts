@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { after } from "next/server";
+import { deliverPush } from "@/lib/webPush";
 
 /** Tạo thông báo cho nhiều người nhận (tự loại trùng và loại bỏ id rỗng) */
 export async function notify(
@@ -9,13 +11,22 @@ export async function notify(
       | "TASK_COMPLETED"
       | "TASK_UPDATED"
       | "COMMENT"
+      | "COMMENT_MENTION"
       | "TASK_FOLLOW"
       | "DEADLINE_REMINDER"
-      | "RECOGNITION_RECEIVED";
+      | "RECOGNITION_RECEIVED"
+      | "LEAVE_REQUEST"
+      | "LEAVE_DECISION"
+      | "MEETING_INVITED"
+      | "MEETING_UPDATED"
+      | "MEETING_CANCELLED"
+      | "MEETING_RESPONSE"
+      | "MEETING_REMINDER";
     message: string;
     taskId?: string;
     projectId?: string;
     recognitionId?: string;
+    meetingId?: string;
   }
 ) {
   // Việc dọn thông báo cũ (quá 30 ngày) do cron nhắc việc hàng ngày đảm nhiệm —
@@ -37,6 +48,10 @@ export async function notify(
 
   await prisma.notification.createMany({
     data: unique.map((userId) => ({ userId, ...data })),
+  });
+  after(async () => {
+    try { await deliverPush(unique, data); }
+    catch { console.warn("Web push delivery could not be completed."); }
   });
 }
 

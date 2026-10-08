@@ -13,7 +13,16 @@ export default async function ModuleShell({ user, projectId, workflow = false, c
 }) {
   const projects = await prisma.project.findMany({
     where: { members: { some: { userId: user.id } } },
-    select: { id: true, name: true, color: true, status: true, account: { select: { team: { select: { id: true, name: true } } } } },
+    select: {
+      id: true,
+      name: true,
+      color: true,
+      status: true,
+      category: true,
+      responsibleTeam: { select: { id: true, name: true } },
+      responsibleGroup: { select: { id: true, name: true } },
+      account: { select: { team: { select: { id: true, name: true } } } },
+    },
     orderBy: { createdAt: "desc" },
   });
   return <div className="tf-shell">

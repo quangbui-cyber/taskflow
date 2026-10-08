@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { requireProjectManager } from "@/lib/auth";
+import { requireRevenueViewer } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
 import RevenueBreakdown, { type RevenueRow } from "@/components/RevenueBreakdown";
 import RevenuePipeline from "@/components/RevenuePipeline";
@@ -9,6 +9,9 @@ import MonthlyRevenueChart, {
   type MonthlyRevenuePoint,
 } from "@/components/MonthlyRevenueChart";
 import ProjectTypeMix from "@/components/ProjectTypeMix";
+import ClientRevenueDonut, {
+  type ClientRevenueRow,
+} from "@/components/ClientRevenueDonut";
 import ExecutionSchedule from "@/components/ExecutionSchedule";
 import {
   PROJECT_STATUSES,
@@ -18,10 +21,8 @@ import {
   projectTypeInfo,
 } from "@/lib/types";
 import {
-  Building2,
   ChevronDown,
   CircleDollarSign,
-  Tags,
   UsersRound,
 } from "lucide-react";
 
@@ -32,13 +33,15 @@ const REVENUE_BLUE = "#2563eb";
 const REVENUE_BLUE_DARK = "#1d4ed8";
 const REVENUE_BLUE_SOFT = "#eff6ff";
 
+// Bảng màu tiết chế: một tông xanh đậm dần theo tiến trình (Bidding → Done),
+// xám cho trạng thái tạm dừng/huỷ, chỉ Fail dùng đỏ nhạt để nổi bật.
 const PIPELINE_STAGES = [
-  { key: "BIDDING", label: "Bidding", color: "#f59e0b" },
+  { key: "BIDDING", label: "Bidding", color: "#93c5fd" },
   { key: "ON_PROCESS", label: "On Process", color: REVENUE_BLUE },
-  { key: "DONE", label: "Done", color: "#10b981" },
-  { key: "FAIL", label: "Fail", color: "#ef4444" },
-  { key: "PENDING", label: "Pending", color: "#8b5cf6" },
-  { key: "CANCEL", label: "Cancel", color: "#71717a" },
+  { key: "DONE", label: "Done", color: "#1e3a8a" },
+  { key: "FAIL", label: "Fail", color: "#f87171" },
+  { key: "PENDING", label: "Pending", color: "#d4d4d8" },
+  { key: "CANCEL", label: "Cancel", color: "#a1a1aa" },
 ] as const;
 
 const REVENUE_TIME_ZONE = "Asia/Ho_Chi_Minh";
@@ -70,8 +73,23 @@ function recentRevenueMonths(now = new Date()): MonthlyRevenuePoint[] {
   });
 }
 
-export default async function RevenuePage() {
-  const user = await requireProjectManager();
+function yearMonths(year: number): MonthlyRevenuePoint[] {
+  return Array.from({ length: 12 }, (_, index) => ({
+    key: `${year}-${String(index + 1).padStart(2, "0")}`,
+    label: `T${index + 1}`,
+    value: 0,
+  }));
+}
+
+export default async function RevenuePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ year?: string }>;
+}) {
+  const [user, params] = await Promise.all([
+    requireRevenueViewer(),
+    searchParams,
+  ]);
   const isAdmin = user.role === "ADMIN";
 
   // Admin thấy toàn bộ; Account chỉ thấy project mình tham gia
@@ -79,9 +97,9 @@ export default async function RevenuePage() {
     ? {}
     : { members: { some: { userId: user.id } } };
 
-  const [projects, sidebarProjects] = await Promise.all([
+  const [allProjects, sidebarProjects] = await Promise.all([
     prisma.project.findMany({
-      where: projectScope,
+      where: { ...projectScope, category: "CLIENT" },
       select: {
         id: true,
         name: true,
@@ -92,6 +110,7 @@ export default async function RevenuePage() {
         executionEndAt: true,
         revenue: true,
         onProcessAt: true,
+        createdAt: true,
         client: { select: { id: true, name: true } },
         account: {
           select: {
@@ -110,13 +129,34 @@ export default async function RevenuePage() {
         name: true,
         color: true,
         status: true,
-        account: {
-          select: { team: { select: { id: true, name: true } } },
-        },
+        category: true,
+        responsibleTeam: { select: { id: true, name: true } },
+        responsibleGroup: { select: { id: true, name: true } },
+        account: { select: { team: { select: { id: true, name: true } } } },
       },
       orderBy: { createdAt: "desc" },
     }),
   ]);
+
+  // Dự án thuộc năm ghi nhận doanh số (On Process); chưa On Process thì theo năm tạo.
+  // Mặc định xem năm hiện tại để khớp với tab KPI.
+  const projectYear = (p: (typeof allProjects)[number]) =>
+    vietnamYearMonth(p.onProcessAt ?? p.createdAt).year;
+  const currentYear = vietnamYearMonth(new Date()).year;
+  const years = [
+    ...new Set([...allProjects.map(projectYear), currentYear]),
+  ].sort((a, b) => b - a);
+  const requestedYear = Number(params.year);
+  const selectedYear =
+    params.year === "all"
+      ? null
+      : years.includes(requestedYear)
+        ? requestedYear
+        : currentYear;
+  const projects =
+    selectedYear === null
+      ? allProjects
+      : allProjects.filter((p) => projectYear(p) === selectedYear);
 
   const revenueOf = (statuses: string[]) =>
     projects
@@ -163,13 +203,35 @@ export default async function RevenuePage() {
     }
     return [...map.values()].sort((a, b) => b.earned - a.earned);
   }
-  const byClient = groupRevenue((p) => p.client);
+  const clientMap = new Map<string, ClientRevenueRow>();
+  for (const p of projects) {
+    const key = p.client?.id ?? "__none__";
+    const entry = clientMap.get(key) ?? {
+      key,
+      name: p.client?.name ?? "Chưa gán",
+      earned: 0,
+      bidding: 0,
+      count: 0,
+      wonCount: 0,
+      lostCount: 0,
+      projects: [],
+    };
+    entry.count += 1;
+    if (RECOGNIZED_REVENUE.includes(p.status)) entry.earned += p.revenue;
+    if (p.status === "BIDDING") entry.bidding += p.revenue;
+    if (WON.includes(p.status)) entry.wonCount += 1;
+    if (LOST.includes(p.status)) entry.lostCount += 1;
+    entry.projects.push({
+      id: p.id,
+      name: p.name,
+      status: p.status,
+      revenue: p.revenue,
+    });
+    clientMap.set(key, entry);
+  }
+  const byClient = [...clientMap.values()].sort((a, b) => b.earned - a.earned);
   const byAccount = groupRevenue((p) => p.account);
   const byTeam = groupRevenue((p) => p.account?.team ?? null);
-  const byType = groupRevenue((p) => {
-    const info = projectTypeInfo(p.type);
-    return { id: info.key, name: info.label };
-  });
   const typeSlices = PROJECT_TYPES.map((t) => {
     const group = projects.filter((p) => projectTypeInfo(p.type).key === t.key);
     return {
@@ -179,10 +241,14 @@ export default async function RevenuePage() {
       value: group
         .filter((p) => RECOGNIZED_REVENUE.includes(p.status))
         .reduce((sum, p) => sum + p.revenue, 0),
+      bidding: group
+        .filter((p) => p.status === "BIDDING")
+        .reduce((sum, p) => sum + p.revenue, 0),
       count: group.length,
     };
   }).filter((slice) => slice.count > 0);
-  const scheduleRows = projects
+  // Lịch thực hiện là việc sắp tới nên không lọc theo năm đang xem.
+  const scheduleRows = allProjects
     .filter(
       (p) =>
         p.executionStartAt &&
@@ -196,7 +262,8 @@ export default async function RevenuePage() {
       executionStartAt: p.executionStartAt!,
       executionEndAt: p.executionEndAt,
     }));
-  const monthlyRevenue = recentRevenueMonths();
+  const monthlyRevenue =
+    selectedYear === null ? recentRevenueMonths() : yearMonths(selectedYear);
   const monthlyRevenueByKey = new Map(
     monthlyRevenue.map((point) => [point.key, point])
   );
@@ -239,6 +306,31 @@ export default async function RevenuePage() {
             )}
           </div>
 
+          <nav className="flex flex-wrap gap-2" aria-label="Năm xem doanh số">
+            {[...years.map((y) => ({ value: String(y), label: String(y) })), {
+              value: "all",
+              label: "Tất cả",
+            }].map((option) => {
+              const active =
+                option.value === (selectedYear === null ? "all" : String(selectedYear));
+              return (
+                <Link
+                  key={option.value}
+                  href={`/revenue?year=${option.value}`}
+                  prefetch={false}
+                  aria-current={active ? "page" : undefined}
+                  className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                    active
+                      ? "border-blue-600 bg-blue-600 font-medium text-white"
+                      : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
+                  }`}
+                >
+                  {option.label}
+                </Link>
+              );
+            })}
+          </nav>
+
           <div className="tf-metric-strip">
             <section className="tf-metric-item">
               <p className="text-xs font-medium text-zinc-500">Doanh số ghi nhận</p>
@@ -278,18 +370,16 @@ export default async function RevenuePage() {
 
           <ExecutionSchedule rows={scheduleRows} />
 
-          <MonthlyRevenueChart data={monthlyRevenue} />
+          <MonthlyRevenueChart
+            data={monthlyRevenue}
+            periodLabel={
+              selectedYear === null ? "12 tháng gần nhất" : `Năm ${selectedYear}`
+            }
+          />
 
           <RevenuePipeline stages={pipelineStages} />
 
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <ProjectTypeMix slices={typeSlices} />
-            <RevenueBreakdown
-              title="Doanh số theo loại hình"
-              rows={byType}
-              icon={Tags}
-            />
-          </div>
+          <ProjectTypeMix slices={typeSlices} />
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             <RevenueBreakdown
@@ -300,11 +390,7 @@ export default async function RevenuePage() {
             <RevenueWinRate rows={byAccount} />
           </div>
 
-          <RevenueBreakdown
-            title="Doanh số theo Client"
-            rows={byClient}
-            icon={Building2}
-          />
+          <ClientRevenueDonut rows={byClient} />
 
           <section className="tf-panel overflow-hidden">
             <div className="border-b border-zinc-100 px-5 py-3">
