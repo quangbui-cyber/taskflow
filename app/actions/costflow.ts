@@ -6,16 +6,20 @@ import { requireUser } from "@/lib/auth";
 import { readProjectUpload } from "@/lib/projectFiles";
 import { IcEvidenceError } from "@/lib/costflow/icEvidence";
 import { executeFinance } from "@/lib/costflow/service";
+import { executePaymentCash } from "@/lib/costflow/paymentCash";
 import { dispatchWorkflowNotifications } from "@/lib/workflow/notifications";
 
-export type CostFlowActionState = { error?: string; success?: string; requestId?: string; revisionId?: string; quotationId?: string; draftId?: string; beneficiaryId?: string; savedScopes?: string[]; version?: number; lineErrors?: { lineId: string; message: string }[] };
+export type CostFlowActionState = { error?: string; success?: string; requestId?: string; revisionId?: string; quotationId?: string; draftId?: string; beneficiaryId?: string; cashId?: string; idempotent?: boolean; savedScopes?: string[]; version?: number; lineErrors?: { lineId: string; message: string }[] };
 export async function costFlowAction(_previous: CostFlowActionState, form: FormData): Promise<CostFlowActionState> {
   const actor = await requireUser();
   const projectId = String(form.get("projectId") ?? "");
   const version = Number(form.get("version"));
   if (!projectId || !Number.isSafeInteger(version) || version < 0) return { error: "Phiên bản hồ sơ không hợp lệ." };
   try {
-    const result = await executeFinance(projectId, version, actor, form, await readProjectUpload(form.get("proof")));
+    const upload = await readProjectUpload(form.get("proof"));
+    const result = String(form.get("command") ?? "") === "CASH"
+      ? await executePaymentCash(projectId, version, actor, form, upload)
+      : await executeFinance(projectId, version, actor, form, upload);
     await dispatchWorkflowNotifications(result.requestId).catch(() => undefined);
     revalidatePath(`/projects/${projectId}/costflow`);
     revalidatePath("/workflow");

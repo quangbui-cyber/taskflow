@@ -69,7 +69,7 @@ export type FinanceData = {
   evidenceSupplements?: IcEvidenceSupplement[];
   vendorPaymentMilestones?: VendorPaymentMilestone[];
 };
-export type CashRow = { id: string; requestId: string; recipientKey: string; direction: string; amount: string; reference: string; evidenceId: string };
+export type CashRow = { id: string; requestId: string; recipientKey: string; direction: string; amount: string; reference: string; evidenceId: string; channel?: string; occurredAt?: string | Date; normalizedAllocations?: { requestLineId: string; amount: string; direction: string }[] };
 export type RequestPayload = { revisionId?: string; recipientKey?: string; amount?: string; beneficiaryVersion?: number; explanation?: string; targetRequestId?: string; expenseIds?: string[]; evidenceIds?: string[]; actualGross?: string; advance?: string; additional?: string; refund?: string; reconciliation?: string; lines?: IcLine[]; beneficiary?: { name: string; bank: string; account: string }; expenseRevision?: { previousVersion: number; proposed: Expense }; resubmission?: { sourceRequestId: string; sourceAttemptId: string; response: string } };
 export function emptyFinance(): FinanceData {
   return { config: { accountantId: "", ceoId: "", managerId: "" }, closed: false, revisions: [], beneficiaries: [], expenses: [], pos: [], quotations: [], briefs: [], vendorPaymentMilestones: [] };

@@ -2,8 +2,8 @@ import "server-only";
 import { randomUUID, createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { calculateCost, compare, decimal, exact, round, sum } from "./money";
-import { closeBlockers, reconcile, settlement, isExpenseApproved } from "./reconciliation";
+import { calculateCost, compare, decimal, round, sum } from "./money";
+import { closeBlockers, settlement } from "./reconciliation";
 import { emptyFinance, type FinanceData, type IcLine, type QuotationLine, type RequestPayload } from "./types";
 import { decide, validateSteps, type ApprovalStep, type Decision } from "@/lib/workflow/approval";
 import type { ProjectUpload } from "@/lib/projectFiles";
@@ -23,6 +23,7 @@ import { effectiveBaseline, icDecisionPolicy } from "./icEffectiveness";
 import { normalizePaymentDraft } from "./paymentPolicy";
 import type { PaymentDraftLineInput } from "./paymentTypes";
 import { diffPaymentDossiers, type PaymentDossierSnapshot, type PaymentDocumentSnapshot } from "./paymentDiff";
+import { derivePaymentProgress } from "./paymentCash";
 
 type Actor = { id: string; role: string };
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -41,7 +42,7 @@ export async function loadFinance(projectId: string, actor: Actor) {
   const visible = fullAccess ? requests : requests.filter(r => readerIds.includes(r.id) || r.creatorId === actor.id || r.cashAssigneeId === actor.id || (r.steps as ApprovalStep[]).some(s => s.assigneeId === actor.id));
   if (!fullAccess && !visible.length) return null;
   const workspace = await prisma.costFlowWorkspace.findUnique({ where: { projectId } });
-  const cash = await prisma.costFlowCash.findMany({ where: { projectId, ...(!fullAccess ? { requestId: { in: visible.map(r => r.id) } } : {}) }, orderBy: { createdAt: "desc" } });
+  const cash = await prisma.costFlowCash.findMany({ where: { projectId, ...(!fullAccess ? { requestId: { in: visible.map(r => r.id) } } : {}) }, include: { normalizedAllocations: { select: { requestLineId: true, amount: true, direction: true } } }, orderBy: { createdAt: "desc" } });
   const normalizedPaymentRequests = await prisma.workflowRequest.findMany({
     where: { id: { in: visible.map(request => request.id) }, paymentLines: { some: {} } },
     select: {
@@ -95,7 +96,12 @@ export async function loadFinance(projectId: string, actor: Actor) {
       milestone: typeof paymentPayload.milestone === "string" ? paymentPayload.milestone : "",
       totalAmount: typeof paymentPayload.amount === "string" ? paymentPayload.amount : "0",
       lines: request.paymentLines,
-      recipients: request.paymentRecipients,
+      recipients: request.paymentRecipients.map(recipient => {
+        const paidOut = cash
+          .filter(item => item.requestId === request.id && item.recipientKey === recipient.recipientKey && item.direction === "OUT" && item.normalizedAllocations.length > 0)
+          .reduce((total, item) => total + BigInt(item.amount), BigInt(0));
+        return { ...recipient, ...derivePaymentProgress(recipient.totalAmount, paidOut.toString()) };
+      }),
       discussions: request.paymentDiscussions.map(discussion => ({ ...discussion, createdAt: discussion.createdAt.toISOString() })),
       diff: parent ? diffPaymentDossiers(paymentSnapshot(parent), paymentSnapshot(request)) : null,
     };
@@ -970,43 +976,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         await recordApprovalEvent(tx, { requestId: request.id, module: request.module, attemptId: request.currentAttemptId, submittedVersion, mutationVersion: request.version + 1, stepIndex: request.currentStep, role: targetRole === "CASH" ? "CASH" : steps[request.currentStep]?.role ?? "MANAGER", actorId: actor.id, action: `TRANSFER_${targetRole === "CASH" ? "CASH" : "STEP"}`, reason, fromAssigneeId, toAssigneeId: assigneeId, recipients: [assigneeId] });
         break;
       }
-      case "CASH": {
-        if (!request || request.state !== "APPROVED" || request.cashAssigneeId !== actor.id || !["ADVANCE", "VENDOR_PAYMENT", "REIMBURSEMENT"].includes(request.kind)) throw new Error("Chỉ người được giao xử lý tiền cho hồ sơ đã duyệt mới xác nhận tiền.");
-        const body = payload!;
-        if (request.kind === "REIMBURSEMENT" || (request.kind === "VENDOR_PAYMENT" && body.expenseIds?.length)) {
-          const targetExpenseIds = body.expenseIds ?? (request.kind === "REIMBURSEMENT" ? data.expenses.filter(e => e.recipientKey === body.recipientKey).map(e => e.id) : []);
-          const targetExpenses = data.expenses.filter(e => targetExpenseIds.includes(e.id));
-          if (targetExpenses.length > 0 && targetExpenses.some(e => !isExpenseApproved(e))) {
-            throw new Error("Phiếu chưa có hiệu lực thanh toán: Khoản chi AC đính kèm chưa được duyệt đầy đủ (cần đủ hóa đơn + bằng chứng chi hoặc đã được duyệt ngoại lệ).");
-          }
-        }
-        if (body.recipientKey?.startsWith("VENDOR:")) {
-          const beneficiary = data.beneficiaries.find(b => `VENDOR:${b.id}` === body.recipientKey);
-          if (!beneficiary || beneficiary.version !== body.beneficiaryVersion || beneficiary.verifiedVersion !== beneficiary.version) throw new Error("Người thụ hưởng đã đổi hoặc chưa được Kế toán xác minh lại.");
-        }
-        const amount = positive(text(form, "amount"));
-        const paid = sum(cash.filter(c => c.requestId === request.id).map(c => decimal(c.amount)));
-        if (compare(sum([paid, decimal(amount)]), decimal(body.amount ?? "0")) > 0) throw new Error("Tổng giao dịch vượt số tiền hồ sơ đã duyệt.");
-        const direction = request.kind === "REIMBURSEMENT" && body.refund !== "0" ? "IN" : "OUT";
-        if (request.kind === "REIMBURSEMENT") {
-          const current = reconcile(data, cash).find(row => row.recipientKey === body.recipientKey);
-          if (!current || (direction === "OUT" ? !current.payable : !current.receivable)) throw new Error("Số dư đã thay đổi. Lập lại đề nghị hoàn ứng theo đối soát hiện tại.");
-          const absolute = exact(current.rawBalance);
-          if (compare(decimal(amount), exact(`${absolute.numerator < BigInt(0) ? -absolute.numerator : absolute.numerator}/${absolute.denominator}`)) > 0) throw new Error("Khoản tiền vượt số dư còn phải xử lý.");
-        }
-        const allocations = JSON.parse(text(form, "allocations") || "[]") as { lineId: string; amount: string }[];
-        const revision = data.revisions.find(r => r.id === body.revisionId);
-        if (!allocations.length || allocations.some(a => !revision?.lines.some(l => l.id === a.lineId) || compare(decimal(a.amount), decimal("0")) <= 0) || new Set(allocations.map(a => a.lineId)).size !== allocations.length || compare(sum(allocations.map(a => decimal(a.amount))), decimal(amount)) !== 0) throw new Error("Phân bổ phải đúng dòng IC, không trùng và cộng đúng số tiền giao dịch.");
-        let evidenceId: string | null;
-        if (upload) {
-          evidenceId = (await tx.costFlowEvidence.create({ data: { projectId, requestId: request.id, sourceFileId: "uploaded-cash-proof", kind: "CASH", name: upload.name, mimeType: upload.mimeType, data: upload.data, sha256: createHash("sha256").update(upload.data).digest("hex"), createdBy: actor.id } })).id;
-        } else evidenceId = await snapshotFile(text(form, "sourceFileId"), "CASH", request.id);
-        if (!evidenceId) throw new Error("Cần biên lai chuyển khoản hoặc phiếu thu/chi tiền mặt.");
-        const occurredAt = new Date(text(form, "occurredAt"));
-        if (!Number.isFinite(occurredAt.getTime())) throw new Error("Ngày giao dịch không hợp lệ.");
-        await tx.costFlowCash.create({ data: { projectId, requestId: request.id, recipientKey: body.recipientKey!, direction, amount, reference: requireValue(text(form, "reference"), "mã giao dịch/chứng từ duy nhất"), allocations: json(allocations), evidenceId, occurredAt, confirmedBy: actor.id } });
-        break;
-      }
+      case "CASH": throw new Error("Giao dịch tiền phải đi qua paymentCash authority.");
       default: throw new Error("Thao tác không hợp lệ.");
     }
     const updated = await tx.costFlowWorkspace.updateMany({ where: { projectId, version: expectedVersion }, data: { version: { increment: 1 }, data: json(data) } });

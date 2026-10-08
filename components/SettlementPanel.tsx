@@ -25,6 +25,7 @@ import { Input, Select, Textarea } from "@/components/ui/Field";
 import { Alert, Badge, EmptyState, Panel, Table } from "@/components/ui/Presentation";
 import { Dialog } from "@/components/ui/Dialog";
 import ActionForm from "@/components/CostFlowActionForm";
+import CashConfirmationEditor from "@/components/costflow/payments/CashConfirmationEditor";
 import { reconcile, isExpenseApproved } from "@/lib/costflow/reconciliation";
 import { displayMoney } from "@/lib/costflow/money";
 
@@ -60,8 +61,6 @@ export default function SettlementPanel({ finance, user, canCreate }: Props) {
   const [cashModalOpen, setCashModalOpen] = useState(false);
   const [selectedDisbursementReq, setSelectedDisbursementReq] = useState<Request | null>(null);
   const [cashDirection, setCashDirection] = useState<"OUT" | "IN">("OUT");
-  const [cashAmount, setCashAmount] = useState("");
-  const [cashRecipientKey, setCashRecipientKey] = useState("");
 
   const usersMap = useMemo(() => new Map(finance.users.map(u => [u.id, u.name])), [finance.users]);
 
@@ -69,17 +68,6 @@ export default function SettlementPanel({ finance, user, canCreate }: Props) {
     key.startsWith("USER:")
       ? usersMap.get(key.slice(5)) ?? "Nhân viên"
       : finance.data.beneficiaries.find(b => b.id === key.slice(7))?.name ?? "NCC";
-
-  const recipients = useMemo(() => [
-    ...finance.project.members.map(m => ({
-      value: `USER:${m.userId}`,
-      label: `${usersMap.get(m.userId) ?? "Nhân viên"} (Nội bộ)`
-    })),
-    ...finance.data.beneficiaries.map(b => ({
-      value: `VENDOR:${b.id}`,
-      label: `${b.name} (NCC)`
-    }))
-  ], [finance.project.members, finance.data.beneficiaries, usersMap]);
 
   // Cash statistics & Pending disbursements
   const cashStats = useMemo(() => {
@@ -94,7 +82,7 @@ export default function SettlementPanel({ finance, user, canCreate }: Props) {
     const pendingDisbursements = finance.requests.filter(
       r => r.state === "APPROVED" &&
            ["ADVANCE", "VENDOR_PAYMENT", "REIMBURSEMENT"].includes(r.kind) &&
-           !finance.cash.some(c => c.requestId === r.id)
+           (finance.paymentDossiers?.find(dossier => dossier.requestId === r.id)?.recipients.some(recipient => recipient.progress !== "DA_CHI_DU") ?? !finance.cash.some(c => c.requestId === r.id))
     );
 
     return {
@@ -104,7 +92,7 @@ export default function SettlementPanel({ finance, user, canCreate }: Props) {
       pendingCount: pendingDisbursements.length,
       pendingDisbursements
     };
-  }, [finance.cash, finance.requests]);
+  }, [finance.cash, finance.paymentDossiers, finance.requests]);
 
   // Multi-party reconciliation ledger
   const ledger = useMemo(() => {
@@ -146,21 +134,17 @@ export default function SettlementPanel({ finance, user, canCreate }: Props) {
     );
   }, [finance.requests, finance.cash]);
 
-  const canManageCash = finance.fullAccess && ["ADMIN", "ACCOUNTANT"].includes(user.role);
+  const canManageCash = ["ADMIN", "ACCOUNT"].includes(user.role);
 
   const handleOpenDisbursementModal = (req: Request) => {
     setSelectedDisbursementReq(req);
     setCashDirection("OUT");
-    setCashAmount(req.payload.amount ? String(req.payload.amount) : "");
-    setCashRecipientKey(req.payload.recipientKey || "");
     setCashModalOpen(true);
   };
 
   const handleOpenDirectCashModal = (dir: "OUT" | "IN") => {
     setSelectedDisbursementReq(null);
     setCashDirection(dir);
-    setCashAmount("");
-    setCashRecipientKey("");
     setCashModalOpen(true);
   };
 
@@ -274,7 +258,7 @@ export default function SettlementPanel({ finance, user, canCreate }: Props) {
               </h3>
             </div>
             <span className="text-xs text-[var(--text-secondary)]">
-              Kế toán / Thủ quỹ xác nhận khi tiền đã chuyển khoản thực tế
+              Account được phân công xác nhận khi tiền đã chuyển thực tế
             </span>
           </div>
 
@@ -323,7 +307,7 @@ export default function SettlementPanel({ finance, user, canCreate }: Props) {
                         Chưa có hiệu lực chi
                       </Button>
                     ) : (
-                      canManageCash && !finance.data.closed && (
+                      canManageCash && req.cashAssigneeId === user.id && !finance.data.closed && (
                         <Button
                           size="sm"
                           onClick={() => handleOpenDisbursementModal(req)}
@@ -638,78 +622,12 @@ export default function SettlementPanel({ finance, user, canCreate }: Props) {
             : "Ghi nhận trực tiếp khoản thu/chi thực tế từ quỹ dự án."
         }
       >
-        <ActionForm
-          finance={finance}
-          command="CASH"
-          label={cashDirection === "IN" ? "Ghi nhận thu tiền" : "Xác nhận chi tiền"}
-          onSuccess={() => setCashModalOpen(false)}
-        >
-          {selectedDisbursementReq && (
-            <input type="hidden" name="requestId" value={selectedDisbursementReq.id} />
-          )}
-
-          <input type="hidden" name="direction" value={cashDirection} />
-
-          <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Select
-                name="recipientKey"
-                label="Người nhận / Thụ hưởng"
-                value={cashRecipientKey}
-                onChange={e => setCashRecipientKey(e.target.value)}
-                required
-              >
-                <option value="">Chọn người nhận</option>
-                {recipients.map(r => (
-                  <option key={r.value} value={r.value}>{r.label}</option>
-                ))}
-              </Select>
-
-              <Input
-                name="amount"
-                label="Số tiền thực tế (VND)"
-                value={cashAmount}
-                onChange={e => setCashAmount(e.target.value)}
-                required
-                inputMode="decimal"
-                placeholder="Nhập số tiền..."
-              />
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Input
-                name="reference"
-                label="Mã tham chiếu / Số UNC / Phiếu thu"
-                placeholder="Ví dụ: UNC-20261008-01 hoặc PT-02..."
-                required
-              />
-
-              <Input
-                name="date"
-                type="date"
-                label="Ngày giao dịch"
-                defaultValue={new Date().toISOString().slice(0, 10)}
-                required
-              />
-            </div>
-
-            <Select
-              name="evidenceId"
-              label="Chứng từ chuyển khoản / Giấy báo có (Tùy chọn)"
-            >
-              <option value="">Không đính kèm file / Đã có file riêng</option>
-              {finance.files.map(f => (
-                <option key={f.id} value={f.id}>{f.name}</option>
-              ))}
-            </Select>
-
-            <Textarea
-              name="note"
-              label="Ghi chú giao dịch"
-              placeholder="Ghi chú thêm về phương thức chuyển khoản, ngân hàng thụ hưởng..."
-            />
-          </div>
-        </ActionForm>
+        {selectedDisbursementReq ? (() => {
+          const dossier = finance.paymentDossiers?.find(item => item.requestId === selectedDisbursementReq.id);
+          if (!dossier) return <Alert tone="danger" title="Hồ sơ chưa có dữ liệu dòng thanh toán chuẩn hóa." />;
+          if (selectedDisbursementReq.kind !== "ADVANCE") return <Alert tone="warning" title="Thanh toán/hoàn ứng sau AC chưa khả dụng cho đến khi Phase 8 cung cấp AC đã duyệt." />;
+          return <div className="space-y-4">{dossier.recipients.map(recipient => <CashConfirmationEditor key={recipient.recipientKey} finance={finance} request={selectedDisbursementReq} dossier={dossier} recipient={recipient} userId={user.id} onSuccess={() => setCashModalOpen(false)} />)}</div>;
+        })() : <Alert tone="warning" title="Thu hoàn sau AC chưa khả dụng cho đến khi Phase 8 cung cấp AC đã duyệt." />}
       </Dialog>
     </div>
   );
