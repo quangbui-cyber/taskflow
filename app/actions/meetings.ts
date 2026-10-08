@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { requireAdmin, requireUser } from "@/lib/auth";
+import { MEETINGS_DISABLED_MESSAGE, meetingsEnabled } from "@/lib/features";
 import { sendMeetingEmail, type MeetingMailKind } from "@/lib/meetingMail";
 import {
   MEETING_DESCRIPTION_MAX,
@@ -228,6 +229,7 @@ export async function createMeeting(
   _previousState: MeetingActionState,
   formData: FormData
 ): Promise<MeetingActionState> {
+  if (!meetingsEnabled()) return { error: MEETINGS_DISABLED_MESSAGE };
   const user = await requireUser();
   const input = parseMeetingForm(formData, user.id);
   if ("error" in input) return input;
@@ -294,6 +296,7 @@ export async function updateMeeting(
   _previousState: MeetingActionState,
   formData: FormData
 ): Promise<MeetingActionState> {
+  if (!meetingsEnabled()) return { error: MEETINGS_DISABLED_MESSAGE };
   const user = await requireUser();
   const existing = await prisma.meeting.findUnique({
     where: { id: meetingId },
@@ -428,6 +431,7 @@ export async function updateMeeting(
 }
 
 export async function cancelMeeting(meetingId: string): Promise<MeetingActionState> {
+  if (!meetingsEnabled()) return { error: MEETINGS_DISABLED_MESSAGE };
   const user = await requireUser();
   const meeting = await prisma.meeting.findUnique({
     where: { id: meetingId },
@@ -488,6 +492,7 @@ export async function respondToMeeting(
   meetingId: string,
   response: "ACCEPTED" | "DECLINED"
 ): Promise<MeetingActionState> {
+  if (!meetingsEnabled()) return { error: MEETINGS_DISABLED_MESSAGE };
   const user = await requireUser();
   if (response !== "ACCEPTED" && response !== "DECLINED") {
     return { error: "Phản hồi không hợp lệ." };
@@ -535,6 +540,7 @@ export async function createMeetingRoom(
   _previousState: MeetingActionState,
   formData: FormData
 ): Promise<MeetingActionState> {
+  if (!meetingsEnabled()) return { error: MEETINGS_DISABLED_MESSAGE };
   await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
   const capacityRaw = String(formData.get("capacity") ?? "").trim();
@@ -562,6 +568,7 @@ export async function setMeetingRoomActive(
   roomId: string,
   isActive: boolean
 ): Promise<MeetingActionState> {
+  if (!meetingsEnabled()) return { error: MEETINGS_DISABLED_MESSAGE };
   await requireAdmin();
   const room = await prisma.meetingRoom.findUnique({
     where: { id: roomId },
@@ -580,6 +587,7 @@ export async function setMeetingRoomActive(
 }
 
 export async function deleteMeetingRoom(roomId: string): Promise<MeetingActionState> {
+  if (!meetingsEnabled()) return { error: MEETINGS_DISABLED_MESSAGE };
   await requireAdmin();
   const upcoming = await prisma.meeting.count({
     where: { roomId, status: "SCHEDULED", endAt: { gte: new Date() } },

@@ -4,6 +4,7 @@ import { deliverPush } from "@/lib/webPush";
 import { prisma } from "@/lib/prisma";
 import { sendGoogleChat } from "@/lib/googleChat";
 import { daysUntil, formatDue, isOverdue } from "@/lib/dates";
+import { meetingsEnabled } from "@/lib/features";
 import { formatMeetingTime, vnDayRange } from "@/lib/meetings";
 import { ARCHIVED_PROJECT_STATUS_KEYS } from "@/lib/types";
 
@@ -229,7 +230,10 @@ export async function GET(request: Request) {
 
     // Nhắc mọi người về các cuộc họp diễn ra trong hôm nay (một lần mỗi ngày cho mỗi người).
     const today = vnDayRange();
-    const meetingsToday = await withDatabaseRetry(() =>
+    // Lịch họp đang tạm ẩn thì không nhắc họp.
+    const meetingsToday = !meetingsEnabled()
+      ? []
+      : await withDatabaseRetry(() =>
       prisma.meeting.findMany({
         where: {
           status: "SCHEDULED",

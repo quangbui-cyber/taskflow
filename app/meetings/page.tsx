@@ -14,7 +14,9 @@ import MeetingComposer, {
   type RoomBooking,
 } from "@/components/MeetingComposer";
 import Sidebar from "@/components/Sidebar";
+import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
+import { meetingsEnabled } from "@/lib/features";
 import { formatHour, toDateInputVN } from "@/lib/dates";
 import { isEmailConfigured } from "@/lib/email";
 import {
@@ -223,6 +225,8 @@ export default async function MeetingsPage({
   searchParams: Promise<{ view?: string; focus?: string }>;
 }) {
   const user = await requireUser();
+  // Tính năng đang tạm ẩn: link cũ (thông báo, email) đưa về trang chính.
+  if (!meetingsEnabled()) redirect("/");
   const params = await searchParams;
   const now = new Date();
   const mineWhere: Prisma.MeetingWhereInput = {

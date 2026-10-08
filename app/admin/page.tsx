@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BarChart3 } from "lucide-react";
+import { meetingsEnabled } from "@/lib/features";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
@@ -238,7 +239,9 @@ export default async function AdminPage({
 }) {
   const [admin, params] = await Promise.all([requireAdmin(), searchParams]);
   const requestedTab = params.tab === "team" ? "account" : params.tab;
-  const activeTab: SettingsTab = isSettingsTab(requestedTab)
+  const activeTab: SettingsTab =
+    isSettingsTab(requestedTab) &&
+    (requestedTab !== "rooms" || meetingsEnabled())
     ? requestedTab
     : "create-user";
   const sidebarProjects = await prisma.project.findMany({
@@ -279,7 +282,9 @@ export default async function AdminPage({
             className="tf-scroll-tabs flex gap-1 border-b border-zinc-200"
             aria-label="Các mục cài đặt"
           >
-            {SETTINGS_TABS.map((tab) => (
+            {SETTINGS_TABS.filter(
+              (tab) => tab.key !== "rooms" || meetingsEnabled()
+            ).map((tab) => (
               <Link
                 key={tab.key}
                 href={`/admin?tab=${tab.key}`}

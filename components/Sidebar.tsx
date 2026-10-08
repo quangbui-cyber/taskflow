@@ -23,6 +23,7 @@ import Brand from "@/components/Brand";
 import Avatar from "@/components/Avatar";
 import MobileSidebarMenu from "@/components/MobileSidebarMenu";
 import { canCreateProjects, canViewRevenue } from "@/lib/auth";
+import { meetingsEnabled } from "@/lib/features";
 import { prisma } from "@/lib/prisma";
 import { projectResponsibilityGroup } from "@/lib/projectResponsibility";
 import {
@@ -385,6 +386,7 @@ export default async function Sidebar({
   });
   const canCreate = canCreateProjects(user.role ?? "");
   const showRevenue = canViewRevenue(user.role ?? "");
+  const showMeetings = meetingsEnabled();
   const activeProjects = projects.filter(
     (project) => !isArchivedProjectStatus(project.status)
   );
@@ -407,7 +409,7 @@ export default async function Sidebar({
             <nav className="space-y-1" aria-label="Không gian làm việc">
               <MenuLink href="/" label="Công việc" icon={CheckCircle2} active={activeSection === "home" && !activeProjectId} />
               <MenuLink href="/notifications" label="Thông báo" icon={Bell} active={activeSection === "notifications"} badge={unreadCount} />
-              <MenuLink href="/meetings" label="Lịch họp" icon={CalendarClock} active={activeSection === "meetings"} />
+              {showMeetings && <MenuLink href="/meetings" label="Lịch họp" icon={CalendarClock} active={activeSection === "meetings"} />}
               <MenuLink href="/recognition" label="Góc cảm ơn" icon={Star} active={activeSection === "recognition"} />
               <MenuLink href="/team" label="Hiệu suất" icon={UsersRound} active={activeSection === "team"} />
               {showRevenue && (
@@ -484,7 +486,7 @@ export default async function Sidebar({
             <div className="space-y-1">
               <MenuLink href="/" label="Công việc" icon={CheckCircle2} active={activeSection === "home" && !activeProjectId} />
               <MenuLink href="/notifications" label="Thông báo" icon={Bell} active={activeSection === "notifications"} badge={unreadCount} />
-              <MenuLink href="/meetings" label="Lịch họp" icon={CalendarClock} active={activeSection === "meetings"} />
+              {showMeetings && <MenuLink href="/meetings" label="Lịch họp" icon={CalendarClock} active={activeSection === "meetings"} />}
               <MenuLink href="/recognition" label="Góc cảm ơn" icon={Star} active={activeSection === "recognition"} />
               <MenuLink href="/team" label="Hiệu suất" icon={UsersRound} active={activeSection === "team"} />
               {showRevenue && <MenuLink href="/revenue" label="Doanh số" icon={CircleDollarSign} active={activeSection === "revenue"} />}
