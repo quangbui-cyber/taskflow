@@ -4,6 +4,9 @@ import { normalizePaymentDraft } from "../lib/costflow/paymentPolicy";
 import { projectPaymentDossiers } from "../lib/costflow/paymentCompatibility";
 import type { PaymentDraftInput } from "../lib/costflow/paymentTypes";
 import { derivePaymentProgress } from "../lib/costflow/paymentCash";
+import { validateApprovedActualCostLines } from "../lib/costflow/approvedActualCost";
+import { authorizeSettlementCash, calculateSelectedAdvanceSettlement } from "../lib/costflow/paymentSettlement";
+import { ApprovedAcConsumerFixture } from "./fixtures/approved-ac-consumer-fixture";
 
 const projectId = "project-phase-7";
 const revisionId = "ic-effective";
@@ -174,4 +177,40 @@ test("payment-cash: canonical 75m sequence derives cash progress independently",
     progress: "DA_CHI_DU", approvedAmount: "75000000", paidOutAmount: "75000000", remainingAmount: "0",
   });
   assert.throws(() => derivePaymentProgress("75000000", "75000001"), /vượt/i);
+});
+
+const acQuery = { projectId, versionId: "ac-v2", approvalEventId: "event-approved", approvalAttemptId: "attempt-2", lineIds: ["ac-line"] };
+const acLine = { ...acQuery, stableLineId: "ac-line", recipientKey: "USER:employee", approvedAmount: "8000000" };
+
+test("payment-policy: ApprovedAcConsumerFixture selects newer advance without FIFO", async () => {
+  const consumer = new ApprovedAcConsumerFixture([acLine]);
+  const approved = validateApprovedActualCostLines(acQuery, await consumer.resolveApprovedLines(acQuery));
+  const sourceA = { projectId, recipientKey: "USER:employee", advanceRequestId: "advance-a-old", advanceLineId: "advance-line-a", grossOutAmount: "10000000", alreadyAppliedAmount: "0", selectedAmount: "2000000" };
+  const sourceB = { ...sourceA, advanceRequestId: "advance-b-new", advanceLineId: "advance-line-b", selectedAmount: "8000000" };
+  const result = calculateSelectedAdvanceSettlement({ projectId, recipientKey: "USER:employee", approvedActualLines: approved, selectedAdvances: [sourceB] });
+  assert.deepEqual(result.selectedAdvanceLineIds, ["advance-line-b"]);
+  assert.equal(result.advanceApplied, "8000000");
+  assert.throws(() => calculateSelectedAdvanceSettlement({ projectId, recipientKey: "USER:employee", approvedActualLines: approved, selectedAdvances: [sourceB, sourceB] }), /trùng|tái sử dụng/i);
+  assert.throws(() => calculateSelectedAdvanceSettlement({ projectId, recipientKey: "USER:employee", approvedActualLines: approved, selectedAdvances: [{ ...sourceA, projectId: "project-b" }] }), /chéo Project/i);
+  assert.throws(() => calculateSelectedAdvanceSettlement({ projectId, recipientKey: "USER:employee", approvedActualLines: approved, selectedAdvances: [{ ...sourceA, recipientKey: "USER:other" }] }), /chéo người nhận/i);
+});
+
+test("payment-policy: ApprovedAcConsumerFixture derives 10m advance and 8m actual refund authorization", async () => {
+  const approved = validateApprovedActualCostLines(acQuery, await new ApprovedAcConsumerFixture([acLine]).resolveApprovedLines(acQuery));
+  const result = calculateSelectedAdvanceSettlement({ projectId, recipientKey: "USER:employee", approvedActualLines: approved, selectedAdvances: [{ projectId, recipientKey: "USER:employee", advanceRequestId: "advance", advanceLineId: "advance-line", grossOutAmount: "10000000", alreadyAppliedAmount: "0", selectedAmount: "10000000" }] });
+  assert.equal(result.actualUsed, "8000000");
+  assert.equal(result.unusedOrRefundDue, "2000000");
+  assert.deepEqual(authorizeSettlementCash({ direction: "IN", amount: "2000000", refundDue: result.unusedOrRefundDue, additionalDue: "0", ordinaryApproved: false }), { authorized: true, kind: "REFUND_IN" });
+  assert.equal(calculateSelectedAdvanceSettlement({ projectId, recipientKey: "USER:employee", approvedActualLines: approved, selectedAdvances: [{ projectId, recipientKey: "USER:employee", advanceRequestId: "advance", advanceLineId: "advance-line", grossOutAmount: "10000000", alreadyAppliedAmount: "0", selectedAmount: "10000000" }], committedSettlementIn: "2000000" }).unusedOrRefundDue, "0");
+});
+
+test("payment-policy: ApprovedAcConsumerFixture derives 10m advance and 12m actual ordinary-approved additional OUT", async () => {
+  const twelve = { ...acLine, approvedAmount: "12000000" };
+  const approved = validateApprovedActualCostLines(acQuery, await new ApprovedAcConsumerFixture([twelve]).resolveApprovedLines(acQuery));
+  const source = { projectId, recipientKey: "USER:employee", advanceRequestId: "advance", advanceLineId: "advance-line", grossOutAmount: "10000000", alreadyAppliedAmount: "0", selectedAmount: "10000000" };
+  const result = calculateSelectedAdvanceSettlement({ projectId, recipientKey: "USER:employee", approvedActualLines: approved, selectedAdvances: [source] });
+  assert.equal(result.overspendOrAdditionalDue, "2000000");
+  assert.throws(() => authorizeSettlementCash({ direction: "OUT", amount: "2000000", refundDue: "0", additionalDue: result.overspendOrAdditionalDue, ordinaryApproved: false }), /duyệt thông thường/i);
+  assert.deepEqual(authorizeSettlementCash({ direction: "OUT", amount: "2000000", refundDue: "0", additionalDue: result.overspendOrAdditionalDue, ordinaryApproved: true }), { authorized: true, kind: "ADDITIONAL_OUT" });
+  assert.equal(calculateSelectedAdvanceSettlement({ projectId, recipientKey: "USER:employee", approvedActualLines: approved, selectedAdvances: [source], committedApprovedAdditionalOut: "2000000" }).overspendOrAdditionalDue, "0");
 });
