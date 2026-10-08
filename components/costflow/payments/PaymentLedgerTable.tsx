@@ -11,9 +11,20 @@ function money(value: string | null) {
   return value === null ? "Chưa khả dụng" : displayMoney(value);
 }
 
+function EvidenceLinks({ projectId, row }: { projectId: string; row: PaymentLedgerRow }) {
+  return row.evidenceLinks.length ? <ul className="space-y-1">{row.evidenceLinks.map(link => <li key={link.id} className="flex flex-wrap gap-2">
+    <Link className="tf-link" href={`/api/projects/${projectId}/costflow/evidence/${link.id}`}>{link.label}</Link>
+    <Link className="tf-link" href={`/api/projects/${projectId}/costflow/evidence/${link.id}/preview`} target="_blank" rel="noreferrer">Xem trước</Link>
+  </li>)}</ul> : <span className="text-xs text-[var(--text-secondary)]">Chưa có link được phép</span>;
+}
+
+function StateFacts({ row }: { row: PaymentLedgerRow }) {
+  return <><p>Duyệt: {row.approvalState}</p><p>Tiền: {PROGRESS[row.cashProgress]}</p><p>Xác minh NCC: {row.beneficiaryVerification}</p><p>Đóng tài chính: {row.financialCloseState}</p></>;
+}
+
 export default function PaymentLedgerTable({ projectId, rows }: { projectId: string; rows: PaymentLedgerRow[] }) {
   if (!rows.length) return <EmptyState title="Chưa có dữ liệu sổ thanh toán" description="Sổ sẽ hiển thị sau khi có hồ sơ thanh toán hoặc dữ liệu legacy được nhận diện." />;
-  return <Table caption="Sổ đối soát hồ sơ, người nhận và luồng tiền">
+  return <><div className="tf-payment-ledger-table"><Table caption="Sổ đối soát hồ sơ, người nhận và luồng tiền">
     <thead><tr>
       <th scope="col">Hồ sơ / người nhận</th>
       <th scope="col">Trạng thái độc lập</th>
@@ -25,12 +36,26 @@ export default function PaymentLedgerTable({ projectId, rows }: { projectId: str
     </tr></thead>
     <tbody>{rows.map(row => <tr key={`${row.projectId}:${row.requestId}:${row.recipientKey}`}>
       <td><strong>{row.title}</strong><p className="text-xs text-[var(--text-secondary)]">{row.recipientLabel} · {row.milestone || "Không có milestone"}</p>{row.needsReview && <Badge tone="warning">Legacy · cần kiểm tra nguồn</Badge>}</td>
-      <td><p>Duyệt: {row.approvalState}</p><p>Tiền: {PROGRESS[row.cashProgress]}</p><p>Xác minh NCC: {row.beneficiaryVerification}</p><p>Đóng tài chính: {row.financialCloseState}</p></td>
+      <td><StateFacts row={row} /></td>
       <td className="text-right tabular-nums">{money(row.approvedAmount)}</td>
       <td className="text-right tabular-nums">{money(row.grossStandardOut)}</td>
       <td className="text-right tabular-nums">{money(row.remainingStandardOut)}</td>
       <td className="text-right"><p>Hoàn IN: {money(row.refundInBalance)}</p><p>Chi thêm OUT: {money(row.additionalOutBalance)}</p><p className="text-xs text-[var(--text-secondary)]">Nguồn AC: {row.approvedAcSourceStatus}</p></td>
-      <td>{row.evidenceLinks.length ? row.evidenceLinks.map(link => <p key={link.id}><Link className="tf-link" href={`/api/projects/${projectId}/costflow/evidence/${link.id}`}>{link.label}</Link></p>) : <span className="text-xs text-[var(--text-secondary)]">Chưa có link được phép</span>}</td>
+      <td><EvidenceLinks projectId={projectId} row={row} /></td>
     </tr>)}</tbody>
-  </Table>;
+  </Table></div><ol className="tf-payment-ledger-cards space-y-3" aria-label="Sổ đối soát hồ sơ, người nhận và luồng tiền">
+    {rows.map(row => <li key={`${row.projectId}:${row.requestId}:${row.recipientKey}:card`} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 space-y-3">
+      <div><strong>{row.title}</strong><p className="text-xs text-[var(--text-secondary)]">{row.recipientLabel} · {row.milestone || "Không có milestone"}</p>{row.needsReview && <Badge tone="warning">Legacy · cần kiểm tra nguồn</Badge>}</div>
+      <div className="rounded-lg bg-[var(--surface-soft)] p-2 text-xs"><StateFacts row={row} /></div>
+      <dl className="grid grid-cols-2 gap-2 text-xs">
+        <div><dt className="text-[var(--text-secondary)]">Đề nghị</dt><dd className="font-semibold tabular-nums">{money(row.approvedAmount)}</dd></div>
+        <div><dt className="text-[var(--text-secondary)]">Gross tạm ứng OUT</dt><dd className="font-semibold tabular-nums">{money(row.grossStandardOut)}</dd></div>
+        <div><dt className="text-[var(--text-secondary)]">Còn lại</dt><dd className="font-semibold tabular-nums">{money(row.remainingStandardOut)}</dd></div>
+        <div><dt className="text-[var(--text-secondary)]">Hoàn IN</dt><dd className="font-semibold tabular-nums">{money(row.refundInBalance)}</dd></div>
+        <div><dt className="text-[var(--text-secondary)]">Chi thêm OUT</dt><dd className="font-semibold tabular-nums">{money(row.additionalOutBalance)}</dd></div>
+        <div><dt className="text-[var(--text-secondary)]">Nguồn AC</dt><dd className="font-semibold">{row.approvedAcSourceStatus}</dd></div>
+      </dl>
+      <div className="text-xs"><p className="mb-1 font-semibold">Chứng từ giao dịch</p><EvidenceLinks projectId={projectId} row={row} /></div>
+    </li>)}
+  </ol></>;
 }

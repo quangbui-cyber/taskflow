@@ -26,11 +26,11 @@ import IcRequestEvidence from "@/components/IcRequestEvidence";
 import ExpenseRequestModal from "@/components/ExpenseRequestModal";
 import { icStatusProjection } from "@/lib/costflow/icEffectiveness";
 import { displayMoney } from "@/lib/costflow/money";
-import { isExpenseApproved } from "@/lib/costflow/reconciliation";
 import { FilePlus2, Building2, Search, X } from "lucide-react";
 import { PaymentRequestEditor } from "@/components/costflow/payments/PaymentRequestEditor";
 import { PaymentRequestPreview } from "@/components/costflow/payments/PaymentRequestPreview";
 import { PaymentRequestReview } from "@/components/costflow/payments/PaymentRequestReview";
+import AdvanceSettlementAllocator from "@/components/costflow/payments/AdvanceSettlementAllocator";
 
 const KIND_INFO: Record<string, { label: string; tone: "info" | "warning" | "success" | "neutral" }> = {
   IC: { label: "Dự toán IC", tone: "info" },
@@ -246,7 +246,7 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
       </details>}
       {!!finance.paymentDossiers?.length && <Panel className="space-y-4">
         <div><h3 className="font-semibold">ĐNTU đa khoản đã lưu</h3><p className="tf-ui-help">Nạp lại từ dòng và snapshot chuẩn hóa trên server.</p></div>
-        {finance.paymentDossiers.map(dossier => <PaymentRequestPreview key={dossier.requestId} serverProjection milestone={dossier.milestone} lines={dossier.lines.map(line => ({
+        {finance.paymentDossiers.map(dossier => <PaymentRequestPreview key={dossier.requestId} serverProjection title={dossier.title} milestone={dossier.milestone} explanation={finance.requests.find(request => request.id === dossier.requestId)?.payload.explanation} revisionLabel={[...new Set(dossier.lines.map(line => line.icRevisionId))].join(", ")} lines={dossier.lines.map(line => ({
           stableKey: line.stableKey,
           description: line.description,
           amount: line.amount,
@@ -706,33 +706,8 @@ function EnhancedRequestCard({
         )}
 
         {/* Trạng thái hiệu lực giải ngân thanh toán */}
-        {["REIMBURSEMENT", "VENDOR_PAYMENT"].includes(request.kind) && (() => {
-          const reqExpenseIds = request.payload.expenseIds;
-          const targetExpenses = finance.data.expenses.filter(e =>
-            reqExpenseIds?.length
-              ? reqExpenseIds.includes(e.id)
-              : (request.kind === "REIMBURSEMENT" && e.recipientKey === request.payload.recipientKey)
-          );
-          const hasPendingAc = targetExpenses.length > 0 && targetExpenses.some(e => !isExpenseApproved(e));
-
-          return (
-            <div className={`p-3 rounded-lg border text-xs space-y-1 ${hasPendingAc ? "border-[var(--warning)] bg-[var(--warning-soft)]" : "border-[var(--success)] bg-[var(--success-soft)]"}`}>
-              <div className="flex items-center justify-between">
-                <span className="font-semibold text-[var(--foreground)]">
-                  Hiệu lực giải ngân / thanh toán:
-                </span>
-                <Badge tone={hasPendingAc ? "warning" : "success"}>
-                  {hasPendingAc ? "Chờ duyệt AC (Chưa thể giải ngân)" : "Đã duyệt AC (Đủ điều kiện chi tiền)"}
-                </Badge>
-              </div>
-              <p className="text-[11px] text-[var(--text-secondary)]">
-                {hasPendingAc
-                  ? "Phiếu có thể tạo và duyệt trước, nhưng chỉ có hiệu lực thanh toán thực tế khi các khoản AC tương ứng được bổ sung đủ chứng từ hoặc được duyệt ngoại lệ."
-                  : "Toàn bộ khoản chi AC liên quan đã được duyệt hợp lệ. Phiếu có hiệu lực giải ngân sau khi hoàn tất các cấp duyệt."}
-              </p>
-            </div>
-          );
-        })()}
+        {request.kind === "REIMBURSEMENT" && <AdvanceSettlementAllocator kind="REIMBURSEMENT" />}
+        {request.kind === "VENDOR_PAYMENT" && <AdvanceSettlementAllocator kind="VENDOR_PAYMENT" />}
 
         {/* Lý do / Giải trình */}
         {request.payload.explanation && (

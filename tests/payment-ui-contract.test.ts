@@ -56,3 +56,42 @@ test("payment UI: no Phase 7 exception approval or evidence-as-AC control is int
   assert.doesNotMatch(files, /duyệt ngoại lệ/i);
   assert.doesNotMatch(files, /evidence.*approved AC/i);
 });
+
+test("payment UI: reviewer exposes immutable facts and Project-scoped evidence routes", () => {
+  const review = source("components/costflow/payments/PaymentRequestReview.tsx");
+  const discussion = source("components/costflow/payments/PaymentLineDiscussion.tsx");
+
+  for (const fact of ["Snapshot server bất biến", "Mốc hồ sơ chung", "Tổng server", "Tài liệu trong snapshot", "Thay đổi so với bản nguồn", "Giải trình của hồ sơ"]) {
+    assert.match(review, new RegExp(fact));
+  }
+  assert.match(review, /\/api\/projects\/\$\{finance\.project\.id\}\/costflow\/evidence\/\$\{document\.id\}/);
+  assert.match(review, /evidence\/\$\{document\.id\}\/preview/);
+  assert.match(discussion, /ADD_PAYMENT_LINE_DISCUSSION/);
+  assert.doesNotMatch(review, /command="DECIDE"|APPROVE_PAYMENT|Duyệt khoản|Từ chối khoản/);
+});
+
+test("payment UI: ledger has complete desktop and mobile state axes", () => {
+  const ledger = source("components/costflow/payments/PaymentLedgerTable.tsx");
+  const css = source("app/modules.css");
+
+  assert.match(ledger, /tf-payment-ledger-table/);
+  assert.match(ledger, /tf-payment-ledger-cards/);
+  for (const fact of ["Duyệt:", "Tiền:", "Xác minh NCC:", "Đóng tài chính:", "Gross tạm ứng OUT", "Hoàn IN", "Chi thêm OUT", "Nguồn AC"]) {
+    assert.match(ledger, new RegExp(fact));
+  }
+  assert.match(ledger, /evidence\/\$\{link\.id\}\/preview/);
+  assert.match(css, /\.tf-payment-ledger-table[\s\S]*display: none/);
+});
+
+test("payment UI: workspace keeps shared approval and money surfaces distinct", () => {
+  const workspace = source("components/CostFlowPanel.tsx");
+  const approval = source("components/ApprovalRequestsPanel.tsx");
+
+  assert.match(workspace, /ApprovalRequestsPanel/);
+  assert.match(workspace, /SettlementPanel/);
+  assert.match(workspace, /Hồ sơ & Trình duyệt/);
+  assert.match(workspace, /Tiền & Quyết toán/);
+  assert.match(approval, /AdvanceSettlementAllocator/);
+  assert.doesNotMatch(approval, /duyệt ngoại lệ/i);
+  assert.doesNotMatch(`${workspace}\n${approval}`, /PAY-06/);
+});

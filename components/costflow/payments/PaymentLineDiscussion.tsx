@@ -12,7 +12,7 @@ export function PaymentLineDiscussion({ finance, requestId, lineId, discussions 
   const [mentionIds, setMentionIds] = useState<string[]>([]);
   const members = finance.project.members.map(member => finance.users.find(user => user.id === member.userId)).filter((user): user is Finance["users"][number] => !!user);
   const toggle = (userId: string) => setMentionIds(current => current.includes(userId) ? current.filter(id => id !== userId) : [...current, userId]);
-  return <details className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+  return <details className="tf-payment-line-discussion rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
     <summary className="cursor-pointer text-xs font-semibold">Trao đổi về khoản này ({discussions.length})</summary>
     <div className="mt-3 space-y-3">
       {discussions.length > 0 && <ol className="space-y-2">
