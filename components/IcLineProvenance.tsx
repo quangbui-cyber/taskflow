@@ -6,11 +6,6 @@ import { Input, Select } from "@/components/ui/Field";
 import ActionForm from "@/components/CostFlowActionForm";
 import type { Finance } from "@/components/CostFlowPanel";
 import type { IcLine, IcRevision } from "@/lib/costflow/types";
-import { resolveIcLineOrigin } from "@/lib/costflow/budgetLineage";
-
-export function IcLineProvenance({ finance, line }: { finance: Finance; line: IcLine }) {
-  return <details><summary>Nguồn dòng</summary>{line.originLines?.length ? line.originLines.map(ref => <p key={`${ref.revisionId}:${ref.lineId}`}>IC r{finance.data.revisions.find(r => r.id === ref.revisionId)?.number} · {resolveIcLineOrigin(finance.data, ref.revisionId, ref.lineId)?.description ?? "Dòng cũ"} · {ref.lineId}</p>) : <p>Dòng gốc · {line.id}</p>}</details>;
-}
 
 export default function IcLineTransform({ finance, revision }: { finance: Finance; revision: IcRevision }) {
   const [mode, setMode] = useState("");

@@ -22,7 +22,6 @@ import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Field";
 import { Alert, Badge, EmptyState, Panel, Table } from "@/components/ui/Presentation";
 import ActionForm from "@/components/CostFlowActionForm";
-import { IcLineProvenance } from "@/components/IcLineProvenance";
 import IcRevisionDiff, { IcQuotationUpdates } from "@/components/IcRevisionDiff";
 import PairedQuotationIcEditor from "@/components/PairedQuotationIcEditor";
 import { workingIcRevision } from "@/lib/costflow/budgetRevisions";
@@ -89,6 +88,11 @@ export default function InternalCostPanel({
     if (!visibleRevision) return undefined;
     return finance.requests.find(q => q.id === visibleRevision.requestId);
   }, [visibleRevision, finance.requests]);
+
+  const workingRequest = useMemo(() => {
+    if (!working) return undefined;
+    return finance.requests.find(request => request.id === working.requestId);
+  }, [working, finance.requests]);
 
   // Two-axis projection (budget effectiveness vs approval state)
   const visibleStatus = useMemo(() => {
@@ -314,18 +318,20 @@ export default function InternalCostPanel({
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-[var(--primary)]">
-                  Baseline Ngân Sách Hiệu Lực
+                  Ngân sách IC được phép sử dụng
                 </span>
                 {effective ? (
                   <Badge tone="success">Đang có hiệu lực</Badge>
                 ) : (
-                  <Badge tone="warning">Chưa thiết lập</Badge>
+                  <Badge tone="warning">Chưa có IC được duyệt</Badge>
                 )}
               </div>
               <h3 className="mt-0.5 text-lg font-bold text-[var(--foreground)]">
                 {effective
                   ? `IC-R${effective.number} · Dự toán ngân sách dự án`
-                  : "Dự án chưa có Baseline IC hiệu lực"}
+                  : working
+                    ? `IC-R${working.number} chưa được Quản lý duyệt`
+                    : "Chưa có IC được Quản lý duyệt"}
               </h3>
             </div>
           </div>
@@ -404,15 +410,29 @@ export default function InternalCostPanel({
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-3 pt-4 text-sm text-[var(--text-secondary)]">
             <p className="max-w-xl">
-              Internal Cost bắt đầu có hiệu lực ngân sách ngay sau khi Quản lý phê duyệt (bước 1 của quy trình trình duyệt).
-              Khi chưa có IC hiệu lực, dự án chưa thể tạo phát sinh Actual Cost mới dựa trên IC.
+              <strong className="text-[var(--foreground)]">Việc cần làm:</strong>{" "}
+              {working
+                ? workingRequest?.state === "DRAFT"
+                  ? `Hoàn thiện và gửi IC-R${working.number} để Quản lý duyệt. `
+                  : `Theo dõi IC-R${working.number} trong Trình duyệt đến khi Quản lý xử lý. `
+                : "Tạo IC và gửi để Quản lý duyệt. "}
+              Chỉ sau bước duyệt này, IC mới trở thành ngân sách được phép dùng để ghi nhận Actual Cost và các phát sinh tiếp theo.
             </p>
-            {canCreate && !finance.data.closed && (
+            {canCreate && !finance.data.closed && working && workingRequest?.state === "DRAFT" ? (
+              <Link className="tf-button-primary text-sm flex items-center gap-1" href={worksheetHref(working)}>
+                Tiếp tục hoàn thiện IC-R{working.number}
+                <ArrowRight size={14} aria-hidden="true" />
+              </Link>
+            ) : working && workingRequest?.state !== "DRAFT" ? (
+              <Button variant="secondary" size="sm" onClick={() => onOpenApproval(working.requestId)}>
+                Theo dõi trình duyệt IC-R{working.number}
+              </Button>
+            ) : canCreate && !finance.data.closed ? (
               <Link className="tf-button-primary text-sm flex items-center gap-1" href={pairedHref}>
                 <Plus size={15} className="mr-1" aria-hidden="true" />
-                Lập dự toán đầu tiên
+                Tạo IC đầu tiên
               </Link>
-            )}
+            ) : null}
           </div>
         )}
       </div>
@@ -664,7 +684,6 @@ export default function InternalCostPanel({
                       </td>
                       <td>
                         <div className="font-medium text-[var(--foreground)]">{line.description}</div>
-                        <IcLineProvenance finance={finance} line={line} />
                       </td>
                       <td className="text-sm text-[var(--text-secondary)]">{line.unit}</td>
                       <td className="text-right tabular-nums text-sm">{line.quantity}</td>
