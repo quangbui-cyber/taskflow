@@ -6,7 +6,6 @@ import ActionForm from "@/components/CostFlowActionForm";
 import ActualCostPanel from "@/components/ActualCostPanel";
 import ApprovalRequestsPanel from "@/components/ApprovalRequestsPanel";
 import InternalCostPanel from "@/components/InternalCostPanel";
-import PaymentCashPanel from "@/components/PaymentCashPanel";
 import QuotationPanel from "@/components/QuotationPanel";
 import SettlementPanel from "@/components/SettlementPanel";
 import { Button } from "@/components/ui/Button";
@@ -43,7 +42,7 @@ export type Request = {
 };
 
 export type Finance = {
-  project: { id: string; name: string; client?: { id: string; name: string } | null; members: { userId: string }[] };
+  project: { id: string; name: string; ownerId?: string; client?: { id: string; name: string } | null; members: { userId: string }[] };
   clients?: { id: string; name: string }[];
   fullAccess: boolean;
   version: number;
@@ -62,8 +61,10 @@ export type Finance = {
     state: string;
     milestone: string;
     totalAmount: string;
-    lines: { id: string; stableKey: string; position: number; description: string; amount: string; icRevisionId: string; icLineId: string; recipientKey: string }[];
-    recipients: { recipientKey: string; recipientType: string; displayName: string; totalAmount: string }[];
+    lines: { id: string; stableKey: string; position: number; description: string; amount: string; icRevisionId: string; icLineId: string; recipientKey: string; sourceSnapshot: unknown; evidenceManifest: { id?: string; name: string; sha256?: string }[] }[];
+    recipients: { recipientKey: string; recipientType: string; displayName: string; bankName?: string | null; accountLast4?: string | null; sourceVersion?: number | null; totalAmount: string }[];
+    discussions: { id: string; lineId: string; authorId: string; body: string; createdAt: string; author: { name: string } }[];
+    diff: import("@/lib/costflow/paymentDiff").PaymentDossierDiff | null;
   }[];
 };
 
@@ -83,14 +84,19 @@ const serverRequestAnchor = () => "";
 export type CostFlowTabId = "overview" | "scope" | "ic" | "approvals" | "expense" | "requests" | "close" | "settings";
 const COSTFLOW_TABS = new Set<CostFlowTabId>(["overview", "scope", "ic", "approvals", "expense", "requests", "close", "settings"]);
 
+function resolveTab(t: string | null | undefined): CostFlowTabId | null {
+  if (!t) return null;
+  if (t === "requests") return "approvals";
+  return COSTFLOW_TABS.has(t as CostFlowTabId) ? (t as CostFlowTabId) : null;
+}
+
 function PersonSelect({ finance, name, label, defaultValue }: { finance: Finance; name: string; label: string; defaultValue?: string }) {
   return <Select name={name} label={label} required defaultValue={defaultValue}><option value="">Chọn người xử lý</option>{finance.users.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</Select>;
 }
 
 export default function CostFlowPanel({ finance, user, projectHeading, initialTab }: { finance: Finance; user: { id: string; role: string }; projectHeading: ReactNode; initialTab?: string }) {
-  const [tab, setTabState] = useState<CostFlowTabId | null>(initialTab && COSTFLOW_TABS.has(initialTab as CostFlowTabId) ? initialTab as CostFlowTabId : null);
+  const [tab, setTabState] = useState<CostFlowTabId | null>(resolveTab(initialTab));
   const anchor = useSyncExternalStore(subscribeRequestAnchor, requestAnchor, serverRequestAnchor);
-  const [savedNotice, setSavedNotice] = useState("");
   const canCreate = finance.fullAccess && ["ADMIN", "ACCOUNT"].includes(user.role);
   const latestQuotation = finance.data.quotations?.at(-1);
   const latestQuotationGross = (() => {
@@ -107,13 +113,21 @@ export default function CostFlowPanel({ finance, user, projectHeading, initialTa
   try { working = workingIcRevision(finance.data, finance.requests); } catch (error) { workingError = error instanceof Error ? error.message : "Cần đối soát revision"; }
 
   const tabs: [CostFlowTabId, string][] = finance.fullAccess
-    ? [["overview", "Tổng quan"], ["scope", "Scope & Báo giá"], ["ic", "Internal Cost"], ["approvals", "Trình duyệt"], ["expense", "Actual Cost"], ["requests", "Hồ sơ & tiền"], ["close", "Quyết toán"], ...(user.role === "ADMIN" ? [["settings", "Phân công"]] as [CostFlowTabId, string][] : [])]
+    ? [
+        ["overview", "Tổng quan"],
+        ["scope", "Scope & Báo giá"],
+        ["ic", "Internal Cost"],
+        ["expense", "Actual Cost"],
+        ["approvals", "Hồ sơ & Trình duyệt"],
+        ["close", "Tiền & Quyết toán"],
+        ...(user.role === "ADMIN" ? [["settings", "Phân công"]] as [CostFlowTabId, string][] : [])
+      ]
     : [["approvals", "Hồ sơ được giao"]];
   const activeTab: CostFlowTabId = anchor ? "approvals" : tab && tabs.some(([id]) => id === tab) ? tab : finance.fullAccess ? "overview" : "approvals";
 
   const setTab = (next: string) => {
-    if (!COSTFLOW_TABS.has(next as CostFlowTabId)) return;
-    const resolved = next as CostFlowTabId;
+    const resolved = resolveTab(next);
+    if (!resolved) return;
     setTabState(resolved);
     const url = new URL(window.location.href);
     url.searchParams.set("tab", resolved);
@@ -130,6 +144,19 @@ export default function CostFlowPanel({ finance, user, projectHeading, initialTa
     url.hash = `request-${requestId}`;
     window.history.pushState(null, "", `${url.pathname}${url.search}${url.hash}`);
     window.dispatchEvent(new HashChangeEvent("hashchange"));
+  };
+
+  const openAdvance = (params: { kind: "ADVANCE" | "VENDOR_PAYMENT"; recipientKey: string; amount: string; title: string }) => {
+    setTabState("approvals");
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", "approvals");
+    url.searchParams.set("kind", params.kind);
+    url.searchParams.set("recipientKey", params.recipientKey);
+    url.searchParams.set("amount", params.amount);
+    if (params.title) url.searchParams.set("title", params.title);
+    url.hash = "";
+    window.history.pushState(null, "", `${url.pathname}${url.search}`);
+    window.dispatchEvent(new Event("popstate"));
   };
 
   const worksheetHref = (revision?: IcRevision) => {
@@ -161,7 +188,14 @@ export default function CostFlowPanel({ finance, user, projectHeading, initialTa
     <section className="tf-costflow-hero">
       <div className="tf-costflow-hero-heading">{projectHeading}<div className="flex flex-wrap items-center gap-2">
         <Link className="tf-button-secondary" href="/workflow">Hồ sơ của tôi</Link>
-        {canCreate && !finance.data.closed && <><Link className="tf-button-secondary tf-button-size-sm" href={worksheetHref(working ?? effective)}><Plus size={15} aria-hidden="true" />Tạo IC</Link><Button size="sm" onClick={() => setTab("requests")}><FilePlus2 size={15} aria-hidden="true" />Lập hồ sơ chi</Button></>}
+        {canCreate && !finance.data.closed && <><Link className="tf-button-secondary tf-button-size-sm" href={worksheetHref(working ?? effective)}><Plus size={15} aria-hidden="true" />Tạo IC</Link><Button size="sm" onClick={() => {
+          setTab("approvals");
+          const url = new URL(window.location.href);
+          url.searchParams.set("tab", "approvals");
+          url.searchParams.set("openCreateRequest", "1");
+          window.history.pushState(null, "", `${url.pathname}${url.search}`);
+          window.dispatchEvent(new Event("popstate"));
+        }}><FilePlus2 size={15} aria-hidden="true" />Lập hồ sơ chi</Button></>}
       </div></div>
       <ModuleTabs label="CostFlow" tabs={tabs.map(([id, label]) => ({ id, label, ...(id === "approvals" ? { count: finance.requests.filter(request => request.state === "SUBMITTED").length } : {}) }))} active={activeTab} onChange={setTab} />
     </section>
@@ -174,7 +208,6 @@ export default function CostFlowPanel({ finance, user, projectHeading, initialTa
       <MetricCard label="Hồ sơ chờ xử lý" value={String(finance.requests.filter(request => request.state === "SUBMITTED").length)} hint="Mở tab Trình duyệt để xử lý" icon={FileText} />
       <MetricCard label="Chứng từ còn thiếu" value={String(missingEvidence)} hint="AC thiếu hóa đơn hoặc bằng chứng chi" icon={Paperclip} />
     </div>}
-    {savedNotice && <Alert tone="success" title={savedNotice} />}
 
     {activeTab === "overview" && <div className="tf-workspace-grid">
       <Panel><div className="tf-section-heading"><div><h2>{finance.data.revisions.length ? "Hồ sơ gần đây" : "Bắt đầu ngân sách dự án"}</h2><p>Theo dõi dự toán, hồ sơ chi và tiền thực tế trong cùng project.</p></div><FileText size={20} className="text-[var(--text-secondary)]" aria-hidden="true" /></div>
@@ -185,10 +218,9 @@ export default function CostFlowPanel({ finance, user, projectHeading, initialTa
 
     {activeTab === "scope" && <QuotationPanel userId={user.id} finance={finance} canCreate={canCreate && !finance.data.closed} />}
     {activeTab === "settings" && <Panel><h2 className="mb-4 font-semibold">Phân công tài chính</h2><ActionForm finance={finance} command="CONFIGURE" label="Lưu phân công"><PersonSelect finance={finance} label="Kế toán" name="accountantId" defaultValue={finance.data.config.accountantId} /><PersonSelect finance={finance} label="CEO" name="ceoId" defaultValue={finance.data.config.ceoId} /><PersonSelect finance={finance} label="Quản lý phụ trách project (đóng/mở tài chính)" name="managerId" defaultValue={finance.data.config.managerId} /><p className="tf-ui-help">Bước Quản lý khi trình IC/hồ sơ chi lấy theo quản lý trực tiếp của người lập.</p></ActionForm></Panel>}
-    {activeTab === "ic" && <InternalCostPanel finance={finance} user={user} canCreate={canCreate && !finance.data.closed} working={working} workingError={workingError} onOpenApproval={openApproval} />}
+    {activeTab === "ic" && <InternalCostPanel finance={finance} user={user} canCreate={canCreate && !finance.data.closed} working={working} workingError={workingError} onOpenApproval={openApproval} onOpenAdvance={openAdvance} />}
+    {activeTab === "expense" && <ActualCostPanel finance={finance} user={user} canCreate={canCreate} onSelectTab={setTab} />}
     {activeTab === "approvals" && <ApprovalRequestsPanel finance={finance} user={user} canCreate={canCreate} />}
-    {activeTab === "expense" && <ActualCostPanel finance={finance} user={user} canCreate={canCreate} />}
-    {activeTab === "requests" && <PaymentCashPanel finance={finance} user={user} canCreate={canCreate} onSelectTab={setTab} setSavedNotice={setSavedNotice} />}
     {activeTab === "close" && <SettlementPanel finance={finance} user={user} canCreate={canCreate} />}
   </div>;
 }

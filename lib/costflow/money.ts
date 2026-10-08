@@ -106,3 +106,52 @@ export function moneyInWords(value: string) {
   const text = `${negative ? "âm " : ""}${parts.join(" ")} đồng`;
   return text[0].toUpperCase() + text.slice(1);
 }
+
+const PERCENT_FORMATTER = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 });
+
+export type MarginResult = {
+  marginDisplay: string;
+  marginNet: string;
+  percentDisplay: string;
+  percentNum: number;
+  hasData: boolean;
+  isPositive: boolean;
+};
+
+export function calculateMargin(
+  sellCost: { net?: string; rawNet?: string } | null | undefined,
+  buyCost: { net?: string; rawNet?: string } | null | undefined
+): MarginResult | null {
+  if (!sellCost || !buyCost || !sellCost.rawNet || !buyCost.rawNet) {
+    return null;
+  }
+  try {
+    const sNet = exact(sellCost.rawNet);
+    const bNet = exact(buyCost.rawNet);
+    const diff = subtract(sNet, bNet);
+    const isPositive = diff.numerator >= ZERO;
+    const marginNet = round(diff);
+    const marginDisplay = displayMoney(source(diff));
+    if (sNet.numerator === ZERO) {
+      return {
+        marginDisplay,
+        marginNet,
+        percentDisplay: "0%",
+        percentNum: 0,
+        hasData: true,
+        isPositive,
+      };
+    }
+    const pctRatio = Number(round(multiply(divide(diff, sNet), decimal("10000")))) / 100;
+    return {
+      marginDisplay,
+      marginNet,
+      percentDisplay: (isPositive ? "+" : "") + PERCENT_FORMATTER.format(pctRatio) + "%",
+      percentNum: pctRatio,
+      hasData: true,
+      isPositive,
+    };
+  } catch {
+    return null;
+  }
+}

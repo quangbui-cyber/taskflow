@@ -120,6 +120,12 @@
 
 /* Quotation parameter settings: proposals stay local until explicit apply. */
 .tf-ui-dialog:has(.tf-quotation-settings) { width: min(920px, calc(100% - 32px)); }
+/* CostFlow: Wide dialog for parallel IC & Quotation line editor */
+.tf-ui-dialog:has(.tf-edit-ic-line-modal),
+.tf-ui-dialog.tf-dialog-wide {
+  width: min(1120px, calc(100vw - 32px));
+  max-width: 1120px;
+}
 .tf-quotation-settings { display: grid; gap: 20px; }
 .tf-quotation-settings > section { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); }
 .tf-quotation-settings h3, .tf-quotation-impact h3 { font-size: 14px; font-weight: 650; }

@@ -11,6 +11,8 @@ import {
   FileText,
   CreditCard,
   Coins,
+  AlertCircle,
+  ShieldAlert,
 } from "lucide-react";
 import type { Finance } from "@/components/CostFlowPanel";
 import { Button } from "@/components/ui/Button";
@@ -18,6 +20,8 @@ import { Input, Select, Textarea } from "@/components/ui/Field";
 import { Badge, EmptyState, Panel, Table } from "@/components/ui/Presentation";
 import ActionForm from "@/components/CostFlowActionForm";
 import { displayMoney } from "@/lib/costflow/money";
+import { isExpenseApproved } from "@/lib/costflow/reconciliation";
+import type { RequestPayload } from "@/lib/costflow/types";
 
 type Props = {
   finance: Finance;
@@ -34,10 +38,53 @@ export default function PaymentCashPanel({
   onSelectTab,
   setSavedNotice
 }: Props) {
-  const [activeSubTab, setActiveSubTab] = useState<"create" | "cash" | "beneficiary">("create");
-  const [kind, setKind] = useState("ADVANCE");
+  const [activeSubTab, setActiveSubTab] = useState<"create" | "cash" | "beneficiary">(() => {
+    if (typeof window !== "undefined") {
+      const sp = new URLSearchParams(window.location.search);
+      const urlKind = sp.get("kind");
+      if (urlKind && ["ADVANCE", "VENDOR_PAYMENT", "REIMBURSEMENT"].includes(urlKind)) return "create";
+    }
+    return "create";
+  });
+  const [kind, setKind] = useState(() => {
+    if (typeof window !== "undefined") {
+      const sp = new URLSearchParams(window.location.search);
+      const urlKind = sp.get("kind");
+      if (urlKind && ["ADVANCE", "VENDOR_PAYMENT", "REIMBURSEMENT"].includes(urlKind)) return urlKind;
+    }
+    return "ADVANCE";
+  });
   const [requestSource, setRequestSource] = useState("");
-  const [amountInput, setAmountInput] = useState("");
+  const [amountInput, setAmountInput] = useState(() => {
+    if (typeof window !== "undefined") {
+      return new URLSearchParams(window.location.search).get("amount") || "";
+    }
+    return "";
+  });
+  const [titleInput, setTitleInput] = useState(() => {
+    if (typeof window !== "undefined") {
+      return new URLSearchParams(window.location.search).get("title") || "";
+    }
+    return "";
+  });
+  const [selectedRecipientKey, setSelectedRecipientKey] = useState(() => {
+    if (typeof window !== "undefined") {
+      return new URLSearchParams(window.location.search).get("recipientKey") || "";
+    }
+    return "";
+  });
+  const [selectedExpenseIds, setSelectedExpenseIds] = useState<string[]>(() => {
+    if (typeof window !== "undefined") {
+      const raw = new URLSearchParams(window.location.search).get("expenseIds");
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) return parsed;
+        } catch {}
+      }
+    }
+    return [];
+  });
 
   const usersMap = useMemo(() => new Map(finance.users.map(u => [u.id, u.name])), [finance.users]);
 
@@ -278,15 +325,30 @@ export default function PaymentCashPanel({
                   <label className="tf-label mb-2 block">Loại hồ sơ đề nghị</label>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     {[
-                      { id: "ADVANCE", label: "Đề nghị tạm ứng", desc: "Tạm ứng cho nhân sự phụ trách" },
-                      { id: "VENDOR_PAYMENT", label: "Thanh toán NCC", desc: "Chi trả hóa đơn nhà cung cấp" },
-                      { id: "REIMBURSEMENT", label: "Đề nghị Hoàn Tạm Ứng", desc: "Đối soát và quyết toán ứng" }
+                      {
+                        id: "ADVANCE",
+                        label: "Đề nghị tạm ứng (ĐNTU)",
+                        desc: "Tạm ứng quỹ công việc cho nhân sự phụ trách"
+                      },
+                      {
+                        id: "VENDOR_PAYMENT",
+                        label: "Đề nghị thanh toán (ĐNTT)",
+                        desc: "Chi trả hóa đơn nhà cung cấp / đối tác (VENDOR_DIRECT)"
+                      },
+                      {
+                        id: "REIMBURSEMENT",
+                        label: "Đề nghị Hoàn tạm ứng (ĐNHTU)",
+                        desc: "Quyết toán tạm ứng & thu hồi tiền túi nhân sự tự ứng (OUT_OF_POCKET)"
+                      }
                     ].map(opt => (
                       <button
                         key={opt.id}
                         type="button"
                         disabled={!!requestSource}
-                        onClick={() => setKind(opt.id)}
+                        onClick={() => {
+                          setKind(opt.id);
+                          setSelectedExpenseIds([]);
+                        }}
                         className={`p-3 rounded-lg border text-left transition-all ${
                           kind === opt.id
                             ? "border-[var(--primary)] bg-[var(--primary-soft)] ring-1 ring-[var(--primary)]"
@@ -301,11 +363,26 @@ export default function PaymentCashPanel({
                   <input type="hidden" name="kind" value={kind} />
                 </div>
 
+                {/* Banner giải thích quy tắc hiệu lực giải ngân */}
+                <div className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] space-y-1.5 text-xs text-[var(--text-secondary)]">
+                  <div className="flex items-center gap-2 text-[var(--foreground)] font-semibold">
+                    <AlertCircle size={15} className="text-amber-500" aria-hidden="true" />
+                    <span>Quy tắc hiệu lực giải ngân thanh toán:</span>
+                  </div>
+                  <p>
+                    • Cả <strong>Phiếu Hoàn tạm ứng (ĐNHTU)</strong> và <strong>Phiếu Đề nghị thanh toán (ĐNTT)</strong> đều <em>có thể tạo trước</em> trong quá trình thực hiện dự án.
+                  </p>
+                  <p>
+                    • Phiếu <em>chỉ có hiệu lực giải ngân / chi tiền thực tế</em> khi các khoản chi phí AC tương ứng <strong>được phê duyệt</strong> (đủ hóa đơn + chứng từ thanh toán hoặc được Kế toán / Quản lý duyệt ngoại lệ).
+                  </p>
+                </div>
+
                 {/* 3. Tiêu đề hồ sơ */}
                 <Input
                   name="title"
                   label="Tên hồ sơ đề nghị"
-                  defaultValue={originalRequest?.title}
+                  value={titleInput || originalRequest?.title || ""}
+                  onChange={e => setTitleInput(e.target.value)}
                   placeholder="Ví dụ: Tạm ứng tiền thi công booth tại Hồ Tràm"
                   required
                 />
@@ -329,7 +406,8 @@ export default function PaymentCashPanel({
                   <Select
                     name="recipientKey"
                     label="Người nhận tiền / Thụ hưởng"
-                    defaultValue={originalRequest?.payload.recipientKey ?? ""}
+                    value={selectedRecipientKey || originalRequest?.payload.recipientKey || ""}
+                    onChange={e => setSelectedRecipientKey(e.target.value)}
                     required
                   >
                     <option value="">Chọn người nhận</option>
@@ -338,6 +416,93 @@ export default function PaymentCashPanel({
                     ))}
                   </Select>
                 </div>
+
+                {/* Gắn kèm khoản chi AC đối với VENDOR_PAYMENT */}
+                {kind === "VENDOR_PAYMENT" && selectedRecipientKey && (
+                  <div className="p-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] space-y-2">
+                    <span className="text-xs font-semibold text-[var(--foreground)] block">
+                      Khoản chi AC liên quan (Tùy chọn gắn kèm):
+                    </span>
+                    {finance.data.expenses.filter(e => e.recipientKey === selectedRecipientKey && e.fundingSource === "VENDOR_DIRECT").length > 0 ? (
+                      <div className="space-y-1.5">
+                        {finance.data.expenses
+                          .filter(e => e.recipientKey === selectedRecipientKey && e.fundingSource === "VENDOR_DIRECT")
+                          .map(exp => {
+                            const isChecked = selectedExpenseIds.includes(exp.id);
+                            const isApproved = isExpenseApproved(exp);
+                            return (
+                              <label key={exp.id} className="flex items-center justify-between p-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-xs cursor-pointer hover:border-[var(--text-secondary)]">
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={e => {
+                                      const next = e.target.checked
+                                        ? [...selectedExpenseIds, exp.id]
+                                        : selectedExpenseIds.filter(id => id !== exp.id);
+                                      setSelectedExpenseIds(next);
+                                      if (next.length > 0) {
+                                        const sumGross = finance.data.expenses
+                                          .filter(item => next.includes(item.id))
+                                          .reduce((acc, item) => acc + (parseFloat(item.cost.gross) || 0), 0);
+                                        setAmountInput(String(Math.round(sumGross)));
+                                      }
+                                    }}
+                                  />
+                                  <div>
+                                    <span className="font-semibold text-[var(--foreground)] block">{exp.description}</span>
+                                    <span className="text-[11px] text-[var(--text-secondary)]">
+                                      Gross: {displayMoney(exp.cost.gross)} · {isApproved ? "Đã duyệt AC" : "Chưa duyệt AC"}
+                                    </span>
+                                  </div>
+                                </div>
+                                <Badge tone={isApproved ? "success" : "warning"}>
+                                  {isApproved ? "AC đã duyệt" : "Chờ duyệt AC"}
+                                </Badge>
+                              </label>
+                            );
+                          })}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-[var(--text-secondary)]">Chưa có khoản chi VENDOR_DIRECT nào được báo cho đối tác này.</p>
+                    )}
+                    <input type="hidden" name="expenseIds" value={JSON.stringify(selectedExpenseIds)} />
+                  </div>
+                )}
+
+                {/* Tóm tắt tình trạng AC đối với REIMBURSEMENT */}
+                {kind === "REIMBURSEMENT" && selectedRecipientKey && (
+                  <div className="p-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-[var(--foreground)]">
+                        Các khoản chi phí AC của nhân sự này:
+                      </span>
+                      {(() => {
+                        const mExpenses = finance.data.expenses.filter(e => e.recipientKey === selectedRecipientKey);
+                        const allApproved = mExpenses.length > 0 && mExpenses.every(isExpenseApproved);
+                        return (
+                          <Badge tone={allApproved ? "success" : "warning"}>
+                            {allApproved ? "Đủ điều kiện thanh toán (AC đã duyệt)" : "Tạo trước (Chờ duyệt AC để giải ngân)"}
+                          </Badge>
+                        );
+                      })()}
+                    </div>
+                    {finance.data.expenses.filter(e => e.recipientKey === selectedRecipientKey).length > 0 ? (
+                      <div className="space-y-1 text-xs">
+                        {finance.data.expenses.filter(e => e.recipientKey === selectedRecipientKey).map(exp => (
+                          <div key={exp.id} className="flex items-center justify-between p-1.5 rounded bg-[var(--surface)] text-[11px]">
+                            <span>{exp.description} ({displayMoney(exp.cost.gross)})</span>
+                            <span className={isExpenseApproved(exp) ? "text-[var(--success)] font-medium" : "text-amber-600 font-medium"}>
+                              {isExpenseApproved(exp) ? "✓ Đã duyệt AC" : "⏳ Chờ duyệt AC"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-[var(--text-secondary)]">Chưa ghi nhận khoản chi AC nào của nhân sự này.</p>
+                    )}
+                  </div>
+                )}
 
                 {/* 5. Số tiền đề nghị */}
                 {kind !== "REIMBURSEMENT" && (
@@ -397,25 +562,61 @@ export default function PaymentCashPanel({
               </div>
 
               <div className="divide-y divide-[var(--border)]">
-                {cashStats.pendingDisbursements.map(req => (
-                  <div key={req.id} className="py-3 flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-[var(--foreground)]">{req.title}</p>
-                      <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                        Người đề nghị: {usersMap.get(req.creatorId) ?? "Người lập"} ·
-                        Số tiền: <strong className="text-[var(--success)]">{req.payload.amount ? displayMoney(req.payload.amount) : "Theo đối soát"}</strong>
-                      </p>
-                    </div>
+                {cashStats.pendingDisbursements.map(req => {
+                  const reqPayload = req.payload as RequestPayload;
+                  const reqExpenseIds = reqPayload?.expenseIds;
+                  const targetExpenses = finance.data.expenses.filter(e =>
+                    reqExpenseIds?.length
+                      ? reqExpenseIds.includes(e.id)
+                      : (req.kind === "REIMBURSEMENT" && e.recipientKey === reqPayload?.recipientKey)
+                  );
+                  const isBlockedByPendingAc = targetExpenses.length > 0 && targetExpenses.some(e => !isExpenseApproved(e));
 
-                    <Link
-                      href={`/projects/${finance.project.id}/costflow?tab=approvals#request-${req.id}`}
-                      className="tf-button-primary text-xs"
-                    >
-                      Xác nhận chi tiền
-                      <ArrowUpRight size={13} className="ml-1" aria-hidden="true" />
-                    </Link>
-                  </div>
-                ))}
+                  return (
+                    <div key={req.id} className="py-3 flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-[var(--foreground)]">{req.title}</p>
+                          <Badge tone={isBlockedByPendingAc ? "warning" : "success"}>
+                            {isBlockedByPendingAc ? "Chờ duyệt AC (Chưa thể giải ngân)" : "Đã duyệt AC (Đủ điều kiện chi)"}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                          Người đề nghị: {usersMap.get(req.creatorId) ?? "Người lập"} ·
+                          Số tiền: <strong className="text-[var(--success)]">{req.payload.amount ? displayMoney(req.payload.amount) : "Theo đối soát"}</strong>
+                          {isBlockedByPendingAc && (
+                            <span className="text-amber-700 dark:text-amber-400 block mt-1 font-medium">
+                              ⚠ Cần duyệt AC đầy đủ (hoặc duyệt ngoại lệ) cho các khoản chi trước khi Kế toán / Thủ quỹ chi tiền.
+                            </span>
+                          )}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {isBlockedByPendingAc ? (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled
+                            className="text-xs opacity-60 cursor-not-allowed"
+                            title="Phiếu chưa có hiệu lực chi vì AC tương ứng chưa được phê duyệt đầy đủ"
+                          >
+                            <ShieldAlert size={13} className="mr-1 text-amber-600" />
+                            Chưa có hiệu lực chi
+                          </Button>
+                        ) : (
+                          <Link
+                            href={`/projects/${finance.project.id}/costflow?tab=approvals#request-${req.id}`}
+                            className="tf-button-primary text-xs"
+                          >
+                            Xác nhận chi tiền
+                            <ArrowUpRight size={13} className="ml-1" aria-hidden="true" />
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </Panel>
           )}

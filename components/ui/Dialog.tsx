@@ -3,9 +3,9 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { Button } from "./Button";
 
-export function Dialog({ open, onClose, title, description, children, footer }:
+export function Dialog({ open, onClose, title, description, children, footer, className }:
   { open: boolean; onClose: () => void; title: string; description?: string;
-    children: ReactNode; footer?: ReactNode }) {
+    children: ReactNode; footer?: ReactNode; className?: string }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const descriptionId = useId();
@@ -17,7 +17,7 @@ export function Dialog({ open, onClose, title, description, children, footer }:
     return () => { if (dialog.open) dialog.close(); };
   }, [open]);
 
-  return <dialog ref={dialogRef} className="tf-ui-dialog" aria-labelledby={titleId}
+  return <dialog ref={dialogRef} className={`tf-ui-dialog ${className ?? ""}`.trim()} aria-labelledby={titleId}
     aria-describedby={description ? descriptionId : undefined}
     onKeyDown={(event) => {
       if (event.key !== "Tab") return;

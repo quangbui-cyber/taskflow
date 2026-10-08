@@ -19,13 +19,16 @@ const newLine = (): EditableLine => ({
   recipientKey: "",
 });
 
-export function PaymentRequestEditor({ finance, onCreated }:
-  { finance: Finance; onCreated: () => void }) {
+type SavedDossier = NonNullable<Finance["paymentDossiers"]>[number];
+
+export function PaymentRequestEditor({ finance, onCreated, draft }:
+  { finance: Finance; onCreated: () => void; draft?: SavedDossier }) {
   const revision = finance.data.revisions.find(item => item.effective);
-  const [title, setTitle] = useState("");
-  const [milestone, setMilestone] = useState("");
-  const [explanation, setExplanation] = useState("");
-  const [lines, setLines] = useState<EditableLine[]>(() => [newLine()]);
+  const draftRequest = draft ? finance.requests.find(request => request.id === draft.requestId) : undefined;
+  const [title, setTitle] = useState(draft?.title ?? "");
+  const [milestone, setMilestone] = useState(draft?.milestone ?? "");
+  const [explanation, setExplanation] = useState(typeof draftRequest?.payload.explanation === "string" ? draftRequest.payload.explanation : "");
+  const [lines, setLines] = useState<EditableLine[]>(() => draft?.lines.length ? draft.lines.map(line => ({ stableKey: line.stableKey, description: line.description, amount: line.amount, lineId: line.icLineId, recipientKey: line.recipientKey })) : [newLine()]);
   const recipients = useMemo(() => [
     ...finance.project.members.map(member => ({ key: `USER:${member.userId}`, label: `${finance.users.find(user => user.id === member.userId)?.name ?? "Nhân viên"} (nội bộ)` })),
     ...finance.data.beneficiaries.map(beneficiary => ({ key: `VENDOR:${beneficiary.id}`, label: `${beneficiary.name} (NCC)` })),
@@ -57,10 +60,10 @@ export function PaymentRequestEditor({ finance, onCreated }:
   if (!revision) return <Alert tone="warning" title="Chưa có IC hiệu lực">Đề nghị tạm ứng đa khoản chỉ được lập từ một IC đang có hiệu lực ngân sách.</Alert>;
   return <Panel className="space-y-5">
     <div>
-      <h3 className="font-bold text-base text-[var(--foreground)]">Đề nghị tạm ứng đa khoản</h3>
-      <p className="tf-ui-help">Một hồ sơ có thể gồm nhiều NCC/nhân viên. Từng khoản giữ nguồn IC riêng; tổng hiển thị chỉ là xem trước và được server tính lại.</p>
+      <h3 className="font-bold text-base text-[var(--foreground)]">{draft ? "Sửa và gửi lại ĐNTU" : "Đề nghị tạm ứng đa khoản"}</h3>
+      <p className="tf-ui-help">Một hồ sơ có thể gồm nhiều NCC/nhân viên. Từng khoản giữ nguồn IC riêng; tổng hiển thị chỉ là xem trước và được server tính lại. Bản đã gửi trước đó không bị sửa.</p>
     </div>
-    <ActionForm finance={finance} command="CREATE_PAYMENT_DOSSIER" label="Gửi duyệt ĐNTU đa khoản" onSuccess={onCreated}>
+    <ActionForm finance={finance} command={draft ? "RESUBMIT_PAYMENT_DOSSIER" : "CREATE_PAYMENT_DOSSIER"} requestId={draft?.requestId} label={draft ? "Gửi lại toàn bộ ĐNTU" : "Gửi duyệt ĐNTU đa khoản"} onSuccess={onCreated}>
       <input type="hidden" name="kind" value="ADVANCE" />
       <input type="hidden" name="lines" value={JSON.stringify(submittedLines)} />
       <input type="hidden" name="clientTotal" value={clientTotal} />

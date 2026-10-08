@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   FileText,
   Clock,
@@ -17,22 +17,26 @@ import {
 } from "lucide-react";
 import type { Finance, Request } from "@/components/CostFlowPanel";
 import { Button } from "@/components/ui/Button";
-import { Input, Select, Textarea } from "@/components/ui/Field";
+import { Select, Textarea } from "@/components/ui/Field";
 import { Alert, Badge, EmptyState, Panel } from "@/components/ui/Presentation";
 import { Dialog } from "@/components/ui/Dialog";
 import ActionForm from "@/components/CostFlowActionForm";
 import ApprovalTimeline from "@/components/ApprovalTimeline";
 import IcRequestEvidence from "@/components/IcRequestEvidence";
-import { PaymentRequestEditor } from "@/components/costflow/payments/PaymentRequestEditor";
-import { PaymentRequestPreview } from "@/components/costflow/payments/PaymentRequestPreview";
+import ExpenseRequestModal from "@/components/ExpenseRequestModal";
 import { icStatusProjection } from "@/lib/costflow/icEffectiveness";
 import { displayMoney } from "@/lib/costflow/money";
+import { isExpenseApproved } from "@/lib/costflow/reconciliation";
+import { FilePlus2, Building2, Search, X } from "lucide-react";
+import { PaymentRequestEditor } from "@/components/costflow/payments/PaymentRequestEditor";
+import { PaymentRequestPreview } from "@/components/costflow/payments/PaymentRequestPreview";
+import { PaymentRequestReview } from "@/components/costflow/payments/PaymentRequestReview";
 
 const KIND_INFO: Record<string, { label: string; tone: "info" | "warning" | "success" | "neutral" }> = {
   IC: { label: "Dự toán IC", tone: "info" },
-  ADVANCE: { label: "Đề nghị tạm ứng", tone: "info" },
-  VENDOR_PAYMENT: { label: "Thanh toán NCC", tone: "warning" },
-  REIMBURSEMENT: { label: "Hoàn Tạm Ứng", tone: "success" },
+  ADVANCE: { label: "Đề nghị tạm ứng (ĐNTU)", tone: "info" },
+  VENDOR_PAYMENT: { label: "Đề nghị thanh toán (ĐNTT)", tone: "warning" },
+  REIMBURSEMENT: { label: "Hoàn tạm ứng (ĐNHTU)", tone: "success" },
   AC_REVISION: { label: "Sửa chi phí AC", tone: "warning" },
   CLOSE: { label: "Đóng tài chính", tone: "neutral" },
   REOPEN: { label: "Mở lại tài chính", tone: "neutral" },
@@ -78,6 +82,51 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
   const [stateFilter, setStateFilter] = useState("ALL");
   const [assigneeFilter, setAssigneeFilter] = useState("ALL");
   const [scopeTab, setScopeTab] = useState<"ALL" | "MY_ACTION" | "SUBMITTED" | "APPROVED" | "RETURNED_REJECTED">("ALL");
+
+  // Modal states for creating expense requests & managing beneficiaries
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [modalInitialKind, setModalInitialKind] = useState("ADVANCE");
+  const [modalInitialRecipientKey, setModalInitialRecipientKey] = useState("");
+  const [modalInitialAmount, setModalInitialAmount] = useState("");
+  const [modalInitialTitle, setModalInitialTitle] = useState("");
+  const [modalInitialExpenseIds, setModalInitialExpenseIds] = useState<string[]>([]);
+  const [modalInitialTab, setModalInitialTab] = useState<"create" | "beneficiary">("create");
+
+  /* eslint-disable react-hooks/set-state-in-effect -- hydrate modal intent from the external URL once */
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const sp = new URLSearchParams(window.location.search);
+      const urlKind = sp.get("kind");
+      const urlRecipientKey = sp.get("recipientKey");
+      const urlAmount = sp.get("amount");
+      const urlTitle = sp.get("title");
+      const urlExpenseIds = sp.get("expenseIds");
+      const urlOpen = sp.get("openCreateRequest");
+      const urlBeneficiary = sp.get("beneficiary");
+
+      if (urlKind && ["ADVANCE", "VENDOR_PAYMENT", "REIMBURSEMENT"].includes(urlKind)) {
+        setModalInitialKind(urlKind);
+        if (urlRecipientKey) setModalInitialRecipientKey(urlRecipientKey);
+        if (urlAmount) setModalInitialAmount(urlAmount);
+        if (urlTitle) setModalInitialTitle(urlTitle);
+        if (urlExpenseIds) {
+          try {
+            const parsed = JSON.parse(urlExpenseIds);
+            if (Array.isArray(parsed)) setModalInitialExpenseIds(parsed);
+          } catch {}
+        }
+        setModalInitialTab("create");
+        setCreateModalOpen(true);
+      } else if (urlBeneficiary === "1") {
+        setModalInitialTab("beneficiary");
+        setCreateModalOpen(true);
+      } else if (urlOpen === "1") {
+        setModalInitialTab("create");
+        setCreateModalOpen(true);
+      }
+    }
+  }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const usersMap = useMemo(() => new Map(finance.users.map(u => [u.id, u.name])), [finance.users]);
 
@@ -142,21 +191,53 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-bold tracking-tight text-[var(--foreground)]">
-              Trình duyệt CostFlow
+              Hồ sơ & Trình duyệt
             </h2>
             <Badge tone="neutral">{stats.total} hồ sơ</Badge>
           </div>
           <p className="text-sm text-[var(--text-secondary)] mt-1">
-            Theo dõi tiến trình phê duyệt 3 cấp (Quản lý → Kế toán → CEO) cho dự toán IC, chi phí và giải ngân.
+            Quản lý hồ sơ đề nghị chi (ĐNTU, ĐNTT, ĐNHTU) và theo dõi tiến trình phê duyệt 3 cấp (Quản lý → Kế toán → CEO).
           </p>
         </div>
 
-        {canCreate && !finance.data.closed && (
+        <div className="flex flex-wrap items-center gap-2">
+          {canCreate && !finance.data.closed && (
+            <>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setModalInitialTab("beneficiary");
+                  setCreateModalOpen(true);
+                }}
+              >
+                <Building2 size={14} className="mr-1 text-[var(--primary)]" aria-hidden="true" />
+                Danh bạ NCC ({finance.data.beneficiaries.length})
+              </Button>
+
+              <Button
+                size="sm"
+                onClick={() => {
+                  setModalInitialKind("ADVANCE");
+                  setModalInitialRecipientKey("");
+                  setModalInitialAmount("");
+                  setModalInitialTitle("");
+                  setModalInitialExpenseIds([]);
+                  setModalInitialTab("create");
+                  setCreateModalOpen(true);
+                }}
+              >
+                <FilePlus2 size={14} className="mr-1" aria-hidden="true" />
+                Lập hồ sơ chi
+              </Button>
+            </>
+          )}
+
           <Link href="/workflow" className="tf-button-secondary text-xs">
             Hồ sơ cá nhân tại Workflow
             <ArrowRight size={13} className="ml-1" aria-hidden="true" />
           </Link>
-        )}
+        </div>
       </div>
 
       {canCreate && !finance.data.closed && <details className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
@@ -166,7 +247,9 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
       {!!finance.paymentDossiers?.length && <Panel className="space-y-4">
         <div><h3 className="font-semibold">ĐNTU đa khoản đã lưu</h3><p className="tf-ui-help">Nạp lại từ dòng và snapshot chuẩn hóa trên server.</p></div>
         {finance.paymentDossiers.map(dossier => <PaymentRequestPreview key={dossier.requestId} serverProjection milestone={dossier.milestone} lines={dossier.lines.map(line => ({
-          stableKey: line.stableKey, description: line.description, amount: line.amount,
+          stableKey: line.stableKey,
+          description: line.description,
+          amount: line.amount,
           sourceLabel: finance.data.revisions.find(revision => revision.id === line.icRevisionId)?.lines.find(source => source.id === line.icLineId)?.description ?? `${line.icRevisionId} / ${line.icLineId}`,
           recipientKey: line.recipientKey,
           recipientLabel: dossier.recipients.find(recipient => recipient.recipientKey === line.recipientKey)?.displayName ?? line.recipientKey,
@@ -328,13 +411,31 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
           </div>
 
           {/* Search Box */}
-          <div className="w-full sm:w-64">
-            <Input
-              label="Tìm kiếm hồ sơ"
+          <div className="relative w-full sm:w-72">
+            <Search
+              size={15}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] pointer-events-none"
+              aria-hidden="true"
+            />
+            <input
+              type="text"
               placeholder="Nhập tên, người lập..."
               value={search}
               onChange={e => setSearch(e.target.value)}
+              className="tf-field text-xs h-9 w-full"
+              style={{ paddingLeft: "36px", paddingRight: "32px" }}
+              aria-label="Tìm kiếm hồ sơ"
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-[var(--text-secondary)] hover:text-[var(--foreground)]"
+                aria-label="Xóa tìm kiếm"
+              >
+                <X size={13} />
+              </button>
+            )}
           </div>
         </div>
 
@@ -388,10 +489,43 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
           description={
             finance.requests.length > 0
               ? "Thử thay đổi từ khóa tìm kiếm hoặc bỏ bớt các bộ lọc đang chọn."
-              : "Dự án chưa có hồ sơ nào được tạo. Bạn có thể tạo dự toán IC từ tab Internal Cost hoặc lập hồ sơ chi tại tab Hồ sơ & tiền."
+              : "Dự án chưa có hồ sơ nào được tạo. Bạn có thể tạo dự toán IC từ tab Internal Cost hoặc bấm 'Lập hồ sơ chi' để tạo đề nghị chi mới."
           }
         />
       )}
+
+      {/* MODAL TẠO HỒ SƠ CHI & QUẢN LÝ NCC */}
+      <ExpenseRequestModal
+        open={createModalOpen}
+        onClose={() => {
+          setCreateModalOpen(false);
+          // Dọn dẹp query params trên URL nếu có
+          if (typeof window !== "undefined") {
+            const url = new URL(window.location.href);
+            url.searchParams.delete("kind");
+            url.searchParams.delete("recipientKey");
+            url.searchParams.delete("amount");
+            url.searchParams.delete("title");
+            url.searchParams.delete("expenseIds");
+            url.searchParams.delete("openCreateRequest");
+            url.searchParams.delete("beneficiary");
+            window.history.replaceState(null, "", url.toString());
+          }
+        }}
+        finance={finance}
+        user={user}
+        canCreate={canCreate}
+        initialKind={modalInitialKind}
+        initialRecipientKey={modalInitialRecipientKey}
+        initialAmount={modalInitialAmount}
+        initialTitle={modalInitialTitle}
+        initialExpenseIds={modalInitialExpenseIds}
+        initialTab={modalInitialTab}
+        onSuccess={() => {
+          // Cuộn lên đầu để xem hồ sơ vừa tạo
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }}
+      />
     </div>
   );
 }
@@ -427,6 +561,7 @@ function EnhancedRequestCard({
   const revision = request.kind === "IC"
     ? finance.data.revisions.find(item => item.requestId === request.id)
     : undefined;
+  const paymentDossier = finance.paymentDossiers?.find(item => item.requestId === request.id);
 
   const status = revision
     ? icStatusProjection(revision, request, finance.data.revisions)
@@ -545,6 +680,8 @@ function EnhancedRequestCard({
           Chi tiết nội dung hồ sơ
         </h4>
 
+        {paymentDossier && <PaymentRequestReview finance={finance} request={request} dossier={paymentDossier} />}
+
         {/* Số tiền đề nghị (nếu có) */}
         {request.payload.amount && (
           <div className="p-3 rounded-lg bg-[var(--surface-soft)] border border-[var(--border)] flex items-center justify-between">
@@ -567,6 +704,35 @@ function EnhancedRequestCard({
             </p>
           </div>
         )}
+
+        {/* Trạng thái hiệu lực giải ngân thanh toán */}
+        {["REIMBURSEMENT", "VENDOR_PAYMENT"].includes(request.kind) && (() => {
+          const reqExpenseIds = request.payload.expenseIds;
+          const targetExpenses = finance.data.expenses.filter(e =>
+            reqExpenseIds?.length
+              ? reqExpenseIds.includes(e.id)
+              : (request.kind === "REIMBURSEMENT" && e.recipientKey === request.payload.recipientKey)
+          );
+          const hasPendingAc = targetExpenses.length > 0 && targetExpenses.some(e => !isExpenseApproved(e));
+
+          return (
+            <div className={`p-3 rounded-lg border text-xs space-y-1 ${hasPendingAc ? "border-[var(--warning)] bg-[var(--warning-soft)]" : "border-[var(--success)] bg-[var(--success-soft)]"}`}>
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-[var(--foreground)]">
+                  Hiệu lực giải ngân / thanh toán:
+                </span>
+                <Badge tone={hasPendingAc ? "warning" : "success"}>
+                  {hasPendingAc ? "Chờ duyệt AC (Chưa thể giải ngân)" : "Đã duyệt AC (Đủ điều kiện chi tiền)"}
+                </Badge>
+              </div>
+              <p className="text-[11px] text-[var(--text-secondary)]">
+                {hasPendingAc
+                  ? "Phiếu có thể tạo và duyệt trước, nhưng chỉ có hiệu lực thanh toán thực tế khi các khoản AC tương ứng được bổ sung đủ chứng từ hoặc được duyệt ngoại lệ."
+                  : "Toàn bộ khoản chi AC liên quan đã được duyệt hợp lệ. Phiếu có hiệu lực giải ngân sau khi hoàn tất các cấp duyệt."}
+              </p>
+            </div>
+          );
+        })()}
 
         {/* Lý do / Giải trình */}
         {request.payload.explanation && (
@@ -792,7 +958,11 @@ function EnhancedRequestCard({
       )}
 
       {/* 2. NGƯỜI LẬP GỬI DUYỆT (SUBMIT) */}
-      {request.state === "DRAFT" && isCreator && (
+      {request.state === "DRAFT" && isCreator && paymentDossier && (
+        <PaymentRequestEditor finance={finance} draft={paymentDossier} onCreated={() => undefined} />
+      )}
+
+      {request.state === "DRAFT" && isCreator && !paymentDossier && (
         <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] space-y-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-[var(--foreground)]">
             <Send size={16} aria-hidden="true" />

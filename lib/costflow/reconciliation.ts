@@ -15,22 +15,28 @@ export function reconcile(data: FinanceData, cash: CashRow[]) {
   });
 }
 
+export function isExpenseApproved(e: { invoiceId?: string | null; paymentProofId?: string | null; exceptionStatus?: string | null }) {
+  return Boolean((e.invoiceId && e.paymentProofId) || e.exceptionStatus === "APPROVED");
+}
+
 export function closeBlockers(data: FinanceData, cash: CashRow[]) {
   const blockers: string[] = [];
   if (reconcile(data, cash).some(row => compare(exact(row.rawBalance), decimal("0")) !== 0)) blockers.push("Còn khoản phải trả hoặc thu hoàn.");
-  if (data.expenses.some(e => !e.invoiceId || !e.paymentProofId)) blockers.push("Chi phí chưa đủ chứng từ và bằng chứng đã chi.");
+  if (data.expenses.some(e => !isExpenseApproved(e))) blockers.push("Chi phí chưa đủ chứng từ và bằng chứng đã chi.");
   if (cash.some(c => !c.evidenceId)) blockers.push("Giao dịch tiền thiếu chứng từ.");
   return blockers;
 }
 
-export function settlement(data: FinanceData, cash: CashRow[], recipientKey: string) {
+export function settlement(data: FinanceData, cash: CashRow[], recipientKey: string, options?: { allowPendingAc?: boolean }) {
   const expenses = data.expenses.filter(e => e.recipientKey === recipientKey);
-  if (!expenses.length || expenses.some(e => !e.invoiceId || !e.paymentProofId)) throw new Error("Hoàn tạm ứng cần đủ IC/AC, chứng từ chi phí và bằng chứng đã chi.");
+  const hasIncomplete = expenses.some(e => (!e.invoiceId || !e.paymentProofId) && e.exceptionStatus !== "APPROVED");
+  if (!expenses.length) throw new Error("Chưa có khoản chi phí AC nào được ghi nhận cho đối tượng này.");
+  if (!options?.allowPendingAc && hasIncomplete) throw new Error("Hoàn tạm ứng cần đủ IC/AC, chứng từ chi phí và bằng chứng đã chi.");
   const total = totals(expenses.map(e => e.cost));
   const paid = sum(cash.filter(c => c.recipientKey === recipientKey && c.direction === "OUT").map(c => decimal(c.amount)));
   const refunded = sum(cash.filter(c => c.recipientKey === recipientKey && c.direction === "IN").map(c => decimal(c.amount)));
   const difference = subtract(decimal(total.gross), subtract(paid, refunded));
-  return { actualGross: total.gross, advance: round(paid), additional: compare(difference, decimal("0")) > 0 ? round(difference) : "0", refund: compare(difference, decimal("0")) < 0 ? round(subtract(decimal("0"), difference)) : "0", reconciliation: source(difference), expenseIds: expenses.map(e => e.id) };
+  return { actualGross: total.gross, advance: round(paid), additional: compare(difference, decimal("0")) > 0 ? round(difference) : "0", refund: compare(difference, decimal("0")) < 0 ? round(subtract(decimal("0"), difference)) : "0", reconciliation: source(difference), expenseIds: expenses.map(e => e.id), isAcApproved: !hasIncomplete };
 }
 
 export function margin(data: FinanceData) {

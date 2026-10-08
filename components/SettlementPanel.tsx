@@ -1,24 +1,31 @@
 "use client";
 
-import { useMemo } from "react";
+import Link from "next/link";
+import { useState, useMemo } from "react";
 import {
-  Scale,
   Lock,
   Unlock,
   Building2,
   User,
   History,
   XCircle,
-  TrendingDown,
-  TrendingUp,
   FileSpreadsheet,
-  ShieldCheck
+  ShieldCheck,
+  Clock,
+  ArrowDownLeft,
+  ArrowUpRight,
+  ShieldAlert,
+  FileText,
+  Coins,
 } from "lucide-react";
-import type { Finance } from "@/components/CostFlowPanel";
+import type { Finance, Request } from "@/components/CostFlowPanel";
+import type { RequestPayload } from "@/lib/costflow/types";
+import { Button } from "@/components/ui/Button";
 import { Input, Select, Textarea } from "@/components/ui/Field";
 import { Alert, Badge, EmptyState, Panel, Table } from "@/components/ui/Presentation";
+import { Dialog } from "@/components/ui/Dialog";
 import ActionForm from "@/components/CostFlowActionForm";
-import { reconcile } from "@/lib/costflow/reconciliation";
+import { reconcile, isExpenseApproved } from "@/lib/costflow/reconciliation";
 import { displayMoney } from "@/lib/costflow/money";
 
 const ACTION_LABEL: Record<string, string> = {
@@ -48,13 +55,56 @@ type Props = {
   canCreate: boolean;
 };
 
-export default function SettlementPanel({ finance, canCreate }: Props) {
+export default function SettlementPanel({ finance, user, canCreate }: Props) {
+  // Modal states for Cash confirmation & Direct cash entries
+  const [cashModalOpen, setCashModalOpen] = useState(false);
+  const [selectedDisbursementReq, setSelectedDisbursementReq] = useState<Request | null>(null);
+  const [cashDirection, setCashDirection] = useState<"OUT" | "IN">("OUT");
+  const [cashAmount, setCashAmount] = useState("");
+  const [cashRecipientKey, setCashRecipientKey] = useState("");
+
   const usersMap = useMemo(() => new Map(finance.users.map(u => [u.id, u.name])), [finance.users]);
 
   const recipientName = (key: string) =>
     key.startsWith("USER:")
       ? usersMap.get(key.slice(5)) ?? "Nhân viên"
       : finance.data.beneficiaries.find(b => b.id === key.slice(7))?.name ?? "NCC";
+
+  const recipients = useMemo(() => [
+    ...finance.project.members.map(m => ({
+      value: `USER:${m.userId}`,
+      label: `${usersMap.get(m.userId) ?? "Nhân viên"} (Nội bộ)`
+    })),
+    ...finance.data.beneficiaries.map(b => ({
+      value: `VENDOR:${b.id}`,
+      label: `${b.name} (NCC)`
+    }))
+  ], [finance.project.members, finance.data.beneficiaries, usersMap]);
+
+  // Cash statistics & Pending disbursements
+  const cashStats = useMemo(() => {
+    let outTotal = 0;
+    let inTotal = 0;
+    finance.cash.forEach(c => {
+      const amt = parseFloat(c.amount) || 0;
+      if (c.direction === "IN") inTotal += amt;
+      else outTotal += amt;
+    });
+
+    const pendingDisbursements = finance.requests.filter(
+      r => r.state === "APPROVED" &&
+           ["ADVANCE", "VENDOR_PAYMENT", "REIMBURSEMENT"].includes(r.kind) &&
+           !finance.cash.some(c => c.requestId === r.id)
+    );
+
+    return {
+      outTotal,
+      inTotal,
+      netTotal: outTotal - inTotal,
+      pendingCount: pendingDisbursements.length,
+      pendingDisbursements
+    };
+  }, [finance.cash, finance.requests]);
 
   // Multi-party reconciliation ledger
   const ledger = useMemo(() => {
@@ -96,6 +146,24 @@ export default function SettlementPanel({ finance, canCreate }: Props) {
     );
   }, [finance.requests, finance.cash]);
 
+  const canManageCash = finance.fullAccess && ["ADMIN", "ACCOUNTANT"].includes(user.role);
+
+  const handleOpenDisbursementModal = (req: Request) => {
+    setSelectedDisbursementReq(req);
+    setCashDirection("OUT");
+    setCashAmount(req.payload.amount ? String(req.payload.amount) : "");
+    setCashRecipientKey(req.payload.recipientKey || "");
+    setCashModalOpen(true);
+  };
+
+  const handleOpenDirectCashModal = (dir: "OUT" | "IN") => {
+    setSelectedDisbursementReq(null);
+    setCashDirection(dir);
+    setCashAmount("");
+    setCashRecipientKey("");
+    setCashModalOpen(true);
+  };
+
   return (
     <div className="space-y-6">
       {/* 1. TOP HEADER & METRICS */}
@@ -103,18 +171,29 @@ export default function SettlementPanel({ finance, canCreate }: Props) {
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-bold tracking-tight text-[var(--foreground)]">
-              Quyết toán & Đối soát công nợ
+              Tiền & Quyết toán
             </h2>
             <Badge tone={finance.data.closed ? "neutral" : "success"}>
               {finance.data.closed ? "Tài chính đã đóng" : "Tài chính đang mở"}
             </Badge>
           </div>
           <p className="text-sm text-[var(--text-secondary)] mt-1">
-            Đối soát đa chiều độc lập theo từng người nhận/NCC giữa chi phí AC, tiền đã chi và tiền hoàn trả.
+            Theo dõi sổ quỹ tiền thực tế, giải ngân các hồ sơ đã duyệt và đối soát đa chiều công nợ độc lập theo từng người nhận/NCC.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
+          {canManageCash && !finance.data.closed && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => handleOpenDirectCashModal("IN")}
+            >
+              <ArrowDownLeft size={14} className="mr-1 text-[var(--success)]" aria-hidden="true" />
+              Ghi nhận thu hoàn quỹ
+            </Button>
+          )}
+
           {finance.data.closed ? (
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
               <Lock size={14} aria-hidden="true" />
@@ -133,7 +212,7 @@ export default function SettlementPanel({ finance, canCreate }: Props) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
           <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
-            <span className="font-medium">Tổng chi phí AC</span>
+            <span className="font-medium">Tổng chi phí AC (Gross)</span>
             <FileSpreadsheet size={16} className="text-blue-600 dark:text-blue-400" aria-hidden="true" />
           </div>
           <p className="text-xl font-bold tabular-nums text-[var(--foreground)] mt-2">
@@ -146,45 +225,198 @@ export default function SettlementPanel({ finance, canCreate }: Props) {
 
         <div className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
           <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
-            <span className="font-medium">Thực chi đã thanh toán</span>
-            <TrendingDown size={16} className="text-rose-600 dark:text-rose-400" aria-hidden="true" />
+            <span className="font-medium">Thực chi từ quỹ dự án</span>
+            <ArrowUpRight size={16} className="text-rose-600 dark:text-rose-400" aria-hidden="true" />
           </div>
           <p className="text-xl font-bold tabular-nums text-rose-600 dark:text-rose-400 mt-2">
-            {displayMoney(Math.round(summary.totalPaid).toString())}
+            {displayMoney(Math.round(cashStats.outTotal).toString())}
           </p>
           <span className="text-[11px] text-[var(--text-secondary)]">
-            Đã chuyển khoản thực tế
+            Đã chuyển khoản thực tế ({finance.cash.filter(c => c.direction === "OUT").length} giao dịch)
           </span>
         </div>
 
         <div className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
           <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
-            <span className="font-medium">Thu hồi / Hoàn quỹ</span>
-            <TrendingUp size={16} className="text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+            <span className="font-medium">Thu hoàn vào quỹ</span>
+            <ArrowDownLeft size={16} className="text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
           </div>
           <p className="text-xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400 mt-2">
-            {displayMoney(Math.round(summary.totalRefunded).toString())}
+            {displayMoney(Math.round(cashStats.inTotal).toString())}
           </p>
           <span className="text-[11px] text-[var(--text-secondary)]">
-            Đã nhập lại quỹ dự án
+            Đã nhập lại quỹ ({finance.cash.filter(c => c.direction === "IN").length} giao dịch)
           </span>
         </div>
 
         <div className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
           <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
-            <span className="font-medium">Tiến độ đối soát</span>
-            <Scale size={16} className="text-purple-600 dark:text-purple-400" aria-hidden="true" />
+            <span className="font-medium">Chờ giải ngân</span>
+            <Clock size={16} className="text-amber-600 dark:text-amber-400" aria-hidden="true" />
           </div>
-          <p className="text-xl font-bold tabular-nums text-[var(--foreground)] mt-2">
-            {summary.balancedCount}/{ledger.length}
+          <p className="text-xl font-bold tabular-nums text-amber-600 dark:text-amber-400 mt-2">
+            {cashStats.pendingCount} hồ sơ
           </p>
           <span className="text-[11px] text-[var(--text-secondary)]">
-            {summary.pendingCount > 0 ? `Còn ${summary.pendingCount} đối tượng chưa khớp` : "Đã khớp 100% đối tượng"}
+            Đã duyệt 3 cấp, chưa xuất tiền
           </span>
         </div>
       </div>
 
-      {/* 2. RECONCILIATION LEDGER TABLE */}
+      {/* 2. SECTION: HỒ SƠ ĐÃ DUYỆT CHỜ GIẢI NGÂN (PENDING DISBURSEMENTS) */}
+      {cashStats.pendingDisbursements.length > 0 && (
+        <Panel className="space-y-4 border-[var(--warning)] bg-[var(--warning-soft)]/40">
+          <div className="flex items-center justify-between pb-2 border-b border-[var(--border)]/60">
+            <div className="flex items-center gap-2">
+              <Clock size={18} className="text-[var(--warning)]" aria-hidden="true" />
+              <h3 className="font-bold text-sm text-[var(--foreground)]">
+                Hồ sơ đã duyệt đang chờ giải ngân ({cashStats.pendingDisbursements.length})
+              </h3>
+            </div>
+            <span className="text-xs text-[var(--text-secondary)]">
+              Kế toán / Thủ quỹ xác nhận khi tiền đã chuyển khoản thực tế
+            </span>
+          </div>
+
+          <div className="divide-y divide-[var(--border)]">
+            {cashStats.pendingDisbursements.map(req => {
+              const reqPayload = req.payload as RequestPayload;
+              const reqExpenseIds = reqPayload?.expenseIds;
+              const targetExpenses = finance.data.expenses.filter(e =>
+                reqExpenseIds?.length
+                  ? reqExpenseIds.includes(e.id)
+                  : (req.kind === "REIMBURSEMENT" && e.recipientKey === reqPayload?.recipientKey)
+              );
+              const isBlockedByPendingAc = targetExpenses.length > 0 && targetExpenses.some(e => !isExpenseApproved(e));
+
+              return (
+                <div key={req.id} className="py-3 flex flex-wrap items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-semibold text-[var(--foreground)]">{req.title}</p>
+                      <Badge tone={isBlockedByPendingAc ? "warning" : "success"}>
+                        {isBlockedByPendingAc ? "Chờ duyệt AC (Chưa thể giải ngân)" : "Đã duyệt AC (Đủ điều kiện chi)"}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-[var(--text-secondary)]">
+                      Người đề nghị: <strong>{usersMap.get(req.creatorId) ?? "Người lập"}</strong> ·
+                      Người nhận: <strong>{recipientName(req.payload.recipientKey || "")}</strong> ·
+                      Số tiền: <strong className="text-[var(--foreground)]">{req.payload.amount ? displayMoney(req.payload.amount) : "Theo đối soát"}</strong>
+                    </p>
+                    {isBlockedByPendingAc && (
+                      <span className="text-xs text-amber-700 dark:text-amber-400 block font-medium">
+                        ⚠ Cần duyệt AC đầy đủ (hoặc duyệt ngoại lệ) cho các khoản chi trước khi Kế toán / Thủ quỹ chi tiền.
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {isBlockedByPendingAc ? (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled
+                        className="text-xs opacity-60 cursor-not-allowed"
+                        title="Phiếu chưa có hiệu lực chi vì AC tương ứng chưa được phê duyệt đầy đủ"
+                      >
+                        <ShieldAlert size={13} className="mr-1 text-amber-600" />
+                        Chưa có hiệu lực chi
+                      </Button>
+                    ) : (
+                      canManageCash && !finance.data.closed && (
+                        <Button
+                          size="sm"
+                          onClick={() => handleOpenDisbursementModal(req)}
+                        >
+                          <Coins size={14} className="mr-1" aria-hidden="true" />
+                          Xác nhận chi tiền (Giải ngân)
+                        </Button>
+                      )
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Panel>
+      )}
+
+      {/* 3. SECTION: SỔ QUỸ & LỊCH SỬ GIAO DỊCH TIỀN THỰC TẾ (CASHBOOK) */}
+      <Panel className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-base text-[var(--foreground)]">
+              Sổ quỹ giao dịch tiền thực tế (Cashbook)
+            </h3>
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+              Ghi nhận đầy đủ chứng từ chuyển khoản, số phiếu thu/chi và người nhận tiền từ quỹ dự án.
+            </p>
+          </div>
+          <Badge tone="neutral">{finance.cash.length} giao dịch</Badge>
+        </div>
+
+        {finance.cash.length > 0 ? (
+          <Table caption="Danh sách các giao dịch tiền thực tế">
+            <thead>
+              <tr>
+                <th scope="col" className="w-32">Mã tham chiếu</th>
+                <th scope="col">Người nhận / Thụ hưởng</th>
+                <th scope="col" className="w-28 text-center">Luồng tiền</th>
+                <th scope="col" className="w-40 text-right">Số tiền thực tế</th>
+                <th scope="col" className="w-32 text-center">Chứng từ đính kèm</th>
+              </tr>
+            </thead>
+            <tbody>
+              {finance.cash.map(c => {
+                const isRefund = c.direction === "IN";
+                return (
+                  <tr key={c.id}>
+                    <td className="font-mono text-xs font-semibold text-[var(--foreground)]">
+                      {c.reference}
+                    </td>
+                    <td>
+                      <span className="font-medium text-sm text-[var(--foreground)]">
+                        {recipientName(c.recipientKey)}
+                      </span>
+                    </td>
+                    <td className="text-center">
+                      <Badge tone={isRefund ? "success" : "danger"}>
+                        {isRefund ? "Thu hoàn" : "Chi tiền"}
+                      </Badge>
+                    </td>
+                    <td className="text-right tabular-nums font-mono font-bold text-sm">
+                      <span className={isRefund ? "text-[var(--success)]" : "text-rose-600 dark:text-rose-400"}>
+                        {isRefund ? "+" : "-"}{displayMoney(c.amount)}
+                      </span>
+                    </td>
+                    <td className="text-center">
+                      {c.evidenceId ? (
+                        <Link
+                          className="tf-link text-xs inline-flex items-center gap-1"
+                          href={`/api/projects/${finance.project.id}/costflow/evidence/${c.evidenceId}`}
+                          target="_blank"
+                        >
+                          <FileText size={12} aria-hidden="true" />
+                          <span>Xem chứng từ</span>
+                        </Link>
+                      ) : (
+                        <span className="text-xs text-[var(--text-secondary)]">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState
+            title="Chưa có giao dịch tiền nào"
+            description="Các giao dịch tiền sẽ được ghi nhận sau khi Kế toán/Thủ quỹ xác nhận đã chi hoặc thu hoàn cho hồ sơ đã duyệt."
+          />
+        )}
+      </Panel>
+
+      {/* 4. SECTION: BẢNG ĐỐI SOÁT ĐA CHIỀU (RECONCILIATION LEDGER) */}
       <Panel className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
@@ -192,12 +424,17 @@ export default function SettlementPanel({ finance, canCreate }: Props) {
               Bảng đối soát đa chiều (Reconciliation Ledger)
             </h3>
             <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-              Cân đối độc lập từng tài khoản nội bộ và NCC; tách biệt giữa nghĩa vụ chi phí và dòng tiền thực tế.
+              Cân đối độc lập từng tài khoản nội bộ và NCC; đối chiếu giữa nghĩa vụ chi phí AC và dòng tiền thực tế.
             </p>
           </div>
-          <Badge tone={summary.isAllBalanced ? "success" : "warning"}>
-            {summary.isAllBalanced ? "Đã đối soát hoàn tất" : "Đang xử lý cân đối"}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-[var(--text-secondary)]">
+              Tiến độ: <strong>{summary.balancedCount}/{ledger.length}</strong> đối tượng
+            </span>
+            <Badge tone={summary.isAllBalanced ? "success" : "warning"}>
+              {summary.isAllBalanced ? "Đã đối soát hoàn tất" : "Đang xử lý cân đối"}
+            </Badge>
+          </div>
         </div>
 
         {ledger.length > 0 ? (
@@ -264,7 +501,7 @@ export default function SettlementPanel({ finance, canCreate }: Props) {
         )}
       </Panel>
 
-      {/* 3. QUY TRÌNH ĐÓNG / MỞ TÀI CHÍNH DỰ ÁN */}
+      {/* 5. SECTION: QUY TRÌNH ĐÓNG / MỞ TÀI CHÍNH DỰ ÁN */}
       {finance.fullAccess && (
         <Panel className="space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
@@ -315,7 +552,7 @@ export default function SettlementPanel({ finance, canCreate }: Props) {
         </Panel>
       )}
 
-      {/* 4. YÊU CẦU HỦY HỒ SƠ ĐÃ DUYỆT, CHƯA CHI */}
+      {/* 6. SECTION: YÊU CẦU HỦY HỒ SƠ ĐÃ DUYỆT, CHƯA CHI */}
       {canCreate && !finance.data.closed && cancellableRequests.length > 0 && (
         <details className="rounded-xl border border-[var(--border)] p-4 bg-[var(--surface)]">
           <summary className="font-semibold text-sm cursor-pointer text-[var(--foreground)] flex items-center justify-between">
@@ -343,7 +580,7 @@ export default function SettlementPanel({ finance, canCreate }: Props) {
         </details>
       )}
 
-      {/* 5. SỔ NHẬT KÝ KIỂM TOÁN (AUDIT HISTORY TIMELINE) */}
+      {/* 7. SECTION: SỔ NHẬT KÝ KIỂM TOÁN (AUDIT HISTORY TIMELINE) */}
       <Panel className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -383,6 +620,97 @@ export default function SettlementPanel({ finance, canCreate }: Props) {
           </p>
         )}
       </Panel>
+
+      {/* DIALOG XÁC NHẬN TIỀN THỰC TẾ (CASH MODAL) */}
+      <Dialog
+        open={cashModalOpen}
+        onClose={() => setCashModalOpen(false)}
+        title={
+          selectedDisbursementReq
+            ? `Xác nhận giải ngân: ${selectedDisbursementReq.title}`
+            : cashDirection === "IN"
+            ? "Ghi nhận tiền thu hoàn vào quỹ"
+            : "Ghi nhận chi tiền thực tế"
+        }
+        description={
+          selectedDisbursementReq
+            ? "Ghi nhận tiền đã chuyển khoản thực tế cho hồ sơ đã duyệt 3 cấp. Dữ liệu sẽ cập nhật vào Sổ quỹ và Bảng đối soát công nợ."
+            : "Ghi nhận trực tiếp khoản thu/chi thực tế từ quỹ dự án."
+        }
+      >
+        <ActionForm
+          finance={finance}
+          command="CASH"
+          label={cashDirection === "IN" ? "Ghi nhận thu tiền" : "Xác nhận chi tiền"}
+          onSuccess={() => setCashModalOpen(false)}
+        >
+          {selectedDisbursementReq && (
+            <input type="hidden" name="requestId" value={selectedDisbursementReq.id} />
+          )}
+
+          <input type="hidden" name="direction" value={cashDirection} />
+
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Select
+                name="recipientKey"
+                label="Người nhận / Thụ hưởng"
+                value={cashRecipientKey}
+                onChange={e => setCashRecipientKey(e.target.value)}
+                required
+              >
+                <option value="">Chọn người nhận</option>
+                {recipients.map(r => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
+              </Select>
+
+              <Input
+                name="amount"
+                label="Số tiền thực tế (VND)"
+                value={cashAmount}
+                onChange={e => setCashAmount(e.target.value)}
+                required
+                inputMode="decimal"
+                placeholder="Nhập số tiền..."
+              />
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                name="reference"
+                label="Mã tham chiếu / Số UNC / Phiếu thu"
+                placeholder="Ví dụ: UNC-20261008-01 hoặc PT-02..."
+                required
+              />
+
+              <Input
+                name="date"
+                type="date"
+                label="Ngày giao dịch"
+                defaultValue={new Date().toISOString().slice(0, 10)}
+                required
+              />
+            </div>
+
+            <Select
+              name="evidenceId"
+              label="Chứng từ chuyển khoản / Giấy báo có (Tùy chọn)"
+            >
+              <option value="">Không đính kèm file / Đã có file riêng</option>
+              {finance.files.map(f => (
+                <option key={f.id} value={f.id}>{f.name}</option>
+              ))}
+            </Select>
+
+            <Textarea
+              name="note"
+              label="Ghi chú giao dịch"
+              placeholder="Ghi chú thêm về phương thức chuyển khoản, ngân hàng thụ hưởng..."
+            />
+          </div>
+        </ActionForm>
+      </Dialog>
     </div>
   );
 }
