@@ -94,4 +94,6 @@ test("payment UI: workspace keeps shared approval and money surfaces distinct", 
   assert.match(approval, /AdvanceSettlementAllocator/);
   assert.doesNotMatch(approval, /duyệt ngoại lệ/i);
   assert.doesNotMatch(`${workspace}\n${approval}`, /PAY-06/);
+  assert.doesNotMatch(workspace, /PaymentCashPanel/);
+  assert.doesNotMatch(approval, /PRE_APPROVAL|APPROVE_EXCEPTION|chi trước/i);
 });

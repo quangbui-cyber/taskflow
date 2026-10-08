@@ -7,6 +7,7 @@ import { readProjectUpload } from "@/lib/projectFiles";
 import { IcEvidenceError } from "@/lib/costflow/icEvidence";
 import { executeFinance } from "@/lib/costflow/service";
 import { executePaymentCash } from "@/lib/costflow/paymentCash";
+import { publicPaymentErrorMessage } from "@/lib/costflow/paymentPolicy";
 import { dispatchWorkflowNotifications } from "@/lib/workflow/notifications";
 
 export type CostFlowActionState = { error?: string; success?: string; requestId?: string; revisionId?: string; quotationId?: string; draftId?: string; beneficiaryId?: string; cashId?: string; idempotent?: boolean; savedScopes?: string[]; version?: number; lineErrors?: { lineId: string; message: string }[] };
@@ -25,12 +26,12 @@ export async function costFlowAction(_previous: CostFlowActionState, form: FormD
     revalidatePath("/workflow");
     return result;
   } catch (error) {
-    if (error instanceof IcEvidenceError) return { error: error.message, lineErrors: error.lineErrors };
+    if (error instanceof IcEvidenceError) return { error: publicPaymentErrorMessage(error), lineErrors: error.lineErrors.map(item => ({ ...item, message: publicPaymentErrorMessage(new Error(item.message)) })) };
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2002") return { error: "Mã giao dịch hoặc phiên bản đã tồn tại. Không ghi tiền hai lần." };
       if (error.code === "P2034") return { error: "Có thao tác đồng thời. Tải lại trang rồi thử lại." };
       return { error: "Chưa lưu được hồ sơ. Kiểm tra kết nối dữ liệu." };
     }
-    return { error: error instanceof Error ? error.message : "Không lưu được hồ sơ." };
+    return { error: publicPaymentErrorMessage(error) };
   }
 }

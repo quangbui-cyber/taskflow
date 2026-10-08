@@ -13,6 +13,14 @@ function requiredText(value: string, label: string, maxLength: number) {
   return normalized;
 }
 
+export function publicPaymentErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "Không lưu được hồ sơ.";
+  return message
+    .replace(/\b\d{8,19}\b/g, "[đã ẩn]")
+    .replace(/((?:số tài khoản|stk|account)\s*[:=#-]?\s*)[^\s,;]+/giu, "$1[đã ẩn]")
+    .slice(0, 500);
+}
+
 export function exactPositiveVnd(value: string) {
   const normalized = value.trim();
   if (!/^\d+$/.test(normalized)) throw new Error("Số tiền VND phải là số nguyên dương.");
@@ -107,4 +115,3 @@ export function normalizePaymentDraft(input: PaymentDraftInput): PaymentDossierP
     canSubmit: true,
   };
 }
-
