@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { normalizePaymentDraft } from "../lib/costflow/paymentPolicy";
 import { projectPaymentDossiers } from "../lib/costflow/paymentCompatibility";
 import type { PaymentDraftInput } from "../lib/costflow/paymentTypes";
+import { derivePaymentProgress } from "../lib/costflow/paymentCash";
 
 const projectId = "project-phase-7";
 const revisionId = "ic-effective";
@@ -160,4 +161,17 @@ test("payment-read-model: normalized rows win and legacy rows appear once with e
     provenance: "legacy",
     needsReview: true,
   });
+});
+
+test("payment-cash: canonical 75m sequence derives cash progress independently", () => {
+  assert.deepEqual(derivePaymentProgress("75000000", "0"), {
+    progress: "CHUA_CHI", approvedAmount: "75000000", paidOutAmount: "0", remainingAmount: "75000000",
+  });
+  assert.deepEqual(derivePaymentProgress("75000000", "45000000"), {
+    progress: "DANG_CHI_MOT_PHAN", approvedAmount: "75000000", paidOutAmount: "45000000", remainingAmount: "30000000",
+  });
+  assert.deepEqual(derivePaymentProgress("75000000", "75000000"), {
+    progress: "DA_CHI_DU", approvedAmount: "75000000", paidOutAmount: "75000000", remainingAmount: "0",
+  });
+  assert.throws(() => derivePaymentProgress("75000000", "75000001"), /vượt/i);
 });

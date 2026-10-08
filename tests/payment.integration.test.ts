@@ -310,3 +310,95 @@ test("payment-integration: service creates one canonical 75m dossier with zero c
     if (createdUserIds.length) await prisma.user.deleteMany({ where: { id: { in: createdUserIds }, email: { startsWith: prefix } } });
   }
 });
+
+test("payment-integration: one-recipient cash is authorized, idempotent and race-safe", async () => {
+  approvedDatabaseUrl();
+  const { prisma } = await import("../lib/prisma");
+  const { executePaymentCash } = await import("../lib/costflow/paymentCash");
+  const { emptyFinance } = await import("../lib/costflow/types");
+  const prefix = `phase7-cash-${randomUUID()}`;
+  const userIds: string[] = [];
+  let projectId = "";
+  try {
+    const account = await prisma.user.create({ data: { email: `${prefix}-account@example.test`, name: "Account", role: "ACCOUNT", passwordHash: "unused" } });
+    const outsider = await prisma.user.create({ data: { email: `${prefix}-outsider@example.test`, name: "Outsider", role: "ACCOUNT", passwordHash: "unused" } });
+    userIds.push(account.id, outsider.id);
+    const project = await prisma.project.create({ data: { name: prefix, ownerId: account.id, members: { create: { userId: account.id } } } });
+    projectId = project.id;
+    await prisma.costFlowWorkspace.create({ data: { projectId, data: emptyFinance() } });
+    const request = await prisma.workflowRequest.create({ data: { projectId, module: "COSTFLOW", kind: "ADVANCE", title: "Approved advance", creatorId: account.id, cashAssigneeId: account.id, state: "APPROVED", steps: [], payload: { amount: "45000000" } } });
+    const employeeKey = `USER:${account.id}`;
+    const vendorKey = "VENDOR:race-vendor";
+    await prisma.paymentRecipientSnapshot.createMany({ data: [
+      { projectId, requestId: request.id, recipientKey: employeeKey, recipientType: "EMPLOYEE", displayName: "Account", totalAmount: "35000000" },
+      { projectId, requestId: request.id, recipientKey: vendorKey, recipientType: "VENDOR", displayName: "Race Vendor", totalAmount: "10000000" },
+    ] });
+    const lines = await Promise.all([
+      ["employee-10", "10000000", employeeKey], ["employee-15", "15000000", employeeKey], ["employee-10b", "10000000", employeeKey], ["vendor-10", "10000000", vendorKey],
+    ].map(async ([stableKey, amount, recipientKey], position) => prisma.paymentRequestLine.create({ data: { projectId, requestId: request.id, stableKey, position, description: stableKey, amount, icRevisionId: "revision", icLineId: `ic-${stableKey}`, sourceSnapshot: { effective: true }, recipientKey, evidenceManifest: [] } })));
+    const upload = { name: "proof.pdf", mimeType: "application/pdf", size: 5, data: new Uint8Array([1, 2, 3, 4, 5]) };
+    const makeForm = (recipientKey: string, selected: typeof lines, key: string, reference: string) => {
+      const form = new FormData();
+      form.set("requestId", request.id); form.set("recipientKey", recipientKey); form.set("direction", "OUT");
+      form.set("channel", "BANK_TRANSFER"); form.set("reference", reference); form.set("idempotencyKey", key);
+      form.set("occurredAt", "2026-10-08T10:00:00.000Z");
+      form.set("amount", selected.reduce((sum, line) => sum + BigInt(line.amount), BigInt(0)).toString());
+      form.set("allocations", JSON.stringify(selected.map(line => ({ requestLineId: line.id, amount: line.amount }))));
+      return form;
+    };
+    const effects = async () => ({
+      cash: await prisma.costFlowCash.count({ where: { projectId } }), allocations: await prisma.costFlowCashAllocation.count({ where: { projectId } }),
+      evidence: await prisma.costFlowEvidence.count({ where: { projectId } }), history: await prisma.costFlowHistory.count({ where: { projectId } }),
+    });
+    const employeeLines = lines.slice(0, 3);
+    const employeeForm = makeForm(employeeKey, employeeLines, `${prefix}-employee`, `${prefix}-employee-ref`);
+    await assert.rejects(() => executePaymentCash(projectId, 0, outsider, employeeForm, upload), /được giao|quyền/i);
+    assert.deepEqual(await effects(), { cash: 0, allocations: 0, evidence: 0, history: 0 });
+    await prisma.workflowRequest.update({ where: { id: request.id }, data: { state: "RETURNED" } });
+    await assert.rejects(() => executePaymentCash(projectId, 0, account, employeeForm, upload), /đã duyệt/i);
+    assert.deepEqual(await effects(), { cash: 0, allocations: 0, evidence: 0, history: 0 });
+    await prisma.workflowRequest.update({ where: { id: request.id }, data: { state: "APPROVED" } });
+    await assert.rejects(() => executePaymentCash(projectId, 0, account, makeForm(employeeKey, [lines[3]], `${prefix}-cross`, `${prefix}-cross-ref`), upload), /cùng người nhận/i);
+    assert.deepEqual(await effects(), { cash: 0, allocations: 0, evidence: 0, history: 0 });
+
+    const saved = await executePaymentCash(projectId, 0, account, employeeForm, upload);
+    assert.equal(saved.idempotent, false);
+    assert.deepEqual(await effects(), { cash: 1, allocations: 3, evidence: 1, history: 1 });
+    const replay = await executePaymentCash(projectId, 0, account, employeeForm, upload);
+    assert.equal(replay.idempotent, true);
+    assert.equal(replay.cashId, saved.cashId);
+    assert.deepEqual(await effects(), { cash: 1, allocations: 3, evidence: 1, history: 1 });
+    await assert.rejects(() => executePaymentCash(projectId, 1, account, makeForm(employeeKey, employeeLines, `${prefix}-employee`, `${prefix}-different-ref`), upload), /đã được dùng/i);
+    assert.deepEqual(await effects(), { cash: 1, allocations: 3, evidence: 1, history: 1 });
+
+    const race = await Promise.allSettled([
+      executePaymentCash(projectId, 1, account, makeForm(vendorKey, [lines[3]], `${prefix}-race-a`, `${prefix}-race-ref-a`), upload),
+      executePaymentCash(projectId, 1, account, makeForm(vendorKey, [lines[3]], `${prefix}-race-b`, `${prefix}-race-ref-b`), upload),
+    ]);
+    assert.equal(race.filter(result => result.status === "fulfilled").length, 1);
+    assert.deepEqual(await effects(), { cash: 2, allocations: 4, evidence: 2, history: 2 });
+    const vendorPaid = await prisma.costFlowCashAllocation.findMany({ where: { projectId, recipientKey: vendorKey, direction: "OUT" }, select: { amount: true } });
+    assert.equal(vendorPaid.reduce((sum, item) => sum + BigInt(item.amount), BigInt(0)).toString(), "10000000");
+
+    const postAc = await prisma.workflowRequest.create({ data: { projectId, module: "COSTFLOW", kind: "REIMBURSEMENT", title: "Post AC", creatorId: account.id, cashAssigneeId: account.id, state: "APPROVED", steps: [], payload: {} } });
+    const unavailable = makeForm(employeeKey, employeeLines, `${prefix}-post-ac`, `${prefix}-post-ac-ref`);
+    unavailable.set("requestId", postAc.id); unavailable.set("direction", "IN");
+    await assert.rejects(() => executePaymentCash(projectId, 2, account, unavailable, upload), /Phase 8/i);
+    unavailable.set("direction", "OUT");
+    await assert.rejects(() => executePaymentCash(projectId, 2, account, unavailable, upload), /Phase 8/i);
+    assert.deepEqual(await effects(), { cash: 2, allocations: 4, evidence: 2, history: 2 });
+  } finally {
+    if (projectId) {
+      await prisma.costFlowCashAllocation.deleteMany({ where: { projectId } });
+      await prisma.costFlowCash.deleteMany({ where: { projectId } });
+      await prisma.costFlowEvidence.deleteMany({ where: { projectId } });
+      await prisma.paymentRequestLine.deleteMany({ where: { projectId } });
+      await prisma.paymentRecipientSnapshot.deleteMany({ where: { projectId } });
+      await prisma.workflowRequest.deleteMany({ where: { projectId } });
+      await prisma.costFlowHistory.deleteMany({ where: { projectId } });
+      await prisma.costFlowWorkspace.deleteMany({ where: { projectId } });
+      await prisma.project.deleteMany({ where: { id: projectId } });
+    }
+    if (userIds.length) await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+  }
+});
