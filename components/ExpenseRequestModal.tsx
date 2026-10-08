@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/Button";
 import { Input, Select, Textarea } from "@/components/ui/Field";
 import { Alert, Badge } from "@/components/ui/Presentation";
 import ActionForm from "@/components/CostFlowActionForm";
+import AdvanceSettlementAllocator from "@/components/costflow/payments/AdvanceSettlementAllocator";
 import { displayMoney } from "@/lib/costflow/money";
 import { isExpenseApproved } from "@/lib/costflow/reconciliation";
 
@@ -157,12 +158,14 @@ export default function ExpenseRequestModal({
         {/* TAB 1: LẬP HỒ SƠ CHI */}
         {activeTab === "create" && (
           <div className="space-y-4">
+            {kind !== "ADVANCE" && <AdvanceSettlementAllocator kind={kind as "VENDOR_PAYMENT" | "REIMBURSEMENT"} />}
             {canCreate && !finance.data.closed ? (
               <ActionForm
                 key={requestSource || "new-request"}
                 finance={finance}
-                command="CREATE_REQUEST"
+                command={kind === "ADVANCE" ? "CREATE_REQUEST" : kind === "VENDOR_PAYMENT" ? "PAYMENT" : "ADVANCE_SETTLEMENT"}
                 label="Gửi duyệt hồ sơ"
+                showSubmit={kind === "ADVANCE"}
                 onSuccess={() => {
                   setFeedbackNotice("Hồ sơ đã được gửi thành công và đưa vào luồng Trình duyệt.");
                   setTimeout(() => {

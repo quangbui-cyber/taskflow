@@ -25,6 +25,7 @@ import type { PaymentDraftLineInput } from "./paymentTypes";
 import { diffPaymentDossiers, type PaymentDossierSnapshot, type PaymentDocumentSnapshot } from "./paymentDiff";
 import { derivePaymentProgress } from "./paymentCash";
 import { projectPaymentLedger, type BeneficiaryVerification } from "./paymentReadModel";
+import { resolveProductionApprovedActualCost } from "./approvedActualCost";
 
 type Actor = { id: string; role: string };
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -800,6 +801,17 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         await tx.costFlowEvidence.updateMany({ where: { id: { in: [invoiceId!, paymentProofId!] } }, data: { requestId: saved.id } });
         break;
       }
+      case "PAYMENT":
+      case "ADVANCE_SETTLEMENT": {
+        await resolveProductionApprovedActualCost({
+          projectId,
+          versionId: text(form, "acVersionId"),
+          approvalEventId: text(form, "acApprovalEventId"),
+          approvalAttemptId: text(form, "acApprovalAttemptId"),
+          lineIds: form.getAll("acLineIds").map(String).filter(Boolean),
+        });
+        throw new Error("Approved AC producer unavailable until Phase 8.");
+      }
       case "CREATE_REQUEST": {
         const kind = text(form, "kind");
         if (["CLOSE", "REOPEN"].includes(kind)) { if (!member && !isAdmin) throw new Error("Cần là nhân sự của project để yêu cầu đóng/mở tài chính."); }
@@ -817,6 +829,10 @@ export async function executeFinance(projectId: string, expectedVersion: number,
           break;
         }
         if (!["ADVANCE", "VENDOR_PAYMENT", "REIMBURSEMENT"].includes(kind)) throw new Error("Loại hồ sơ không hợp lệ.");
+        if (["VENDOR_PAYMENT", "REIMBURSEMENT"].includes(kind)) {
+          await resolveProductionApprovedActualCost({ projectId, versionId: text(form, "acVersionId"), approvalEventId: text(form, "acApprovalEventId"), approvalAttemptId: text(form, "acApprovalAttemptId"), lineIds: form.getAll("acLineIds").map(String).filter(Boolean) });
+          throw new Error("Approved AC producer unavailable until Phase 8.");
+        }
         const key = await recipient(text(form, "recipientKey"));
         if (kind === "ADVANCE" && !key.startsWith("USER:")) throw new Error("Tạm ứng dành cho nhân viên.");
         if (kind === "VENDOR_PAYMENT" && !key.startsWith("VENDOR:")) throw new Error("Chi NCC cần người thụ hưởng NCC.");

@@ -315,7 +315,7 @@ test("payment-integration: one-recipient cash is authorized, idempotent and race
   approvedDatabaseUrl();
   const { prisma } = await import("../lib/prisma");
   const { executePaymentCash } = await import("../lib/costflow/paymentCash");
-  const { loadFinance } = await import("../lib/costflow/service");
+  const { executeFinance, loadFinance } = await import("../lib/costflow/service");
   const { emptyFinance } = await import("../lib/costflow/types");
   const prefix = `phase7-cash-${randomUUID()}`;
   const userIds: string[] = [];
@@ -388,6 +388,27 @@ test("payment-integration: one-recipient cash is authorized, idempotent and race
     unavailable.set("direction", "OUT");
     await assert.rejects(() => executePaymentCash(projectId, 2, account, unavailable, upload), /Phase 8/i);
     assert.deepEqual(await effects(), { cash: 2, allocations: 4, evidence: 2, history: 2 });
+
+    const workspace = await prisma.costFlowWorkspace.findUniqueOrThrow({ where: { projectId } });
+    const evidenceCompleteData = structuredClone(workspace.data) as ReturnType<typeof emptyFinance>;
+    evidenceCompleteData.expenses = [{
+      id: "expense-evidence-complete", revisionId: "revision", lineId: "ic-line", recipientKey: employeeKey, description: "Có đủ hóa đơn và bằng chứng chi nhưng chưa có AC approval",
+      input: { quantity: "1", unitPrice: "8000000", basis: "GROSS", vatPercent: "0" },
+      cost: { rawNet: "8000000/1", rawVat: "0/1", rawGross: "8000000/1", net: "8000000", vat: "0", gross: "8000000" },
+      invoiceId: "invoice-present", paymentProofId: "payment-proof-present", createdBy: account.id,
+    }];
+    await prisma.costFlowWorkspace.update({ where: { projectId }, data: { data: evidenceCompleteData } });
+    const blockedBaseline = {
+      dossiers: await prisma.workflowRequest.count({ where: { projectId } }),
+      applications: await prisma.advanceApplication.count({ where: { projectId } }),
+      ...await effects(),
+    };
+    for (const command of ["PAYMENT", "ADVANCE_SETTLEMENT"]) {
+      const blocked = new FormData();
+      blocked.set("command", command); blocked.set("recipientKey", employeeKey); blocked.set("acVersionId", "claimed-ac"); blocked.set("acApprovalEventId", "claimed-event"); blocked.set("acApprovalAttemptId", "claimed-attempt"); blocked.append("acLineIds", "expense-evidence-complete");
+      await assert.rejects(() => executeFinance(projectId, 2, account, blocked, null), /Phase 8/i);
+      assert.deepEqual({ dossiers: await prisma.workflowRequest.count({ where: { projectId } }), applications: await prisma.advanceApplication.count({ where: { projectId } }), ...await effects() }, blockedBaseline);
+    }
 
     const authorized = await loadFinance(projectId, account);
     assert.ok(authorized);

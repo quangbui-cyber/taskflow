@@ -23,6 +23,7 @@ import { displayMoney } from "@/lib/costflow/money";
 import { isExpenseApproved } from "@/lib/costflow/reconciliation";
 import type { RequestPayload } from "@/lib/costflow/types";
 import PaymentLedgerTable from "@/components/costflow/payments/PaymentLedgerTable";
+import AdvanceSettlementAllocator from "@/components/costflow/payments/AdvanceSettlementAllocator";
 
 type Props = {
   finance: Finance;
@@ -283,11 +284,14 @@ export default function PaymentCashPanel({
                 </Badge>
               </div>
 
+              {kind !== "ADVANCE" && <AdvanceSettlementAllocator kind={kind as "VENDOR_PAYMENT" | "REIMBURSEMENT"} />}
+
               <ActionForm
                 key={requestSource || "new-request"}
                 finance={finance}
-                command="CREATE_REQUEST"
+                command={kind === "ADVANCE" ? "CREATE_REQUEST" : kind === "VENDOR_PAYMENT" ? "PAYMENT" : "ADVANCE_SETTLEMENT"}
                 label="Gửi duyệt hồ sơ"
+                showSubmit={kind === "ADVANCE"}
                 onSuccess={() => {
                   setSavedNotice("Hồ sơ đề nghị đã được tạo thành công và chuyển sang Trình duyệt.");
                   onSelectTab("approvals");
