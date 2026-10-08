@@ -121,3 +121,82 @@ test("payment-integration: approved DB guard runs before any fixture write", asy
     }
   }
 });
+
+test("payment-integration: service creates one canonical 75m dossier with zero cash", async () => {
+  approvedDatabaseUrl();
+  const { prisma } = await import("../lib/prisma");
+  const { executeFinance, loadFinance } = await import("../lib/costflow/service");
+  const { calculateCost } = await import("../lib/costflow/money");
+  const { emptyFinance } = await import("../lib/costflow/types");
+  const prefix = `phase7-service-${randomUUID()}`;
+  const createdUserIds: string[] = [];
+  let projectId = "";
+  try {
+    const createUser = async (label: string, role = "USER", managerId?: string) => {
+      const user = await prisma.user.create({ data: { email: `${prefix}-${label}@example.test`, name: `${prefix} ${label}`, role, managerId, passwordHash: "unused" } });
+      createdUserIds.push(user.id);
+      return user;
+    };
+    const manager = await createUser("manager");
+    const account = await createUser("account", "ACCOUNT", manager.id);
+    const accountant = await createUser("accountant");
+    const ceo = await createUser("ceo");
+    const employee = await createUser("employee");
+    const project = await prisma.project.create({ data: { name: prefix, ownerId: account.id, members: { create: [account, manager, accountant, ceo, employee].map(user => ({ userId: user.id })) } } });
+    projectId = project.id;
+    const finance = emptyFinance();
+    finance.config = { managerId: manager.id, accountantId: accountant.id, ceoId: ceo.id };
+    finance.beneficiaries = [
+      { id: `${prefix}-vendor-a`, name: "Vendor A", bank: "Bank A", account: "00001111", version: 1, verifiedVersion: null, proofId: "unused-a" },
+      { id: `${prefix}-resort-b`, name: "Resort B", bank: "Bank B", account: "00002222", version: 1, verifiedVersion: null, proofId: "unused-b" },
+    ];
+    const makeLine = (id: string, description: string, gross: string) => ({ id, description, unit: "gói", quantity: "1", unitPrice: gross, basis: "GROSS" as const, vatPercent: "0", cost: calculateCost({ quantity: "1", unitPrice: gross, basis: "GROSS", vatPercent: "0" }) });
+    finance.revisions = [{ id: `${prefix}-revision`, number: 1, requestId: `${prefix}-ic-request`, effective: true, lines: [makeLine("line-a", "Vendor A", "25000000"), makeLine("line-b", "Resort B", "40000000"), makeLine("line-c", "Vận hành", "10000000")], poIds: [], evidenceIds: [], createdBy: account.id }];
+    await prisma.costFlowWorkspace.create({ data: { projectId, data: finance } });
+
+    const form = new FormData();
+    form.set("command", "CREATE_PAYMENT_DOSSIER");
+    form.set("kind", "ADVANCE");
+    form.set("title", "ĐNTU 75m đa người nhận");
+    form.set("milestone", "Đợt chuẩn bị và đặt cọc trước sự kiện");
+    form.set("explanation", "Ba khoản theo IC hiệu lực");
+    form.set("clientTotal", "1");
+    form.set("lines", JSON.stringify([
+      { stableKey: "vendor-a", description: "Đặt cọc Vendor A", amount: "25000000", revisionId: `${prefix}-revision`, lineId: "line-a", recipientKey: `VENDOR:${prefix}-vendor-a`, evidenceIds: [] },
+      { stableKey: "resort-b", description: "Đặt cọc Resort B", amount: "40000000", revisionId: `${prefix}-revision`, lineId: "line-b", recipientKey: `VENDOR:${prefix}-resort-b`, evidenceIds: [] },
+      { stableKey: "employee", description: "Tạm ứng vận hành", amount: "10000000", revisionId: `${prefix}-revision`, lineId: "line-c", recipientKey: `USER:${employee.id}`, evidenceIds: [] },
+    ]));
+    const result = await executeFinance(projectId, 0, account, form, null);
+    assert.ok(result.requestId);
+    const request = await prisma.workflowRequest.findUniqueOrThrow({ where: { id: result.requestId }, include: { paymentLines: { orderBy: { position: "asc" } }, paymentRecipients: true, cash: true } });
+    const payload = request.payload as Record<string, unknown>;
+    assert.equal(request.kind, "ADVANCE");
+    assert.equal(payload.amount, "75000000");
+    assert.equal(request.paymentLines.length, 3);
+    assert.deepEqual(request.paymentLines.map(line => line.amount), ["25000000", "40000000", "10000000"]);
+    assert.deepEqual(Object.fromEntries(request.paymentRecipients.map(item => [item.recipientKey, item.totalAmount])), { [`VENDOR:${prefix}-vendor-a`]: "25000000", [`VENDOR:${prefix}-resort-b`]: "40000000", [`USER:${employee.id}`]: "10000000" });
+    assert.equal(request.cash.length, 0);
+    const reloaded = await loadFinance(projectId, account);
+    assert.equal(reloaded?.paymentDossiers[0]?.totalAmount, "75000000");
+    assert.equal(reloaded?.paymentDossiers[0]?.lines.length, 3);
+  } finally {
+    if (projectId) {
+      await prisma.costFlowCashAllocation.deleteMany({ where: { projectId } });
+      await prisma.costFlowCash.deleteMany({ where: { projectId } });
+      await prisma.paymentLineDiscussion.deleteMany({ where: { projectId } });
+      await prisma.advanceApplication.deleteMany({ where: { projectId } });
+      await prisma.paymentRequestLine.deleteMany({ where: { projectId } });
+      await prisma.paymentRecipientSnapshot.deleteMany({ where: { projectId } });
+      await prisma.workflowNotificationDelivery.deleteMany({ where: { event: { request: { projectId } } } });
+      await prisma.workflowApprovalEvent.deleteMany({ where: { request: { projectId } } });
+      await prisma.workflowRequestReader.deleteMany({ where: { request: { projectId } } });
+      await prisma.workflowDecision.deleteMany({ where: { request: { projectId } } });
+      await prisma.workflowRequest.deleteMany({ where: { projectId } });
+      await prisma.costFlowHistory.deleteMany({ where: { projectId } });
+      await prisma.costFlowEvidence.deleteMany({ where: { projectId } });
+      await prisma.costFlowWorkspace.deleteMany({ where: { projectId } });
+      await prisma.project.deleteMany({ where: { id: projectId, name: prefix } });
+    }
+    if (createdUserIds.length) await prisma.user.deleteMany({ where: { id: { in: createdUserIds }, email: { startsWith: prefix } } });
+  }
+});

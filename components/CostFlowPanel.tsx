@@ -55,6 +55,16 @@ export type Finance = {
   evidence: { id: string; name: string; requestId: string | null; kind: string; mimeType?: string; sha256?: string }[];
   supplements?: import("@/lib/costflow/types").IcEvidenceSupplement[];
   history: { id: string; actorId: string; action: string; version: number; createdAt: string }[];
+  paymentDossiers?: {
+    requestId: string;
+    kind: string;
+    title: string;
+    state: string;
+    milestone: string;
+    totalAmount: string;
+    lines: { id: string; stableKey: string; position: number; description: string; amount: string; icRevisionId: string; icLineId: string; recipientKey: string }[];
+    recipients: { recipientKey: string; recipientType: string; displayName: string; totalAmount: string }[];
+  }[];
 };
 
 const KIND: Record<string, string> = { IC: "IC", AC_REVISION: "Sửa chi phí AC", ADVANCE: "Đề nghị tạm ứng", VENDOR_PAYMENT: "Đề nghị thanh toán NCC", REIMBURSEMENT: "Đề nghị Hoàn Tạm Ứng", CLOSE: "Đóng tài chính", REOPEN: "Mở lại tài chính", CANCEL: "Hủy hồ sơ" };

@@ -20,6 +20,8 @@ import { initializeQuotationReuseDraft } from "./quotationReuse";
 import { blankPairedRow } from "./pairedDraft";
 import { normalizeParameterBinding, parameterFinalizationIssues } from "./quotationParameters";
 import { effectiveBaseline, icDecisionPolicy } from "./icEffectiveness";
+import { normalizePaymentDraft } from "./paymentPolicy";
+import type { PaymentDraftLineInput } from "./paymentTypes";
 
 type Actor = { id: string; role: string };
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -39,6 +41,18 @@ export async function loadFinance(projectId: string, actor: Actor) {
   if (!fullAccess && !visible.length) return null;
   const workspace = await prisma.costFlowWorkspace.findUnique({ where: { projectId } });
   const cash = await prisma.costFlowCash.findMany({ where: { projectId, ...(!fullAccess ? { requestId: { in: visible.map(r => r.id) } } : {}) }, orderBy: { createdAt: "desc" } });
+  const normalizedPaymentRequests = await prisma.workflowRequest.findMany({
+    where: { id: { in: visible.map(request => request.id) }, paymentLines: { some: {} } },
+    select: {
+      id: true,
+      kind: true,
+      title: true,
+      state: true,
+      payload: true,
+      paymentLines: { orderBy: { position: "asc" }, select: { id: true, stableKey: true, position: true, description: true, amount: true, icRevisionId: true, icLineId: true, sourceSnapshot: true, recipientKey: true, evidenceManifest: true } },
+      paymentRecipients: { orderBy: { recipientKey: "asc" }, select: { recipientKey: true, recipientType: true, displayName: true, bankName: true, accountLast4: true, sourceVersion: true, totalAmount: true } },
+    },
+  });
   const savedData = workspace?.data as unknown as FinanceData | undefined;
   const supplements = (savedData?.evidenceSupplements ?? []).filter(s => fullAccess || visible.some(r => r.id === s.requestId));
   const linkedIds = requestEvidenceIds(visible, supplements);
@@ -48,7 +62,20 @@ export async function loadFinance(projectId: string, actor: Actor) {
   const files = fullAccess ? await prisma.projectFile.findMany({ where: { projectId }, select: { id: true, name: true }, orderBy: { createdAt: "desc" } }) : [];
   const history = fullAccess ? await prisma.costFlowHistory.findMany({ where: { projectId }, select: { id: true, actorId: true, action: true, version: true, createdAt: true }, orderBy: { version: "desc" }, take: 50 }) : [];
   const clients = fullAccess ? await prisma.client.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }) : [];
-  return { project: { ...project, members: fullAccess ? project.members : [], client: fullAccess ? project.client : null }, clients, fullAccess, version: workspace?.version ?? 0, data: fullAccess && savedData ? savedData : { ...emptyFinance(), closed: savedData?.closed ?? false }, requests: visible, cash, users, files, evidence, supplements, history };
+  const paymentDossiers = normalizedPaymentRequests.map(request => {
+    const paymentPayload = request.payload && typeof request.payload === "object" ? request.payload as Record<string, unknown> : {};
+    return {
+      requestId: request.id,
+      kind: request.kind,
+      title: request.title,
+      state: request.state,
+      milestone: typeof paymentPayload.milestone === "string" ? paymentPayload.milestone : "",
+      totalAmount: typeof paymentPayload.amount === "string" ? paymentPayload.amount : "0",
+      lines: request.paymentLines,
+      recipients: request.paymentRecipients,
+    };
+  });
+  return { project: { ...project, members: fullAccess ? project.members : [], client: fullAccess ? project.client : null }, clients, fullAccess, version: workspace?.version ?? 0, data: fullAccess && savedData ? savedData : { ...emptyFinance(), closed: savedData?.closed ?? false }, requests: visible, cash, users, files, evidence, supplements, history, paymentDossiers };
 }
 
 export async function executeFinance(projectId: string, expectedVersion: number, actor: Actor, form: FormData, upload: ProjectUpload | null) {
@@ -148,6 +175,123 @@ export async function executeFinance(projectId: string, expectedVersion: number,
     };
 
     switch (command) {
+      case "CREATE_PAYMENT_DOSSIER": {
+        needCreator();
+        const kind = text(form, "kind");
+        if (kind !== "ADVANCE") throw new Error("Lát cắt đa khoản hiện chỉ hỗ trợ Đề nghị tạm ứng.");
+        const parsedLines = JSON.parse(text(form, "lines") || "[]") as Array<{
+          stableKey?: unknown;
+          description?: unknown;
+          amount?: unknown;
+          revisionId?: unknown;
+          lineId?: unknown;
+          recipientKey?: unknown;
+          evidenceIds?: unknown;
+        }>;
+        if (!Array.isArray(parsedLines)) throw new Error("Danh sách khoản đề nghị không hợp lệ.");
+
+        const sourceEvidenceIds = [...new Set(parsedLines.flatMap(line => Array.isArray(line.evidenceIds) ? line.evidenceIds.filter((id): id is string => typeof id === "string") : []))];
+        const evidenceRows = sourceEvidenceIds.length ? await tx.costFlowEvidence.findMany({
+          where: { projectId, id: { in: sourceEvidenceIds } },
+          select: { id: true, name: true, kind: true, mimeType: true, sha256: true },
+        }) : [];
+        if (evidenceRows.length !== sourceEvidenceIds.length) throw new Error("Minh chứng của khoản đề nghị phải thuộc đúng Project.");
+        const evidenceById = new Map(evidenceRows.map(row => [row.id, row]));
+
+        const resolvedLines: PaymentDraftLineInput[] = [];
+        for (const rawLine of parsedLines) {
+          const revisionId = String(rawLine.revisionId ?? "").trim();
+          const lineId = String(rawLine.lineId ?? "").trim();
+          const revision = requireEffectiveIc(revisionId);
+          const sourceLine = revision.lines.find(line => line.id === lineId);
+          if (!sourceLine) throw new Error("Mỗi khoản phải truy được một dòng thuộc IC hiệu lực của Project.");
+          const recipientKey = await recipient(String(rawLine.recipientKey ?? "").trim());
+          let recipientInput: PaymentDraftLineInput["recipient"];
+          if (recipientKey.startsWith("USER:")) {
+            const userId = recipientKey.slice(5);
+            const savedUser = await tx.user.findFirst({ where: { id: userId, isActive: true }, select: { name: true } });
+            if (!savedUser) throw new Error("Người nhận nội bộ không còn hoạt động.");
+            recipientInput = { projectId, key: recipientKey, type: "EMPLOYEE", name: savedUser.name };
+          } else {
+            const beneficiary = data.beneficiaries.find(item => `VENDOR:${item.id}` === recipientKey);
+            if (!beneficiary) throw new Error("Không tìm thấy người thụ hưởng NCC trong Project.");
+            const accountDigits = beneficiary.account.replace(/\D/g, "");
+            recipientInput = {
+              projectId,
+              key: recipientKey,
+              type: "VENDOR",
+              name: beneficiary.name,
+              bankName: beneficiary.bank,
+              accountLast4: accountDigits ? accountDigits.slice(-4) : undefined,
+              sourceVersion: beneficiary.version,
+            };
+          }
+          resolvedLines.push({
+            stableKey: String(rawLine.stableKey ?? ""),
+            description: String(rawLine.description ?? ""),
+            amount: String(rawLine.amount ?? ""),
+            source: { projectId, revisionId, lineId, budgetGross: (sourceLine.cost ?? calculateCost(sourceLine)).gross },
+            recipient: recipientInput,
+            evidenceIds: Array.isArray(rawLine.evidenceIds) ? rawLine.evidenceIds.filter((id): id is string => typeof id === "string") : [],
+          });
+        }
+
+        const projection = normalizePaymentDraft({
+          projectId,
+          kind: "ADVANCE",
+          budgetEffectStatus: "EFFECTIVE",
+          milestone: text(form, "milestone"),
+          explanation: text(form, "explanation"),
+          clientTotal: text(form, "clientTotal"),
+          lines: resolvedLines,
+        });
+        const chain = await ordinarySteps();
+        const attemptId = randomUUID();
+        const saved = await tx.workflowRequest.create({
+          data: {
+            projectId,
+            module: "COSTFLOW",
+            kind: "ADVANCE",
+            title: requireValue(text(form, "title"), "tên hồ sơ"),
+            creatorId: actor.id,
+            cashAssigneeId: actor.id,
+            state: "SUBMITTED",
+            steps: json(chain),
+            currentAttemptId: attemptId,
+            currentStepArrivedAt: new Date(),
+            payload: json({
+              normalizedPayment: true,
+              milestone: projection.milestone,
+              explanation: projection.explanation,
+              amount: projection.totalAmount,
+              recipientTotals: projection.recipientTotals,
+              warnings: projection.warnings,
+            }),
+          },
+        });
+        affectedRequestId = saved.id;
+        await recordApprovalEvent(tx, { requestId: saved.id, module: saved.module, attemptId, submittedVersion: saved.version, mutationVersion: saved.version, stepIndex: 0, role: chain[0]?.role ?? "MANAGER", actorId: actor.id, action: "SUBMIT", recipients: chain[0]?.assigneeId ? [chain[0].assigneeId] : [] });
+        for (const [recipientKey, totalAmount] of Object.entries(projection.recipientTotals)) {
+          const resolved = projection.lines.find(line => line.recipient.key === recipientKey)!.recipient;
+          await tx.paymentRecipientSnapshot.create({ data: { projectId, requestId: saved.id, recipientKey, recipientType: resolved.type, displayName: resolved.name, bankName: resolved.bankName, accountLast4: resolved.accountLast4, sourceVersion: resolved.sourceVersion, totalAmount } });
+        }
+        for (const line of projection.lines) {
+          await tx.paymentRequestLine.create({ data: {
+            projectId,
+            requestId: saved.id,
+            stableKey: line.stableKey,
+            position: line.position,
+            description: line.description,
+            amount: line.amount,
+            icRevisionId: line.source.revisionId,
+            icLineId: line.source.lineId,
+            sourceSnapshot: json({ ...line.source, effective: true }),
+            recipientKey: line.recipient.key,
+            evidenceManifest: json(line.evidenceIds.map(id => evidenceById.get(id))),
+          } });
+        }
+        break;
+      }
       case "CREATE_REUSE_DRAFT": {
         needCreator();
         const draft = await initializeQuotationReuseDraft(tx, projectId, { id: actor.id, role: currentActor.role }, data, form);

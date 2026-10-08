@@ -23,6 +23,8 @@ import { Dialog } from "@/components/ui/Dialog";
 import ActionForm from "@/components/CostFlowActionForm";
 import ApprovalTimeline from "@/components/ApprovalTimeline";
 import IcRequestEvidence from "@/components/IcRequestEvidence";
+import { PaymentRequestEditor } from "@/components/costflow/payments/PaymentRequestEditor";
+import { PaymentRequestPreview } from "@/components/costflow/payments/PaymentRequestPreview";
 import { icStatusProjection } from "@/lib/costflow/icEffectiveness";
 import { displayMoney } from "@/lib/costflow/money";
 
@@ -156,6 +158,20 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
           </Link>
         )}
       </div>
+
+      {canCreate && !finance.data.closed && <details className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+        <summary className="cursor-pointer font-semibold text-sm">Lập ĐNTU đa khoản</summary>
+        <div className="mt-4"><PaymentRequestEditor finance={finance} onCreated={() => undefined} /></div>
+      </details>}
+      {!!finance.paymentDossiers?.length && <Panel className="space-y-4">
+        <div><h3 className="font-semibold">ĐNTU đa khoản đã lưu</h3><p className="tf-ui-help">Nạp lại từ dòng và snapshot chuẩn hóa trên server.</p></div>
+        {finance.paymentDossiers.map(dossier => <PaymentRequestPreview key={dossier.requestId} serverProjection milestone={dossier.milestone} lines={dossier.lines.map(line => ({
+          stableKey: line.stableKey, description: line.description, amount: line.amount,
+          sourceLabel: finance.data.revisions.find(revision => revision.id === line.icRevisionId)?.lines.find(source => source.id === line.icLineId)?.description ?? `${line.icRevisionId} / ${line.icLineId}`,
+          recipientKey: line.recipientKey,
+          recipientLabel: dossier.recipients.find(recipient => recipient.recipientKey === line.recipientKey)?.displayName ?? line.recipientKey,
+        }))} />)}
+      </Panel>}
 
       {/* KPI METRICS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
