@@ -5,7 +5,8 @@ import { ArrowDown, ArrowUp, Copy, Plus, Trash2 } from "lucide-react";
 import ActionForm from "@/components/CostFlowActionForm";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Input, Select, Textarea } from "@/components/ui/Field";
-import { Alert, Panel } from "@/components/ui/Presentation";
+import { Dialog } from "@/components/ui/Dialog";
+import { Alert, Panel, Table } from "@/components/ui/Presentation";
 import type { Finance } from "@/components/CostFlowPanel";
 import { PaymentRequestPreview, type PaymentPreviewLine } from "./PaymentRequestPreview";
 
@@ -28,6 +29,7 @@ export function PaymentRequestEditor({ finance, onCreated, draft }:
   const [title, setTitle] = useState(draft?.title ?? "");
   const [milestone, setMilestone] = useState(draft?.milestone ?? "");
   const [explanation, setExplanation] = useState(typeof draftRequest?.payload.explanation === "string" ? draftRequest.payload.explanation : "");
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [lines, setLines] = useState<EditableLine[]>(() => draft?.lines.length ? draft.lines.map(line => ({ stableKey: line.stableKey, description: line.description, amount: line.amount, lineId: line.icLineId, recipientKey: line.recipientKey })) : [newLine()]);
   const recipients = useMemo(() => [
     ...finance.project.members.map(member => ({ key: `USER:${member.userId}`, label: `${finance.users.find(user => user.id === member.userId)?.name ?? "Nhân viên"} (nội bộ)` })),
@@ -56,6 +58,12 @@ export function PaymentRequestEditor({ finance, onCreated, draft }:
     recipientLabel: recipients.find(recipient => recipient.key === line.recipientKey)?.label ?? "",
   }));
   const clientTotal = lines.reduce((sum, line) => /^\d+$/.test(line.amount) ? sum + BigInt(line.amount) : sum, BigInt(0)).toString();
+  const duplicate = (line: EditableLine, index: number) => setLines(current => [
+    ...current.slice(0, index + 1),
+    { ...line, stableKey: crypto.randomUUID() },
+    ...current.slice(index + 1),
+  ]);
+  const remove = (stableKey: string) => setLines(current => current.filter(item => item.stableKey !== stableKey));
 
   if (!revision) return <Alert tone="warning" title="Chưa có IC hiệu lực">Đề nghị tạm ứng đa khoản chỉ được lập từ một IC đang có hiệu lực ngân sách.</Alert>;
   return <Panel className="space-y-5">
@@ -72,31 +80,59 @@ export function PaymentRequestEditor({ finance, onCreated, draft }:
         <Input name="milestone" label="Mốc hồ sơ chung" value={milestone} onChange={event => setMilestone(event.target.value)} required placeholder="Ví dụ: Đợt chuẩn bị và đặt cọc" />
       </div>
       <Textarea name="explanation" label="Giải trình chung" value={explanation} onChange={event => setExplanation(event.target.value)} hint="Bắt buộc khi tổng một nguồn vượt số tham chiếu IC; không tự tạo revision IC." />
-      <div className="space-y-3">
+      <div className="tf-payment-line-editor space-y-3">
+        <div className="tf-payment-line-table" aria-label="Bảng nhập các khoản đề nghị trên desktop">
+          <Table caption="Các khoản trong đề nghị tạm ứng">
+            <thead><tr><th scope="col">Khoản</th><th scope="col">Dòng IC hiệu lực</th><th scope="col">Người nhận</th><th scope="col">Số tiền VND</th><th scope="col">Thao tác</th></tr></thead>
+            <tbody>{lines.map((line, index) => <tr key={line.stableKey}>
+              <td><Input aria-label={`Nội dung khoản ${index + 1}`} aria-required="true" value={line.description} onChange={event => update(line.stableKey, { description: event.target.value })} /></td>
+              <td><Select aria-label={`Dòng IC của khoản ${index + 1}`} aria-required="true" value={line.lineId} onChange={event => update(line.stableKey, { lineId: event.target.value })}>
+                <option value="">Chọn dòng IC</option>{revision.lines.map(source => <option key={source.id} value={source.id}>{source.description}</option>)}
+              </Select></td>
+              <td><Select aria-label={`Người nhận khoản ${index + 1}`} aria-required="true" value={line.recipientKey} onChange={event => update(line.stableKey, { recipientKey: event.target.value })}>
+                <option value="">Chọn người nhận</option>{recipients.map(recipient => <option key={recipient.key} value={recipient.key}>{recipient.label}</option>)}
+              </Select></td>
+              <td><Input aria-label={`Số tiền khoản ${index + 1}`} aria-required="true" inputMode="numeric" pattern="[0-9]+" value={line.amount} onChange={event => update(line.stableKey, { amount: event.target.value.replace(/\D/g, "") })} /></td>
+              <td><div className="flex flex-wrap gap-1">
+                <IconButton aria-label={`Đưa khoản ${index + 1} lên`} variant="ghost" size="sm" disabled={index === 0} onClick={() => move(index, -1)}><ArrowUp size={15} aria-hidden="true" /></IconButton>
+                <IconButton aria-label={`Đưa khoản ${index + 1} xuống`} variant="ghost" size="sm" disabled={index === lines.length - 1} onClick={() => move(index, 1)}><ArrowDown size={15} aria-hidden="true" /></IconButton>
+                <IconButton aria-label={`Nhân đôi khoản ${index + 1}`} variant="ghost" size="sm" onClick={() => duplicate(line, index)}><Copy size={15} aria-hidden="true" /></IconButton>
+                <IconButton aria-label={`Xóa khoản ${index + 1}`} variant="ghost" size="sm" disabled={lines.length === 1} onClick={() => remove(line.stableKey)}><Trash2 size={15} aria-hidden="true" /></IconButton>
+              </div></td>
+            </tr>)}</tbody>
+          </Table>
+        </div>
+        <div className="tf-payment-line-cards" aria-label="Các khoản đề nghị trên điện thoại">
         {lines.map((line, index) => <fieldset key={line.stableKey} className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 space-y-3">
           <legend className="px-1 text-sm font-semibold">Khoản {index + 1}</legend>
           <div className="grid gap-3 lg:grid-cols-4">
-            <Input label="Nội dung" value={line.description} onChange={event => update(line.stableKey, { description: event.target.value })} required />
-            <Select label="Dòng IC hiệu lực" value={line.lineId} onChange={event => update(line.stableKey, { lineId: event.target.value })} required>
+            <Input label="Nội dung" aria-required="true" value={line.description} onChange={event => update(line.stableKey, { description: event.target.value })} />
+            <Select label="Dòng IC hiệu lực" aria-required="true" value={line.lineId} onChange={event => update(line.stableKey, { lineId: event.target.value })}>
               <option value="">Chọn dòng IC</option>
               {revision.lines.map(source => <option key={source.id} value={source.id}>{source.description}</option>)}
             </Select>
-            <Select label="Người nhận" value={line.recipientKey} onChange={event => update(line.stableKey, { recipientKey: event.target.value })} required>
+            <Select label="Người nhận" aria-required="true" value={line.recipientKey} onChange={event => update(line.stableKey, { recipientKey: event.target.value })}>
               <option value="">Chọn người nhận</option>
               {recipients.map(recipient => <option key={recipient.key} value={recipient.key}>{recipient.label}</option>)}
             </Select>
-            <Input label="Số tiền VND" inputMode="numeric" pattern="[0-9]+" value={line.amount} onChange={event => update(line.stableKey, { amount: event.target.value.replace(/\D/g, "") })} required />
+            <Input label="Số tiền VND" aria-required="true" inputMode="numeric" pattern="[0-9]+" value={line.amount} onChange={event => update(line.stableKey, { amount: event.target.value.replace(/\D/g, "") })} />
           </div>
           <div className="flex flex-wrap justify-end gap-1">
-            <IconButton aria-label={`Đưa khoản ${index + 1} lên`} variant="ghost" size="sm" disabled={index === 0} onClick={() => move(index, -1)}><ArrowUp size={15} /></IconButton>
-            <IconButton aria-label={`Đưa khoản ${index + 1} xuống`} variant="ghost" size="sm" disabled={index === lines.length - 1} onClick={() => move(index, 1)}><ArrowDown size={15} /></IconButton>
-            <IconButton aria-label={`Nhân đôi khoản ${index + 1}`} variant="ghost" size="sm" onClick={() => setLines(current => [...current.slice(0, index + 1), { ...line, stableKey: crypto.randomUUID() }, ...current.slice(index + 1)])}><Copy size={15} /></IconButton>
-            <IconButton aria-label={`Xóa khoản ${index + 1}`} variant="ghost" size="sm" disabled={lines.length === 1} onClick={() => setLines(current => current.filter(item => item.stableKey !== line.stableKey))}><Trash2 size={15} /></IconButton>
+            <IconButton aria-label={`Đưa khoản ${index + 1} lên`} variant="ghost" size="sm" disabled={index === 0} onClick={() => move(index, -1)}><ArrowUp size={15} aria-hidden="true" /></IconButton>
+            <IconButton aria-label={`Đưa khoản ${index + 1} xuống`} variant="ghost" size="sm" disabled={index === lines.length - 1} onClick={() => move(index, 1)}><ArrowDown size={15} aria-hidden="true" /></IconButton>
+            <IconButton aria-label={`Nhân đôi khoản ${index + 1}`} variant="ghost" size="sm" onClick={() => duplicate(line, index)}><Copy size={15} aria-hidden="true" /></IconButton>
+            <IconButton aria-label={`Xóa khoản ${index + 1}`} variant="ghost" size="sm" disabled={lines.length === 1} onClick={() => remove(line.stableKey)}><Trash2 size={15} aria-hidden="true" /></IconButton>
           </div>
         </fieldset>)}
-        <Button variant="secondary" size="sm" onClick={() => setLines(current => [...current, newLine()])}><Plus size={15} className="mr-1" />Thêm khoản</Button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setLines(current => [...current, newLine()])}><Plus size={15} className="mr-1" aria-hidden="true" />Thêm khoản</Button>
+          <Button variant="secondary" size="sm" onClick={() => setPreviewOpen(true)}>Xem trước snapshot gửi duyệt</Button>
+        </div>
       </div>
-      <PaymentRequestPreview milestone={milestone} lines={previewLines} />
     </ActionForm>
+    <Dialog open={previewOpen} onClose={() => setPreviewOpen(false)} title="Xem trước hồ sơ gửi duyệt" description="Đây là projection từ dữ liệu đang nhập; server sẽ chuẩn hóa và tính lại trước khi lưu snapshot bất biến.">
+      <PaymentRequestPreview title={title} milestone={milestone} explanation={explanation} revisionLabel={`IC-R${revision.number}`} lines={previewLines} />
+    </Dialog>
   </Panel>;
 }

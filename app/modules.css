@@ -1193,3 +1193,24 @@ dialog.tf-ui-dialog:has(.tf-quotation-settings-panel) .tf-ui-actions {
   margin: 0 !important;
   box-shadow: 0 -4px 12px rgba(17, 24, 39, 0.05) !important;
 }
+
+/* Phase 7 payment dossiers: one state model, table on desktop and complete cards on mobile. */
+.tf-payment-line-cards,
+.tf-payment-preview-cards,
+.tf-payment-ledger-cards { display: none; }
+.tf-payment-line-table .tf-ui-table { min-width: 860px; }
+.tf-payment-line-table .tf-ui-field-group { min-width: 140px; }
+.tf-payment-line-table .tf-ui-table td:last-child { min-width: 152px; }
+.tf-payment-review-document-links { overflow-wrap: anywhere; }
+
+@media (max-width: 767px) {
+  .tf-payment-line-table,
+  .tf-payment-preview-table,
+  .tf-payment-ledger-table { display: none; }
+  .tf-payment-line-cards,
+  .tf-payment-preview-cards,
+  .tf-payment-ledger-cards { display: block; }
+  .tf-payment-cash-editor { padding: 12px; }
+  .tf-payment-cash-editor .tf-ui-actions { align-items: stretch; }
+  .tf-payment-cash-editor .tf-ui-actions > * { width: 100%; }
+}

@@ -31,7 +31,7 @@ export default function CashConfirmationEditor({ finance, request, dossier, reci
   const amount = allocations.reduce((sum, item) => sum + BigInt(item.amount), BigInt(0)).toString();
   const canConfirm = request.state === "APPROVED" && request.kind === "ADVANCE" && request.cashAssigneeId === userId && recipient.progress !== "DA_CHI_DU";
 
-  return <section className="space-y-4 rounded-xl border border-[var(--border)] p-4">
+  return <section className="tf-payment-cash-editor space-y-4 rounded-xl border border-[var(--border)] p-4">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div><h4 className="font-semibold">{recipient.displayName}</h4><p className="text-xs text-[var(--text-secondary)]">{recipient.bankName ?? "Chưa có ngân hàng"}{recipient.accountLast4 ? ` · •••• ${recipient.accountLast4}` : ""}</p></div>
       <Badge tone={recipient.progress === "DA_CHI_DU" ? "success" : recipient.progress === "DANG_CHI_MOT_PHAN" ? "warning" : "neutral"}>{PROGRESS[recipient.progress]}</Badge>
@@ -55,7 +55,8 @@ export default function CashConfirmationEditor({ finance, request, dossier, reci
         <Input name="occurredAt" type="datetime-local" label="Thời điểm giao dịch" required />
         <Input name="proof" type="file" label="Chứng từ bất biến" required accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv" />
       </div>
-      <p className="text-xs text-[var(--text-secondary)]">Tổng giao dịch: <strong>{displayMoney(amount)}</strong>. Mỗi lần xác nhận chỉ áp dụng cho một người nhận.</p>
+      <p className="text-xs text-[var(--text-secondary)]">Gross tạm ứng OUT của giao dịch: <strong>{displayMoney(amount)}</strong>. Mỗi lần xác nhận chỉ áp dụng cho một người nhận và phân bổ vào đúng khoản của hồ sơ.</p>
+      <Alert tone="info" title="Chưa phải đối soát sau AC">Hoàn IN, chi thêm OUT, net cash, approved actual và đóng tài chính chỉ có sau nguồn AC được duyệt có thẩm quyền ở Phase 8.</Alert>
     </ActionForm>}
   </section>;
 }
