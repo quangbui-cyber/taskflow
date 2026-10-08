@@ -120,3 +120,25 @@ Scope & Báo giá là hub nguồn và phiên bản, không còn đồng thời l
 Trình duyệt chỉ xử lý timeline, quyết định và evidence; Hồ sơ & tiền tạo request, quản lý người thụ hưởng, cash và phân bổ. Internal Cost luôn tách hiệu lực ngân sách khỏi kết quả approval; Actual Cost luôn tách approval khỏi giao dịch tiền. Không có thay đổi schema, payload server action, quyền, lifecycle hoặc công thức tài chính trong refactor này.
 
 Local DB proof chỉ dùng `postgresql://postgres@127.0.0.1:55439/taskflow`; test từ chối host/port/database khác và xóa đúng fixture riêng. Hiệu lực IC không đồng nghĩa quyền thanh toán, tiền thực tế, chữ ký, hoàn tất công việc hoặc đóng tài chính. Nghiệm thu vai trò thật, đối soát Kế toán, delivery provider và production vẫn Pending.
+
+## Phase 7 — ĐNTU đa khoản, tiền tạm ứng và sổ đối soát
+
+Luồng vận hành chuẩn Phase 7 là một hồ sơ ADVANCE có nhiều khoản và nhiều người nhận, nhưng chỉ một milestone và một chuỗi duyệt toàn hồ sơ. Mỗi khoản giữ stable key, thứ tự, dòng/revision IC hiệu lực, người nhận và số VND nguyên dương; server tự tải lại nguồn/người nhận, tính tổng phiếu và tổng theo người nhận. `clientTotal`, role, recipient facts hoặc trạng thái gửi từ trình duyệt không có authority.
+
+Khi hồ sơ bị trả, bản sửa là request mới liên kết bản nguồn. Snapshot cũ không đổi; diff theo stable key bao gồm header, thứ tự, nguồn, người nhận, số tiền và manifest tài liệu. Trao đổi gắn theo khoản chỉ bổ sung ngữ cảnh, không tạo quyết định. Kế toán kiểm tra tất cả NCC trong một lần; một NCC đổi phiên bản hoặc chưa xác minh làm cả hồ sơ bị trả.
+
+Sau khi toàn hồ sơ ADVANCE được duyệt, chỉ Account/Admin đang hoạt động và được giao `cashAssigneeId` mới xác nhận tiền thật. Mỗi giao dịch chỉ thuộc một người nhận và chỉ phân bổ vào các khoản cùng Project/request/người nhận. Gross tạm ứng OUT có thể chia nhiều đợt; tạo/duyệt hồ sơ không tạo cash. Chứng từ được sao chép bytes/hash khi ghi giao dịch. Serializable transaction, optimistic workspace version, reference unique và fingerprinted idempotency ngăn retry/race ghi vượt trần.
+
+Sổ đối soát chuẩn hóa tách riêng: kết quả duyệt, tiến độ cash, xác minh NCC, nguồn AC và đóng tài chính. Ledger không trả số tài khoản, bytes chứng từ hoặc suy luận provenance thiếu. Download/preview chứng từ recheck quyền đọc Project/hồ sơ, trả 404 không phân biệt và `private, no-store`.
+
+UI dùng bảng desktop và card đầy đủ ở ≤767px cho editor, preview/reviewer và ledger. Preview trước submit nói rõ là projection tạm thời; server chuẩn hóa lại trước khi lưu snapshot bất biến. Reviewer có đúng một khu vực quyết định toàn hồ sơ. Tiền sau AC, hoàn IN, chi thêm OUT, approved actual và đóng tài chính không bị gộp vào tiến độ tạm ứng.
+
+### Ranh giới hậu-AC và Phase 8
+
+Phase 7 có contract tính selected-source, không FIFO: Account chọn rõ nguồn ứng và số áp dụng. Hai case 10m ứng / 8m actual → hoàn 2m và 10m / 12m → chi thêm 2m chỉ được chứng minh bằng fixture pure/test-only. Production `ApprovedActualCostConsumer` vẫn unavailable; đủ hóa đơn/chứng từ không đồng nghĩa AC đã duyệt. Vì vậy PAYMENT, ADVANCE_SETTLEMENT, refund IN và additional OUT thật vẫn fail closed, không có positive DB/browser claim trong Phase 7.
+
+Contract producer chi tiết cho Phase 8 nằm tại `docs/COSTFLOW_PHASE8_AC_CONTRACT.md`. Phase 8 hoặc một gap plan sau Phase 8 phải cung cấp persisted approved AC, production binding, DB và authenticated browser proof trước khi mở các control này.
+
+PAY-06 (ngoại lệ chi trước) được hoãn và vẫn Pending. Không có exception model/API/action/UI command. Kiểm chứng local Phase 7 không phải nghiệm thu Kế toán/công ty, pilot, deployment hoặc production acceptance.
+
+Kiểm chứng Phase 7 dùng duy nhất PostgreSQL local `127.0.0.1:55439/taskflow` với URL guard và fixture riêng: policy/diff/read-model/security/UI contract, DB adversarial tests, TypeScript, focused ESLint và direct Next webpack build. Browser desktop/exact 390px là checkpoint riêng; mọi kết quả phải ghi rõ mức bằng chứng.

@@ -3,6 +3,7 @@ export type ApprovedActualCostLine = {
   versionId: string;
   approvalEventId: string;
   approvalAttemptId: string;
+  approvalState: "APPROVED";
   stableLineId: string;
   recipientKey: string;
   approvedAmount: string;
@@ -44,7 +45,7 @@ export function validateApprovedActualCostLines(query: ApprovedActualCostQuery, 
   if (new Set(query.lineIds).size !== query.lineIds.length) throw new Error("Dòng AC được chọn bị trùng.");
   if (lines.length !== query.lineIds.length) throw new ApprovedActualCostUnavailableError("AC chưa có đủ dòng đã duyệt theo contract Phase 8.");
   for (const line of lines) {
-    if (line.projectId !== query.projectId || line.versionId !== query.versionId || line.approvalEventId !== query.approvalEventId || line.approvalAttemptId !== query.approvalAttemptId || !query.lineIds.includes(line.stableLineId)) {
+    if (line.projectId !== query.projectId || line.versionId !== query.versionId || line.approvalEventId !== query.approvalEventId || line.approvalAttemptId !== query.approvalAttemptId || line.approvalState !== "APPROVED" || !query.lineIds.includes(line.stableLineId)) {
       throw new ApprovedActualCostUnavailableError("AC đã duyệt không khớp Project, phiên bản hoặc approval event.");
     }
     if (!/^[1-9]\d*$/.test(line.approvedAmount)) throw new Error("Giá trị AC đã duyệt phải là số nguyên VND dương.");

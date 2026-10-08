@@ -180,7 +180,7 @@ test("payment-cash: canonical 75m sequence derives cash progress independently",
 });
 
 const acQuery = { projectId, versionId: "ac-v2", approvalEventId: "event-approved", approvalAttemptId: "attempt-2", lineIds: ["ac-line"] };
-const acLine = { ...acQuery, stableLineId: "ac-line", recipientKey: "USER:employee", approvedAmount: "8000000" };
+const acLine = { ...acQuery, approvalState: "APPROVED" as const, stableLineId: "ac-line", recipientKey: "USER:employee", approvedAmount: "8000000" };
 
 test("payment-policy: ApprovedAcConsumerFixture selects newer advance without FIFO", async () => {
   const consumer = new ApprovedAcConsumerFixture([acLine]);
