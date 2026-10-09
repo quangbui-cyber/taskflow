@@ -2,7 +2,7 @@ import "server-only";
 import { randomUUID, createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { calculateCost, calculateLineCost, compare, decimal } from "./money";
+import { calculateCost, calculateLineCost, compare, decimal, round, sum } from "./money";
 import { closeBlockers } from "./reconciliation";
 import { emptyFinance, type FinanceData, type IcLine, type QuotationLine, type RequestPayload } from "./types";
 import { decide, validateSteps, type ApprovalStep, type Decision } from "@/lib/workflow/approval";
@@ -28,12 +28,21 @@ import { projectPaymentLedger, type BeneficiaryVerification } from "./paymentRea
 import { resolveProductionApprovedActualCost } from "./approvedActualCost";
 import { loadActualCosts } from "./actualCostReadModel";
 import { approvedActualSettlementRoute, calculateSelectedAdvanceSettlement, type AdvanceSourceSelection } from "./paymentSettlement";
+import { deriveCustomerAccounting, validateLiquidationAmounts } from "./customerAccounting";
+import { projectQuotation } from "./quotationProjection";
 
 type Actor = { id: string; role: string };
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 const text = (form: FormData, key: string) => String(form.get(key) ?? "").trim();
 function requireValue(value: string, label: string) { if (!value) throw new Error(`Thiếu ${label}.`); return value; }
 function positive(value: string) { if (compare(decimal(value), decimal("0")) <= 0) throw new Error("Số tiền phải lớn hơn 0."); return value; }
+function bounded(value: string, label: string, max = 160) { const result = requireValue(value, label); if (result.length > max) throw new Error(`${label} quá dài.`); return result; }
+function calendarDate(value: string, label: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error(`${label} không hợp lệ.`);
+  const result = new Date(`${value}T00:00:00.000Z`);
+  if (!Number.isFinite(result.getTime()) || result.toISOString().slice(0, 10) !== value) throw new Error(`${label} không hợp lệ.`);
+  return result;
+}
 
 export async function loadFinance(projectId: string, actor: Actor) {
   const activeActor = await prisma.user.findFirst({where:{id:actor.id,isActive:true},select:{role:true}});
@@ -134,7 +143,30 @@ export async function loadFinance(projectId: string, actor: Actor) {
     financialCloseState: savedData?.closed ? "CLOSED" : "OPEN",
   });
   const actualCosts = fullAccess ? await loadActualCosts(projectId, actor) : null;
-  return { project: { ...project, members: fullAccess ? project.members : [], client: fullAccess ? project.client : null }, clients, fullAccess, version: workspace?.version ?? 0, data: fullAccess && savedData ? savedData : { ...emptyFinance(), closed: savedData?.closed ?? false }, requests: visible, cash, users, files, evidence, supplements, history, paymentDossiers, paymentLedger, actualCosts };
+  const [customerLiquidations, customerCashIns] = fullAccess ? await Promise.all([
+    prisma.customerLiquidation.findMany({ where: { projectId }, include: { evidence: { select: { id: true, name: true, sha256: true } } }, orderBy: { version: "asc" } }),
+    prisma.customerCashIn.findMany({ where: { projectId }, include: { evidence: { select: { id: true, name: true, sha256: true } } }, orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }] }),
+  ]) : [[], []];
+  let quotation: { net: string; gross: string } | null = null;
+  const latestQuotation = savedData?.quotations?.at(-1);
+  if (latestQuotation) {
+    try {
+      const amount = projectQuotation(latestQuotation).amount;
+      quotation = { net: amount.net, gross: amount.gross };
+    } catch {
+      quotation = null;
+    }
+  }
+  const purchaseOrderNet = savedData ? round(sum(currentPurchaseOrders(savedData.pos).map(po => decimal(po.net)))) : "0";
+  const customerAccounting = deriveCustomerAccounting({
+    liquidations: customerLiquidations.map(item => ({ id: item.id, version: item.version, documentNumber: item.documentNumber, signedAt: item.signedAt.toISOString(), netAmount: item.netAmount, vatAmount: item.vatAmount, grossAmount: item.grossAmount, evidence: item.evidence, createdAt: item.createdAt.toISOString() })),
+    cashIns: customerCashIns.map(item => ({ id: item.id, liquidationId: item.liquidationId, milestone: item.milestone, occurredAt: item.occurredAt.toISOString(), amount: item.amount, reference: item.reference, evidence: item.evidence, createdAt: item.createdAt.toISOString() })),
+    quotation,
+    purchaseOrderNet,
+    actualCosts: (actualCosts?.lines ?? []).flatMap(line => line.cost ? [{ stableLineId: line.stableLineId, source: line.source, cost: line.cost }] : []),
+  });
+  const canManageCustomerAccounting = activeActor.role === "ADMIN" || project.members.some(item => item.userId === actor.id);
+  return { project: { ...project, members: fullAccess ? project.members : [], client: fullAccess ? project.client : null }, clients, fullAccess, canManageCustomerAccounting, version: workspace?.version ?? 0, data: fullAccess && savedData ? savedData : { ...emptyFinance(), closed: savedData?.closed ?? false }, requests: visible, cash, users, files, evidence, supplements, history, paymentDossiers, paymentLedger, actualCosts, customerAccounting };
 }
 
 export async function executeFinance(projectId: string, expectedVersion: number, actor: Actor, form: FormData, upload: ProjectUpload | null) {
@@ -161,6 +193,8 @@ export async function executeFinance(projectId: string, expectedVersion: number,
     let savedDraftId: string | undefined;
     let savedBeneficiaryId: string | undefined;
     let savedScopes: string[] | undefined;
+    let customerCashFingerprint: string | undefined;
+    let customerCashIdempotencyKey: string | undefined;
     const request = requests.find(r => r.id === text(form, "requestId"));
     let affectedRequestId = request?.id;
     const payload = request?.payload as RequestPayload | undefined;
@@ -173,6 +207,23 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         const ids = JSON.parse(text(form, "evidenceIds") || "[]");
         if (!canCreate || existing.actorId !== actor.id || existing.requestId !== request?.id || existing.lineId !== text(form, "lineId") || existing.requestVersion !== Number(text(form, "requestVersion")) || existing.reason !== text(form, "reason") || JSON.stringify(existing.evidenceIds) !== JSON.stringify(ids)) throw new Error("Mã thao tác đã dùng với nội dung khác.");
         return { success: "Bổ sung này đã được lưu.", version: workspace.version };
+      }
+    }
+    if (command === "ADD_CUSTOMER_CASH_IN") {
+      if (!member && !isAdmin) throw new Error("Bạn không có quyền ghi nhận tiền khách hàng trên Project này.");
+      customerCashIdempotencyKey = bounded(text(form, "idempotencyKey"), "mã chống ghi trùng", 200);
+      if (!upload) throw new Error("Thiếu chứng từ tiền khách hàng đã thu.");
+      customerCashFingerprint = createHash("sha256").update(JSON.stringify({
+        milestone: text(form, "milestone"),
+        occurredAt: text(form, "occurredAt"),
+        amount: text(form, "amount"),
+        reference: text(form, "reference"),
+        evidenceSha256: createHash("sha256").update(upload.data).digest("hex"),
+      })).digest("hex");
+      const existing = await tx.customerCashIn.findUnique({ where: { projectId_idempotencyKey: { projectId, idempotencyKey: customerCashIdempotencyKey } }, select: { id: true, commandFingerprint: true } });
+      if (existing) {
+        if (existing.commandFingerprint !== customerCashFingerprint) throw new Error("Mã chống ghi trùng đã được dùng với nội dung khác.");
+        return { success: "Khoản thu này đã được ghi nhận trước đó.", cashId: existing.id, idempotent: true, version: workspace.version };
       }
     }
     if (workspace.version !== expectedVersion) throw new Error("Dữ liệu đã thay đổi. Tải lại trang trước khi thao tác.");
@@ -192,6 +243,10 @@ export async function executeFinance(projectId: string, expectedVersion: number,
       if (!file) throw new Error("Chứng từ phải thuộc đúng project.");
       const saved = await tx.costFlowEvidence.create({ data: { projectId, requestId, sourceFileId: file.id, kind, name: file.name, mimeType: file.mimeType, data: file.data, sha256: createHash("sha256").update(file.data).digest("hex"), createdBy: actor.id } });
       return saved.id;
+    };
+    const snapshotUpload = async (kind: string) => {
+      if (!upload) throw new Error("Thiếu chứng từ tải lên.");
+      return tx.costFlowEvidence.create({ data: { projectId, sourceFileId: `UPLOAD:${randomUUID()}`, kind, name: upload.name, mimeType: upload.mimeType, data: upload.data, sha256: createHash("sha256").update(upload.data).digest("hex"), createdBy: actor.id } });
     };
     const ordinarySteps = async (): Promise<ApprovalStep[]> => {
       const chain = validateSteps([{ role: "MANAGER", assigneeId: currentActor.managerId ?? "" }, { role: "ACCOUNTANT", assigneeId: data.config.accountantId }, { role: "CEO", assigneeId: data.config.ceoId }]);
@@ -385,6 +440,37 @@ export async function executeFinance(projectId: string, expectedVersion: number,
     };
 
     switch (command) {
+      case "SAVE_CUSTOMER_LIQUIDATION": {
+        if (!member && !isAdmin) throw new Error("Bạn không có quyền lưu thanh lý khách hàng trên Project này.");
+        const documentNumber = bounded(text(form, "documentNumber"), "số biên bản thanh lý", 120);
+        const signedAt = calendarDate(text(form, "signedAt"), "Ngày ký thanh lý");
+        const amounts = validateLiquidationAmounts({ netAmount: text(form, "netAmount"), vatAmount: text(form, "vatAmount"), grossAmount: text(form, "grossAmount") });
+        const evidence = await snapshotUpload("CUSTOMER_LIQUIDATION");
+        const latest = await tx.customerLiquidation.findFirst({ where: { projectId }, orderBy: { version: "desc" }, select: { version: true } });
+        await tx.customerLiquidation.create({ data: {
+          projectId,
+          version: (latest?.version ?? 0) + 1,
+          documentNumber,
+          signedAt,
+          ...amounts,
+          evidenceId: evidence.id,
+          sourceSnapshot: json({ documentNumber, signedAt: signedAt.toISOString(), ...amounts, evidence: { id: evidence.id, name: evidence.name, sha256: evidence.sha256 } }),
+          createdById: actor.id,
+        } });
+        break;
+      }
+      case "ADD_CUSTOMER_CASH_IN": {
+        if (!member && !isAdmin || !customerCashFingerprint || !customerCashIdempotencyKey) throw new Error("Bạn không có quyền ghi nhận tiền khách hàng trên Project này.");
+        const milestone = bounded(text(form, "milestone"), "mốc thu tiền", 120);
+        const occurredAt = calendarDate(text(form, "occurredAt"), "Ngày thu tiền");
+        const amount = positive(text(form, "amount"));
+        if (!/^\d+$/.test(amount)) throw new Error("Số tiền khách hàng đã thu phải là số nguyên VND dương.");
+        const reference = bounded(text(form, "reference"), "mã tham chiếu", 160);
+        const evidence = await snapshotUpload("CUSTOMER_CASH_IN");
+        const liquidation = await tx.customerLiquidation.findFirst({ where: { projectId }, orderBy: { version: "desc" }, select: { id: true } });
+        await tx.customerCashIn.create({ data: { projectId, liquidationId: liquidation?.id, milestone, occurredAt, amount, reference, evidenceId: evidence.id, idempotencyKey: customerCashIdempotencyKey, commandFingerprint: customerCashFingerprint, createdById: actor.id } });
+        break;
+      }
       case "CREATE_PAYMENT_DOSSIER": {
         needCreator();
         const kind = text(form, "kind");

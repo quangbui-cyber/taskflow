@@ -40,6 +40,9 @@ export function settlement(data: FinanceData, cash: CashRow[], recipientKey: str
 }
 
 export function margin(data: FinanceData) {
+  // Legacy budget-only compatibility. The CostFlow UI actual-margin authority is
+  // deriveCustomerAccounting(): signed liquidation net -> quotation net -> PO net,
+  // minus normalized AC net with explicit non-overlapping legacy fallback.
   const revenue = sum(currentPurchaseOrders(data.pos).map(po => decimal(po.net)));
   const incurred = totals(data.expenses.map(e => e.cost));
   return { revenue: round(revenue), incurred: incurred.net, margin: round(subtract(revenue, exact(incurred.rawNet))) };

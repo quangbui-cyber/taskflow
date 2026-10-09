@@ -132,6 +132,7 @@ export async function loadActualCosts(projectId: string, actor: Actor) {
   }));
   const normalizedKeys = new Set(normalized.flatMap(line => [line.id, line.stableLineId]));
   const data = workspace?.data as unknown as FinanceData | undefined;
+  const legacyCostById = new Map((data?.expenses ?? []).map(expense => [expense.id, expense.cost]));
   const legacyLines: ActualCostReadLine[] = normalizeLegacyActualCosts(data?.expenses ?? [])
     .filter(line => !normalizedKeys.has(line.id))
     .map(line => ({
@@ -146,7 +147,7 @@ export async function loadActualCosts(projectId: string, actor: Actor) {
       days: null,
       unitPrice: null,
       unit: null,
-      cost: null,
+      cost: legacyCostById.get(line.id) ?? null,
       billable: false,
       saleSnapshot: null,
       revisionId: line.revisionId,

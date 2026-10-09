@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { deriveCustomerAccounting, validateLiquidationAmounts } from "../lib/costflow/customerAccounting";
 
 const cost = (net: string) => ({ rawNet: `${net}/1`, rawVat: "0/1", rawGross: `${net}/1`, net, vat: "0", gross: net });
@@ -56,4 +57,16 @@ test("customer accounting: finalized quotation then PO are explicit fallbacks an
   const empty = deriveCustomerAccounting({ liquidations: [], cashIns: [], quotation: null, purchaseOrderNet: "0", actualCosts: [] });
   assert.equal(empty.margin.percent, null);
   assert.equal(empty.margin.source, "NO_REVENUE_SOURCE");
+});
+
+test("customer accounting UI: Scope owns liquidation while AR and outgoing cash remain visibly separate", () => {
+  const panel = readFileSync(new URL("../components/costflow/customer/CustomerLiquidationPanel.tsx", import.meta.url), "utf8");
+  const cashIn = readFileSync(new URL("../components/costflow/customer/CustomerCashInEditor.tsx", import.meta.url), "utf8");
+  const workspace = readFileSync(new URL("../components/CostFlowPanel.tsx", import.meta.url), "utf8");
+  assert.match(workspace, /activeTab === "scope"[\s\S]*CustomerLiquidationPanel/);
+  assert.match(panel, /SAVE_CUSTOMER_LIQUIDATION/);
+  assert.match(cashIn, /ADD_CUSTOMER_CASH_IN/);
+  assert.match(panel, /AR còn phải thu/);
+  assert.match(panel, /Net margin/);
+  assert.match(cashIn, /không tạo cash OUT, hồ sơ chi hoặc quyền thanh toán/);
 });
