@@ -124,6 +124,26 @@
 .tf-ic-input-table .tf-label { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 .tf-module-page .tf-ic-input-table th, .tf-module-page .tf-ic-input-table td { position: relative; padding-left: 6px; padding-right: 6px; }
 
+/* Phase 8 Actual Cost: wide financial table owns scrolling; mobile keeps every field/action in cards. */
+.tf-ac-toolbar { display: grid; grid-template-columns: minmax(0,1fr) 190px minmax(220px,320px); align-items: end; gap: 12px; }
+.tf-ac-view-selector { display: flex; min-width: 0; gap: 4px; padding: 4px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface-soft); }
+.tf-ac-view-selector legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.tf-ac-view-selector button { min-height: 36px; padding: 6px 10px; border-radius: 5px; color: var(--text-secondary); font-size: 12px; }
+.tf-ac-view-selector button[aria-pressed="true"] { background: var(--surface); color: var(--foreground); box-shadow: var(--shadow-sm); font-weight: 650; }
+.tf-ac-table { min-width: 1080px; }
+.tf-ac-table .tf-ac-identity { position: sticky; left: 0; z-index: 1; min-width: 230px; background: var(--surface); text-align: left; }
+.tf-ac-identity span { display: block; margin-top: 3px; color: var(--text-secondary); font-size: 11px; font-weight: 400; }
+.tf-ac-mobile { display: none; }
+.tf-ac-card { min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); }
+.tf-ac-card h4 { overflow-wrap: anywhere; font-weight: 650; }
+.tf-ac-card p { margin-top: 3px; color: var(--text-secondary); font-size: 12px; }
+.tf-ac-card dl { display: grid; gap: 8px; margin: 12px 0; }
+.tf-ac-card dl div { display: flex; justify-content: space-between; gap: 12px; }
+.tf-ac-card dt { color: var(--text-secondary); font-size: 12px; }
+.tf-ac-card dd { text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.tf-customer-accounting-grid { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 1px; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--border); }
+.tf-customer-accounting-grid .tf-summary-item { min-width: 0; padding: 16px; background: var(--surface); }
+
 /* Quotation parameter settings: proposals stay local until explicit apply. */
 .tf-ui-dialog:has(.tf-quotation-settings) { width: min(920px, calc(100% - 32px)); }
 /* CostFlow: Wide dialog for parallel IC & Quotation line editor */
@@ -179,6 +199,16 @@
   .tf-quotation-impact tr { margin-bottom: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-control); }
   .tf-quotation-impact td { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; border: 0; text-align: left !important; }
   .tf-quotation-impact td[data-label]::before { content: attr(data-label); color: var(--text-secondary); }
+  .tf-ac-toolbar { grid-template-columns: minmax(0,1fr); }
+  .tf-ac-view-selector { overflow-x: auto; }
+  .tf-ac-view-selector button { flex: 0 0 auto; min-height: 44px; }
+  .tf-ac-desktop { display: none; }
+  .tf-ac-mobile { display: grid; gap: 12px; min-width: 0; }
+  .tf-customer-accounting-grid { grid-template-columns: minmax(0,1fr); }
+}
+
+@media (pointer: coarse) {
+  .tf-ac-card input[type="checkbox"], .tf-ac-view-selector button { min-width: 44px; min-height: 44px; }
 }
 
 /* Quotation editor: compact spreadsheet with a clear section header. */

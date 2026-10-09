@@ -101,10 +101,10 @@ export default function ActualCostEditor({ finance, currentUserId }: { finance: 
         </form>
       ) : <Alert tone="warning" title="Chưa có IC hiệu lực">Không thể tạo AC liên kết IC cho đến khi có đúng một baseline hiệu lực.</Alert>}
 
-      {finance.actualCosts && <ActualCostTable actualCosts={finance.actualCosts} />}
+      {finance.actualCosts && <ActualCostTable finance={finance} />}
 
       {actualCosts.length > 0 && <div className="space-y-3 border-t border-[var(--border)] pt-4">
-        {actualCosts.map(line => <div key={`${line.source}:${line.id}`} className="space-y-3 rounded-xl border border-[var(--border)] p-3">
+        {actualCosts.map(line => <div id={`actual-cost-detail-${line.id}`} key={`${line.source}:${line.id}`} className="scroll-mt-24 space-y-3 rounded-xl border border-[var(--border)] p-3">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
               <p className="font-medium text-[var(--foreground)]">{line.description}</p>

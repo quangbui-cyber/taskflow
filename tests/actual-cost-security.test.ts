@@ -46,3 +46,15 @@ test("customer acceptance exports authorize the Project and accept snapshot iden
   assert.match(projection, /sourceKind !== "UNBUDGETED"/);
   assert.match(projection, /!addition\.billable/);
 });
+
+test("actual cost bulk decision validates the entire current-version set before writes", () => {
+  const action = source("app/actions/costflow.ts");
+  const service = source("lib/costflow/actualCostService.ts");
+  assert.match(action, /BULK_DECIDE/);
+  assert.match(action, /bulkSelection/);
+  assert.match(service, /executeActualCostBulkDecision/);
+  assert.match(service, /lines\.length !== input\.selections\.length/);
+  assert.match(service, /line\.currentVersion !== selection\.version/);
+  assert.match(service, /selection\.reviewToken !==/);
+  assert.ok(service.indexOf("const validated = input.selections.map") < service.indexOf("for (const item of validated)"));
+});

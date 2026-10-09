@@ -9,7 +9,7 @@ import { executeFinance } from "@/lib/costflow/service";
 import { executePaymentCash } from "@/lib/costflow/paymentCash";
 import { publicPaymentErrorMessage } from "@/lib/costflow/paymentPolicy";
 import { dispatchWorkflowNotifications } from "@/lib/workflow/notifications";
-import { executeActualCostCommand, type ActualCostCommand } from "@/lib/costflow/actualCostService";
+import { executeActualCostBulkDecision, executeActualCostCommand, type ActualCostBulkSelection, type ActualCostCommand } from "@/lib/costflow/actualCostService";
 
 export type CostFlowActionState = { error?: string; success?: string; requestId?: string; revisionId?: string; quotationId?: string; draftId?: string; beneficiaryId?: string; cashId?: string; customerAcceptanceId?: string; customerAcceptanceVersion?: number; idempotent?: boolean; savedScopes?: string[]; version?: number; lineErrors?: { lineId: string; message: string }[] };
 
@@ -21,6 +21,18 @@ export async function actualCostAction(_previous: ActualCostActionState, form: F
   const action = String(form.get("actualCostCommand") ?? "").trim();
   if (!projectId) return { error: "Thiếu Project." };
   try {
+    if (action === "BULK_DECIDE") {
+      const decision = String(form.get("decision") ?? "");
+      if (decision !== "APPROVED" && decision !== "RETURNED") return { error: "Quyết định AC không hợp lệ." };
+      const selections: ActualCostBulkSelection[] = form.getAll("bulkSelection").map(value => {
+        const parsed = JSON.parse(String(value)) as Record<string, unknown>;
+        if (typeof parsed.lineId !== "string" || !Number.isSafeInteger(parsed.version) || typeof parsed.reviewToken !== "string") throw new Error("Dòng AC được chọn không hợp lệ.");
+        return { lineId: parsed.lineId, version: Number(parsed.version), reviewToken: parsed.reviewToken };
+      });
+      const result = await executeActualCostBulkDecision(actor, { projectId, action: decision, reason: String(form.get("reason") ?? ""), acknowledgeMissingEvidence: form.get("acknowledgeMissingEvidence") === "yes", selections });
+      revalidatePath(`/projects/${projectId}/costflow`);
+      return { success: `Đã ${decision === "APPROVED" ? "duyệt" : "trả lại"} ${result.count} dòng AC.` };
+    }
     let command: ActualCostCommand;
     if (action === "CREATE_AND_SUBMIT") {
       command = {

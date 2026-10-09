@@ -14,7 +14,7 @@ function approvedDatabaseUrl() {
 test("actual-cost integration: create, submit, return, resubmit and approve are immutable", async () => {
   approvedDatabaseUrl(); // The exact DB guard runs before any fixture write.
   const { prisma } = await import("../lib/prisma");
-  const { attachActualCostEvidence, executeActualCostCommand, findActualCostEvidenceForActor } = await import("../lib/costflow/actualCostService");
+  const { attachActualCostEvidence, executeActualCostBulkDecision, executeActualCostCommand, findActualCostEvidenceForActor } = await import("../lib/costflow/actualCostService");
   const prefix = `phase8-ac-${randomUUID()}`;
   const userIds: string[] = [];
   let projectId = "";
@@ -88,6 +88,20 @@ test("actual-cost integration: create, submit, return, resubmit and approve are 
       new Set(["gói", "người", "xe", "phòng"]),
       "mixed units remain separate on versions",
     );
+    const bulkCandidates = await prisma.actualCostLine.findMany({
+      where: { projectId, stableLineId: { in: [`${prefix}-occurrence-0`, `${prefix}-occurrence-1`] } },
+      include: { versions: { orderBy: { version: "desc" }, take: 1 } },
+      orderBy: { stableLineId: "asc" },
+    });
+    const validBulk = bulkCandidates.map(line => ({ lineId: line.id, version: line.currentVersion, reviewToken: `${line.versions[0].id}:${line.currentVersion}` }));
+    const beforeBulkFailures = await prisma.actualCostApproval.count({ where: { projectId } });
+    await assert.rejects(() => executeActualCostBulkDecision(dd, { projectId, action: "APPROVED", reason: "Bulk", acknowledgeMissingEvidence: true, selections: [validBulk[0], { ...validBulk[1], reviewToken: "stale:1" }] }), /phiên bản AC đã thay đổi/);
+    await assert.rejects(() => executeActualCostBulkDecision(dd, { projectId, action: "APPROVED", reason: "Bulk", acknowledgeMissingEvidence: true, selections: [validBulk[0], { lineId: randomUUID(), version: 1, reviewToken: "foreign:1" }] }), /không thuộc đúng Project/);
+    await assert.rejects(() => executeActualCostBulkDecision(admin, { projectId, action: "APPROVED", reason: "Bulk", acknowledgeMissingEvidence: true, selections: validBulk }), /AC_DD/);
+    assert.equal(await prisma.actualCostApproval.count({ where: { projectId } }), beforeBulkFailures, "stale, foreign and non-DD bulk sets write zero decisions");
+    const bulkApproved = await executeActualCostBulkDecision(dd, { projectId, action: "APPROVED", reason: "DD duyệt theo lô", acknowledgeMissingEvidence: true, selections: validBulk });
+    assert.equal(bulkApproved.count, 2);
+    assert.equal(await prisma.actualCostApproval.count({ where: { lineId: { in: validBulk.map(item => item.lineId) }, action: "APPROVED" } }), 2);
 
     const evidence = await prisma.costFlowEvidence.create({ data: {
       projectId, sourceFileId: `${prefix}-evidence`, kind: "VAT_INVOICE", name: "invoice.pdf",

@@ -19,6 +19,7 @@ import {
 import type { FinanceData } from "./types";
 
 export type ActualCostActor = { id: string; role: string };
+export type ActualCostBulkSelection = { lineId: string; version: number; reviewToken: string };
 
 export type ActualCostCommand =
   | {
@@ -328,6 +329,65 @@ export async function executeActualCostCommand(
     amount: result.amount,
     ...("approvalId" in result ? { approvalId: result.approvalId, approvalAttemptId: result.approvalAttemptId, action: result.action } : {}),
   };
+}
+
+export async function executeActualCostBulkDecision(actor: ActualCostActor, input: {
+  projectId: string;
+  action: ActualCostDecisionAction;
+  reason: string;
+  acknowledgeMissingEvidence: boolean;
+  selections: ActualCostBulkSelection[];
+}) {
+  if (!input.selections.length) throw new Error("Chọn ít nhất một dòng AC để quyết định.");
+  if (new Set(input.selections.map(item => item.lineId)).size !== input.selections.length) throw new Error("Dòng AC bị chọn trùng.");
+  const result = await prisma.$transaction(async tx => {
+    const context = await assertProjectActor(tx, input.projectId, actor);
+    const activeDd = await tx.workflowRoleGrant.findMany({ where: { role: "AC_DD", revokedAt: null, user: { isActive: true } }, select: { userId: true } });
+    if (!context.isDd || !activeDd.some(item => item.userId === context.actor.id)) throw new Error("Chỉ AC_DD đang hoạt động được quyết định AC.");
+    const lines = await tx.actualCostLine.findMany({
+      where: { projectId: input.projectId, id: { in: input.selections.map(item => item.lineId) } },
+      include: { versions: { orderBy: { version: "desc" }, take: 1, include: { approvals: true, evidenceLinks: true } } },
+    });
+    if (lines.length !== input.selections.length) throw new Error("Một hoặc nhiều dòng AC không thuộc đúng Project.");
+    const validated = input.selections.map(selection => {
+      const line = lines.find(item => item.id === selection.lineId);
+      const version = line?.versions[0];
+      if (!line || !version || line.currentVersion !== selection.version || version.version !== selection.version || selection.reviewToken !== `${version.id}:${version.version}`) {
+        throw new Error("Một hoặc nhiều phiên bản AC đã thay đổi. Chưa có quyết định nào được lưu.");
+      }
+      if (version.state !== "SUBMITTED" || version.approvals.length) throw new Error("Một hoặc nhiều phiên bản AC đã được quyết định. Chưa có quyết định nào được lưu.");
+      const decision = validateActualCostDecision({ action: input.action, actorId: context.actor.id, activeDdIds: activeDd.map(item => item.userId), expectedVersion: selection.version, currentVersion: line.currentVersion, reason: input.reason });
+      const warningCodes = actualCostEvidenceWarnings(version.evidenceLinks.map(link => link.kind));
+      if (decision.action === "APPROVED" && warningCodes.length && !input.acknowledgeMissingEvidence) throw new Error("DD phải xác nhận rõ việc duyệt các dòng còn thiếu chứng từ.");
+      return { line, version, decision, warningCodes };
+    });
+    const notifications: { lineId: string; version: number; userId: string; action: ActualCostDecisionAction }[] = [];
+    for (const item of validated) {
+      const updated = await tx.actualCostVersion.updateMany({ where: { id: item.version.id, projectId: input.projectId, state: "SUBMITTED" }, data: { state: item.decision.action } });
+      if (updated.count !== 1) throw new Error("Một hoặc nhiều phiên bản AC đã thay đổi. Chưa có quyết định nào được lưu.");
+      await tx.actualCostApproval.create({ data: {
+        projectId: input.projectId,
+        lineId: item.line.id,
+        versionId: item.version.id,
+        attemptId: randomUUID(),
+        retryKey: `${item.version.id}:${item.decision.action}`,
+        action: item.decision.action,
+        actorId: context.actor.id,
+        reason: item.decision.reason,
+        warningCodes: item.warningCodes,
+      } });
+      notifications.push({ lineId: item.line.id, version: item.version.version, userId: item.line.createdById, action: item.decision.action });
+    }
+    return notifications;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15000 });
+  await Promise.all(result.map(item => prisma.notification.create({ data: {
+    dedupeKey: `actual-cost:${item.lineId}:${item.version}:${item.action}`,
+    userId: item.userId,
+    message: item.action === "APPROVED" ? "AC đã được DD duyệt." : "AC đã được DD trả lại để chỉnh sửa.",
+    projectId: input.projectId,
+    type: "costflow",
+  } }).catch(() => undefined)));
+  return { count: result.length, action: input.action };
 }
 
 export async function attachActualCostEvidence(
