@@ -5,7 +5,7 @@ import { normalizePairedRows } from "../lib/costflow/pairedDraft";
 import { groupAmount } from "../lib/costflow/pairedPricing";
 import { evaluateFormula, normalizeParameterSnapshot } from "../lib/costflow/quotationParameters";
 
-test("Teambuilding quotation template preserves hierarchy, source quantities and billable day multiplication", () => {
+test("Teambuilding quotation template keeps quantity and days as independent pricing inputs", () => {
   const rows = normalizePairedRows(TEAMBUILDING_TEMPLATE_SNAPSHOT.rows);
   assert.equal(TEAMBUILDING_TEMPLATE_NAME, "Báo giá mẫu — Teambuilding (tham số)");
   assert.match(TEAMBUILDING_TEMPLATE_DESCRIPTION, /Loại project: Teambuilding/);
@@ -17,14 +17,17 @@ test("Teambuilding quotation template preserves hierarchy, source quantities and
   assert.equal(parameterConfig.modules.length, 7);
 
   const projectLeader = rows.find(row => row.itemId === "tb-f-1")!;
-  assert.equal(projectLeader.sell.quantity, "2");
-  assert.equal(evaluateFormula(projectLeader.sell.parameterBinding!.quantityFormula!, parameterConfig, projectLeader.sell.parameterBinding!.moduleId).value, "2");
-  assert.match(projectLeader.sell.notes, /SL gốc: 1; Số ngày: 2/);
+  assert.equal(projectLeader.sell.quantity, "1");
+  assert.equal(projectLeader.sell.days, "2");
+  assert.equal(evaluateFormula(projectLeader.sell.parameterBinding!.daysFormula!, parameterConfig, projectLeader.sell.parameterBinding!.moduleId).value, "2");
   const supporter = rows.find(row => row.itemId === "tb-f-2")!;
-  assert.equal(supporter.sell.quantity, "4");
+  assert.equal(supporter.sell.quantity, "2");
+  assert.equal(supporter.sell.days, "2");
   const insurance = rows.find(row => row.itemId === "tb-g-3")!;
-  assert.equal(insurance.sell.quantity, "170");
-  assert.equal(evaluateFormula(insurance.sell.parameterBinding!.quantityFormula!, parameterConfig, insurance.sell.parameterBinding!.moduleId).value, "170");
+  assert.equal(insurance.sell.quantity, "85");
+  assert.equal(insurance.sell.days, "2");
+  assert.equal(evaluateFormula(insurance.sell.parameterBinding!.quantityFormula!, parameterConfig, insurance.sell.parameterBinding!.moduleId).value, "85");
+  assert.equal(evaluateFormula(insurance.sell.parameterBinding!.daysFormula!, parameterConfig, insurance.sell.parameterBinding!.moduleId).value, "2");
   assert.ok(rows.every(row => row.buy.parameterBinding === undefined));
 
   const idea = rows.find(row => row.itemId === "tb-a-1")!;
@@ -34,7 +37,6 @@ test("Teambuilding quotation template preserves hierarchy, source quantities and
   assert.equal(optionalChair.sell.quantity, "");
   assert.equal(optionalChair.sell.unitPrice, "50000");
   assert.match(optionalChair.sell.notes, /Optional/);
-  assert.match(optionalChair.sell.notes, /SL gốc: 85/);
   const gift = rows.find(row => row.itemId === "tb-g-5")!;
   assert.equal(gift.sell.unitPrice, "0");
   assert.match(gift.sell.notes, /Ga tặng/);

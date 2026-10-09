@@ -8,7 +8,7 @@ export function workingIcRevision(data: FinanceData, requests: { id: string; sta
 
 export function diffIcRevisions(revision: IcRevision, baseline?: IcRevision) {
   if (!baseline) return { baselineId: null, added: revision.lines.map(l => l.id), removed: [] as string[], changed: [] as { id: string; fields: string[] }[], sourceChanged: false, material: false };
-  const fields = ["description", "unit", "quantity", "unitPrice", "basis", "vatPercent", "quotationId", "quotationLineId", "vendorId", "originLines"] as const;
+  const fields = ["description", "unit", "quantity", "days", "unitPrice", "basis", "vatPercent", "quotationId", "quotationLineId", "vendorId", "originLines"] as const;
   const added = revision.lines.filter(l => !baseline.lines.some(old => old.id === l.id)).map(l => l.id);
   const removed = baseline.lines.filter(l => !revision.lines.some(next => next.id === l.id)).map(l => l.id);
   const changed = revision.lines.flatMap(line => {
@@ -25,6 +25,7 @@ const FIELD_LABELS: Record<string, string> = {
   description: "Nội dung",
   unit: "Đơn vị",
   quantity: "Số lượng",
+  days: "Số ngày",
   unitPrice: "Đơn giá",
   basis: "Cơ sở giá",
   vatPercent: "VAT",

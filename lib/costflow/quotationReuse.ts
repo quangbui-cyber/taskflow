@@ -12,6 +12,7 @@ type Actor = { id: string; role: string };
 type SnapshotRow = Omit<PairedRow, "buy" | "icLineId" | "quotationLineId">;
 
 export type QuotationReuseSnapshot = {
+  linePricingSchemaVersion?: 2;
   parameterConfig?: QuotationParameterSnapshot;
   notes: string;
   rows: SnapshotRow[];
@@ -50,6 +51,7 @@ export function quotationReuseSnapshot(quotation: Quotation): QuotationReuseSnap
   }));
   const totalLines = normalizeQuotationTotals(structuredClone(quotation.totalLines ?? []));
   return {
+    linePricingSchemaVersion: 2,
     parameterConfig: quotation.parameterConfig ? structuredClone(quotation.parameterConfig) : undefined,
     notes: quotation.notes,
     rows,
@@ -143,6 +145,7 @@ export async function initializeQuotationReuseDraft(
   }
 
   const draft: PairedDraft = {
+    linePricingSchemaVersion: 2,
     id: randomUUID(),
     version: 1,
     createdBy: actor.id,

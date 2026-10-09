@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { normalizeQuotationTotalLayout, normalizeQuotationTotals } from "./quotationTotals";
 import { blankPairedRow, pairedFromLegacy, normalizePairedRows } from "./pairedDraft";
-import { calculateCost } from "./money";
+import { calculateLineCost } from "./money";
 import { draftLineIssues } from "./budgetDraft";
 import { workingIcRevision } from "./budgetRevisions";
 import type { FinanceData, IcLine, PairedDraft } from "./types";
@@ -25,8 +25,8 @@ function assertCalculatedValues(rows: PairedDraft["rows"], config?: QuotationPar
   for (const row of rows) for (const side of ["sell", "buy"] as const) {
     const binding = row[side].parameterBinding;
     if (!binding || binding.mode === "MANUAL" || binding.mode === "OVERRIDDEN") continue;
-    for (const field of ["quantity", "unitPrice"] as const) {
-      const formula = field === "quantity" ? binding.quantityFormula : binding.unitPriceFormula;
+    for (const field of ["quantity", "days", "unitPrice"] as const) {
+      const formula = field === "quantity" ? binding.quantityFormula : field === "days" ? binding.daysFormula : binding.unitPriceFormula;
       if (!formula) continue;
       const evaluated = evaluateFormula(formula, config, binding.moduleId);
       if (!evaluated.issue && row[side][field] !== evaluated.value) throw new Error(`${row.name || row.itemId}: ${side === "sell" ? "Bán" : "IC"} ${field === "quantity" ? "số lượng" : "đơn giá"} không khớp công thức đã áp dụng.`);
@@ -46,6 +46,7 @@ export function createPairedFromQuoteDraft(data: FinanceData, draftId: string, a
   })));
   const paired: PairedDraft = {
     ...structuredClone(source),
+    linePricingSchemaVersion: 2,
     id: randomUUID(),
     version: 1,
     workspaceMode: "paired",
@@ -94,13 +95,13 @@ export async function savePairedDraft(tx: Prisma.TransactionClient, projectId: s
   if (rows.some(row => row.buy.vendorId && !data.beneficiaries.some(b => b.id === row.buy.vendorId))) throw new Error("NCC không thuộc project.");
   for (const row of rows) if (row.icLineId && !revision?.lines.some(line => line.id === row.icLineId)) throw new Error("Dòng IC không thuộc phiên bản đang làm.");
   const title = String(form.get("title") ?? "").trim().slice(0, 500);
-  const draft: PairedDraft = { id: previous?.id ?? randomUUID(), version: (previous?.version ?? 0) + 1, createdBy: actorId, workspaceMode: mode as PairedDraft["workspaceMode"], parameterConfig: parameterConfig ? structuredClone(parameterConfig) : undefined, totalLines, totalLayout, title, clientId, customer: client?.name ?? previous?.customer ?? source?.customer ?? "", notes: String(form.get("notes") ?? "").slice(0, 5000), rows, sourceQuotationId: sourceId || undefined, latestQuotationId: previous?.latestQuotationId, globalEvidenceIds: [...new Set(globalIds)], reuseSource: previous?.reuseSource, priceReviewRequired: previous?.priceReviewRequired };
+  const draft: PairedDraft = { linePricingSchemaVersion: 2, id: previous?.id ?? randomUUID(), version: (previous?.version ?? 0) + 1, createdBy: actorId, workspaceMode: mode as PairedDraft["workspaceMode"], parameterConfig: parameterConfig ? structuredClone(parameterConfig) : undefined, totalLines, totalLayout, title, clientId, customer: client?.name ?? previous?.customer ?? source?.customer ?? "", notes: String(form.get("notes") ?? "").slice(0, 5000), rows, sourceQuotationId: sourceId || undefined, latestQuotationId: previous?.latestQuotationId, globalEvidenceIds: [...new Set(globalIds)], reuseSource: previous?.reuseSource, priceReviewRequired: previous?.priceReviewRequired };
   if (editable && mode !== "quote" && form.get("saveIc") !== "no") {
     const lines: IcLine[] = rows.filter(row => row.rowType !== "GROUP" && !rows.some(child => child.parentItemId === row.itemId)).map(row => {
       const retained = revision?.lines.find(line => line.id === row.icLineId || line.itemId === row.itemId);
       const input = row.buy;
       const description = row.name || row.description;
-      const line: IcLine = { ...input, parameterBinding: input.parameterBinding ? structuredClone(input.parameterBinding) : undefined, id: retained?.id ?? randomUUID(), itemId: row.itemId, description, unit: input.unit, cost: draftLineIssues({ ...input, description }).length ? null : calculateCost(input), evidenceIds: [...input.evidenceIds], evidenceReason: input.evidenceReason, internalNotes: input.notes,
+      const line: IcLine = { ...input, parameterBinding: input.parameterBinding ? structuredClone(input.parameterBinding) : undefined, id: retained?.id ?? randomUUID(), itemId: row.itemId, description, unit: input.unit, cost: draftLineIssues({ ...input, description }).length ? null : calculateLineCost(input), evidenceIds: [...input.evidenceIds], evidenceReason: input.evidenceReason, internalNotes: input.notes,
         ...(input.vendorId ? { vendorId: input.vendorId } : {}), ...(retained?.originLines ? { originLines: retained.originLines } : {}), ...(retained?.quotationId ? { quotationId: retained.quotationId, quotationLineId: retained.quotationLineId } : source && row.quotationLineId ? { quotationId: source.id, quotationLineId: row.quotationLineId } : {}) };
       row.icLineId = line.id; return line;
     });
@@ -110,10 +111,11 @@ export async function savePairedDraft(tx: Prisma.TransactionClient, projectId: s
     if (lines.length > 500) throw new Error("IC tối đa 500 dòng.");
     if (!revision) {
       const request = await tx.workflowRequest.create({ data: { projectId, module: "COSTFLOW", kind: "IC", title: `IC — ${title || "Dự toán"}`, creatorId: actorId, cashAssigneeId: actorId, state: "DRAFT", steps: [], payload: {} } });
-      revision = { id: randomUUID(), number: data.revisions.length + 1, requestId: request.id, effective: false, createdBy: actorId, lines, poIds: [], briefIds: [], evidenceIds: [] };
+      revision = { linePricingSchemaVersion: 2, id: randomUUID(), number: data.revisions.length + 1, requestId: request.id, effective: false, createdBy: actorId, lines, poIds: [], briefIds: [], evidenceIds: [] };
       data.revisions.push(revision);
     }
     revision.pairedDraftId = draft.id;
+    revision.linePricingSchemaVersion = 2;
     revision.parameterConfig = parameterConfig ? structuredClone(parameterConfig) : undefined;
     if (draft.latestQuotationId || draft.sourceQuotationId) revision.quotationId = draft.latestQuotationId ?? draft.sourceQuotationId;
     revision.tree = rows.map(r => ({ itemId: r.itemId, parentItemId: r.parentItemId, name: r.name, description: r.description }));
@@ -124,7 +126,7 @@ export async function savePairedDraft(tx: Prisma.TransactionClient, projectId: s
     // Never persist client-supplied replacements of a submitted IC snapshot.
     for (const row of rows) {
       const line = revision?.lines.find(line => line.id === row.icLineId || line.itemId === row.itemId);
-      row.buy = line ? { quantity: line.quantity, unitPrice: line.unitPrice, vatPercent: line.vatPercent, basis: line.basis, unit: line.unit, notes: line.internalNotes ?? "", parameterBinding: line.parameterBinding ? structuredClone(line.parameterBinding) : undefined, vendorId: line.vendorId ?? "", evidenceIds: [...(line.evidenceIds ?? [])], evidenceReason: line.evidenceReason ?? "" } : { quantity: "", unitPrice: "", vatPercent: "", basis: "NET", unit: "", notes: "", vendorId: "", evidenceIds: [], evidenceReason: "" };
+      row.buy = line ? { quantity: line.quantity, days: line.days, unitPrice: line.unitPrice, vatPercent: line.vatPercent, basis: line.basis, unit: line.unit, notes: line.internalNotes ?? "", parameterBinding: line.parameterBinding ? structuredClone(line.parameterBinding) : undefined, vendorId: line.vendorId ?? "", evidenceIds: [...(line.evidenceIds ?? [])], evidenceReason: line.evidenceReason ?? "" } : { quantity: "", days: "", unitPrice: "", vatPercent: "", basis: "NET", unit: "", notes: "", vendorId: "", evidenceIds: [], evidenceReason: "" };
     }
   }
   if (!editable || form.get("saveIc") === "no") draft.globalEvidenceIds = [...(revision?.evidenceIds ?? previous?.globalEvidenceIds ?? [])];
@@ -145,11 +147,11 @@ export function finalizePairedQuotation(data: FinanceData, draftId: string, acto
   }
   if (projectDraft(draft).incomplete) throw new Error("Báo giá cần tên, khách hàng và đủ giá bán, số lượng, VAT của các dòng đang tính trước khi xuất.");
   const previous = data.quotations?.find(q => q.id === (draft.latestQuotationId ?? draft.sourceQuotationId));
-  const lines = saleContributors(draft.rows).map(row => ({ ...row.sell, id: randomUUID(), description: row.name || row.description, cost: calculateCost(row.sell), ...(row.quotationLineId && previous?.lines.some(l => l.id === row.quotationLineId) ? { parentQuotationLineId: row.quotationLineId } : {}) }));
+  const lines = saleContributors(draft.rows).map(row => ({ ...row.sell, id: randomUUID(), description: row.name || row.description, cost: calculateLineCost(row.sell), ...(row.quotationLineId && previous?.lines.some(l => l.id === row.quotationLineId) ? { parentQuotationLineId: row.quotationLineId } : {}) }));
   const id = randomUUID();
   // Finalized quote stores sales only; IC evidence/history stays in its original separate records.
     const salesRows = draft.rows.map(row => ({ itemId: row.itemId, parentItemId: row.parentItemId, rowType: row.rowType, name: row.name, description: row.description, pricingMode: row.pricingMode, showChildren: row.showChildren, showGroupSubtotal: row.showGroupSubtotal, packageChildDisplay: row.packageChildDisplay, saleRemoved: row.saleRemoved, sell: structuredClone(row.sell), quotationLineId: lines[saleContributors(draft.rows).findIndex(r => r.itemId === row.itemId)]?.id }));
-  data.quotations = [...(data.quotations ?? []), { id, number: (data.quotations?.length ?? 0) + 1, parentId: previous?.id ?? null, parameterConfig: draft.parameterConfig ? structuredClone(draft.parameterConfig) : undefined, totalLines: structuredClone(draft.totalLines ?? []), totalLayout: structuredClone(draft.totalLayout ?? []), title: draft.title, customer: draft.customer, notes: draft.notes, lines, salesRows, poIds: [...(previous?.poIds ?? [])], briefIds: [...(previous?.briefIds ?? [])], evidenceIds: [...(previous?.evidenceIds ?? [])], createdBy: actorId, createdAt: new Date().toISOString() }];
+  data.quotations = [...(data.quotations ?? []), { linePricingSchemaVersion: 2, id, number: (data.quotations?.length ?? 0) + 1, parentId: previous?.id ?? null, parameterConfig: draft.parameterConfig ? structuredClone(draft.parameterConfig) : undefined, totalLines: structuredClone(draft.totalLines ?? []), totalLayout: structuredClone(draft.totalLayout ?? []), title: draft.title, customer: draft.customer, notes: draft.notes, lines, salesRows, poIds: [...(previous?.poIds ?? [])], briefIds: [...(previous?.briefIds ?? [])], evidenceIds: [...(previous?.evidenceIds ?? [])], createdBy: actorId, createdAt: new Date().toISOString() }];
   draft.latestQuotationId = id;
   delete draft.reuseSource;
   draft.priceReviewRequired = false;

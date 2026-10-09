@@ -21,7 +21,7 @@ import { Input, Select, Textarea } from "@/components/ui/Field";
 import { Badge, Alert } from "@/components/ui/Presentation";
 import { Dialog } from "@/components/ui/Dialog";
 import ActionForm from "@/components/CostFlowActionForm";
-import { calculateCost, calculateMargin, displayMoney } from "@/lib/costflow/money";
+import { calculateLineCost, calculateMargin, displayMoney } from "@/lib/costflow/money";
 import { matchIcLineToQuotation } from "@/lib/costflow/budgetQuotation";
 import type { IcLine, IcRevision } from "@/lib/costflow/types";
 import Link from "next/link";
@@ -73,6 +73,7 @@ export default function EditIcLineModal({
   const [description, setDescription] = useState(line?.description ?? "");
   const [unit, setUnit] = useState(line?.unit?.trim() ? line.unit : (initialQuoteUnit || "Gói"));
   const [quantity, setQuantity] = useState(line?.quantity?.trim() ? line.quantity : (initialQuoteQty || "1"));
+  const [days, setDays] = useState(line?.days ?? "1");
   const [unitPrice, setUnitPrice] = useState(line?.unitPrice ?? "");
   const [basis, setBasis] = useState<"NET" | "GROSS">((line?.basis as "NET" | "GROSS") || "NET");
   const [vatPercent, setVatPercent] = useState(line?.vatPercent ?? "8");
@@ -138,8 +139,9 @@ export default function EditIcLineModal({
       if (!quantity || !unitPrice || parseFloat(quantity) <= 0 || parseFloat(unitPrice) < 0) {
         return null;
       }
-      return calculateCost({
+      return calculateLineCost({
         quantity: String(quantity),
+        days: String(days),
         unitPrice: String(unitPrice),
         basis,
         vatPercent: vatPercent || "0",
@@ -147,7 +149,7 @@ export default function EditIcLineModal({
     } catch {
       return null;
     }
-  }, [quantity, unitPrice, basis, vatPercent]);
+  }, [quantity, days, unitPrice, basis, vatPercent]);
 
   // Live Margin Calculation (Comparing Sell vs Buy)
   const liveMargin = useMemo(() => {
@@ -176,6 +178,7 @@ export default function EditIcLineModal({
       description: description.trim(),
       unit: finalUnit,
       quantity: finalQuantity,
+      days,
       unitPrice: String(unitPrice || "0"),
       basis,
       vatPercent: String(vatPercent || "0"),
@@ -204,8 +207,9 @@ export default function EditIcLineModal({
         let lineCost = l.cost;
         if (!lineCost && autoQty && l.unitPrice?.trim()) {
           try {
-            lineCost = calculateCost({
+            lineCost = calculateLineCost({
               quantity: autoQty,
+              days: l.days || "1",
               unitPrice: l.unitPrice,
               basis: l.basis || "NET",
               vatPercent: l.vatPercent || "8",

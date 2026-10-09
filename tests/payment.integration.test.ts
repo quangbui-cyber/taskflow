@@ -152,7 +152,7 @@ test("payment-integration: service creates one canonical 75m dossier with zero c
       { id: `${prefix}-vendor-a`, name: "Vendor A", bank: "Bank A", account: "00001111", version: 1, verifiedVersion: null, proofId: vendorAProof.id },
       { id: `${prefix}-resort-b`, name: "Resort B", bank: "Bank B", account: "00002222", version: 1, verifiedVersion: null, proofId: vendorBProof.id },
     ];
-    const makeLine = (id: string, description: string, gross: string) => ({ id, description, unit: "gói", quantity: "1", unitPrice: gross, basis: "GROSS" as const, vatPercent: "0", cost: calculateCost({ quantity: "1", unitPrice: gross, basis: "GROSS", vatPercent: "0" }) });
+    const makeLine = (id: string, description: string, gross: string) => ({ id, description, unit: "gói", quantity: "1", days: "1", unitPrice: gross, basis: "GROSS" as const, vatPercent: "0", cost: calculateCost({ quantity: "1", unitPrice: gross, basis: "GROSS", vatPercent: "0" }) });
     finance.revisions = [{ id: `${prefix}-revision`, number: 1, requestId: `${prefix}-ic-request`, effective: true, lines: [makeLine("line-a", "Vendor A", "25000000"), makeLine("line-b", "Resort B", "40000000"), makeLine("line-c", "Vận hành", "10000000")], poIds: [], evidenceIds: [], createdBy: account.id }];
     await prisma.costFlowWorkspace.create({ data: { projectId, data: finance } });
 

@@ -10,7 +10,7 @@ import type { IcRevision } from "../lib/costflow/types";
 import { resolveIcLineOrigin, validateIcLineOrigins } from "../lib/costflow/budgetLineage";
 
 test("Line ancestry resolves archived draft sources and rejects foreign, duplicate and cyclic links", () => {
-  const old = { id: "old", description: "Original", unit: "set", quantity: "1", unitPrice: "", vatPercent: "", basis: "NET" as const, cost: null };
+  const old = { id: "old", description: "Original", unit: "set", quantity: "1", days: "1", unitPrice: "", vatPercent: "", basis: "NET" as const, cost: null };
   const data = { ...emptyFinance(), lineArchive: [{ revisionId: "r", line: old }] };
   const next = { ...old, id: "new", originLines: [{ revisionId: "r", lineId: "old" }] };
   validateIcLineOrigins(data, next, "r");
@@ -21,8 +21,8 @@ test("Line ancestry resolves archived draft sources and rejects foreign, duplica
 });
 
 test("All business fields and sources are material, internal notes exempt, pending effective revision remains working", () => {
-  const base: IcRevision = { id: "r", number: 1, requestId: "q", createdBy: "a", effective: true, poIds: [], lines: [{ id: "l", description: "Print", unit: "set", quantity: "1", unitPrice: "100", basis: "NET", vatPercent: "0", cost: calculateCost({ quantity: "1", unitPrice: "100", basis: "NET", vatPercent: "0" }) }] };
-  for (const key of ["description", "unit", "quantity", "unitPrice", "vatPercent", "quotationId", "quotationLineId", "vendorId"] ) {
+  const base: IcRevision = { id: "r", number: 1, requestId: "q", createdBy: "a", effective: true, poIds: [], lines: [{ id: "l", description: "Print", unit: "set", quantity: "1", days: "1", unitPrice: "100", basis: "NET", vatPercent: "0", cost: calculateCost({ quantity: "1", unitPrice: "100", basis: "NET", vatPercent: "0" }) }] };
+  for (const key of ["description", "unit", "quantity", "days", "unitPrice", "vatPercent", "quotationId", "quotationLineId", "vendorId"] ) {
     const changed = structuredClone(base); Object.assign(changed.lines[0], { [key]: "different" });
     assert.equal(diffIcRevisions(changed, base).material, true, key);
   }
@@ -35,7 +35,7 @@ test("All business fields and sources are material, internal notes exempt, pendi
 });
 
 test("Incomplete IC retains unknown VAT versus explicit zero and rejects malformed filled values", () => {
-  const line = { id: "line", description: "Print", unit: "set", quantity: "1", unitPrice: "", basis: "NET" as const, vatPercent: "", cost: null };
+  const line = { id: "line", description: "Print", unit: "set", quantity: "1", days: "1", unitPrice: "", basis: "NET" as const, vatPercent: "", cost: null };
   assert.deepEqual(draftLineIssues(line), ["missing-price", "missing-VAT"]);
   assert.throws(() => completeIcLines([line]));
   assert.throws(() => draftLineIssues({ ...line, unitPrice: "NaN" }));

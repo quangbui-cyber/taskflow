@@ -6,7 +6,7 @@ import { effectiveBaseline, icDecisionPolicy, icStatusProjection } from "../lib/
 import type { IcRevision } from "../lib/costflow/types";
 
 const line = (id: string, overrides: Record<string, unknown> = {}) => {
-  const input = { quantity: "1", unitPrice: "100", basis: "NET" as const, vatPercent: "8" };
+  const input = { quantity: "1", days: "1", unitPrice: "100", basis: "NET" as const, vatPercent: "8" };
   return { id, description: `Dòng ${id}`, unit: "gói", ...input, cost: calculateCost(input), ...overrides };
 };
 

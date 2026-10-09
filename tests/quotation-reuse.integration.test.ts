@@ -26,8 +26,8 @@ test("quotation reuse catalog, independent drafts, review gate and template life
     const forbiddenProject = await prisma.project.create({ data: { name: "Forbidden source", ownerId: outsider.id, members: { create: { userId: outsider.id } } } });
     const makeQuotation = (title: string): Quotation => ({
       id: randomUUID(), number: 1, parentId: null, title, customer: "Old customer", notes: "Customer note", poIds: [], briefIds: [], evidenceIds: [], createdBy: account.id, createdAt: new Date("2026-09-01T00:00:00.000Z").toISOString(),
-      lines: [{ id: randomUUID(), description: "Backdrop", unit: "bộ", quantity: "2", unitPrice: "1000", basis: "NET", vatPercent: "8", cost: { rawNet: "2000", rawVat: "160", rawGross: "2160", net: "2000", vat: "160", gross: "2160" } }],
-      salesRows: [{ itemId: randomUUID(), parentItemId: null, rowType: "ITEM", name: "Backdrop", description: "In bạt", pricingMode: "DETAIL", showChildren: true, showGroupSubtotal: true, packageChildDisplay: "CONTENT", sell: { unit: "bộ", quantity: "2", unitPrice: "1000", vatPercent: "8", basis: "NET", notes: "Ghi chú khách" } }],
+      lines: [{ id: randomUUID(), description: "Backdrop", unit: "bộ", quantity: "2", days: "1", unitPrice: "1000", basis: "NET", vatPercent: "8", cost: { rawNet: "2000", rawVat: "160", rawGross: "2160", net: "2000", vat: "160", gross: "2160" } }],
+      salesRows: [{ itemId: randomUUID(), parentItemId: null, rowType: "ITEM", name: "Backdrop", description: "In bạt", pricingMode: "DETAIL", showChildren: true, showGroupSubtotal: true, packageChildDisplay: "CONTENT", sell: { unit: "bộ", quantity: "2", days: "1", unitPrice: "1000", vatPercent: "8", basis: "NET", notes: "Ghi chú khách" } }],
       totalLines: [], totalLayout: [],
     });
     const sourceQuotation = makeQuotation("Old quote");

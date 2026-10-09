@@ -7,7 +7,8 @@ export function draftLineIssues(line: Partial<IcLine>) {
   for (const key of ["quantity", "days", "unitPrice", "vatPercent"] as const) {
     const value = line[key]?.trim() ?? "";
     if (!value) issues.push(key === "unitPrice" ? "missing-price" : key === "vatPercent" ? "missing-VAT" : key === "days" ? "missing-days" : "missing-quantity");
-    else if (key === "days" ? compare(decimal(value), decimal("0")) <= 0 : compare(decimal(value), decimal("0")) < 0) issues.push(key === "days" ? "invalid-days" : `invalid-${key}`);
+    else if (key === "days" && compare(decimal(value), decimal("0")) <= 0) issues.push("invalid-days");
+    else if (compare(decimal(value), decimal("0")) < 0) throw new Error("Số lượng, đơn giá và VAT không được âm.");
   }
   if (line.basis !== undefined && !["NET", "GROSS"].includes(line.basis)) throw new Error("Chọn net hoặc gross.");
   return issues;

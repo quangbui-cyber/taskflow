@@ -1,4 +1,4 @@
-import { calculateCost, decimal, divide, exact, multiply, source, totals, type Rational } from "./money";
+import { calculateLineCost, decimal, divide, exact, multiply, source, totals, type Rational } from "./money";
 import type { PairedRow } from "./types";
 
 export type FormulaNode =
@@ -32,8 +32,9 @@ export type ParameterBinding = {
   mode: "MANUAL" | "PARAMETER" | "FORMULA" | "OVERRIDDEN";
   moduleId?: string;
   quantityFormula?: FormulaNode;
+  daysFormula?: FormulaNode;
   unitPriceFormula?: FormulaNode;
-  lastCalculated?: { quantity?: string; unitPrice?: string };
+  lastCalculated?: { quantity?: string; days?: string; unitPrice?: string };
 };
 
 export type ParameterIssue = {
@@ -42,7 +43,7 @@ export type ParameterIssue = {
   rowId?: string;
   rowName?: string;
   side?: "sell" | "buy";
-  field?: "quantity" | "unitPrice";
+  field?: "quantity" | "days" | "unitPrice";
 };
 
 export type FormulaEvaluation = { value: string; issue?: never } | { value?: never; issue: ParameterIssue };
@@ -51,7 +52,7 @@ export type ParameterImpact = {
   rowId: string;
   rowName: string;
   side: "sell" | "buy";
-  field: "quantity" | "unitPrice";
+  field: "quantity" | "days" | "unitPrice";
   oldValue: string;
   newValue: string;
 };
@@ -113,13 +114,15 @@ export function normalizeParameterBinding(value: unknown): ParameterBinding | un
   const moduleId = input.moduleId === undefined ? undefined : String(input.moduleId);
   if (moduleId !== undefined && !KEY.test(moduleId)) throw new Error("Mã module của dòng không hợp lệ.");
   const quantityFormula = input.quantityFormula === undefined ? undefined : normalizeFormulaNode(input.quantityFormula);
+  const daysFormula = input.daysFormula === undefined ? undefined : normalizeFormulaNode(input.daysFormula);
   const unitPriceFormula = input.unitPriceFormula === undefined ? undefined : normalizeFormulaNode(input.unitPriceFormula);
-  if (["PARAMETER", "FORMULA", "OVERRIDDEN"].includes(input.mode) && !quantityFormula && !unitPriceFormula) throw new Error("Liên kết tính toán phải có công thức.");
+  if (["PARAMETER", "FORMULA", "OVERRIDDEN"].includes(input.mode) && !quantityFormula && !daysFormula && !unitPriceFormula) throw new Error("Liên kết tính toán phải có công thức.");
   const lastCalculated = input.lastCalculated && typeof input.lastCalculated === "object" ? {
     ...(input.lastCalculated.quantity === undefined ? {} : { quantity: String(input.lastCalculated.quantity) }),
+    ...(input.lastCalculated.days === undefined ? {} : { days: String(input.lastCalculated.days) }),
     ...(input.lastCalculated.unitPrice === undefined ? {} : { unitPrice: String(input.lastCalculated.unitPrice) }),
   } : undefined;
-  return { mode: input.mode, ...(moduleId ? { moduleId } : {}), ...(quantityFormula ? { quantityFormula } : {}), ...(unitPriceFormula ? { unitPriceFormula } : {}), ...(lastCalculated ? { lastCalculated } : {}) };
+  return { mode: input.mode, ...(moduleId ? { moduleId } : {}), ...(quantityFormula ? { quantityFormula } : {}), ...(daysFormula ? { daysFormula } : {}), ...(unitPriceFormula ? { unitPriceFormula } : {}), ...(lastCalculated ? { lastCalculated } : {}) };
 }
 
 export function normalizeParameterSnapshot(value: unknown): QuotationParameterSnapshot {
@@ -213,7 +216,7 @@ function fingerprint(rows: PairedRow[], parameterConfig?: QuotationParameterSnap
 }
 
 function safeTotals(rows: PairedRow[], side: "sell" | "buy") {
-  const calculated = rows.filter(row => row.rowType !== "GROUP").map(row => { try { return calculateCost(row[side]); } catch { return null; } });
+  const calculated = rows.filter(row => row.rowType !== "GROUP").map(row => { try { return calculateLineCost(row[side]); } catch { return null; } });
   const valid = calculated.filter((item): item is NonNullable<typeof item> => item !== null);
   return { ...totals(valid), incomplete: valid.length !== calculated.length };
 }
@@ -225,8 +228,8 @@ function calculatedRows(rows: PairedRow[], snapshot: QuotationParameterSnapshot)
   for (const row of next) for (const side of ["sell", "buy"] as const) {
     const binding = row[side].parameterBinding;
     if (!binding || binding.mode === "MANUAL" || binding.mode === "OVERRIDDEN") continue;
-    for (const field of ["quantity", "unitPrice"] as const) {
-      const formula = field === "quantity" ? binding.quantityFormula : binding.unitPriceFormula;
+    for (const field of ["quantity", "days", "unitPrice"] as const) {
+      const formula = field === "quantity" ? binding.quantityFormula : field === "days" ? binding.daysFormula : binding.unitPriceFormula;
       if (!formula) continue;
       const result = evaluateFormula(formula, snapshot, binding.moduleId);
       if (result.issue) issues.push({ ...result.issue, rowId: row.itemId, rowName: row.name, side, field });

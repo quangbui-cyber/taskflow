@@ -2,7 +2,7 @@ import "server-only";
 import { randomUUID, createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { calculateCost, compare, decimal, round, sum } from "./money";
+import { calculateCost, calculateLineCost, compare, decimal, round, sum } from "./money";
 import { closeBlockers, settlement } from "./reconciliation";
 import { emptyFinance, type FinanceData, type IcLine, type QuotationLine, type RequestPayload } from "./types";
 import { decide, validateSteps, type ApprovalStep, type Decision } from "@/lib/workflow/approval";
@@ -17,7 +17,7 @@ import { createPairedFromQuoteDraft, savePairedDraft, finalizePairedQuotation } 
 import { assertApprovalToken, correctionItems, recordApprovalEvent } from "@/lib/workflow/approvalEvents";
 import { assertEligibleApprovalReceiver } from "@/lib/workflow/permissions";
 import { initializeQuotationReuseDraft } from "./quotationReuse";
-import { blankPairedRow } from "./pairedDraft";
+import { blankPairedRow, hydrateLinePricingData } from "./pairedDraft";
 import { normalizeParameterBinding, parameterFinalizationIssues } from "./quotationParameters";
 import { effectiveBaseline, icDecisionPolicy } from "./icEffectiveness";
 import { normalizePaymentDraft } from "./paymentPolicy";
@@ -59,7 +59,7 @@ export async function loadFinance(projectId: string, actor: Actor) {
       paymentDiscussions: { orderBy: { createdAt: "asc" }, select: { id: true, lineId: true, authorId: true, body: true, createdAt: true, author: { select: { name: true } } } },
     },
   });
-  const savedData = workspace?.data as unknown as FinanceData | undefined;
+  const savedData = workspace?.data ? hydrateLinePricingData(workspace.data as unknown as FinanceData) : undefined;
   const supplements = (savedData?.evidenceSupplements ?? []).filter(s => fullAccess || visible.some(r => r.id === s.requestId));
   const linkedIds = requestEvidenceIds(visible, supplements);
   const evidence = await prisma.costFlowEvidence.findMany({ where: { projectId, ...(!fullAccess ? { OR: [{ requestId: { in: visible.map(r => r.id) } }, { id: { in: linkedIds } }] } : {}) }, select: { id: true, name: true, kind: true, requestId: true, sha256: true, mimeType: true } });
@@ -148,7 +148,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
       workspace = await tx.costFlowWorkspace.create({ data: { projectId, data: json(emptyFinance()) } });
     }
 
-    const data = workspace.data as unknown as FinanceData;
+    const data = hydrateLinePricingData(workspace.data as unknown as FinanceData);
     const cash = await tx.costFlowCash.findMany({ where: { projectId } });
     const requests = await tx.workflowRequest.findMany({ where: { projectId, module: "COSTFLOW" } });
     const command = requireValue(text(form, "command"), "thao tác");
@@ -270,7 +270,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
           stableKey: String(rawLine.stableKey ?? ""),
           description: String(rawLine.description ?? ""),
           amount: String(rawLine.amount ?? ""),
-          source: { projectId, revisionId, lineId, budgetGross: (sourceLine.cost ?? calculateCost(sourceLine)).gross },
+          source: { projectId, revisionId, lineId, budgetGross: (sourceLine.cost ?? calculateLineCost(sourceLine)).gross },
           recipient: recipientInput,
           evidenceIds: Array.isArray(rawLine.evidenceIds) ? rawLine.evidenceIds.filter((id): id is string => typeof id === "string") : [],
         });
@@ -485,10 +485,10 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         if (clientId && !client) throw new Error("Khách hàng không còn trong danh mục dự án.");
         const customer = requireValue(client?.name ?? text(form, "customer"), "khách hàng");
         const lines = rows.map(row => {
-          const input = { quantity: String(row.quantity ?? ""), unitPrice: String(row.unitPrice ?? ""), basis: row.basis ?? "NET", vatPercent: String(row.vatPercent ?? "") };
+          const input = { quantity: String(row.quantity ?? ""), days: String(row.days ?? "1"), unitPrice: String(row.unitPrice ?? ""), basis: row.basis ?? "NET", vatPercent: String(row.vatPercent ?? "") };
           const parentLineId = (row.id && parent?.lines.some(l => l.id === row.id) ? row.id : row.parentQuotationLineId);
           if (parentLineId && !parent?.lines.some(l => l.id === parentLineId)) throw new Error("Dòng báo giá cha không thuộc bản nguồn đã chọn.");
-          return { ...input, id: randomUUID(), description: requireValue(String(row.description ?? "").trim(), "nội dung báo giá"), unit: String(row.unit ?? ""), cost: calculateCost(input), ...(parentLineId ? { parentQuotationLineId: parentLineId } : {}) };
+          return { ...input, id: randomUUID(), description: requireValue(String(row.description ?? "").trim(), "nội dung báo giá"), unit: String(row.unit ?? ""), cost: calculateLineCost(input), ...(parentLineId ? { parentQuotationLineId: parentLineId } : {}) };
         });
         const poIds = [...new Set(form.getAll("poIds").map(String))];
         if (poIds.some(id => !data.pos.some(po => po.id === id))) throw new Error("PO không thuộc project.");
@@ -499,7 +499,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         if (retainedIds.some(id => !parent?.evidenceIds.includes(id))) throw new Error("Nguồn Brief/báo giá không hợp lệ.");
         const evidenceIds = [...retainedIds];
         for (const sourceId of sourceIds) evidenceIds.push((await snapshotFile(sourceId, "QUOTATION_SOURCE"))!);
-        const quotation = { id: randomUUID(), number: quotations.length + 1, parentId: parent?.id ?? null, title, customer, notes: text(form, "notes"), lines, poIds, briefIds, evidenceIds, createdBy: actor.id, createdAt: new Date().toISOString() };
+        const quotation = { linePricingSchemaVersion: 2 as const, id: randomUUID(), number: quotations.length + 1, parentId: parent?.id ?? null, title, customer, notes: text(form, "notes"), lines, poIds, briefIds, evidenceIds, createdBy: actor.id, createdAt: new Date().toISOString() };
         data.quotations = [...quotations, quotation];
         savedQuotationId = quotation.id;
         break;
@@ -529,15 +529,15 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         if (!Array.isArray(rows) || rows.length > 500 || rows.some(row => !row || typeof row !== "object")) throw new Error("Danh sách dòng IC không hợp lệ.");
         const knownIds = new Set([...(existing?.lines ?? []), ...(copySource?.lines ?? [])].map(l => l.id));
         const lines = rows.map(row => {
-          const input = { quantity: String(row.quantity ?? ""), unitPrice: String(row.unitPrice ?? ""), basis: row.basis ?? "NET", vatPercent: String(row.vatPercent ?? "") };
+          const retained = [...(existing?.lines ?? []), ...(copySource?.lines ?? [])].find(l => l.id === row.id);
+          const input = { quantity: String(row.quantity ?? ""), days: String(row.days ?? retained?.days ?? ""), unitPrice: String(row.unitPrice ?? ""), basis: row.basis ?? "NET", vatPercent: String(row.vatPercent ?? "") };
           if (row.quotationId || row.quotationLineId) {
             const source = data.quotations?.find(q => q.id === row.quotationId);
             if (!source?.lines.some(line => line.id === row.quotationLineId)) throw new Error("Hạng mục báo giá nguồn không thuộc project/phiên bản đã lưu.");
           }
           const description = String(row.description ?? "").trim();
           const issues = draftLineIssues({ ...input, description });
-          const retained = [...(existing?.lines ?? []), ...(copySource?.lines ?? [])].find(l => l.id === row.id);
-          return { ...input, itemId: retained?.itemId, parameterBinding: normalizeParameterBinding(row.parameterBinding ?? retained?.parameterBinding), evidenceIds: row.evidenceIds ?? retained?.evidenceIds ?? [], evidenceReason: row.evidenceReason ?? retained?.evidenceReason ?? "", internalNotes: row.internalNotes ?? retained?.internalNotes ?? "", id: row.id && knownIds.has(row.id) ? row.id : randomUUID(), description, unit: String(row.unit ?? ""), cost: issues.length ? null : calculateCost(input), ...(retained?.originLines ? { originLines: retained.originLines } : {}), ...(row.vendorId ? { vendorId: requireValue(String(row.vendorId), "NCC") } : {}), ...(row.quotationId ? { quotationId: row.quotationId, quotationLineId: row.quotationLineId } : {}) };
+          return { ...input, itemId: retained?.itemId, parameterBinding: normalizeParameterBinding(row.parameterBinding ?? retained?.parameterBinding), evidenceIds: row.evidenceIds ?? retained?.evidenceIds ?? [], evidenceReason: row.evidenceReason ?? retained?.evidenceReason ?? "", internalNotes: row.internalNotes ?? retained?.internalNotes ?? "", id: row.id && knownIds.has(row.id) ? row.id : randomUUID(), description, unit: String(row.unit ?? ""), cost: issues.length ? null : calculateLineCost(input), ...(retained?.originLines ? { originLines: retained.originLines } : {}), ...(row.vendorId ? { vendorId: requireValue(String(row.vendorId), "NCC") } : {}), ...(row.quotationId ? { quotationId: row.quotationId, quotationLineId: row.quotationLineId } : {}) };
         });
         const lineEvidence = [...new Set(lines.flatMap(l => l.evidenceIds ?? []))];
         if (lineEvidence.some(id => typeof id !== "string") || (lineEvidence.length && await tx.costFlowEvidence.count({ where: { projectId, id: { in: lineEvidence } } }) !== lineEvidence.length)) throw new Error("Minh chứng dòng phải thuộc project.");
@@ -552,7 +552,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         const evidenceIds = [...new Set([...retainedIds, ...lines.flatMap(line => data.quotations?.find(q => q.id === line.quotationId)?.evidenceIds ?? [])])];
         for (const fileId of [...new Set(form.getAll("sourceFileIds").map(String).filter(Boolean))]) evidenceIds.push((await snapshotFile(fileId, "IC_SOURCE"))!);
         if (existing && request) {
-          existing.lines = lines; existing.poIds = poIds; existing.briefIds = briefIds; existing.evidenceIds = evidenceIds;
+          existing.linePricingSchemaVersion = 2; existing.lines = lines; existing.poIds = poIds; existing.briefIds = briefIds; existing.evidenceIds = evidenceIds;
           savedRevisionId = existing.id;
           await tx.workflowRequest.update({ where: { id: request.id }, data: { title: requireValue(text(form, "title"), "tên IC"), version: { increment: 1 }, payload: json({ revisionId: existing.id, lines, poIds, briefIds, evidenceIds }) } });
         } else {
@@ -562,9 +562,9 @@ export async function executeFinance(projectId: string, expectedVersion: number,
           const cancellationReason = parentRequest?.state === "CANCELLED" ? String((requests.find(candidate => candidate.kind === "CANCEL" && candidate.state === "APPROVED" && (candidate.payload as RequestPayload).targetRequestId === parentRequest.id)?.payload as RequestPayload | undefined)?.explanation ?? "") : undefined;
           const lineageReason = text(form, "explanation") || withdrawalReason || cancellationReason || undefined;
           if (handoff && !lineageReason) throw new Error("Thiếu lý do rút/hủy/trả để liên kết revision mới.");
-          const revision = { id, number: data.revisions.length + 1, requestId: saved.id, effective: false, lines, poIds, briefIds, evidenceIds, createdBy: actor.id, ...(copySource ? { parentRevisionId: copySource.id, lineageReason, parameterConfig: copySource.parameterConfig ? structuredClone(copySource.parameterConfig) : undefined } : {}) };
+          const revision = { linePricingSchemaVersion: 2 as const, id, number: data.revisions.length + 1, requestId: saved.id, effective: false, lines, poIds, briefIds, evidenceIds, createdBy: actor.id, ...(copySource ? { parentRevisionId: copySource.id, lineageReason, parameterConfig: copySource.parameterConfig ? structuredClone(copySource.parameterConfig) : undefined } : {}) };
           if (handoff && copySource) {
-            if (!copySource.submissions?.length && parentRequest) copySource.submissions = [{ requestId: parentRequest.id, requestVersion: parentRequest.version, submittedAt: null, title: parentRequest.title, parameterConfig: copySource.parameterConfig ? structuredClone(copySource.parameterConfig) : undefined, lines: structuredClone(copySource.lines), poIds: [...copySource.poIds], briefIds: [...(copySource.briefIds ?? [])], evidenceIds: [...(copySource.evidenceIds ?? [])] }];
+            if (!copySource.submissions?.length && parentRequest) copySource.submissions = [{ linePricingSchemaVersion: 2, requestId: parentRequest.id, requestVersion: parentRequest.version, submittedAt: null, title: parentRequest.title, parameterConfig: copySource.parameterConfig ? structuredClone(copySource.parameterConfig) : undefined, lines: structuredClone(copySource.lines), poIds: [...copySource.poIds], briefIds: [...(copySource.briefIds ?? [])], evidenceIds: [...(copySource.evidenceIds ?? [])] }];
             copySource.supersededByRevisionId = id;
           }
           data.revisions.push(revision);
@@ -591,7 +591,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         const parameterRows = revision.lines.map(line => {
           const row = blankPairedRow(line.itemId ?? line.id);
           row.name = line.description;
-          row.buy = { ...row.buy, quantity: line.quantity, unitPrice: line.unitPrice, vatPercent: line.vatPercent, basis: line.basis, unit: line.unit, notes: line.internalNotes ?? "", parameterBinding: line.parameterBinding ? structuredClone(line.parameterBinding) : undefined, vendorId: line.vendorId ?? "", evidenceIds: [...(line.evidenceIds ?? [])], evidenceReason: line.evidenceReason ?? "" };
+          row.buy = { ...row.buy, quantity: line.quantity, days: line.days, unitPrice: line.unitPrice, vatPercent: line.vatPercent, basis: line.basis, unit: line.unit, notes: line.internalNotes ?? "", parameterBinding: line.parameterBinding ? structuredClone(line.parameterBinding) : undefined, vendorId: line.vendorId ?? "", evidenceIds: [...(line.evidenceIds ?? [])], evidenceReason: line.evidenceReason ?? "" };
           return row;
         });
         const parameterIssues = parameterFinalizationIssues(parameterRows, revision.parameterConfig, "buy");
@@ -605,7 +605,8 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         const proofs = await tx.costFlowEvidence.findMany({ where: { projectId, id: { in: ids } }, select: { id: true, sha256: true } });
         if (proofs.length !== ids.length) throw new Error("Minh chứng đã thay đổi hoặc không thuộc project.");
         revision.evidenceHashes = Object.fromEntries(proofs.map(p => [p.id, p.sha256]));
-        revision.submissions = [...(revision.submissions ?? []), { requestId: request.id, requestVersion: request.version + 1, submittedAt: new Date().toISOString(), title: request.title, explanation, baselineRevisionId: baseline?.id ?? null, parameterConfig: revision.parameterConfig ? structuredClone(revision.parameterConfig) : undefined, tree: structuredClone(revision.tree ?? []), evidenceHashes: { ...revision.evidenceHashes }, lines: structuredClone(revision.lines), poIds: [...revision.poIds], briefIds: [...(revision.briefIds ?? [])], evidenceIds: [...(revision.evidenceIds ?? [])] }];
+        revision.linePricingSchemaVersion = 2;
+        revision.submissions = [...(revision.submissions ?? []), { linePricingSchemaVersion: 2, requestId: request.id, requestVersion: request.version + 1, submittedAt: new Date().toISOString(), title: request.title, explanation, baselineRevisionId: baseline?.id ?? null, parameterConfig: revision.parameterConfig ? structuredClone(revision.parameterConfig) : undefined, tree: structuredClone(revision.tree ?? []), evidenceHashes: { ...revision.evidenceHashes }, lines: structuredClone(revision.lines), poIds: [...revision.poIds], briefIds: [...(revision.briefIds ?? [])], evidenceIds: [...(revision.evidenceIds ?? [])] }];
         const chain = await ordinarySteps();
         const attemptId = randomUUID();
         const submittedVersion = request.version + 1;
@@ -678,9 +679,9 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         data.lineArchive ??= [];
         for (const line of sourceLines) if (line && !data.lineArchive.some(entry => entry.revisionId === revision.id && entry.line.id === line.id)) data.lineArchive.push({ revisionId: revision.id, line: structuredClone(line) });
         const outputs = rows.map(row => {
-          const input = { quantity: String(row.quantity ?? ""), unitPrice: String(row.unitPrice ?? ""), basis: row.basis ?? "NET", vatPercent: String(row.vatPercent ?? "") };
+          const input = { quantity: String(row.quantity ?? ""), days: String(row.days ?? ""), unitPrice: String(row.unitPrice ?? ""), basis: row.basis ?? "NET", vatPercent: String(row.vatPercent ?? "") };
           const description = requireValue(String(row.description ?? "").trim(), "nội dung dòng kết quả");
-          const line: IcLine = { ...input, description, unit: String(row.unit ?? ""), id: randomUUID(), cost: draftLineIssues({ ...input, description }).length ? null : calculateCost(input), originLines: ids.map(lineId => ({ revisionId: revision.id, lineId })) };
+          const line: IcLine = { ...input, description, unit: String(row.unit ?? ""), id: randomUUID(), cost: draftLineIssues({ ...input, description }).length ? null : calculateLineCost(input), originLines: ids.map(lineId => ({ revisionId: revision.id, lineId })) };
           validateIcLineOrigins(data, line, revision.id); return line;
         });
         revision.lines = [...revision.lines.filter(line => !ids.includes(line.id)), ...outputs];
@@ -712,8 +713,8 @@ export async function executeFinance(projectId: string, expectedVersion: number,
             if (updateQuantity.includes(id)) existing.quantity = row.quantity;
             if (updateUnit.includes(id)) existing.unit = row.unit;
             existing.quotationId = quotation.id; existing.quotationLineId = row.id;
-            existing.cost = draftLineIssues(existing).length ? null : calculateCost(existing);
-          } else revision.lines.push({ id: randomUUID(), description: row.description, quantity: row.quantity, unit: row.unit, basis: "NET", unitPrice: "", vatPercent: "", cost: null, quotationId: quotation.id, quotationLineId: row.id });
+            existing.cost = draftLineIssues(existing).length ? null : calculateLineCost(existing);
+          } else revision.lines.push({ id: randomUUID(), description: row.description, quantity: row.quantity, days: "", unit: row.unit, basis: "NET", unitPrice: "", vatPercent: "", cost: null, quotationId: quotation.id, quotationLineId: row.id });
         }
         if (revision.lines.length > 500) throw new Error("IC tối đa 500 dòng.");
         await tx.workflowRequest.update({ where: { id: request.id }, data: { payload: json(revision), version: { increment: 1 } } });

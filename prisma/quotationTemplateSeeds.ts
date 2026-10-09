@@ -2,14 +2,15 @@ import type { PrismaClient } from "@prisma/client";
 import type { PairedRow } from "../lib/costflow/types";
 import type { FormulaNode, ParameterBinding, QuotationParameterSnapshot } from "../lib/costflow/quotationParameters";
 
-export const TEAMBUILDING_TEMPLATE_ID = "quotation-template-teambuilding-parameters-v2";
+export const TEAMBUILDING_TEMPLATE_ID = "quotation-template-teambuilding-line-pricing-v3";
 export const TEAMBUILDING_TEMPLATE_NAME = "Báo giá mẫu — Teambuilding (tham số)";
 export const TEAMBUILDING_TEMPLATE_DESCRIPTION =
-  "Loại project: Teambuilding. Template Event Pricing Parameters v2 cho chương trình 2 ngày; Account phải rà soát lại số người, số ngày, số đêm, số phòng, đơn giá và VAT trước khi sử dụng.";
+  "Loại project: Teambuilding. Template Line Pricing v3 cho chương trình 2 ngày; Account phải rà soát lại số người, số ngày, số đêm, số phòng, đơn giá và VAT trước khi sử dụng.";
 
 const blankBuy = () => ({
   unit: "",
   quantity: "",
+  days: "",
   unitPrice: "",
   vatPercent: "",
   basis: "NET" as const,
@@ -30,7 +31,7 @@ function group(itemId: string, name: string): PairedRow {
     showChildren: true,
     showGroupSubtotal: true,
     packageChildDisplay: "CONTENT",
-    sell: { unit: "", quantity: "", unitPrice: "", vatPercent: "8", basis: "NET", notes: "" },
+    sell: { unit: "", quantity: "", days: "", unitPrice: "", vatPercent: "8", basis: "NET", notes: "" },
     buy: blankBuy(),
   };
 }
@@ -47,6 +48,7 @@ type ItemOptions = {
   optional?: boolean;
   complimentaryReferencePrice?: number;
   quantityFormula?: FormulaNode;
+  daysFormula?: FormulaNode;
 };
 
 function money(value: number) {
@@ -61,13 +63,12 @@ function item(itemId: string, parentItemId: string, name: string, options: ItemO
     options.optional ? "Optional — chưa tính vào tổng; nhập lại số lượng khi khách chọn." : undefined,
     options.focReferencePrice !== undefined ? `FOC; đơn giá tham chiếu ${money(options.focReferencePrice)} VND.` : undefined,
     options.complimentaryReferencePrice !== undefined ? `Ga tặng; đơn giá tham chiếu ${money(options.complimentaryReferencePrice)} VND.` : undefined,
-    sourceQuantity !== undefined ? `SL gốc: ${sourceQuantity}; Số ngày: ${days}.` : days ? `Số ngày: ${days}.` : undefined,
   ].filter(Boolean).join(" ");
-  const billableQuantity = options.optional
+  const quantity = options.optional
     ? ""
     : sourceQuantity === undefined
       ? ""
-      : String(sourceQuantity * days);
+      : String(sourceQuantity);
   const unitPrice = options.focReferencePrice !== undefined || options.complimentaryReferencePrice !== undefined
     ? "0"
     : options.unitPrice === undefined
@@ -84,8 +85,8 @@ function item(itemId: string, parentItemId: string, name: string, options: ItemO
     showGroupSubtotal: true,
     packageChildDisplay: "CONTENT",
     sell: {
-      unit: options.unit ?? "", quantity: billableQuantity, unitPrice, vatPercent: "8", basis: "NET", notes,
-      ...(options.quantityFormula ? { parameterBinding: { mode: "FORMULA", moduleId: parentItemId, quantityFormula: options.quantityFormula, lastCalculated: { quantity: billableQuantity } } satisfies ParameterBinding } : {}),
+      unit: options.unit ?? "", quantity, days: String(days), unitPrice, vatPercent: "8", basis: "NET", notes,
+      ...(options.quantityFormula || options.daysFormula ? { parameterBinding: { mode: "FORMULA", moduleId: parentItemId, ...(options.quantityFormula ? { quantityFormula: options.quantityFormula } : {}), ...(options.daysFormula ? { daysFormula: options.daysFormula } : {}), lastCalculated: { quantity, days: String(days) } } satisfies ParameterBinding } : {}),
     },
     buy: blankBuy(),
   };
@@ -96,6 +97,7 @@ function parentItem(itemId: string, parentItemId: string, name: string): PairedR
 }
 
 export const TEAMBUILDING_TEMPLATE_SNAPSHOT = {
+  linePricingSchemaVersion: 2 as const,
   parameterConfig: {
     schemaVersion: 1,
     definitions: [
@@ -119,7 +121,7 @@ export const TEAMBUILDING_TEMPLATE_SNAPSHOT = {
     "LOẠI PROJECT: TEAMBUILDING.",
     "Template tham khảo từ bảng báo giá mẫu do người dùng cung cấp ngày 06/10/2026.",
     "VAT mặc định 8% theo cấu hình dòng mới hiện tại; Account phải rà soát VAT, giá bán và các dòng phí trước khi chốt.",
-    "Các dòng nhiều ngày dùng số lượng tính tiền = SL gốc × số ngày; hai giá trị nguồn được giữ trong ghi chú dòng.",
+    "Thành tiền mỗi dòng = số lượng × số ngày × đơn giá; số ngày chương trình chỉ cấp giá trị cho công thức số ngày của từng dòng.",
   ].join(" "),
   rows: [
     group("tb-a", "A. Ý TƯỞNG VÀ THIẾT KẾ"),
@@ -156,18 +158,18 @@ export const TEAMBUILDING_TEMPLATE_SNAPSHOT = {
     item("tb-e-3", "tb-e", "LED", { description: "4m3 x 2m6", unit: "Gói", quantity: 1, days: 1, unitPrice: 4_500_000 }),
 
     group("tb-f", "F. NHÂN SỰ"),
-    item("tb-f-1", "tb-f", "Project Leader", { unit: "Người-ngày", quantity: 1, days: 2, unitPrice: 1_000_000, quantityFormula: { op: "MUL", left: { op: "CONST", value: "1" }, right: { op: "PARAM", key: "days" } } }),
-    item("tb-f-2", "tb-f", "Supporter", { description: "Hỗ trợ logistic", unit: "Người-ngày", quantity: 2, days: 2, unitPrice: 700_000, quantityFormula: { op: "MUL", left: { op: "CONST", value: "2" }, right: { op: "PARAM", key: "days" } } }),
+    item("tb-f-1", "tb-f", "Project Leader", { unit: "Người-ngày", quantity: 1, days: 2, unitPrice: 1_000_000, daysFormula: { op: "PARAM", key: "days" } }),
+    item("tb-f-2", "tb-f", "Supporter", { description: "Hỗ trợ logistic", unit: "Người-ngày", quantity: 2, days: 2, unitPrice: 700_000, daysFormula: { op: "PARAM", key: "days" } }),
     item("tb-f-3", "tb-f", "MC", { description: "Teambuilding + Gala", unit: "Show", quantity: 1, days: 1, unitPrice: 8_000_000 }),
     item("tb-f-4", "tb-f", "Band nhạc", { unit: "Gói", quantity: 1, days: 1, unitPrice: 9_000_000 }),
-    item("tb-f-5", "tb-f", "Hướng dẫn viên", { unit: "Người-ngày", quantity: 4, days: 2, unitPrice: 700_000, quantityFormula: { op: "MUL", left: { op: "CONST", value: "4" }, right: { op: "PARAM", key: "days" } } }),
+    item("tb-f-5", "tb-f", "Hướng dẫn viên", { unit: "Người-ngày", quantity: 4, days: 2, unitPrice: 700_000, daysFormula: { op: "PARAM", key: "days" } }),
     item("tb-f-6", "tb-f", "DJ", { unit: "Show", quantity: 1, days: 1, unitPrice: 5_000_000 }),
     item("tb-f-7", "tb-f", "Quay phim - chụp hình", { description: "1 quay\n1 chụp\nClip recap", unit: "Gói", quantity: 1, days: 1, unitPrice: 9_000_000 }),
 
     group("tb-g", "G. CHI PHÍ KHÁC"),
     item("tb-g-1", "tb-g", "Chi phí lưu trú và ăn uống nhân sự", { unit: "Gói", quantity: 1, days: 1, unitPrice: 3_000_000 }),
     item("tb-g-2", "tb-g", "Chi phí vận chuyển setup", { unit: "Gói", quantity: 1, days: 1, unitPrice: 3_000_000 }),
-    item("tb-g-3", "tb-g", "Bảo hiểm", { unit: "Gói", quantity: 85, days: 2, unitPrice: 10_000, quantityFormula: { op: "MUL", left: { op: "PARAM", key: "participants" }, right: { op: "PARAM", key: "days" } } }),
+    item("tb-g-3", "tb-g", "Bảo hiểm", { unit: "Gói", quantity: 85, days: 2, unitPrice: 10_000, quantityFormula: { op: "PARAM", key: "participants" }, daysFormula: { op: "PARAM", key: "days" } }),
     item("tb-g-4", "tb-g", "Workshop", { unit: "Người", quantity: 85, days: 1, unitPrice: 50_000, quantityFormula: { op: "PARAM", key: "participants" } }),
     item("tb-g-5", "tb-g", "Bình nước", { unit: "Cái", quantity: 85, days: 1, complimentaryReferencePrice: 50_000, quantityFormula: { op: "PARAM", key: "participants" } }),
   ],

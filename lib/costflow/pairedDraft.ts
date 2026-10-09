@@ -1,6 +1,6 @@
 import { compare, decimal, normalizeDecimalInput } from "./money";
 import { normalizeParameterBinding } from "./quotationParameters";
-import type { IcRevision, PairedDraft, PairedRow, PairedSide, Quotation } from "./types";
+import type { FinanceData, IcRevision, PairedDraft, PairedRow, PairedSide, Quotation } from "./types";
 
 export function blankSide(days = ""): PairedSide {
   return { quantity: "", days, unitPrice: "", vatPercent: "8", basis: "NET", unit: "", notes: "" };
@@ -77,4 +77,23 @@ export function hydrateLegacyPairedDraft(draft: PairedDraft): PairedDraft {
     },
   }));
   return hydrated;
+}
+
+export function hydrateLinePricingData(source: FinanceData): FinanceData {
+  const data = structuredClone(source);
+  data.quotationDrafts = data.quotationDrafts?.map(hydrateLegacyPairedDraft);
+  data.quotations = data.quotations?.map(quotation => ({
+    ...quotation,
+    lines: quotation.lines.map(line => ({ ...line, days: line.days || "1" })),
+    salesRows: quotation.salesRows?.map(row => ({ ...row, sell: { ...row.sell, days: row.sell.days || "1" } })),
+  }));
+  data.revisions = data.revisions.map(revision => ({
+    ...revision,
+    lines: revision.lines.map(line => ({ ...line, days: line.days || "1" })),
+    submissions: revision.submissions?.map(submission => ({
+      ...submission,
+      lines: submission.lines.map(line => ({ ...line, days: line.days || "1" })),
+    })),
+  }));
+  return data;
 }
