@@ -7,8 +7,10 @@ import {
   calculateActualCost,
   nextActualCostVersion,
   normalizeActualCostFundingSource,
+  validateUnbudgetedActualCost,
   validateActualCostDecision,
   type ActualCostDecisionAction,
+  type ActualCostSourceKind,
 } from "./actualCost";
 import type { FinanceData } from "./types";
 
@@ -19,14 +21,24 @@ export type ActualCostCommand =
       command: "CREATE_AND_SUBMIT";
       projectId: string;
       stableLineId: string;
-      revisionId: string;
-      icLineId: string;
+      sourceKind?: ActualCostSourceKind;
+      revisionId?: string;
+      icLineId?: string;
       recipientKey: string;
       description: string;
+      reason?: string;
       fundingSource: string;
       quantity: string;
       days: string;
       unitPrice: string;
+      unit?: string;
+      basis?: "NET" | "GROSS";
+      vatPercent?: string;
+      evidenceIds?: string[];
+      billable?: boolean;
+      saleQuantity?: string;
+      saleDays?: string;
+      saleUnitPrice?: string;
     }
   | {
       command: "RESUBMIT";
@@ -113,17 +125,55 @@ export async function executeActualCostCommand(
 
     if (command.command === "CREATE_AND_SUBMIT") {
       if (!context.member) throw new Error("Chỉ thành viên Project được lập AC.");
-      const sourceSnapshot = await resolveIcSource(tx, command.projectId, required(command.revisionId, "phiên bản IC"), required(command.icLineId, "dòng IC"));
+      const sourceKind = command.sourceKind ?? "IC_LINKED";
+      if (sourceKind !== "IC_LINKED" && sourceKind !== "UNBUDGETED") throw new Error("Nguồn AC không hợp lệ.");
       const recipientKey = await assertRecipient(tx, command.projectId, required(command.recipientKey, "người nhận"));
-      const fundingSource = normalizeActualCostFundingSource(command.fundingSource);
-      const calculated = calculateActualCost(command);
+      let sourceSnapshot: Record<string, unknown>;
+      let revisionId: string | null = null;
+      let icLineId: string | null = null;
+      let unit: string;
+      let basis: "NET" | "GROSS";
+      let vatPercent: string;
+      let fundingSource: ReturnType<typeof normalizeActualCostFundingSource>;
+      let billable = false;
+      let saleSnapshot: { quantity: string; days: string; unitPrice: string } | null = null;
+      let evidenceIds: string[] = [];
+      if (sourceKind === "IC_LINKED") {
+        const icSource = await resolveIcSource(tx, command.projectId, required(command.revisionId ?? "", "phiên bản IC"), required(command.icLineId ?? "", "dòng IC"));
+        sourceSnapshot = structuredClone(icSource) as unknown as Record<string, unknown>;
+        revisionId = icSource.revisionId;
+        icLineId = icSource.lineId;
+        unit = icSource.unit;
+        basis = icSource.basis;
+        vatPercent = icSource.vatPercent;
+        fundingSource = normalizeActualCostFundingSource(command.fundingSource);
+      } else {
+        const validated = validateUnbudgetedActualCost({
+          ...command,
+          reason: command.reason ?? "",
+          unit: command.unit ?? "",
+          evidenceIds: command.evidenceIds ?? [],
+          billable: command.billable ?? false,
+        });
+        const evidence = await tx.costFlowEvidence.findMany({ where: { projectId: command.projectId, id: { in: validated.evidenceIds } }, select: { id: true, kind: true } });
+        if (evidence.length !== validated.evidenceIds.length) throw new Error("Chứng từ AC phải thuộc đúng Project.");
+        evidenceIds = validated.evidenceIds;
+        sourceSnapshot = { sourceKind, reason: validated.reason };
+        unit = validated.unit;
+        basis = command.basis ?? "GROSS";
+        vatPercent = command.vatPercent ?? "0";
+        fundingSource = validated.fundingSource;
+        billable = validated.billable;
+        saleSnapshot = validated.saleSnapshot;
+      }
+      const calculated = calculateActualCost({ ...command, basis, vatPercent });
       const line = await tx.actualCostLine.create({
         data: {
           projectId: command.projectId,
           stableLineId: required(command.stableLineId, "mã dòng ổn định"),
-          sourceKind: "IC_LINKED",
-          icRevisionId: sourceSnapshot.revisionId,
-          icLineId: sourceSnapshot.lineId,
+          sourceKind,
+          icRevisionId: revisionId,
+          icLineId,
           recipientKey,
           createdById: context.actor.id,
           currentVersion: 1,
@@ -137,12 +187,19 @@ export async function executeActualCostCommand(
               quantity: command.quantity,
               days: command.days,
               unitPrice: command.unitPrice,
-              unit: sourceSnapshot.unit,
+              unit,
+              basis,
+              vatPercent,
               amount: calculated.amount,
               rawAmount: calculated.rawAmount,
               sourceSnapshot: sourceSnapshot as unknown as Prisma.InputJsonValue,
+              billable,
+              saleSnapshot: saleSnapshot as Prisma.InputJsonValue ?? undefined,
               createdById: context.actor.id,
               submittedAt: new Date(),
+              evidenceLinks: evidenceIds.length ? {
+                create: evidenceIds.map(evidenceId => ({ projectId: command.projectId, evidenceId, kind: "ACTUAL_COST", actorId: context.actor.id })),
+              } : undefined,
             },
           },
         },
@@ -155,7 +212,7 @@ export async function executeActualCostCommand(
 
     const line = await tx.actualCostLine.findFirst({
       where: { id: command.lineId, projectId: command.projectId },
-      include: { versions: { orderBy: { version: "desc" }, take: 1, include: { approvals: true } } },
+      include: { versions: { orderBy: { version: "desc" }, take: 1, include: { approvals: true, evidenceLinks: true } } },
     });
     if (!line || !line.versions[0]) throw new Error("Không tìm thấy AC trong Project này.");
     const current = line.versions[0];
@@ -165,7 +222,8 @@ export async function executeActualCostCommand(
       if (command.expectedVersion !== line.currentVersion) throw new Error("Phiên bản đã thay đổi. Tải lại trước khi gửi lại.");
       const nextVersion = nextActualCostVersion(line.currentVersion, current.state);
       const fundingSource = normalizeActualCostFundingSource(command.fundingSource);
-      const calculated = calculateActualCost(command);
+      const basis = current.basis === "NET" ? "NET" : "GROSS";
+      const calculated = calculateActualCost({ ...command, basis, vatPercent: current.vatPercent });
       const version = await tx.actualCostVersion.create({
         data: {
           projectId: command.projectId,
@@ -187,6 +245,9 @@ export async function executeActualCostCommand(
           saleSnapshot: current.saleSnapshot ?? undefined,
           createdById: context.actor.id,
           submittedAt: new Date(),
+          evidenceLinks: current.evidenceLinks.length ? {
+            create: current.evidenceLinks.map(link => ({ projectId: command.projectId, evidenceId: link.evidenceId, kind: link.kind, actorId: context.actor.id })),
+          } : undefined,
         },
       });
       const updated = await tx.actualCostLine.updateMany({ where: { id: line.id, projectId: command.projectId, currentVersion: command.expectedVersion }, data: { currentVersion: nextVersion } });

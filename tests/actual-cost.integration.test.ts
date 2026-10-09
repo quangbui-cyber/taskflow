@@ -40,7 +40,10 @@ test("actual-cost integration: create, submit, return, resubmit and approve are 
         data: {
           config: { accountantId: "", ceoId: "", managerId: "" },
           closed: false,
-          revisions: [{ id: `${prefix}-revision`, number: 1, requestId: `${prefix}-ic-request`, effective: true, lines: [{ id: `${prefix}-ic-line`, description: "Dòng IC nguồn", unit: "gói", quantity: "2", days: "3", unitPrice: "100000", basis: "GROSS", vatPercent: "0", cost: { rawNet: "600000/1", rawVat: "0/1", rawGross: "600000/1", net: "600000", vat: "0", gross: "600000" } }], poIds: [], evidenceIds: [], createdBy: member.id }],
+          revisions: [{ id: `${prefix}-revision`, number: 1, requestId: `${prefix}-ic-request`, effective: true, lines: [
+            { id: `${prefix}-ic-line`, description: "Dòng IC nguồn", unit: "gói", quantity: "2", days: "3", unitPrice: "100000", basis: "GROSS", vatPercent: "0", cost: { rawNet: "600000/1", rawVat: "0/1", rawGross: "600000/1", net: "600000", vat: "0", gross: "600000" } },
+            ...["người", "xe", "phòng"].map((unit, index) => ({ id: `${prefix}-ic-${unit}`, description: `IC ${unit}`, unit, quantity: "1", days: "1", unitPrice: String((index + 1) * 10000), basis: "GROSS", vatPercent: "0", cost: { rawNet: `${(index + 1) * 10000}/1`, rawVat: "0/1", rawGross: `${(index + 1) * 10000}/1`, net: String((index + 1) * 10000), vat: "0", gross: String((index + 1) * 10000) } })),
+          ], poIds: [], evidenceIds: [], createdBy: member.id }],
           beneficiaries: [],
           expenses: [],
           pos: [],
@@ -51,6 +54,7 @@ test("actual-cost integration: create, submit, return, resubmit and approve are 
       },
     });
     await prisma.workflowRoleGrant.create({ data: { userId: dd.id, role: "AC_DD", grantedById: admin.id } });
+    const baselineBefore = JSON.stringify((await prisma.costFlowWorkspace.findUniqueOrThrow({ where: { projectId }, select: { data: true } })).data);
 
     const created = await executeActualCostCommand(member, {
       command: "CREATE_AND_SUBMIT",
@@ -68,6 +72,44 @@ test("actual-cost integration: create, submit, return, resubmit and approve are 
     assert.equal(created.version, 1);
     assert.equal(created.amount, "600000");
     assert.equal(await prisma.costFlowCash.count({ where: { projectId } }), 0);
+
+    for (const [index, unit] of ["gói", "người", "xe", "phòng"].entries()) {
+      const icLineId = unit === "gói" ? `${prefix}-ic-line` : `${prefix}-ic-${unit}`;
+      await executeActualCostCommand(member, {
+        command: "CREATE_AND_SUBMIT", projectId, stableLineId: `${prefix}-occurrence-${index}`,
+        revisionId: `${prefix}-revision`, icLineId, recipientKey: `USER:${member.id}`,
+        description: `Đợt nghiệm thu ${unit}`, fundingSource: "EMPLOYEE_OUT_OF_POCKET",
+        quantity: "1", days: "1", unitPrice: "10000",
+      });
+    }
+    assert.equal(await prisma.actualCostLine.count({ where: { projectId, icLineId: `${prefix}-ic-line` } }), 2, "one immutable IC line accepts multiple actual occurrences");
+    assert.deepEqual(
+      new Set((await prisma.actualCostVersion.findMany({ where: { projectId }, select: { unit: true } })).map(item => item.unit)),
+      new Set(["gói", "người", "xe", "phòng"]),
+      "mixed units remain separate on versions",
+    );
+
+    const evidence = await prisma.costFlowEvidence.create({ data: {
+      projectId, sourceFileId: `${prefix}-evidence`, kind: "INVOICE", name: "invoice.pdf",
+      mimeType: "application/pdf", data: new Uint8Array([1, 2, 3]), sha256: `${prefix}-sha`, createdBy: member.id,
+    } });
+    await assert.rejects(() => executeActualCostCommand(member, {
+      command: "CREATE_AND_SUBMIT", projectId, stableLineId: `${prefix}-unbudgeted-invalid`, sourceKind: "UNBUDGETED",
+      recipientKey: `USER:${member.id}`, description: "Phát sinh", reason: "", fundingSource: "EMPLOYEE_OUT_OF_POCKET",
+      quantity: "1", days: "1", unitPrice: "90000", unit: "gói", evidenceIds: [evidence.id],
+    }), /lý do phát sinh/);
+    const unbudgeted = await executeActualCostCommand(member, {
+      command: "CREATE_AND_SUBMIT", projectId, stableLineId: `${prefix}-unbudgeted`, sourceKind: "UNBUDGETED",
+      recipientKey: `USER:${member.id}`, description: "Phát sinh", reason: "Khách đổi yêu cầu", fundingSource: "EMPLOYEE_OUT_OF_POCKET",
+      quantity: "1", days: "1", unitPrice: "90000", unit: "gói", evidenceIds: [evidence.id], billable: true,
+      saleQuantity: "1", saleDays: "1", saleUnitPrice: "120000",
+    });
+    const unbudgetedVersion = await prisma.actualCostVersion.findUniqueOrThrow({ where: { id: unbudgeted.versionId }, include: { evidenceLinks: true } });
+    assert.equal(unbudgetedVersion.amount, "90000", "sale metadata never changes approved AC amount");
+    assert.equal(unbudgetedVersion.billable, true);
+    assert.equal(unbudgetedVersion.evidenceLinks.length, 1);
+    await executeActualCostCommand(dd, { command: "DECIDE", projectId, lineId: unbudgeted.lineId, version: 1, action: "APPROVED", reason: "DD duyệt phát sinh" });
+    assert.equal(JSON.stringify((await prisma.costFlowWorkspace.findUniqueOrThrow({ where: { projectId }, select: { data: true } })).data), baselineBefore, "AC writes and approvals do not mutate effective IC or parameter snapshots");
 
     const beforeUnauthorized = {
       approvals: await prisma.actualCostApproval.count({ where: { projectId } }),
@@ -110,7 +152,7 @@ test("actual-cost integration: create, submit, return, resubmit and approve are 
       () => executeActualCostCommand(dd, { command: "DECIDE", projectId, lineId: created.lineId, version: 2, action: "APPROVED", reason: "Replay" }),
       /đã được quyết định/,
     );
-    assert.equal(await prisma.actualCostApproval.count({ where: { projectId, action: "APPROVED" } }), 1);
+    assert.equal(await prisma.actualCostApproval.count({ where: { projectId, lineId: created.lineId, action: "APPROVED" } }), 1);
     assert.equal(await prisma.costFlowCash.count({ where: { projectId } }), 0);
 
     const replacementDd = await createUser("replacement-dd");
@@ -182,6 +224,7 @@ test("actual-cost integration: create, submit, return, resubmit and approve are 
       await prisma.actualCostApproval.deleteMany({ where: { projectId } });
       await prisma.actualCostVersion.deleteMany({ where: { projectId } });
       await prisma.actualCostLine.deleteMany({ where: { projectId } });
+      await prisma.costFlowEvidence.deleteMany({ where: { projectId, sourceFileId: { startsWith: prefix } } });
       await prisma.workflowRoleGrant.deleteMany({ where: { userId: { in: userIds }, role: "AC_DD" } });
       await prisma.costFlowWorkspace.deleteMany({ where: { projectId } });
       await prisma.project.deleteMany({ where: { id: projectId, name: prefix } });

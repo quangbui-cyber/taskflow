@@ -1,4 +1,14 @@
-import { compare, decimal, multiply, round, source } from "./money";
+import {
+  calculateLineCost,
+  compare,
+  decimal,
+  exact,
+  round,
+  source,
+  subtract,
+  totals,
+  type CalculatedCost,
+} from "./money";
 import type { ActualCostFundingSource, Expense } from "./types";
 
 export const ACTUAL_COST_FUNDING_SOURCES = [
@@ -9,8 +19,9 @@ export const ACTUAL_COST_FUNDING_SOURCES = [
 ] as const satisfies readonly ActualCostFundingSource[];
 
 export type ActualCostDecisionAction = "APPROVED" | "RETURNED";
+export type ActualCostSourceKind = "IC_LINKED" | "UNBUDGETED";
 
-export function calculateActualCost(input: { quantity: string; days: string; unitPrice: string }) {
+export function calculateActualCost(input: { quantity: string; days: string; unitPrice: string; basis?: "NET" | "GROSS"; vatPercent?: string }) {
   const quantity = decimal(input.quantity);
   const days = decimal(input.days);
   const unitPrice = decimal(input.unitPrice);
@@ -18,8 +29,71 @@ export function calculateActualCost(input: { quantity: string; days: string; uni
   if (compare(quantity, zero) <= 0 || compare(days, zero) <= 0 || compare(unitPrice, zero) < 0) {
     throw new Error("Số lượng và số ngày phải lớn hơn 0; đơn giá không được âm.");
   }
-  const raw = multiply(multiply(quantity, days), unitPrice);
-  return { amount: round(raw), rawAmount: source(raw) };
+  const cost = calculateLineCost({
+    quantity: input.quantity,
+    days: input.days,
+    unitPrice: input.unitPrice,
+    basis: input.basis ?? "GROSS",
+    vatPercent: input.vatPercent ?? "0",
+  });
+  return { amount: cost.gross, rawAmount: cost.rawGross, cost };
+}
+
+export function actualCostVariance(ic: CalculatedCost, rows: CalculatedCost[]) {
+  const actual = totals(rows);
+  const variance = {
+    rawNet: source(subtract(exact(actual.rawNet), exact(ic.rawNet))),
+    rawVat: source(subtract(exact(actual.rawVat), exact(ic.rawVat))),
+    rawGross: source(subtract(exact(actual.rawGross), exact(ic.rawGross))),
+    net: round(subtract(exact(actual.rawNet), exact(ic.rawNet))),
+    vat: round(subtract(exact(actual.rawVat), exact(ic.rawVat))),
+    gross: round(subtract(exact(actual.rawGross), exact(ic.rawGross))),
+  };
+  const gross = compare(exact(variance.rawGross), decimal("0"));
+  return { ic, actual, variance, status: gross > 0 ? "OVER_BUDGET" as const : gross < 0 ? "SAVING" as const : "ON_BUDGET" as const };
+}
+
+export type UnbudgetedActualCostInput = {
+  description: string;
+  reason: string;
+  fundingSource: string;
+  recipientKey: string;
+  quantity: string;
+  days: string;
+  unitPrice: string;
+  unit: string;
+  basis?: "NET" | "GROSS";
+  vatPercent?: string;
+  evidenceIds: string[];
+  billable: boolean;
+  saleQuantity?: string;
+  saleDays?: string;
+  saleUnitPrice?: string;
+};
+
+export function validateUnbudgetedActualCost(input: UnbudgetedActualCostInput) {
+  const required = (value: string, label: string) => {
+    const normalized = value.trim();
+    if (!normalized) throw new Error(`Thiếu ${label}.`);
+    return normalized;
+  };
+  const description = required(input.description, "nội dung phát sinh");
+  const reason = required(input.reason, "lý do phát sinh");
+  const fundingSource = normalizeActualCostFundingSource(input.fundingSource);
+  const recipientKey = required(input.recipientKey, "người nhận");
+  const unit = required(input.unit, "đơn vị");
+  const evidenceIds = [...new Set(input.evidenceIds.map(value => value.trim()).filter(Boolean))];
+  if (!evidenceIds.length) throw new Error("Cần ít nhất một chứng từ cho phát sinh ngoài IC.");
+  const calculated = calculateActualCost(input);
+  let saleSnapshot: { quantity: string; days: string; unitPrice: string } | null = null;
+  if (input.billable) {
+    const quantity = required(input.saleQuantity ?? "", "số lượng bán thêm");
+    const days = required(input.saleDays ?? "", "số ngày bán thêm");
+    const unitPrice = required(input.saleUnitPrice ?? "", "đơn giá bán thêm");
+    calculateActualCost({ quantity, days, unitPrice });
+    saleSnapshot = { quantity, days, unitPrice };
+  }
+  return { description, reason, fundingSource, recipientKey, unit, evidenceIds, billable: input.billable, saleSnapshot, ...calculated };
 }
 
 export function normalizeActualCostFundingSource(value: string): ActualCostFundingSource {

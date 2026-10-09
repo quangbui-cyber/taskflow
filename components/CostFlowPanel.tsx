@@ -69,6 +69,8 @@ export type Finance = {
   paymentLedger?: import("@/lib/costflow/paymentReadModel").PaymentLedgerRow[];
   actualCosts?: {
     lines: import("@/lib/costflow/actualCostReadModel").ActualCostReadLine[];
+    comparisons: import("@/lib/costflow/actualCostReadModel").ActualCostComparison[];
+    summary: ReturnType<typeof import("@/lib/costflow/actualCost").actualCostVariance>;
     canDecide: boolean;
   } | null;
 };

@@ -1,7 +1,8 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
-import { normalizeLegacyActualCosts } from "./actualCost";
+import { actualCostVariance, calculateActualCost, normalizeLegacyActualCosts } from "./actualCost";
+import { calculateLineCost, totals, type CalculatedCost } from "./money";
 import type { FinanceData } from "./types";
 
 type Actor = { id: string; role: string };
@@ -9,6 +10,7 @@ type Actor = { id: string; role: string };
 export type ActualCostReadLine = {
   id: string;
   stableLineId: string;
+  sourceKind: "IC_LINKED" | "UNBUDGETED" | "LEGACY";
   source: "normalized" | "legacy";
   reviewState: "submitted" | "returned" | "approved" | "needsReview";
   approvalState: "APPROVED" | "RETURNED" | null;
@@ -22,12 +24,31 @@ export type ActualCostReadLine = {
   unitPrice: string | null;
   unit: string | null;
   amount: string;
+  cost: CalculatedCost | null;
+  billable: boolean;
+  saleSnapshot: { quantity: string; days: string; unitPrice: string } | null;
   revisionId: string | null;
   icLineId: string | null;
   createdById: string | null;
   decisionReason: string;
   evidence: { id: string; kind: string; name: string; sha256: string; createdAt: string }[];
 };
+
+export type ActualCostComparison = {
+  key: string;
+  sourceKind: "IC_LINKED" | "UNBUDGETED";
+  description: string;
+  unit: string;
+  ic: { quantity: string; days: string; unitPrice: string; cost: CalculatedCost } | null;
+  actualLineIds: string[];
+  actual: CalculatedCost;
+  variance: CalculatedCost;
+  status: "OVER_BUDGET" | "SAVING" | "ON_BUDGET";
+};
+
+function object(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
 
 export async function loadActualCosts(projectId: string, actor: Actor) {
   const activeActor = await prisma.user.findFirst({ where: { id: actor.id, isActive: true }, select: { id: true, role: true } });
@@ -60,6 +81,7 @@ export async function loadActualCosts(projectId: string, actor: Actor) {
     return {
       id: line.id,
       stableLineId: line.stableLineId,
+      sourceKind: line.sourceKind === "UNBUDGETED" ? "UNBUDGETED" as const : "IC_LINKED" as const,
       source: "normalized" as const,
       reviewState: version.state === "APPROVED" ? "approved" as const : version.state === "RETURNED" ? "returned" as const : "submitted" as const,
       approvalState: decision?.action === "APPROVED" || decision?.action === "RETURNED" ? decision.action : null,
@@ -73,6 +95,13 @@ export async function loadActualCosts(projectId: string, actor: Actor) {
       unitPrice: version.unitPrice,
       unit: version.unit,
       amount: version.amount,
+      cost: calculateActualCost({ quantity: version.quantity, days: version.days, unitPrice: version.unitPrice, basis: version.basis === "NET" ? "NET" : "GROSS", vatPercent: version.vatPercent }).cost,
+      billable: version.billable,
+      saleSnapshot: object(version.saleSnapshot) ? {
+        quantity: String(object(version.saleSnapshot)?.quantity ?? ""),
+        days: String(object(version.saleSnapshot)?.days ?? ""),
+        unitPrice: String(object(version.saleSnapshot)?.unitPrice ?? ""),
+      } : null,
       revisionId: line.icRevisionId,
       icLineId: line.icLineId,
       createdById: line.createdById,
@@ -87,6 +116,7 @@ export async function loadActualCosts(projectId: string, actor: Actor) {
     .map(line => ({
       ...line,
       stableLineId: line.id,
+      sourceKind: "LEGACY" as const,
       versionId: null,
       version: null,
       fundingSource: null,
@@ -94,10 +124,43 @@ export async function loadActualCosts(projectId: string, actor: Actor) {
       days: null,
       unitPrice: null,
       unit: null,
+      cost: null,
+      billable: false,
+      saleSnapshot: null,
       revisionId: line.revisionId,
       createdById: null,
       decisionReason: "",
       evidence: [],
     }));
-  return { lines: [...normalizedLines, ...legacyLines], canDecide: !!ddGrant };
+  const groups = new Map<string, { sourceKind: "IC_LINKED" | "UNBUDGETED"; description: string; unit: string; ic: ActualCostComparison["ic"]; lines: ActualCostReadLine[] }>();
+  for (const line of normalizedLines) {
+    if (!line.cost) continue;
+    const snapshot = object(normalized.find(item => item.id === line.id)?.versions[0]?.sourceSnapshot);
+    const key = line.sourceKind === "IC_LINKED" ? `${line.revisionId}:${line.icLineId}` : `UNBUDGETED:${line.id}`;
+    const sourceCost = object(snapshot?.cost);
+    const ic = line.sourceKind === "IC_LINKED" && snapshot && sourceCost ? {
+      quantity: String(snapshot.quantity ?? ""),
+      days: String(snapshot.days ?? "1"),
+      unitPrice: String(snapshot.unitPrice ?? ""),
+      cost: calculateLineCost({
+        quantity: String(snapshot.quantity ?? "0"),
+        days: String(snapshot.days ?? "1"),
+        unitPrice: String(snapshot.unitPrice ?? "0"),
+        basis: snapshot.basis === "NET" ? "NET" : "GROSS",
+        vatPercent: String(snapshot.vatPercent ?? "0"),
+      }),
+    } : null;
+    const group = groups.get(key) ?? { sourceKind: line.sourceKind as "IC_LINKED" | "UNBUDGETED", description: line.description, unit: line.unit ?? "", ic, lines: [] };
+    group.lines.push(line);
+    groups.set(key, group);
+  }
+  const comparisons: ActualCostComparison[] = [...groups.entries()].map(([key, group]) => {
+    const zero: CalculatedCost = { rawNet: "0/1", rawVat: "0/1", rawGross: "0/1", net: "0", vat: "0", gross: "0" };
+    const comparison = actualCostVariance(group.ic?.cost ?? zero, group.lines.flatMap(line => line.cost ? [line.cost] : []));
+    return { key, sourceKind: group.sourceKind, description: group.description, unit: group.unit, ic: group.ic, actualLineIds: group.lines.map(line => line.id), actual: comparison.actual, variance: comparison.variance, status: comparison.status };
+  });
+  const zero: CalculatedCost = { rawNet: "0/1", rawVat: "0/1", rawGross: "0/1", net: "0", vat: "0", gross: "0" };
+  const icTotal = comparisons.length ? totals(comparisons.flatMap(item => item.ic ? [item.ic.cost] : [])) : zero;
+  const summary = actualCostVariance(icTotal, normalizedLines.flatMap(line => line.cost ? [line.cost] : []));
+  return { lines: [...normalizedLines, ...legacyLines], comparisons, summary, canDecide: !!ddGrant };
 }

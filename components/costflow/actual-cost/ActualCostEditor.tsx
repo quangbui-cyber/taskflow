@@ -8,6 +8,7 @@ import { Input, Select } from "@/components/ui/Field";
 import { Alert, Badge, Panel } from "@/components/ui/Presentation";
 import { displayMoney } from "@/lib/costflow/money";
 import ActualCostDecisionBar from "./ActualCostDecisionBar";
+import ActualCostTable from "./ActualCostTable";
 
 const FUNDING_OPTIONS = [
   ["EMPLOYEE_ADVANCE", "Tạm ứng nhân sự"],
@@ -66,10 +67,15 @@ export default function ActualCostEditor({ finance, currentUserId }: { finance: 
         Dữ liệu Expense JSON cũ chỉ để đọc và không được tự động xem là AC đã DD duyệt.
       </Alert>}
 
+      <Alert tone="info" title="[Phát sinh ngoài IC] · Thu thêm từ khách">
+        Cần ít nhất một chứng từ đã lưu trong kho AC trước khi gửi DD. Form phát sinh ngoài IC sẽ được mở ở Plan 08-03; hệ thống không tự tạo hoặc đoán mã chứng từ.
+      </Alert>
+
       {effective ? (
         <form action={action} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <input type="hidden" name="projectId" value={finance.project.id} />
           <input type="hidden" name="actualCostCommand" value="CREATE_AND_SUBMIT" />
+          <input type="hidden" name="sourceKind" value="IC_LINKED" />
           <input type="hidden" name="stableLineId" value={stableLineId} />
           <input type="hidden" name="revisionId" value={effective.id} />
           <Select name="icLineId" label="Dòng IC hiệu lực" value={icLineId} onChange={event => setIcLineId(event.target.value)} required className="sm:col-span-2">
@@ -93,6 +99,8 @@ export default function ActualCostEditor({ finance, currentUserId }: { finance: 
           </div>
         </form>
       ) : <Alert tone="warning" title="Chưa có IC hiệu lực">Không thể tạo AC liên kết IC cho đến khi có đúng một baseline hiệu lực.</Alert>}
+
+      {finance.actualCosts && <ActualCostTable actualCosts={finance.actualCosts} />}
 
       {actualCosts.length > 0 && <div className="space-y-3 border-t border-[var(--border)] pt-4">
         {actualCosts.map(line => <div key={`${line.source}:${line.id}`} className="space-y-3 rounded-xl border border-[var(--border)] p-3">
