@@ -159,8 +159,8 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
             </h2>
             <Badge tone="neutral">{stats.total} hồ sơ</Badge>
           </div>
-          <p className="text-sm text-[var(--text-secondary)] mt-1">
-            Quản lý hồ sơ đề nghị chi (ĐNTU, ĐNTT, ĐNHTU) và theo dõi tiến trình phê duyệt 3 cấp (Quản lý → Kế toán → CEO).
+          <p className="text-sm text-[var(--text-secondary)] mt-0.5">
+            Quản lý hồ sơ đề nghị chi và theo dõi tiến trình phê duyệt 3 cấp.
           </p>
         </div>
 
@@ -175,7 +175,7 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
                   setCreateModalOpen(true);
                 }}
               >
-                <Building2 size={14} className="mr-1 text-[var(--primary)]" aria-hidden="true" />
+                <Building2 size={14} className="mr-1" aria-hidden="true" />
                 Danh bạ NCC ({finance.data.beneficiaries.length})
               </Button>
 
@@ -197,9 +197,9 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
             </>
           )}
 
-          <Link href="/workflow" className="tf-button-secondary text-xs">
-            Hồ sơ cá nhân tại Workflow
-            <ArrowRight size={13} className="ml-1" aria-hidden="true" />
+          <Link href="/workflow" className="tf-link text-xs flex items-center gap-1 font-medium ml-1">
+            <span>Workflow cá nhân</span>
+            <ArrowRight size={13} aria-hidden="true" />
           </Link>
         </div>
       </div>
@@ -403,34 +403,39 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
           </div>
         </div>
 
-        {/* Dropdown Filters */}
-        <div className="grid gap-3 sm:grid-cols-3 pt-2 border-t border-[var(--border)]/60">
-          <Select
-            label="Loại hồ sơ"
-            value={kindFilter}
-            onChange={e => setKindFilter(e.target.value)}
-          >
-            <option value="ALL">Tất cả các loại hồ sơ</option>
-            {Object.entries(KIND_INFO).map(([val, info]) => (
-              <option key={val} value={val}>{info.label}</option>
-            ))}
-          </Select>
+        {/* Dropdown Filters (Disclosure) */}
+        <details className="pt-2 border-t border-[var(--border)]/60 text-xs" open={kindFilter !== "ALL" || stateFilter !== "ALL" || assigneeFilter !== "ALL"}>
+          <summary className="cursor-pointer text-[var(--text-secondary)] hover:text-[var(--foreground)] font-medium select-none py-1">
+            Bộ lọc nâng cao {(kindFilter !== "ALL" || stateFilter !== "ALL" || assigneeFilter !== "ALL") && "• (Đang lọc)"}
+          </summary>
+          <div className="grid gap-3 sm:grid-cols-3 pt-2">
+            <Select
+              label="Loại hồ sơ"
+              value={kindFilter}
+              onChange={e => setKindFilter(e.target.value)}
+            >
+              <option value="ALL">Tất cả các loại hồ sơ</option>
+              {Object.entries(KIND_INFO).map(([val, info]) => (
+                <option key={val} value={val}>{info.label}</option>
+              ))}
+            </Select>
 
-          <Select
-            label="Trạng thái phê duyệt"
-            value={stateFilter}
-            onChange={e => setStateFilter(e.target.value)}
-          >
-            <option value="ALL">Tất cả trạng thái</option>
-            {Object.entries(STATE_INFO).map(([val, info]) => (
-              <option key={val} value={val}>{info.label}</option>
-            ))}
-          </Select>
-          <Select label="Người xử lý" value={assigneeFilter} onChange={event => setAssigneeFilter(event.target.value)}>
-            <option value="ALL">Tất cả người xử lý</option>
-            {finance.users.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}
-          </Select>
-        </div>
+            <Select
+              label="Trạng thái phê duyệt"
+              value={stateFilter}
+              onChange={e => setStateFilter(e.target.value)}
+            >
+              <option value="ALL">Tất cả trạng thái</option>
+              {Object.entries(STATE_INFO).map(([val, info]) => (
+                <option key={val} value={val}>{info.label}</option>
+              ))}
+            </Select>
+            <Select label="Người xử lý" value={assigneeFilter} onChange={event => setAssigneeFilter(event.target.value)}>
+              <option value="ALL">Tất cả người xử lý</option>
+              {finance.users.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}
+            </Select>
+          </div>
+        </details>
       </Panel>
 
       {/* 3. REQUEST LIST OR EMPTY STATE */}

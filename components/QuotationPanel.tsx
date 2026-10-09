@@ -3,9 +3,6 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
-  FileText,
-  ReceiptText,
-  Paperclip,
   Plus,
   ArrowRight,
   Printer,
@@ -84,7 +81,6 @@ export default function QuotationPanel({
   const briefs = finance.data.briefs ?? [];
   const pos = finance.data.pos ?? [];
   const files = finance.files ?? [];
-  const totalSourcesCount = briefs.length + pos.length + files.length;
 
   return (
     <div className="space-y-6">
@@ -96,16 +92,15 @@ export default function QuotationPanel({
             Tổng hợp Brief, PO, tài liệu dự án và quản lý các phiên bản báo giá
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <Link
-            className="tf-button-secondary text-sm"
+            className="tf-link text-sm"
             href={`/projects/${finance.project.id}?tab=files`}
           >
-            <Paperclip size={14} className="mr-1.5" aria-hidden="true" />
             Tài liệu dự án ({files.length})
           </Link>
           {canCreate && !finance.data.closed && (
-            <Button onClick={() => setCreateDialogOpen(true)}>
+            <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
               <Plus size={15} className="mr-1" aria-hidden="true" />
               Tạo báo giá mới
             </Button>
@@ -113,124 +108,24 @@ export default function QuotationPanel({
         </div>
       </div>
 
-      {/* 2. KHỐI BRIEF & TÀI LIỆU CĂN CỨ ĐẦU VÀO */}
-      <Panel className="space-y-4">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-base text-[var(--foreground)]">Căn cứ & Tài liệu đầu vào</h3>
-            <Badge tone="neutral">{totalSourcesCount} tài liệu</Badge>
-          </div>
-          <Link
-            className="tf-link text-xs flex items-center gap-1"
-            href={`/projects/${finance.project.id}?tab=files`}
-          >
-            <span>Tải lên hoặc xem tất cả</span>
-            <ExternalLink size={12} aria-hidden="true" />
-          </Link>
+      {/* 2. CĂN CỨ & TÀI LIỆU ĐẦU VÀO (COMPACT STRIP) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-sm">
+        <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--text-secondary)]">
+          <span className="font-semibold text-[var(--foreground)]">Căn cứ & tài liệu:</span>
+          <span>Brief <strong className="text-[var(--foreground)]">({briefs.length})</strong></span>
+          <span>·</span>
+          <span>PO <strong className="text-[var(--foreground)]">({pos.length})</strong></span>
+          <span>·</span>
+          <span>Tệp dự án <strong className="text-[var(--foreground)]">({files.length})</strong></span>
         </div>
-
-        {totalSourcesCount > 0 ? (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {/* Briefs */}
-            {briefs.map(brief => (
-              <div
-                key={brief.id}
-                className="flex items-start gap-3 p-3 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] transition-colors hover:border-[var(--primary)]"
-              >
-                <div className="p-2 rounded bg-[var(--surface)] text-[#587216] border border-[#dfecb1]">
-                  <FileText size={18} aria-hidden="true" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <Badge tone="info">Brief</Badge>
-                    <span className="text-xs text-[var(--text-secondary)] truncate">Căn cứ nội dung</span>
-                  </div>
-                  <h4 className="font-semibold text-sm truncate mt-1 text-[var(--foreground)]" title={brief.title}>
-                    {brief.title}
-                  </h4>
-                  {brief.sourceId && (
-                    <Link
-                      className="tf-link text-xs mt-1 inline-block"
-                      href={`/api/projects/${finance.project.id}/costflow/evidence/${brief.sourceId}`}
-                    >
-                      Mở tệp đính kèm
-                    </Link>
-                  )}
-                </div>
-              </div>
-            ))}
-
-            {/* POs */}
-            {pos.map(po => (
-              <div
-                key={po.id}
-                className="flex items-start gap-3 p-3 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] transition-colors hover:border-[var(--primary)]"
-              >
-                <div className="p-2 rounded bg-[var(--surface)] text-[var(--primary)] border border-[#dfecb1]">
-                  <ReceiptText size={18} aria-hidden="true" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <Badge tone="success">PO</Badge>
-                    <span className="text-xs font-semibold tabular-nums text-[var(--foreground)]">
-                      {displayMoney(po.net)}
-                    </span>
-                  </div>
-                  <h4 className="font-semibold text-sm truncate mt-1 text-[var(--foreground)]">
-                    Số PO: {po.number}
-                  </h4>
-                  {po.sourceId && (
-                    <Link
-                      className="tf-link text-xs mt-1 inline-block"
-                      href={`/api/projects/${finance.project.id}/costflow/evidence/${po.sourceId}`}
-                    >
-                      Xem file gốc PO
-                    </Link>
-                  )}
-                </div>
-              </div>
-            ))}
-
-            {/* Project documents preview (limit to first 3 if many) */}
-            {files.slice(0, 3).map(file => (
-              <div
-                key={file.id}
-                className="flex items-start gap-3 p-3 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] transition-colors hover:border-[var(--primary)]"
-              >
-                <div className="p-2 rounded bg-[var(--surface)] text-[var(--muted)] border border-[var(--border)]">
-                  <Paperclip size={18} aria-hidden="true" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <Badge tone="neutral">Tệp dự án</Badge>
-                  </div>
-                  <h4 className="font-medium text-sm truncate mt-1 text-[var(--foreground)]" title={file.name}>
-                    {file.name}
-                  </h4>
-                  <Link
-                    className="tf-link text-xs mt-1 inline-block"
-                    href={`/projects/${finance.project.id}?tab=files`}
-                  >
-                    Xem trong mục tài liệu
-                  </Link>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="p-4 text-center rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface-soft)]">
-            <p className="text-sm text-[var(--text-secondary)]">
-              Chưa có Brief hoặc PO nào được tải lên cho dự án này.
-            </p>
-            <Link
-              className="tf-link text-sm mt-1 inline-block font-semibold"
-              href={`/projects/${finance.project.id}?tab=files`}
-            >
-              + Tải lên tài liệu hoặc Brief dự án
-            </Link>
-          </div>
-        )}
-      </Panel>
+        <Link
+          className="tf-link text-xs flex items-center gap-1 font-medium"
+          href={`/projects/${finance.project.id}?tab=files`}
+        >
+          <span>Xem tất cả tài liệu</span>
+          <ExternalLink size={12} aria-hidden="true" />
+        </Link>
+      </div>
 
       {/* 3. KHỐI BÁO GIÁ HIỆN HÀNH (ACTIVE BASELINE) */}
       {selected ? (

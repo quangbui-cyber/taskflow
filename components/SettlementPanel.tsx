@@ -4,16 +4,13 @@ import Link from "next/link";
 import { useState, useMemo } from "react";
 import {
   Lock,
-  Unlock,
   Building2,
   User,
   History,
   XCircle,
-  FileSpreadsheet,
   ShieldCheck,
   Clock,
   ArrowDownLeft,
-  ArrowUpRight,
   ShieldAlert,
   FileText,
   Coins,
@@ -141,8 +138,8 @@ export default function SettlementPanel({ finance, user, canCreate }: Props) {
               {finance.data.closed ? "Tài chính đã đóng" : "Tài chính đang mở"}
             </Badge>
           </div>
-          <p className="text-sm text-[var(--text-secondary)] mt-1">
-            Theo dõi sổ quỹ tiền thực tế, giải ngân các hồ sơ đã duyệt và đối soát đa chiều công nợ độc lập theo từng người nhận/NCC.
+          <p className="text-sm text-[var(--text-secondary)] mt-0.5">
+            Theo dõi sổ quỹ thực tế, giải ngân hồ sơ duyệt và đối soát công nợ theo người nhận/NCC.
           </p>
         </div>
 
@@ -157,73 +154,30 @@ export default function SettlementPanel({ finance, user, canCreate }: Props) {
               Ghi nhận thu hoàn quỹ
             </Button>
           )}
-
-          {finance.data.closed ? (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-              <Lock size={14} aria-hidden="true" />
-              Sổ tài chính đã khóa
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-              <Unlock size={14} aria-hidden="true" />
-              Cho phép phát sinh & quyết toán
-            </span>
-          )}
         </div>
       </div>
 
-      {/* KPI METRICS */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-          <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
-            <span className="font-medium">Tổng chi phí AC (Gross)</span>
-            <FileSpreadsheet size={16} className="text-blue-600 dark:text-blue-400" aria-hidden="true" />
-          </div>
-          <p className="text-xl font-bold tabular-nums text-[var(--foreground)] mt-2">
-            {displayMoney(Math.round(summary.totalGross).toString())}
-          </p>
-          <span className="text-[11px] text-[var(--text-secondary)]">
-            Nghĩa vụ chi phí đã ghi nhận
-          </span>
+      {/* KPI METRICS (SUMMARY STRIP) */}
+      <div className="tf-summary-strip">
+        <div className="tf-summary-item">
+          <span className="tf-summary-label">Tổng chi phí AC (Gross)</span>
+          <span className="tf-summary-value">{displayMoney(Math.round(summary.totalGross).toString())}</span>
+          <span className="tf-summary-hint">Nghĩa vụ chi phí đã ghi nhận</span>
         </div>
-
-        <div className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-          <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
-            <span className="font-medium">Thực chi từ quỹ dự án</span>
-            <ArrowUpRight size={16} className="text-rose-600 dark:text-rose-400" aria-hidden="true" />
-          </div>
-          <p className="text-xl font-bold tabular-nums text-rose-600 dark:text-rose-400 mt-2">
-            {displayMoney(Math.round(cashStats.outTotal).toString())}
-          </p>
-          <span className="text-[11px] text-[var(--text-secondary)]">
-            Đã chuyển khoản thực tế ({finance.cash.filter(c => c.direction === "OUT").length} giao dịch)
-          </span>
+        <div className="tf-summary-item">
+          <span className="tf-summary-label">Thực chi từ quỹ</span>
+          <span className="tf-summary-value text-rose-600 dark:text-rose-400">{displayMoney(Math.round(cashStats.outTotal).toString())}</span>
+          <span className="tf-summary-hint">{finance.cash.filter(c => c.direction === "OUT").length} giao dịch xuất tiền</span>
         </div>
-
-        <div className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-          <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
-            <span className="font-medium">Thu hoàn vào quỹ</span>
-            <ArrowDownLeft size={16} className="text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-          </div>
-          <p className="text-xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400 mt-2">
-            {displayMoney(Math.round(cashStats.inTotal).toString())}
-          </p>
-          <span className="text-[11px] text-[var(--text-secondary)]">
-            Đã nhập lại quỹ ({finance.cash.filter(c => c.direction === "IN").length} giao dịch)
-          </span>
+        <div className="tf-summary-item">
+          <span className="tf-summary-label">Thu hoàn vào quỹ</span>
+          <span className="tf-summary-value text-[var(--success)]">{displayMoney(Math.round(cashStats.inTotal).toString())}</span>
+          <span className="tf-summary-hint">{finance.cash.filter(c => c.direction === "IN").length} giao dịch nhập quỹ</span>
         </div>
-
-        <div className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-          <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
-            <span className="font-medium">Chờ giải ngân</span>
-            <Clock size={16} className="text-amber-600 dark:text-amber-400" aria-hidden="true" />
-          </div>
-          <p className="text-xl font-bold tabular-nums text-amber-600 dark:text-amber-400 mt-2">
-            {cashStats.pendingCount} hồ sơ
-          </p>
-          <span className="text-[11px] text-[var(--text-secondary)]">
-            Đã duyệt 3 cấp, chưa xuất tiền
-          </span>
+        <div className="tf-summary-item">
+          <span className="tf-summary-label">Chờ giải ngân</span>
+          <span className="tf-summary-value text-amber-600 dark:text-amber-400">{cashStats.pendingCount} hồ sơ</span>
+          <span className="tf-summary-hint">Đã duyệt 3 cấp, chưa xuất tiền</span>
         </div>
       </div>
 

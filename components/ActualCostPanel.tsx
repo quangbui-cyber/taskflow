@@ -2,9 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import {
-  Wallet,
   AlertCircle,
-  CheckCircle2,
   Plus,
   Layers3,
   Paperclip,
@@ -14,7 +12,6 @@ import {
   Search,
   ChevronDown,
   ChevronRight,
-  Coins,
   RotateCcw,
 } from "lucide-react";
 import type { Finance } from "@/components/CostFlowPanel";
@@ -244,66 +241,37 @@ export default function ActualCostPanel({ finance, user, canCreate, onSelectTab 
 
         {isProjectMember && !finance.data.closed && (
           <Button
-            size="md"
+            size="sm"
             onClick={() => openUploadModalWithDefaults()}
             className="shadow-sm"
           >
-            <Plus size={16} className="mr-1.5" aria-hidden="true" />
-            Báo chi phí / Upload AC
+            <Plus size={15} className="mr-1.5" aria-hidden="true" />
+            Ghi chi phí
           </Button>
         )}
       </div>
 
-      {/* KPI METRICS */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-          <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
-            <span className="font-medium">Tổng Actual Cost</span>
-            <Wallet size={16} className="text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-          </div>
-          <p className="text-xl font-bold tabular-nums text-[var(--foreground)] mt-2">
-            {displayMoney(Math.round(stats.totalGross).toString())}
-          </p>
-          <span className="text-[11px] text-[var(--text-secondary)]">
-            {stats.count} khoản chi đã báo (gồm VAT)
-          </span>
+      {/* KPI METRICS (SUMMARY STRIP) */}
+      <div className="tf-summary-strip">
+        <div className="tf-summary-item">
+          <span className="tf-summary-label">Tổng Actual Cost</span>
+          <span className="tf-summary-value">{displayMoney(Math.round(stats.totalGross).toString())}</span>
+          <span className="tf-summary-hint">{stats.count} khoản chi đã báo (gồm VAT)</span>
         </div>
-
-        <div className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-          <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
-            <span className="font-medium">IC Căn cứ Ngân sách</span>
-            <Layers3 size={16} className="text-blue-600 dark:text-blue-400" aria-hidden="true" />
-          </div>
-          <p className="text-xl font-bold text-[var(--foreground)] mt-2">
-            {effective ? `IC-R${effective.number}` : "Chưa có"}
-          </p>
-          <span className="text-[11px] text-[var(--text-secondary)]">
-            {effective ? "Baseline ngân sách hiệu lực" : "Cần Quản lý phê duyệt IC"}
-          </span>
+        <div className="tf-summary-item">
+          <span className="tf-summary-label">IC Căn cứ Ngân sách</span>
+          <span className="tf-summary-value text-[#587216]">{effective ? `IC-R${effective.number}` : "Chưa có"}</span>
+          <span className="tf-summary-hint">{effective ? "Baseline ngân sách hiệu lực" : "Cần Quản lý phê duyệt IC"}</span>
         </div>
-
-        <div className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-          <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
-            <span className="font-medium">Chứng từ Hợp lệ</span>
-            <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-          </div>
-          <p className="text-xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400 mt-2">
-            {stats.completeEvidence} / {stats.count} khoản
-          </p>
-          <span className="text-[11px] text-[var(--text-secondary)]">
-            {stats.missingEvidence > 0 ? `${stats.missingEvidence} khoản cần bổ sung` : "Đầy đủ chứng từ"}
-          </span>
+        <div className="tf-summary-item">
+          <span className="tf-summary-label">Chứng từ Hợp lệ</span>
+          <span className="tf-summary-value text-[var(--success)]">{stats.completeEvidence} / {stats.count} khoản</span>
+          <span className="tf-summary-hint">{stats.missingEvidence > 0 ? `${stats.missingEvidence} khoản cần bổ sung` : "Đầy đủ chứng từ"}</span>
         </div>
-
-        <div className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-          <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
-            <span className="font-medium">Tạm ứng Toàn dự án</span>
-            <Coins size={16} className="text-amber-600 dark:text-amber-400" aria-hidden="true" />
-          </div>
-          <p className="text-xl font-bold tabular-nums text-[var(--foreground)] mt-2">
-            {displayMoney(Math.round(stats.effectiveAdvance).toString())}
-          </p>
-          <span className="text-[11px] text-[var(--text-secondary)]">
+        <div className="tf-summary-item">
+          <span className="tf-summary-label">Tạm ứng Toàn dự án</span>
+          <span className="tf-summary-value">{displayMoney(Math.round(stats.effectiveAdvance).toString())}</span>
+          <span className="tf-summary-hint">
             {stats.projectBalance > 0
               ? `Chi vượt ứng ${displayMoney(String(stats.projectBalance))}`
               : stats.projectBalance < 0

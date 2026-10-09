@@ -7,9 +7,6 @@ import {
   ShieldCheck,
   Plus,
   ArrowRight,
-  TrendingUp,
-  CircleDollarSign,
-  Wallet,
   History,
   ExternalLink,
   FileSpreadsheet,
@@ -559,61 +556,36 @@ export default function InternalCostPanel({
           </div>
         </div>
 
-        {/* 4 KPI METRICS GRID */}
+        {/* KPI METRICS (SUMMARY STRIP) */}
         {visibleTotals ? (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 pt-4">
-            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
-              <span className="flex items-center gap-1 text-xs font-medium text-[var(--text-secondary)]">
-                <CircleDollarSign size={13} aria-hidden="true" /> Tổng dự toán Gross
-              </span>
-              <p className="mt-1 text-lg font-bold tabular-nums text-[#587216]">
-                {displayMoney(visibleTotals.gross)}
-              </p>
-              <span className="text-[11px] text-[var(--text-secondary)]">
-                Net: {displayMoney(visibleTotals.net)} ({visibleRevision?.lines.length ?? 0} dòng)
-              </span>
+          <div className="tf-summary-strip mt-3">
+            <div className="tf-summary-item">
+              <span className="tf-summary-label">Tổng dự toán Gross</span>
+              <span className="tf-summary-value text-[#587216]">{displayMoney(visibleTotals.gross)}</span>
+              <span className="tf-summary-hint">Net: {displayMoney(visibleTotals.net)} ({visibleRevision?.lines.length ?? 0} dòng)</span>
             </div>
-
-            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
-              <span className="flex items-center gap-1 text-xs font-medium text-[var(--text-secondary)]">
-                <TrendingUp size={13} aria-hidden="true" /> Dự toán Margin %
-              </span>
-              <p className="mt-1 text-lg font-bold tabular-nums text-[var(--success)]">
-                {effectiveMargin ? `${effectiveMargin.percent}%` : "—"}
-              </p>
-              <span className="text-[11px] text-[var(--text-secondary)]">
-                {effectiveMargin ? `Lợi nhuận ~ ${displayMoney(effectiveMargin.amount)}` : "Cần doanh thu PO/BG"}
-              </span>
+            <div className="tf-summary-item">
+              <span className="tf-summary-label">Dự toán Margin</span>
+              <span className="tf-summary-value text-[var(--success)]">{effectiveMargin ? `${effectiveMargin.percent}%` : "—"}</span>
+              <span className="tf-summary-hint">{effectiveMargin ? `Lợi nhuận ~ ${displayMoney(effectiveMargin.amount)}` : "Cần doanh thu PO/BG"}</span>
             </div>
-
-            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
-              <span className="flex items-center gap-1 text-xs font-medium text-[var(--text-secondary)]">
-                <Wallet size={13} aria-hidden="true" /> Đã giải ngân / Tạm ứng
-              </span>
-              <p className="mt-1 text-lg font-bold tabular-nums text-[var(--foreground)]">
-                {displayMoney(String(disbursedTotal))}
-              </p>
-              <span className="text-[11px] text-[var(--text-secondary)]">
+            <div className="tf-summary-item">
+              <span className="tf-summary-label">Đã giải ngân / Tạm ứng</span>
+              <span className="tf-summary-value">{displayMoney(String(disbursedTotal))}</span>
+              <span className="tf-summary-hint">
                 {visibleTotals && parseFloat(visibleTotals.gross) > 0
                   ? `${((disbursedTotal / parseFloat(visibleTotals.gross)) * 100).toFixed(1)}% ngân sách IC`
                   : "Thực chi sổ quỹ"}
               </span>
             </div>
-
-            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
-              <span className="flex items-center gap-1 text-xs font-medium text-[var(--text-secondary)]">
-                <Building2 size={13} aria-hidden="true" /> Tiến độ NCC & Bằng chứng
-              </span>
-              <p className="mt-1 text-lg font-bold tabular-nums text-[var(--info)]">
-                {vendorStats.uniqueVendors} Nhà Cung Cấp
-              </p>
-              <span className="text-[11px] text-[var(--text-secondary)]">
-                {vendorStats.evidenceCount}/{vendorStats.totalLines} dòng đủ báo giá NCC
-              </span>
+            <div className="tf-summary-item">
+              <span className="tf-summary-label">Tiến độ NCC & Bằng chứng</span>
+              <span className="tf-summary-value text-[var(--info)]">{vendorStats.uniqueVendors} Nhà Cung Cấp</span>
+              <span className="tf-summary-hint">{vendorStats.evidenceCount}/{vendorStats.totalLines} dòng đủ báo giá NCC</span>
             </div>
           </div>
         ) : (
-          <div className="pt-4 text-sm text-[var(--text-secondary)]">
+          <div className="pt-3 text-sm text-[var(--text-secondary)]">
             <p>
               Chưa có phiên bản IC nào được tạo. Vui lòng bấm <strong>Soạn Báo giá & IC</strong> để bắt đầu dự toán.
             </p>
