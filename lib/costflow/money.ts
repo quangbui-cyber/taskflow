@@ -51,19 +51,46 @@ export function round(value: Rational): string {
 }
 
 export type CostInput = { quantity: string; unitPrice: string; basis: "NET" | "GROSS"; vatPercent: string };
+export type LinePricingInput = CostInput & { days: string };
 export type CalculatedCost = { rawNet: string; rawVat: string; rawGross: string; net: string; vat: string; gross: string };
 
-export function calculateCost(input: CostInput): CalculatedCost {
+export function normalizeDecimalInput(value: string) {
+  const text = value.trim().replace(",", ".");
+  decimal(text);
+  const negative = text.startsWith("-");
+  const unsigned = negative ? text.slice(1) : text;
+  const [whole, fraction = ""] = unsigned.split(".");
+  const normalizedWhole = whole.replace(/^0+(?=\d)/, "") || "0";
+  const normalizedFraction = fraction.replace(/0+$/, "");
+  const normalized = normalizedFraction ? `${normalizedWhole}.${normalizedFraction}` : normalizedWhole;
+  return negative && normalized !== "0" ? `-${normalized}` : normalized;
+}
+
+function calculateAmount(input: CostInput, amount: Rational): CalculatedCost {
   if (!['NET', 'GROSS'].includes(input.basis)) throw new Error("Chọn net hoặc gross.");
-  const quantity = decimal(input.quantity);
-  const unit = decimal(input.unitPrice);
   const rate = divide(decimal(input.vatPercent), decimal("100"));
-  if (quantity.numerator < ZERO || unit.numerator < ZERO || rate.numerator < ZERO) throw new Error("Số lượng, đơn giá và VAT không được âm.");
-  const amount = multiply(quantity, unit);
+  if (amount.numerator < ZERO || rate.numerator < ZERO) throw new Error("Số lượng, số ngày, đơn giá và VAT không được âm.");
   const net = input.basis === "NET" ? amount : divide(amount, add(decimal("1"), rate));
   const vat = multiply(net, rate);
   const gross = add(net, vat);
   return { rawNet: source(net), rawVat: source(vat), rawGross: source(gross), net: round(net), vat: round(vat), gross: round(gross) };
+}
+
+export function calculateCost(input: CostInput): CalculatedCost {
+  const quantity = decimal(input.quantity);
+  const unit = decimal(input.unitPrice);
+  if (quantity.numerator < ZERO || unit.numerator < ZERO) throw new Error("Số lượng và đơn giá không được âm.");
+  return calculateAmount(input, multiply(quantity, unit));
+}
+
+export function calculateLineCost(input: LinePricingInput): CalculatedCost {
+  const quantity = decimal(input.quantity);
+  const days = decimal(input.days);
+  const unit = decimal(input.unitPrice);
+  if (quantity.numerator < ZERO || unit.numerator < ZERO || compare(days, decimal("0")) <= 0) {
+    throw new Error("Số lượng và đơn giá không được âm; số ngày phải lớn hơn 0.");
+  }
+  return calculateAmount(input, multiply(multiply(quantity, days), unit));
 }
 
 export function totals(rows: CalculatedCost[]) {

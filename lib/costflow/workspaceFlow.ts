@@ -65,8 +65,8 @@ export function quotationVersionDate(quotation?: Quotation) {
 
 export function rowCompletion(row: PairedRow) {
   const present = (value: string) => value.trim().length > 0;
-  const sellChecks = [row.name, row.sell.unit, row.sell.quantity, row.sell.unitPrice, row.sell.vatPercent];
-  const buyChecks = [row.name, row.buy.unit, row.buy.quantity, row.buy.unitPrice, row.buy.vatPercent];
+  const sellChecks = [row.name, row.sell.unit, row.sell.quantity, row.sell.days, row.sell.unitPrice, row.sell.vatPercent];
+  const buyChecks = [row.name, row.buy.unit, row.buy.quantity, row.buy.days, row.buy.unitPrice, row.buy.vatPercent];
   const hasEvidence = row.buy.evidenceIds.length > 0 || present(row.buy.evidenceReason);
   return {
     sell: { complete: sellChecks.filter(present).length, total: sellChecks.length },

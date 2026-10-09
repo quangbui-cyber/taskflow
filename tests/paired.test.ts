@@ -1,10 +1,30 @@
 import test from "node:test";
 import { validateIcEvidence, IcEvidenceError, previewMime } from "../lib/costflow/icEvidence";
 import assert from "node:assert/strict";
-import { blankPairedRow, normalizePairedRows, pairedFromLegacy } from "../lib/costflow/pairedDraft";
+import { blankPairedRow, hydrateLegacyPairedDraft, normalizePairedRows, pairedFromLegacy } from "../lib/costflow/pairedDraft";
 import { pricedTotal } from "../lib/costflow/pairedPricing";
 import { projectSales, projectQuotation, quotationReadinessIssues } from "../lib/costflow/quotationProjection";
-import { calculateCost } from "../lib/costflow/money";
+import { calculateCost, calculateLineCost } from "../lib/costflow/money";
+
+test("line pricing multiplies quantity by days without changing generic cost inputs", () => {
+  assert.equal(calculateLineCost({ quantity: "2", days: "3,5", unitPrice: "100", basis: "NET", vatPercent: "0" }).gross, "700");
+  assert.equal(calculateCost({ quantity: "2", unitPrice: "100", basis: "NET", vatPercent: "0" }).gross, "200");
+  assert.throws(() => calculateLineCost({ quantity: "2", days: "0", unitPrice: "100", basis: "NET", vatPercent: "0" }), /lớn hơn 0/);
+});
+
+test("legacy draft hydration defaults active lines only and does not rewrite the source", () => {
+  const row = blankPairedRow("legacy");
+  row.sell.days = "";
+  row.buy = { ...row.buy, quantity: "2", unitPrice: "50", days: "" };
+  const draft = { id: "draft", version: 1, createdBy: "account", title: "Legacy", clientId: "", customer: "Client", notes: "", rows: [row], globalEvidenceIds: [] };
+  const snapshot = JSON.stringify(draft);
+  const hydrated = hydrateLegacyPairedDraft(draft);
+  assert.equal(hydrated.rows[0].sell.days, "1");
+  assert.equal(hydrated.rows[0].buy.days, "1");
+  assert.equal(JSON.stringify(draft), snapshot);
+  row.buy.quantity = ""; row.buy.unitPrice = "";
+  assert.equal(hydrateLegacyPairedDraft({ ...draft, rows: [row] }).rows[0].buy.days, "");
+});
 import { moveQuotationTree, quotationOutline } from "../lib/costflow/quotationHierarchy";
 
 test("paired drafts preserve unknown versus zero and independent quantities", () => {
@@ -48,7 +68,7 @@ test("tree moves preserve subtrees and reject nested groups or a fourth semantic
 
 test("package/detail contribution sets never double count and preserve inactive source prices", () => {
   const parent = blankPairedRow("parent"), one = blankPairedRow("one", "parent"), two = blankPairedRow("two", "parent");
-  for (const row of [parent, one, two]) { row.name = row.itemId; row.sell.quantity = "1"; row.sell.vatPercent = "0"; row.buy.quantity = "1"; row.buy.vatPercent = "0"; }
+  for (const row of [parent, one, two]) { row.name = row.itemId; row.sell.quantity = "1"; row.sell.vatPercent = "0"; row.buy.quantity = "1"; row.buy.days = "1"; row.buy.vatPercent = "0"; }
   parent.sell.unitPrice = "1000"; one.sell.unitPrice = "400"; two.sell.unitPrice = "700"; one.buy.unitPrice = "200"; two.buy.unitPrice = "300";
   parent.pricingMode = "PACKAGE";
   assert.equal(pricedTotal([parent, one, two], "sell").gross, "1000"); assert.equal(pricedTotal([parent, one, two], "buy").gross, "500");
@@ -88,7 +108,7 @@ test("customer allowlist and visibility share raw totals while hiding internal s
 });
 
 test("legacy quotation projection keeps source immutable and ignores lineage as tree", () => {
-  const line = { id: "legacy", parentQuotationLineId: "previous-version-id", description: "Legacy item", unit: "item", quantity: "2", unitPrice: "12.3", basis: "NET" as const, vatPercent: "8", cost: calculateCost({ quantity: "2", unitPrice: "12.3", basis: "NET", vatPercent: "8" }) };
+  const line = { id: "legacy", parentQuotationLineId: "previous-version-id", description: "Legacy item", unit: "item", quantity: "2", days: "1", unitPrice: "12.3", basis: "NET" as const, vatPercent: "8", cost: calculateCost({ quantity: "2", unitPrice: "12.3", basis: "NET", vatPercent: "8" }) };
   const quote = { id: "old", number: 1, parentId: null, title: "Old", customer: "Client", notes: "", lines: [line], poIds: [], evidenceIds: ["PRIVATE_SOURCE"], createdBy: "account", createdAt: "2026-10-02" };
   const snapshot = JSON.stringify(quote), rows = pairedFromLegacy(quote, undefined);
   assert.equal(rows[0].parentItemId, null); assert.equal(rows[0].itemId, "legacy"); assert.equal(JSON.stringify(quote), snapshot);
@@ -107,7 +127,7 @@ test("quotation readiness distinguishes missing values from valid zero amounts",
   assert.equal(projected.amount.gross, "0");
 });
 test("IC evidence gate uses actual line links or trimmed reason, never global coverage", () => {
-  const line = { id: "cost-one", description: "Estimate", unit: "", quantity: "1", unitPrice: "0", vatPercent: "0", basis: "NET" as const, cost: null };
+  const line = { id: "cost-one", description: "Estimate", unit: "", quantity: "1", days: "1", unitPrice: "0", vatPercent: "0", basis: "NET" as const, cost: null };
   assert.throws(()=>validateIcEvidence([line]), e=>e instanceof IcEvidenceError && e.lineErrors[0].lineId === "cost-one");
   assert.throws(()=>validateIcEvidence([{...line,evidenceReason:"  \n "}]));
   validateIcEvidence([{...line,evidenceIds:["proof"]}]); validateIcEvidence([{...line,evidenceReason:"Awaiting supplier"}]);

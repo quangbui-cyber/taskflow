@@ -1,4 +1,4 @@
-import { calculateCost, totals, type CalculatedCost } from "./money";
+import { calculateLineCost, totals, type CalculatedCost } from "./money";
 import type { PairedRow } from "./types";
 
 export function childrenOf(rows: PairedRow[], parent: string | null) { return rows.filter(row => row.parentItemId === parent); }
@@ -7,10 +7,7 @@ export function orderedRows(rows: PairedRow[], parent: string | null = null, dep
 }
 export function rowCost(row: PairedRow, scope: "sell" | "buy"): CalculatedCost | null {
   try {
-    const side = scope === "buy" && !row.buy.quantity && row.sell.quantity
-      ? { ...row.buy, quantity: row.sell.quantity, unit: row.buy.unit || row.sell.unit }
-      : row[scope];
-    return calculateCost(side);
+    return calculateLineCost(row[scope]);
   } catch {
     return null;
   }
