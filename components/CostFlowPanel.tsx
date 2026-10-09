@@ -9,6 +9,7 @@ import InternalCostPanel from "@/components/InternalCostPanel";
 import QuotationPanel from "@/components/QuotationPanel";
 import SettlementPanel from "@/components/SettlementPanel";
 import CustomerLiquidationPanel from "@/components/costflow/customer/CustomerLiquidationPanel";
+import CustomerAcceptanceExport from "@/components/costflow/customer/CustomerAcceptanceExport";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Field";
 import { Alert, Badge, Panel, Table } from "@/components/ui/Presentation";
@@ -76,6 +77,13 @@ export type Finance = {
     canDecide: boolean;
   } | null;
   customerAccounting: CustomerAccountingReadModel;
+  customerAcceptanceSnapshots: {
+    id: string;
+    version: number;
+    quotationId: string;
+    projection: import("@/lib/costflow/customerAcceptanceProjection").CustomerAcceptanceProjection;
+    createdAt: string;
+  }[];
 };
 
 import { KIND_LABELS, STATE_LABELS, STATE_TONES } from "@/lib/costflow/labels";
@@ -290,7 +298,7 @@ export default function CostFlowPanel({ finance, user, projectHeading, initialTa
       <aside className="tf-summary-card"><h3>Thiết lập project</h3><div className="mt-4 space-y-4">{[["Kế toán", finance.data.config.accountantId], ["CEO", finance.data.config.ceoId], ["Quản lý đóng/mở", finance.data.config.managerId]].map(([label, id]) => <div key={label}><p className="tf-list-meta">{label}</p><p className={`mt-1 text-sm font-medium${!id ? " text-[var(--warning)]" : ""}`}>{users.get(id) ?? "Chưa phân công"}</p></div>)}{user.role === "ADMIN" && <Button variant="secondary" size="sm" onClick={() => setTab("settings")}>Cập nhật phân công<ArrowRight size={14} aria-hidden="true" /></Button>}<div className="border-t border-[var(--border)] pt-4"><Link className="tf-link inline-flex items-center gap-2 text-sm" href={`/projects/${finance.project.id}?tab=files`}><FileText size={15} aria-hidden="true" />Tài liệu project</Link><p className="tf-ui-help">Chứng từ đã lưu được dùng cho hồ sơ chi.</p></div></div></aside>
     </div>}
 
-    {activeTab === "scope" && <div className="space-y-6"><QuotationPanel userId={user.id} finance={finance} canCreate={canCreate && !finance.data.closed} createDialogOpen={scopeCreateDialogOpen} onOpenCreateChange={setScopeCreateDialogOpen} /><CustomerLiquidationPanel finance={finance} canManage={finance.canManageCustomerAccounting} /></div>}
+    {activeTab === "scope" && <div className="space-y-6"><QuotationPanel userId={user.id} finance={finance} canCreate={canCreate && !finance.data.closed} createDialogOpen={scopeCreateDialogOpen} onOpenCreateChange={setScopeCreateDialogOpen} /><CustomerAcceptanceExport finance={finance} canManage={canCreate} /><CustomerLiquidationPanel finance={finance} canManage={finance.canManageCustomerAccounting} /></div>}
     {activeTab === "settings" && <Panel><h2 className="mb-4 font-semibold">Phân công tài chính</h2><ActionForm finance={finance} command="CONFIGURE" label="Lưu phân công"><PersonSelect finance={finance} label="Kế toán" name="accountantId" defaultValue={finance.data.config.accountantId} /><PersonSelect finance={finance} label="CEO" name="ceoId" defaultValue={finance.data.config.ceoId} /><PersonSelect finance={finance} label="Quản lý phụ trách project (đóng/mở tài chính)" name="managerId" defaultValue={finance.data.config.managerId} /><p className="tf-ui-help">Bước Quản lý khi trình IC/hồ sơ chi lấy theo quản lý trực tiếp của người lập.</p></ActionForm></Panel>}
     {activeTab === "ic" && <InternalCostPanel finance={finance} user={user} canCreate={canCreate && !finance.data.closed} working={working} workingError={workingError} onOpenApproval={openApproval} onOpenAdvance={openAdvance} />}
     {activeTab === "expense" && <ActualCostPanel finance={finance} user={user} canCreate={canCreate} onSelectTab={setTab} />}

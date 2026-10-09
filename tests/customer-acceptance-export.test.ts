@@ -1,10 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { PDFParse } from "pdf-parse";
 import {
   buildCustomerAcceptanceProjection,
+  customerAcceptanceArtifactRows,
   customerAcceptanceProjectionHash,
   type CustomerAcceptanceAdditionSource,
 } from "../lib/costflow/customerAcceptanceProjection";
+import { customerAcceptancePdf, customerAcceptancePdfRows } from "../lib/costflow/customerAcceptancePdf";
+import { customerAcceptanceXlsx, customerAcceptanceXlsxRows } from "../lib/costflow/customerAcceptanceXlsx";
 import type { CustomerQuotation } from "../lib/costflow/quotationProjection";
 
 const quotation: CustomerQuotation = {
@@ -157,4 +161,31 @@ test("customer acceptance rejects foreign, stale, unapproved and non-billable se
     additions,
     selectedActualCostVersionIds: [],
   }), /không còn thuộc báo giá/);
+});
+
+test("PDF and XLSX render the exact same stored projection rows and remain sentinel-free", async () => {
+  const result = projection();
+  const canonical = customerAcceptanceArtifactRows(result);
+  assert.deepEqual(customerAcceptancePdfRows(result), canonical);
+  assert.deepEqual(customerAcceptanceXlsxRows(result), canonical);
+  const pdf = customerAcceptancePdf(result);
+  const xlsx = customerAcceptanceXlsx(result);
+  assert.equal(pdf.subarray(0, 5).toString(), "%PDF-");
+  assert.equal(xlsx.readUInt32LE(0), 0x04034b50);
+  for (const token of ["VENDOR_PRIVATE", "COST_PRIVATE", "RECIPIENT_PRIVATE", "EVIDENCE_PRIVATE", "IC_INTERNAL_NOTE", "DD_EVENT_PRIVATE", "MARGIN_PRIVATE"]) {
+    assert.ok(!pdf.includes(Buffer.from(token)), `PDF: ${token}`);
+    assert.ok(!xlsx.includes(Buffer.from(token)), `XLSX: ${token}`);
+  }
+  assert.ok(canonical.flat().includes("Đại diện Khách hàng"));
+  assert.ok(canonical.flat().includes("Đại diện Creative Station"));
+  const parser = new PDFParse({ data: new Uint8Array(pdf) });
+  try {
+    const extracted = await parser.getText();
+    assert.match(extracted.text, /Đại diện Khách hàng/);
+    assert.match(extracted.text, /Đại diện Creative Station/);
+    assert.match(extracted.text, /Activation day/);
+    assert.match(extracted.text, /7[.]680[.]000|7680000/);
+  } finally {
+    await parser.destroy();
+  }
 });

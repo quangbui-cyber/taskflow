@@ -59,3 +59,16 @@ test("actual cost UI: evidence vault exposes five typed kinds and explicit DD ac
   assert.match(decisions, /acknowledgeMissingEvidence/);
   assert.match(decisions, /Tôi xác nhận duyệt dù còn thiếu chứng từ/);
 });
+
+test("customer acceptance UI keeps sales actuals and billable additions explicit", () => {
+  const component = source("components/costflow/customer/CustomerAcceptanceExport.tsx");
+  const panel = source("components/CostFlowPanel.tsx");
+  for (const fact of ["actualRows", "quantity", "days", "selectedActualCostVersionIds", "UNBUDGETED", "billable", "reviewState === \"approved\""]) {
+    assert.match(component, new RegExp(fact));
+  }
+  assert.match(component, /type="checkbox"/);
+  assert.doesNotMatch(component, /defaultChecked/);
+  assert.match(component, /customer-acceptance\/pdf/);
+  assert.match(component, /customer-acceptance\/xlsx/);
+  assert.match(panel, /CustomerAcceptanceExport/);
+});
