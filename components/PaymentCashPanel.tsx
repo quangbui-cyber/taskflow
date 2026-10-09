@@ -22,6 +22,7 @@ import ActionForm from "@/components/CostFlowActionForm";
 import { displayMoney } from "@/lib/costflow/money";
 import { isExpenseApproved } from "@/lib/costflow/reconciliation";
 import type { RequestPayload } from "@/lib/costflow/types";
+import { recipientDisplayName } from "@/lib/costflow/labels";
 import PaymentLedgerTable from "@/components/costflow/payments/PaymentLedgerTable";
 import AdvanceSettlementAllocator from "@/components/costflow/payments/AdvanceSettlementAllocator";
 
@@ -91,9 +92,7 @@ export default function PaymentCashPanel({
   const usersMap = useMemo(() => new Map(finance.users.map(u => [u.id, u.name])), [finance.users]);
 
   const recipientName = (key: string) =>
-    key.startsWith("USER:")
-      ? usersMap.get(key.slice(5)) ?? "Nhân viên"
-      : finance.data.beneficiaries.find(b => b.id === key.slice(7))?.name ?? "NCC";
+    recipientDisplayName(key, usersMap, finance.data.beneficiaries);
 
   const recipients = useMemo(() => [
     ...finance.project.members.map(m => ({

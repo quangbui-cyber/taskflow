@@ -30,26 +30,7 @@ import PaymentLedgerTable from "@/components/costflow/payments/PaymentLedgerTabl
 import { reconcile, isExpenseApproved } from "@/lib/costflow/reconciliation";
 import { displayMoney } from "@/lib/costflow/money";
 
-const ACTION_LABEL: Record<string, string> = {
-  APPROVE: "Duyệt",
-  RETURN: "Trả hồ sơ",
-  REJECT: "Từ chối",
-  WITHDRAW: "Rút hồ sơ",
-  CONFIGURE: "Phân công",
-  ADD_PO: "Thêm PO",
-  ADD_BRIEF: "Thêm Brief",
-  SAVE_QUOTATION: "Lưu phiên bản báo giá",
-  SAVE_IC: "Lưu IC nháp",
-  SUBMIT: "Gửi duyệt",
-  BENEFICIARY: "Cập nhật người thụ hưởng",
-  EXPENSE: "Ghi chi phí AC",
-  EXPENSE_EVIDENCE: "Bổ sung chứng từ",
-  REVISE_EXPENSE: "Trình bản sửa chi phí",
-  CREATE_REQUEST: "Lập hồ sơ",
-  DECIDE: "Ghi quyết định",
-  TRANSFER: "Chuyển giao",
-  CASH: "Xác nhận tiền thực tế"
-};
+import { ACTION_LABELS as ACTION_LABEL, recipientDisplayName } from "@/lib/costflow/labels";
 
 type Props = {
   finance: Finance;
@@ -66,9 +47,7 @@ export default function SettlementPanel({ finance, user, canCreate }: Props) {
   const usersMap = useMemo(() => new Map(finance.users.map(u => [u.id, u.name])), [finance.users]);
 
   const recipientName = (key: string) =>
-    key.startsWith("USER:")
-      ? usersMap.get(key.slice(5)) ?? "Nhân viên"
-      : finance.data.beneficiaries.find(b => b.id === key.slice(7))?.name ?? "NCC";
+    recipientDisplayName(key, usersMap, finance.data.beneficiaries);
 
   // Cash statistics & Pending disbursements
   const cashStats = useMemo(() => {

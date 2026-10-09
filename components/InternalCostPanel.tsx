@@ -39,15 +39,7 @@ import { matchIcLineToQuotation } from "@/lib/costflow/budgetQuotation";
 import { currentPurchaseOrders } from "@/lib/costflow/budgetSources";
 import type { IcLine, IcRevision } from "@/lib/costflow/types";
 
-const STATE: Record<string, string> = {
-  DRAFT: "Nháp",
-  SUBMITTED: "Chờ duyệt",
-  APPROVED: "Đã duyệt",
-  RETURNED: "Đã trả",
-  REJECTED: "Từ chối",
-  WITHDRAWN: "Đã rút",
-  CANCELLED: "Đã hủy"
-};
+import { STATE_LABELS as STATE } from "@/lib/costflow/labels";
 
 type Props = {
   finance: Finance;

@@ -32,43 +32,7 @@ import { PaymentRequestPreview } from "@/components/costflow/payments/PaymentReq
 import { PaymentRequestReview } from "@/components/costflow/payments/PaymentRequestReview";
 import AdvanceSettlementAllocator from "@/components/costflow/payments/AdvanceSettlementAllocator";
 
-const KIND_INFO: Record<string, { label: string; tone: "info" | "warning" | "success" | "neutral" }> = {
-  IC: { label: "Dự toán IC", tone: "info" },
-  ADVANCE: { label: "Đề nghị tạm ứng (ĐNTU)", tone: "info" },
-  VENDOR_PAYMENT: { label: "Đề nghị thanh toán (ĐNTT)", tone: "warning" },
-  REIMBURSEMENT: { label: "Hoàn tạm ứng (ĐNHTU)", tone: "success" },
-  AC_REVISION: { label: "Sửa chi phí AC", tone: "warning" },
-  CLOSE: { label: "Đóng tài chính", tone: "neutral" },
-  REOPEN: { label: "Mở lại tài chính", tone: "neutral" },
-  CANCEL: { label: "Hủy hồ sơ", tone: "neutral" }
-};
-
-const STATE_INFO: Record<string, { label: string; tone: "neutral" | "info" | "success" | "warning" | "danger" }> = {
-  DRAFT: { label: "Bản nháp", tone: "neutral" },
-  SUBMITTED: { label: "Đang chờ duyệt", tone: "info" },
-  APPROVED: { label: "Đã phê duyệt", tone: "success" },
-  RETURNED: { label: "Đã trả để sửa", tone: "warning" },
-  REJECTED: { label: "Từ chối", tone: "danger" },
-  WITHDRAWN: { label: "Đã rút", tone: "neutral" },
-  CANCELLED: { label: "Đã hủy", tone: "neutral" }
-};
-
-const ROLE_LABEL: Record<string, string> = {
-  MANAGER: "Quản lý",
-  ACCOUNTANT: "Kế toán",
-  CEO: "CEO"
-};
-
-const ACTION_LABEL: Record<string, string> = {
-  APPROVE: "Duyệt",
-  RETURN: "Trả hồ sơ",
-  REJECT: "Từ chối",
-  WITHDRAW: "Rút hồ sơ",
-  SUBMIT: "Gửi duyệt",
-  DECIDE: "Ghi quyết định",
-  TRANSFER: "Chuyển giao",
-  CASH: "Xác nhận tiền thực tế"
-};
+import { KIND_INFO, STATE_INFO, ROLE_LABELS as ROLE_LABEL, ACTION_LABELS as ACTION_LABEL } from "@/lib/costflow/labels";
 
 type Props = {
   finance: Finance;

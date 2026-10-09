@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/Button";
 import { Alert, Badge, EmptyState, Panel, Table } from "@/components/ui/Presentation";
 import { displayMoney } from "@/lib/costflow/money";
 import { reconcile, margin } from "@/lib/costflow/reconciliation";
+import { recipientDisplayName } from "@/lib/costflow/labels";
 import type { Expense } from "@/lib/costflow/types";
 import ExpenseUploadModal from "@/components/ExpenseUploadModal";
 import ExpenseDetailDrawer from "@/components/ExpenseDetailDrawer";
@@ -58,9 +59,7 @@ export default function ActualCostPanel({ finance, user, canCreate, onSelectTab 
   const isProjectMember = finance.fullAccess;
 
   const recipientName = useCallback((key: string) =>
-    key.startsWith("USER:")
-      ? usersMap.get(key.slice(5)) ?? "Nhân viên"
-      : finance.data.beneficiaries.find(b => b.id === key.slice(7))?.name ?? "NCC",
+    recipientDisplayName(key, usersMap, finance.data.beneficiaries),
     [finance.data.beneficiaries, usersMap]
   );
 
