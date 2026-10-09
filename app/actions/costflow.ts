@@ -68,6 +68,8 @@ export async function actualCostAction(_previous: ActualCostActionState, form: F
         version: Number(form.get("version")),
         action: decision,
         reason: String(form.get("reason") ?? ""),
+        reviewToken: String(form.get("reviewToken") ?? ""),
+        acknowledgeMissingEvidence: form.get("acknowledgeMissingEvidence") === "yes",
       };
     } else {
       return { error: "Thao tác AC không hợp lệ." };

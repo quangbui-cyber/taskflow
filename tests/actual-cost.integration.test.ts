@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 function approvedDatabaseUrl() {
   const url = new URL(process.env.DATABASE_URL ?? "http://invalid");
@@ -14,7 +14,7 @@ function approvedDatabaseUrl() {
 test("actual-cost integration: create, submit, return, resubmit and approve are immutable", async () => {
   approvedDatabaseUrl(); // The exact DB guard runs before any fixture write.
   const { prisma } = await import("../lib/prisma");
-  const { executeActualCostCommand } = await import("../lib/costflow/actualCostService");
+  const { attachActualCostEvidence, executeActualCostCommand, findActualCostEvidenceForActor } = await import("../lib/costflow/actualCostService");
   const prefix = `phase8-ac-${randomUUID()}`;
   const userIds: string[] = [];
   let projectId = "";
@@ -90,7 +90,7 @@ test("actual-cost integration: create, submit, return, resubmit and approve are 
     );
 
     const evidence = await prisma.costFlowEvidence.create({ data: {
-      projectId, sourceFileId: `${prefix}-evidence`, kind: "INVOICE", name: "invoice.pdf",
+      projectId, sourceFileId: `${prefix}-evidence`, kind: "VAT_INVOICE", name: "invoice.pdf",
       mimeType: "application/pdf", data: new Uint8Array([1, 2, 3]), sha256: `${prefix}-sha`, createdBy: member.id,
     } });
     await assert.rejects(() => executeActualCostCommand(member, {
@@ -108,7 +108,7 @@ test("actual-cost integration: create, submit, return, resubmit and approve are 
     assert.equal(unbudgetedVersion.amount, "90000", "sale metadata never changes approved AC amount");
     assert.equal(unbudgetedVersion.billable, true);
     assert.equal(unbudgetedVersion.evidenceLinks.length, 1);
-    await executeActualCostCommand(dd, { command: "DECIDE", projectId, lineId: unbudgeted.lineId, version: 1, action: "APPROVED", reason: "DD duyệt phát sinh" });
+    await executeActualCostCommand(dd, { command: "DECIDE", projectId, lineId: unbudgeted.lineId, version: 1, reviewToken: `${unbudgeted.versionId}:1`, acknowledgeMissingEvidence: true, action: "APPROVED", reason: "DD duyệt phát sinh" });
     assert.equal(JSON.stringify((await prisma.costFlowWorkspace.findUniqueOrThrow({ where: { projectId }, select: { data: true } })).data), baselineBefore, "AC writes and approvals do not mutate effective IC or parameter snapshots");
 
     const beforeUnauthorized = {
@@ -116,7 +116,7 @@ test("actual-cost integration: create, submit, return, resubmit and approve are 
       versions: await prisma.actualCostVersion.count({ where: { projectId } }),
     };
     await assert.rejects(
-      () => executeActualCostCommand(admin, { command: "DECIDE", projectId, lineId: created.lineId, version: 1, action: "APPROVED", reason: "Admin không phải DD" }),
+      () => executeActualCostCommand(admin, { command: "DECIDE", projectId, lineId: created.lineId, version: 1, reviewToken: `${created.versionId}:1`, acknowledgeMissingEvidence: true, action: "APPROVED", reason: "Admin không phải DD" }),
       /AC_DD/,
     );
     assert.deepEqual({
@@ -125,10 +125,10 @@ test("actual-cost integration: create, submit, return, resubmit and approve are 
     }, beforeUnauthorized, "non-DD rejection is a zero-write assertion");
 
     await assert.rejects(
-      () => executeActualCostCommand(dd, { command: "DECIDE", projectId, lineId: created.lineId, version: 1, action: "RETURNED", reason: "" }),
+      () => executeActualCostCommand(dd, { command: "DECIDE", projectId, lineId: created.lineId, version: 1, reviewToken: `${created.versionId}:1`, action: "RETURNED", reason: "" }),
       /lý do/,
     );
-    await executeActualCostCommand(dd, { command: "DECIDE", projectId, lineId: created.lineId, version: 1, action: "RETURNED", reason: "Bổ sung diễn giải" });
+    await executeActualCostCommand(dd, { command: "DECIDE", projectId, lineId: created.lineId, version: 1, reviewToken: `${created.versionId}:1`, action: "RETURNED", reason: "Bổ sung diễn giải" });
     const resubmitted = await executeActualCostCommand(member, {
       command: "RESUBMIT",
       projectId,
@@ -144,15 +144,20 @@ test("actual-cost integration: create, submit, return, resubmit and approve are 
     assert.equal(await prisma.actualCostVersion.count({ where: { lineId: created.lineId } }), 2);
 
     await assert.rejects(
-      () => executeActualCostCommand(dd, { command: "DECIDE", projectId, lineId: created.lineId, version: 1, action: "APPROVED", reason: "Lệnh cũ" }),
+      () => executeActualCostCommand(dd, { command: "DECIDE", projectId, lineId: created.lineId, version: 1, reviewToken: `${created.versionId}:1`, acknowledgeMissingEvidence: true, action: "APPROVED", reason: "Lệnh cũ" }),
       /phiên bản đã thay đổi/,
     );
-    await executeActualCostCommand(dd, { command: "DECIDE", projectId, lineId: created.lineId, version: 2, action: "APPROVED", reason: "Đạt" });
     await assert.rejects(
-      () => executeActualCostCommand(dd, { command: "DECIDE", projectId, lineId: created.lineId, version: 2, action: "APPROVED", reason: "Replay" }),
+      () => executeActualCostCommand(dd, { command: "DECIDE", projectId, lineId: created.lineId, version: 2, reviewToken: `${resubmitted.versionId}:2`, action: "APPROVED", reason: "Thiếu xác nhận" }),
+      /xác nhận rõ việc duyệt/,
+    );
+    await executeActualCostCommand(dd, { command: "DECIDE", projectId, lineId: created.lineId, version: 2, reviewToken: `${resubmitted.versionId}:2`, acknowledgeMissingEvidence: true, action: "APPROVED", reason: "Đạt" });
+    await assert.rejects(
+      () => executeActualCostCommand(dd, { command: "DECIDE", projectId, lineId: created.lineId, version: 2, reviewToken: `${resubmitted.versionId}:2`, acknowledgeMissingEvidence: true, action: "APPROVED", reason: "Replay" }),
       /đã được quyết định/,
     );
     assert.equal(await prisma.actualCostApproval.count({ where: { projectId, lineId: created.lineId, action: "APPROVED" } }), 1);
+    assert.deepEqual(await prisma.actualCostApproval.findFirst({ where: { projectId, lineId: created.lineId, action: "APPROVED" }, select: { warningCodes: true } }).then(item => item?.warningCodes), ["MISSING_ACCEPTANCE_HANDOVER", "MISSING_VAT_INVOICE", "MISSING_PAYMENT_PROOF"]);
     assert.equal(await prisma.costFlowCash.count({ where: { projectId } }), 0);
 
     const replacementDd = await createUser("replacement-dd");
@@ -190,11 +195,35 @@ test("actual-cost integration: create, submit, return, resubmit and approve are 
     assert.equal(await prisma.actualCostVersion.count({ where: { id: notificationFailure.versionId, state: "SUBMITTED" } }), 1, "durable event survives notification failure");
     const beforeOldDd = await prisma.actualCostApproval.count({ where: { lineId: notificationFailure.lineId } });
     await assert.rejects(
-      () => executeActualCostCommand(dd, { command: "DECIDE", projectId, lineId: notificationFailure.lineId, version: 1, action: "APPROVED", reason: "Old DD" }),
+      () => executeActualCostCommand(dd, { command: "DECIDE", projectId, lineId: notificationFailure.lineId, version: 1, reviewToken: `${notificationFailure.versionId}:1`, acknowledgeMissingEvidence: true, action: "APPROVED", reason: "Old DD" }),
       /AC_DD/,
     );
     assert.equal(await prisma.actualCostApproval.count({ where: { lineId: notificationFailure.lineId } }), beforeOldDd, "stale DD writes no decision");
-    await executeActualCostCommand(replacementDd, { command: "DECIDE", projectId, lineId: notificationFailure.lineId, version: 1, action: "APPROVED", reason: "Replacement DD approved" });
+    await executeActualCostCommand(replacementDd, { command: "DECIDE", projectId, lineId: notificationFailure.lineId, version: 1, reviewToken: `${notificationFailure.versionId}:1`, acknowledgeMissingEvidence: true, action: "APPROVED", reason: "Replacement DD approved" });
+
+    let evidenceVersion = 1;
+    const evidenceKinds = ["VENDOR_CONTRACT_PO", "ACCEPTANCE_HANDOVER", "VAT_INVOICE", "PAYMENT_PROOF", "FIELD_PHOTO_REPORT"] as const;
+    const evidenceIds: string[] = [];
+    for (const kind of evidenceKinds) {
+      const bytes = new TextEncoder().encode(`${prefix}:${kind}`);
+      const attached = await attachActualCostEvidence(member, { projectId, lineId: notificationFailure.lineId, expectedVersion: evidenceVersion, kind }, [{
+        name: `${kind}.txt`, mimeType: "text/plain", size: bytes.byteLength, data: bytes,
+      }]);
+      evidenceVersion = attached.version;
+      evidenceIds.push(attached.evidence[0].id);
+      assert.equal(attached.evidence[0].sha256, createHash("sha256").update(bytes).digest("hex"));
+    }
+    assert.equal(evidenceVersion, 6, "each late evidence upload creates immutable manifest history");
+    assert.equal(await prisma.actualCostVersion.count({ where: { lineId: notificationFailure.lineId } }), 6);
+    const latestEvidenceVersion = await prisma.actualCostVersion.findFirstOrThrow({ where: { lineId: notificationFailure.lineId, version: evidenceVersion }, include: { evidenceLinks: true } });
+    assert.equal(latestEvidenceVersion.evidenceLinks.length, 5, "all five typed files remain linked on the latest manifest");
+    assert.equal(await prisma.actualCostEvidenceLink.count({ where: { versionId: notificationFailure.versionId } }), 0, "the previously reviewed version is never rewritten");
+    const readable = await findActualCostEvidenceForActor(projectId, evidenceIds[0], member);
+    assert.equal(new TextDecoder().decode(readable?.data), `${prefix}:VENDOR_CONTRACT_PO`);
+    const outsider = await createUser("outsider");
+    assert.equal(await findActualCostEvidenceForActor(projectId, evidenceIds[0], outsider), null, "outsider learns nothing about linked evidence");
+    assert.equal(await findActualCostEvidenceForActor(randomUUID(), evidenceIds[0], member), null, "wrong Project does not substitute evidence");
+    await executeActualCostCommand(replacementDd, { command: "DECIDE", projectId, lineId: notificationFailure.lineId, version: evidenceVersion, reviewToken: `${latestEvidenceVersion.id}:${evidenceVersion}`, action: "APPROVED", reason: "Đủ manifest" });
 
     await prisma.workflowRoleGrant.updateMany({ where: { role: "AC_DD", revokedAt: null }, data: { revokedAt: new Date() } });
     const missingDdLine = await executeActualCostCommand(member, {
@@ -212,7 +241,7 @@ test("actual-cost integration: create, submit, return, resubmit and approve are 
     });
     const beforeMissingDd = await prisma.actualCostApproval.count({ where: { lineId: missingDdLine.lineId } });
     await assert.rejects(
-      () => executeActualCostCommand(replacementDd, { command: "DECIDE", projectId, lineId: missingDdLine.lineId, version: 1, action: "APPROVED", reason: "No active DD" }),
+      () => executeActualCostCommand(replacementDd, { command: "DECIDE", projectId, lineId: missingDdLine.lineId, version: 1, reviewToken: `${missingDdLine.versionId}:1`, acknowledgeMissingEvidence: true, action: "APPROVED", reason: "No active DD" }),
       /duy nhất một AC_DD/,
     );
     assert.equal(await prisma.actualCostApproval.count({ where: { lineId: missingDdLine.lineId } }), beforeMissingDd, "missing DD writes no decision");
@@ -224,7 +253,7 @@ test("actual-cost integration: create, submit, return, resubmit and approve are 
       await prisma.actualCostApproval.deleteMany({ where: { projectId } });
       await prisma.actualCostVersion.deleteMany({ where: { projectId } });
       await prisma.actualCostLine.deleteMany({ where: { projectId } });
-      await prisma.costFlowEvidence.deleteMany({ where: { projectId, sourceFileId: { startsWith: prefix } } });
+      await prisma.costFlowEvidence.deleteMany({ where: { projectId } });
       await prisma.workflowRoleGrant.deleteMany({ where: { userId: { in: userIds }, role: "AC_DD" } });
       await prisma.costFlowWorkspace.deleteMany({ where: { projectId } });
       await prisma.project.deleteMany({ where: { id: projectId, name: prefix } });

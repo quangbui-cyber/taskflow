@@ -9,6 +9,7 @@ import { Alert, Badge, Panel } from "@/components/ui/Presentation";
 import { displayMoney } from "@/lib/costflow/money";
 import ActualCostDecisionBar from "./ActualCostDecisionBar";
 import ActualCostTable from "./ActualCostTable";
+import ActualCostEvidenceVault from "./ActualCostEvidenceVault";
 
 const FUNDING_OPTIONS = [
   ["EMPLOYEE_ADVANCE", "Tạm ứng nhân sự"],
@@ -111,7 +112,8 @@ export default function ActualCostEditor({ finance, currentUserId }: { finance: 
             </div>
             <div className="text-right"><Badge tone={line.reviewState === "approved" ? "success" : line.reviewState === "returned" ? "warning" : "neutral"}>{line.reviewState}</Badge><p className="mt-1 font-mono text-sm">{displayMoney(line.amount)}</p></div>
           </div>
-          {line.source === "normalized" && line.reviewState === "submitted" && finance.actualCosts?.canDecide && line.version && <ActualCostDecisionBar projectId={finance.project.id} lineId={line.id} version={line.version} />}
+          {line.source === "normalized" && <ActualCostEvidenceVault projectId={finance.project.id} line={line} />}
+          {line.source === "normalized" && line.reviewState === "submitted" && finance.actualCosts?.canDecide && line.version && line.reviewToken && <ActualCostDecisionBar projectId={finance.project.id} lineId={line.id} version={line.version} reviewToken={line.reviewToken} warnings={line.missingEvidenceWarnings} />}
           {line.source === "normalized" && line.reviewState === "returned" && line.createdById === currentUserId && <ResubmitForm finance={finance} line={line} />}
         </div>)}
       </div>}

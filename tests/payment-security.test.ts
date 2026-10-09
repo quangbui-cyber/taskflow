@@ -63,14 +63,17 @@ test("payment security: broad ledger omits bank account and raw evidence bytes",
 });
 
 test("payment security: evidence routes recheck reader, Project and ownership without enumeration", () => {
+  const evidenceAccess = source("lib/costflow/actualCostService.ts");
+  assert.match(evidenceAccess, /findActualCostEvidenceForActor/);
+  assert.match(evidenceAccess, /id: evidenceId, projectId/);
+  assert.match(evidenceAccess, /projectId_userId/);
+  assert.match(evidenceAccess, /readers/);
   for (const path of [
     "app/api/projects/[id]/costflow/evidence/[evidenceId]/route.ts",
     "app/api/projects/[id]/costflow/evidence/[evidenceId]/preview/route.ts",
   ]) {
     const route = source(path);
-    assert.match(route, /loadFinance\(id, actor\)/);
-    assert.match(route, /finance\?\.evidence\.some\(e => e\.id === evidenceId\)/);
-    assert.match(route, /findFirst\(\{ where: \{ id: evidenceId, projectId: id \} \}\)/);
+    assert.match(route, /findActualCostEvidenceForActor\(id, evidenceId, actor\)/);
     assert.match(route, /new Response\("Not found", \{ status: 404 \}\)/);
     assert.match(route, /Cache-Control[\s\S]*private, no-store/);
   }

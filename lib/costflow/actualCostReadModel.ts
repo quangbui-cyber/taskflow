@@ -1,7 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
-import { actualCostVariance, calculateActualCost, normalizeLegacyActualCosts } from "./actualCost";
+import { actualCostEvidenceWarnings, actualCostVariance, calculateActualCost, normalizeLegacyActualCosts } from "./actualCost";
 import { calculateLineCost, totals, type CalculatedCost } from "./money";
 import type { FinanceData } from "./types";
 
@@ -16,6 +16,7 @@ export type ActualCostReadLine = {
   approvalState: "APPROVED" | "RETURNED" | null;
   versionId: string | null;
   version: number | null;
+  reviewToken: string | null;
   description: string;
   recipientKey: string;
   fundingSource: string | null;
@@ -31,7 +32,9 @@ export type ActualCostReadLine = {
   icLineId: string | null;
   createdById: string | null;
   decisionReason: string;
-  evidence: { id: string; kind: string; name: string; sha256: string; createdAt: string }[];
+  acknowledgedWarningCodes: string[];
+  missingEvidenceWarnings: string[];
+  evidence: { id: string; kind: string; name: string; mimeType: string; size: number; sha256: string; createdById: string; createdByName: string; createdAt: string }[];
 };
 
 export type ActualCostComparison = {
@@ -64,7 +67,7 @@ export async function loadActualCosts(projectId: string, actor: Actor) {
           take: 1,
           include: {
             approvals: { orderBy: { createdAt: "desc" }, take: 1 },
-            evidenceLinks: { include: { evidence: { select: { id: true, name: true, sha256: true, createdAt: true } } }, orderBy: { createdAt: "asc" } },
+            evidenceLinks: { include: { evidence: { select: { id: true, name: true, mimeType: true, data: true, sha256: true, createdBy: true, createdAt: true } } }, orderBy: { createdAt: "asc" } },
           },
         },
       },
@@ -75,6 +78,8 @@ export async function loadActualCosts(projectId: string, actor: Actor) {
   if (!project) return null;
   const fullAccess = activeActor.role === "ADMIN" || !!ddGrant || project.members.some(member => member.userId === activeActor.id);
   if (!fullAccess) return null;
+  const creatorIds = [...new Set(normalized.flatMap(line => line.versions.flatMap(version => version.evidenceLinks.map(link => link.evidence.createdBy))))];
+  const creatorNames = new Map((await prisma.user.findMany({ where: { id: { in: creatorIds } }, select: { id: true, name: true } })).map(user => [user.id, user.name]));
 
   const normalizedLines: ActualCostReadLine[] = normalized.flatMap(line => line.versions.map(version => {
     const decision = version.approvals[0];
@@ -87,6 +92,7 @@ export async function loadActualCosts(projectId: string, actor: Actor) {
       approvalState: decision?.action === "APPROVED" || decision?.action === "RETURNED" ? decision.action : null,
       versionId: version.id,
       version: version.version,
+      reviewToken: `${version.id}:${version.version}`,
       description: version.description,
       recipientKey: line.recipientKey,
       fundingSource: version.fundingSource,
@@ -106,7 +112,19 @@ export async function loadActualCosts(projectId: string, actor: Actor) {
       icLineId: line.icLineId,
       createdById: line.createdById,
       decisionReason: decision?.reason ?? "",
-      evidence: version.evidenceLinks.map(link => ({ id: link.evidence.id, kind: link.kind, name: link.evidence.name, sha256: link.evidence.sha256, createdAt: link.evidence.createdAt.toISOString() })),
+      acknowledgedWarningCodes: Array.isArray(decision?.warningCodes) ? decision.warningCodes.filter((value): value is string => typeof value === "string") : [],
+      missingEvidenceWarnings: actualCostEvidenceWarnings(version.evidenceLinks.map(link => link.kind)),
+      evidence: version.evidenceLinks.map(link => ({
+        id: link.evidence.id,
+        kind: link.kind,
+        name: link.evidence.name,
+        mimeType: link.evidence.mimeType,
+        size: link.evidence.data.byteLength,
+        sha256: link.evidence.sha256,
+        createdById: link.evidence.createdBy,
+        createdByName: creatorNames.get(link.evidence.createdBy) ?? "Người dùng",
+        createdAt: link.evidence.createdAt.toISOString(),
+      })),
     };
   }));
   const normalizedKeys = new Set(normalized.flatMap(line => [line.id, line.stableLineId]));
@@ -119,6 +137,7 @@ export async function loadActualCosts(projectId: string, actor: Actor) {
       sourceKind: "LEGACY" as const,
       versionId: null,
       version: null,
+      reviewToken: null,
       fundingSource: null,
       quantity: null,
       days: null,
@@ -130,6 +149,8 @@ export async function loadActualCosts(projectId: string, actor: Actor) {
       revisionId: line.revisionId,
       createdById: null,
       decisionReason: "",
+      acknowledgedWarningCodes: [],
+      missingEvidenceWarnings: [],
       evidence: [],
     }));
   const groups = new Map<string, { sourceKind: "IC_LINKED" | "UNBUDGETED"; description: string; unit: string; ic: ActualCostComparison["ic"]; lines: ActualCostReadLine[] }>();

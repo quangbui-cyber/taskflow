@@ -1,15 +1,19 @@
 import "server-only";
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import type { ProjectUpload } from "@/lib/projectFiles";
 import {
+  actualCostEvidenceWarnings,
   calculateActualCost,
   nextActualCostVersion,
+  normalizeActualCostEvidenceKind,
   normalizeActualCostFundingSource,
   validateUnbudgetedActualCost,
   validateActualCostDecision,
   type ActualCostDecisionAction,
+  type ActualCostEvidenceKind,
   type ActualCostSourceKind,
 } from "./actualCost";
 import type { FinanceData } from "./types";
@@ -58,6 +62,8 @@ export type ActualCostCommand =
       version: number;
       action: ActualCostDecisionAction;
       reason: string;
+      reviewToken?: string;
+      acknowledgeMissingEvidence?: boolean;
     };
 
 function required(value: string, label: string) {
@@ -137,7 +143,7 @@ export async function executeActualCostCommand(
       let fundingSource: ReturnType<typeof normalizeActualCostFundingSource>;
       let billable = false;
       let saleSnapshot: { quantity: string; days: string; unitPrice: string } | null = null;
-      let evidenceIds: string[] = [];
+      let evidenceLinks: { evidenceId: string; kind: ActualCostEvidenceKind }[] = [];
       if (sourceKind === "IC_LINKED") {
         const icSource = await resolveIcSource(tx, command.projectId, required(command.revisionId ?? "", "phiên bản IC"), required(command.icLineId ?? "", "dòng IC"));
         sourceSnapshot = structuredClone(icSource) as unknown as Record<string, unknown>;
@@ -157,7 +163,7 @@ export async function executeActualCostCommand(
         });
         const evidence = await tx.costFlowEvidence.findMany({ where: { projectId: command.projectId, id: { in: validated.evidenceIds } }, select: { id: true, kind: true } });
         if (evidence.length !== validated.evidenceIds.length) throw new Error("Chứng từ AC phải thuộc đúng Project.");
-        evidenceIds = validated.evidenceIds;
+        evidenceLinks = evidence.map(item => ({ evidenceId: item.id, kind: normalizeActualCostEvidenceKind(item.kind) }));
         sourceSnapshot = { sourceKind, reason: validated.reason };
         unit = validated.unit;
         basis = command.basis ?? "GROSS";
@@ -197,8 +203,8 @@ export async function executeActualCostCommand(
               saleSnapshot: saleSnapshot as Prisma.InputJsonValue ?? undefined,
               createdById: context.actor.id,
               submittedAt: new Date(),
-              evidenceLinks: evidenceIds.length ? {
-                create: evidenceIds.map(evidenceId => ({ projectId: command.projectId, evidenceId, kind: "ACTUAL_COST", actorId: context.actor.id })),
+              evidenceLinks: evidenceLinks.length ? {
+                create: evidenceLinks.map(link => ({ projectId: command.projectId, evidenceId: link.evidenceId, kind: link.kind, actorId: context.actor.id })),
               } : undefined,
             },
           },
@@ -267,7 +273,12 @@ export async function executeActualCostCommand(
       reason: command.reason,
     });
     if (current.version !== command.version) throw new Error("Phiên bản đã thay đổi. Tải lại trước khi quyết định.");
+    if (command.reviewToken !== `${current.id}:${current.version}`) throw new Error("Phiên bản xem xét không còn hợp lệ. Tải lại trước khi quyết định.");
     if (current.state !== "SUBMITTED" || current.approvals.length) throw new Error("Phiên bản AC đã được quyết định.");
+    const warningCodes = actualCostEvidenceWarnings(current.evidenceLinks.map(link => link.kind));
+    if (decision.action === "APPROVED" && warningCodes.length && !command.acknowledgeMissingEvidence) {
+      throw new Error("DD phải xác nhận rõ việc duyệt dù còn thiếu chứng từ.");
+    }
     const attemptId = randomUUID();
     const updated = await tx.actualCostVersion.updateMany({ where: { id: current.id, projectId: command.projectId, state: "SUBMITTED" }, data: { state: decision.action } });
     if (updated.count !== 1) throw new Error("Phiên bản AC đã được quyết định.");
@@ -281,6 +292,7 @@ export async function executeActualCostCommand(
         action: decision.action,
         actorId: context.actor.id,
         reason: decision.reason,
+        warningCodes,
       },
     });
     return {
@@ -315,4 +327,93 @@ export async function executeActualCostCommand(
     amount: result.amount,
     ...("approvalId" in result ? { approvalId: result.approvalId, approvalAttemptId: result.approvalAttemptId, action: result.action } : {}),
   };
+}
+
+export async function attachActualCostEvidence(
+  actor: ActualCostActor,
+  input: { projectId: string; lineId: string; expectedVersion: number; kind: ActualCostEvidenceKind },
+  uploads: ProjectUpload[],
+) {
+  if (!uploads.length || uploads.length > 10) throw new Error("Chọn từ 1 đến 10 file chứng từ.");
+  return prisma.$transaction(async tx => {
+    const context = await assertProjectActor(tx, input.projectId, actor);
+    if (!context.member && !context.isDd) throw new Error("Bạn không có quyền bổ sung chứng từ AC.");
+    const line = await tx.actualCostLine.findFirst({
+      where: { id: input.lineId, projectId: input.projectId },
+      include: { versions: { where: { version: input.expectedVersion }, include: { evidenceLinks: true }, take: 1 } },
+    });
+    const current = line?.versions[0];
+    if (!line || !current || line.currentVersion !== input.expectedVersion) throw new Error("Phiên bản AC đã thay đổi. Tải lại trước khi bổ sung chứng từ.");
+    const evidence = await Promise.all(uploads.map(upload => tx.costFlowEvidence.create({
+      data: {
+        projectId: input.projectId,
+        sourceFileId: `actual-cost-upload:${randomUUID()}`,
+        kind: input.kind,
+        name: upload.name,
+        mimeType: upload.mimeType,
+        data: upload.data,
+        sha256: createHash("sha256").update(upload.data).digest("hex"),
+        createdBy: context.actor.id,
+      },
+      select: { id: true, kind: true, name: true, mimeType: true, sha256: true, createdAt: true },
+    })));
+    const nextVersion = line.currentVersion + 1;
+    const version = await tx.actualCostVersion.create({
+      data: {
+        projectId: input.projectId,
+        lineId: line.id,
+        version: nextVersion,
+        state: current.state === "RETURNED" ? "RETURNED" : "SUBMITTED",
+        description: current.description,
+        fundingSource: current.fundingSource,
+        quantity: current.quantity,
+        days: current.days,
+        unitPrice: current.unitPrice,
+        unit: current.unit,
+        basis: current.basis,
+        vatPercent: current.vatPercent,
+        amount: current.amount,
+        rawAmount: current.rawAmount,
+        sourceSnapshot: current.sourceSnapshot ?? undefined,
+        billable: current.billable,
+        saleSnapshot: current.saleSnapshot ?? undefined,
+        createdById: context.actor.id,
+        submittedAt: current.state === "RETURNED" ? null : new Date(),
+        evidenceLinks: {
+          create: [
+            ...current.evidenceLinks.map(link => ({ projectId: input.projectId, evidenceId: link.evidenceId, kind: link.kind, actorId: link.actorId })),
+            ...evidence.map(item => ({ projectId: input.projectId, evidenceId: item.id, kind: input.kind, actorId: context.actor.id })),
+          ],
+        },
+      },
+    });
+    const updated = await tx.actualCostLine.updateMany({ where: { id: line.id, projectId: input.projectId, currentVersion: input.expectedVersion }, data: { currentVersion: nextVersion } });
+    if (updated.count !== 1) throw new Error("Phiên bản AC đã thay đổi. Tải lại trước khi bổ sung chứng từ.");
+    return { lineId: line.id, versionId: version.id, version: nextVersion, evidence };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15000 });
+}
+
+export async function findActualCostEvidenceForActor(projectId: string, evidenceId: string, actor: ActualCostActor) {
+  const active = await prisma.user.findFirst({ where: { id: actor.id, isActive: true }, select: { id: true, role: true } });
+  if (!active) return null;
+  const [member, dd, evidence] = await Promise.all([
+    prisma.projectMember.findUnique({ where: { projectId_userId: { projectId, userId: actor.id } }, select: { userId: true } }),
+    prisma.workflowRoleGrant.findFirst({ where: { userId: actor.id, role: "AC_DD", revokedAt: null }, select: { id: true } }),
+    prisma.costFlowEvidence.findFirst({
+      where: { id: evidenceId, projectId },
+      select: {
+        id: true, name: true, mimeType: true, data: true,
+        actualCostLinks: { where: { projectId, version: { line: { projectId } } }, select: { id: true }, take: 1 },
+        request: { select: { creatorId: true, cashAssigneeId: true, steps: true, readers: { where: { userId: actor.id }, select: { id: true }, take: 1 } } },
+      },
+    }),
+  ]);
+  if (!evidence) return null;
+  const steps = Array.isArray(evidence.request?.steps) ? evidence.request.steps : [];
+  const assigned = !!evidence.request && (
+    evidence.request.creatorId === actor.id || evidence.request.cashAssigneeId === actor.id || evidence.request.readers.length > 0 ||
+    steps.some(step => !!step && typeof step === "object" && "assigneeId" in step && step.assigneeId === actor.id)
+  );
+  if (!member && !dd && active.role !== "ADMIN" && !assigned) return null;
+  return { id: evidence.id, name: evidence.name, mimeType: evidence.mimeType, data: evidence.data };
 }

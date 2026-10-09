@@ -23,6 +23,7 @@ test("actual cost evidence routes recheck Project, AC linkage and return non-dis
 
 test("actual cost read DTO never returns file bytes", () => {
   const readModel = source("lib/costflow/actualCostReadModel.ts");
-  assert.doesNotMatch(readModel, /evidence:\s*\{[^}]*data:/s);
-  assert.doesNotMatch(readModel, /select:\s*\{[^}]*data:\s*true/s);
+  const dto = readModel.slice(readModel.indexOf("export type ActualCostReadLine"), readModel.indexOf("export type ActualCostComparison"));
+  assert.doesNotMatch(dto, /\bdata\s*:/);
+  assert.doesNotMatch(readModel, /data:\s*link\.evidence\.data/);
 });
