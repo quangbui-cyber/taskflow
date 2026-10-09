@@ -83,7 +83,7 @@ function finiteDecimal(value: string, label: string, allowZero = true) {
 
 function rationalDecimal(value: Rational) {
   const negative = value.numerator < BigInt(0);
-  let numerator = negative ? -value.numerator : value.numerator;
+  const numerator = negative ? -value.numerator : value.numerator;
   const whole = numerator / value.denominator;
   let remainder = numerator % value.denominator;
   let fraction = "";

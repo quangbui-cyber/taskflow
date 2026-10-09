@@ -150,3 +150,17 @@ Contract producer chi tiết cho Phase 8 nằm tại `docs/COSTFLOW_PHASE8_AC_CO
 PAY-06 (ngoại lệ chi trước) được hoãn và vẫn Pending. Không có exception model/API/action/UI command. Kiểm chứng local Phase 7 không phải nghiệm thu Kế toán/công ty, pilot, deployment hoặc production acceptance.
 
 Kiểm chứng Phase 7 dùng duy nhất PostgreSQL local `127.0.0.1:55439/taskflow` với URL guard và fixture riêng: policy/diff/read-model/security/UI contract, DB adversarial tests, TypeScript, focused ESLint và direct Next webpack build. Browser desktop/exact 390px là checkpoint riêng; mọi kết quả phải ghi rõ mức bằng chứng.
+
+## Phase 8 — Nghiệm thu, Actual Cost và margin thực tế
+
+Actual Cost chuẩn hóa theo dòng ổn định và nhiều occurrence/version bất biến. Mỗi version lưu `quantity × days × unitPrice`, NET/VAT/GROSS chính xác và một trong bốn nguồn: tạm ứng nhân sự, nhân sự ứng trước, tạm ứng NCC hoặc thanh toán NCC. Quantity chỉ có nghĩa trong đơn vị của dòng; UI và báo cáo không cộng quantity của các đơn vị khác nhau. IC là baseline so sánh bất biến, không bị AC viết lại.
+
+Account/người có quyền Project có thể ghi AC khi chứng từ chưa đủ. Evidence Vault giữ hợp đồng/PO NCC, biên bản nghiệm thu-bàn giao, hóa đơn VAT, chứng từ thanh toán và ảnh/biên bản hiện trường dưới dạng snapshot có hash. Chỉ một `AC_DD` toàn công ty đang hoạt động được approve/return; DD có thể approve khi thiếu chứng từ chỉ sau acknowledgement rõ ràng, và warning vẫn tồn tại. Approval không tạo cash, không chứng minh đã trả, không hoàn tất settlement và không đóng tài chính.
+
+Phase 7 chỉ tiêu thụ exact tuple `Project + stable AC line + immutable version + approval event + approval attempt`. Account chọn rõ advance line; không FIFO, không cross-Project/cross-recipient offset. Application đang active khóa resubmit/evidence mutation của AC; withdrawal hoặc cancellation hợp lệ mới release application, không sửa lịch sử cash. Bản ghi đồng thời dùng Serializable transaction, optimistic version và unique/idempotency constraints để một quyết định/application/receipt chỉ có một winner.
+
+Thanh lý khách hàng là chuỗi version bất biến kèm số biên bản, ngày ký, NET, VAT, GROSS và chứng từ gốc. Doanh thu margin chọn theo thứ tự: NET thanh lý đã ký → NET báo giá finalized → NET PO hiện hành. `Margin thực tế = doanh thu NET được chọn - AC NET phát sinh`. AR cash-in là tiền khách đã thu theo mốc, reference và idempotency key; `Khách còn nợ = GROSS nguồn phải thu - tổng AR cash-in`. AR không cấp quyền chi tiền cho nhân sự/NCC và không thay đổi `Project.revenue` sales hiện hữu.
+
+Customer Acceptance dùng dòng bán của báo giá finalized và actual quantity/days do Account nhập; không dùng quantity/giá mua của supplier làm customer actual. Phát sinh ngoài IC chỉ vào artifact khi đã DD approve, được đánh dấu billable và Account chọn exact current version. PDF/XLSX render cùng một snapshot allowlist, có contract/actual/delta và chữ ký hai bên; không xuất recipient/NCC, buy price, evidence ID/bytes, DD event, internal note hoặc margin.
+
+Các trục vẫn độc lập: kết quả DD, completeness chứng từ, payment authorization, request lifecycle, actual cash, customer receipt, settlement, signature/execution và financial close. PAY-06 vẫn Pending. Không có bank integration, cross-Project offset, chữ ký số hoặc đồng bộ hóa đơn điện tử. Kiểm chứng local không phải nghiệm thu Kế toán/công ty, pilot, deployment hay production acceptance.

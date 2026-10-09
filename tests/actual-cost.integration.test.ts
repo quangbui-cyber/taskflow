@@ -234,7 +234,12 @@ test("actual-cost integration: create, submit, return, resubmit and approve are 
       /AC_DD/,
     );
     assert.equal(await prisma.actualCostApproval.count({ where: { lineId: notificationFailure.lineId } }), beforeOldDd, "stale DD writes no decision");
-    await executeActualCostCommand(replacementDd, { command: "DECIDE", projectId, lineId: notificationFailure.lineId, version: 1, reviewToken: `${notificationFailure.versionId}:1`, acknowledgeMissingEvidence: true, action: "APPROVED", reason: "Replacement DD approved" });
+    const concurrentDecision = await Promise.allSettled([
+      executeActualCostCommand(replacementDd, { command: "DECIDE", projectId, lineId: notificationFailure.lineId, version: 1, reviewToken: `${notificationFailure.versionId}:1`, acknowledgeMissingEvidence: true, action: "APPROVED", reason: "Replacement DD approved A" }),
+      executeActualCostCommand(replacementDd, { command: "DECIDE", projectId, lineId: notificationFailure.lineId, version: 1, reviewToken: `${notificationFailure.versionId}:1`, acknowledgeMissingEvidence: true, action: "APPROVED", reason: "Replacement DD approved B" }),
+    ]);
+    assert.equal(concurrentDecision.filter(result => result.status === "fulfilled").length, 1, "concurrent DD decisions have exactly one winner");
+    assert.equal(await prisma.actualCostApproval.count({ where: { lineId: notificationFailure.lineId, action: "APPROVED" } }), 1, "concurrent loser writes no duplicate decision");
 
     let evidenceVersion = 1;
     const evidenceKinds = ["VENDOR_CONTRACT_PO", "ACCEPTANCE_HANDOVER", "VAT_INVOICE", "PAYMENT_PROOF", "FIELD_PHOTO_REPORT"] as const;

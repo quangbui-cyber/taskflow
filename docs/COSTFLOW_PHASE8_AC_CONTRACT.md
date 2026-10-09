@@ -40,6 +40,29 @@ Refund IN and additional OUT are authorized only against the exact server-derive
 
 This is local technical evidence only. It does not establish authenticated desktop/390px acceptance, company accounting acceptance, pilot acceptance, deployment or production readiness. Those remain separate Phase 8 verification and human-acceptance gates.
 
+## DD authority, evidence and exact calculations
+
+- The company has exactly one active `AC_DD`; Admin manages that grant but does not gain a decision bypass.
+- Return requires a reason. Approval of a current submitted version requires the exact review token. A missing-evidence approval additionally records the explicit DD acknowledgement and warning codes.
+- Each actual occurrence calculates `quantity × days × unitPrice`; NET/VAT/GROSS use the shared exact-money engine. Variance is `AC - IC` per monetary axis. Quantities from unlike units are never summed.
+- The five evidence kinds are vendor contract/PO, acceptance/handover, VAT invoice, payment proof and field photo/report. Evidence completeness is not approval, cash or settlement authority.
+
+## Customer accounting and export contract
+
+- Revenue NET is selected in strict order: signed liquidation NET, finalized quotation NET, current PO NET, otherwise zero with an explicit no-source state.
+- Actual margin is `selected revenue NET - incurred AC NET`. Normalized AC wins by stable ID; a non-overlapping legacy row may remain visible only as compatibility data and never gains DD provenance.
+- Receivable uses the selected customer GROSS source. Customer cash-in is a separate, idempotent receipt ledger; outstanding is `receivable GROSS - collected customer cash-in` and may not authorize outgoing cash.
+- Customer Acceptance snapshots use finalized sales rows plus only Account-selected, billable, unbudgeted and current DD-approved additions. PDF and XLSX render the same stored allowlisted projection and two-party signature blocks.
+
+## Locks, replay and concurrency
+
+- An active settlement application locks the consumed immutable AC tuple. Release requires an allowed request lifecycle outcome and never rewrites cash history.
+- Stale/replayed/non-DD decisions and partial bulk selections write zero decisions. The entire selected set is preflighted before batch writes.
+- Concurrent DD decision, settlement application and customer-receipt attempts are serializable/idempotent: one winner is persisted and losers create no duplicate decision, application, receipt or orphan evidence.
+- Browser totals, recipient facts, roles, version state and approval status are never authority; services re-resolve them from the Project-scoped database state.
+
 ## PAY-06 boundary
 
 Pre-approval payment exception is deferred. There is no Phase 7 exception model, endpoint, action, command or UI bypass. PAY-06 remains Pending and requires a future explicit policy decision before planning or implementation.
+
+Also deferred: bank integration, cross-Project offset, digital signature and electronic-invoice synchronization. None is implied by local Phase 8 evidence.

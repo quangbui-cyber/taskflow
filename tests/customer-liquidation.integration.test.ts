@@ -64,10 +64,10 @@ test("customer-liquidation integration: immutable liquidation, idempotent AR and
     assert.equal(versions[0].evidence.sha256, createHash("sha256").update(proof1.data).digest("hex"));
     assert.equal(versions[1].evidence.sha256, createHash("sha256").update(proof2.data).digest("hex"));
 
-    const cashForm = (amount = "50000000") => {
+    const cashForm = (amount = "50000000", key = `${prefix}-ar-key`, reference = `${prefix}-ar-ref`) => {
       const form = new FormData();
       form.set("command", "ADD_CUSTOMER_CASH_IN"); form.set("milestone", "Đợt 2"); form.set("occurredAt", "2026-10-09");
-      form.set("amount", amount); form.set("reference", `${prefix}-ar-ref`); form.set("idempotencyKey", `${prefix}-ar-key`);
+      form.set("amount", amount); form.set("reference", reference); form.set("idempotencyKey", key);
       return form;
     };
     const receiptProof = proof("receipt.pdf", [7, 8, 9]);
@@ -77,14 +77,24 @@ test("customer-liquidation integration: immutable liquidation, idempotent AR and
     await assert.rejects(() => executeFinance(projectId, 2, member, cashForm("60000000"), receiptProof), /đã được dùng/i);
     assert.equal(await prisma.customerCashIn.count({ where: { projectId } }), 1);
 
+    const raceKey = `${prefix}-ar-race-key`;
+    const raceReference = `${prefix}-ar-race-ref`;
+    const concurrentReceipt = await Promise.allSettled([
+      executeFinance(projectId, 3, member, cashForm("10000000", raceKey, raceReference), receiptProof),
+      executeFinance(projectId, 3, member, cashForm("10000000", raceKey, raceReference), receiptProof),
+    ]);
+    assert.equal(concurrentReceipt.filter(result => result.status === "fulfilled").length, 1, "concurrent AR receipt has exactly one winner");
+    assert.equal(await prisma.customerCashIn.count({ where: { projectId, idempotencyKey: raceKey } }), 1, "concurrent loser writes no duplicate receipt");
+    assert.equal(await prisma.costFlowEvidence.count({ where: { projectId, kind: "CUSTOMER_CASH_IN" } }), 2, "rolled-back receipt creates no orphan evidence");
+
     const current = await loadFinance(projectId, member);
     assert.equal(current?.customerAccounting.currentLiquidation?.version, 2);
     assert.equal(current?.customerAccounting.margin.source, "SIGNED_LIQUIDATION_NET");
     assert.equal(current?.customerAccounting.margin.revenueNet, "120000000");
     assert.equal(current?.customerAccounting.margin.incurredNet, "80000000");
     assert.equal(current?.customerAccounting.margin.netMargin, "40000000");
-    assert.equal(current?.customerAccounting.receivable.collectedGross, "50000000");
-    assert.equal(current?.customerAccounting.receivable.outstandingGross, "82000000");
+    assert.equal(current?.customerAccounting.receivable.collectedGross, "60000000");
+    assert.equal(current?.customerAccounting.receivable.outstandingGross, "72000000");
     assert.equal(await prisma.costFlowCash.count({ where: { projectId } }), 0);
     assert.equal(await prisma.workflowRequest.count({ where: { projectId } }), 0);
     assert.equal(await prisma.actualCostApplication.count({ where: { projectId } }), 0);

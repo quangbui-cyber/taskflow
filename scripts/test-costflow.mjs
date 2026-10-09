@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 
 // An explicit dedicated URL is required for DB tests; DATABASE_URL from a real deployment is never reused.
 const integration = process.argv.includes("--integration");
-const phase8 = process.argv.includes("--phase8");
+const phase8 = !process.argv.includes("--without-phase8");
 if (integration) {
   const url = new URL(process.env.COSTFLOW_TEST_DATABASE_URL || "http://invalid/");
   if (!["postgres:", "postgresql:"].includes(url.protocol) || !["localhost", "127.0.0.1"].includes(url.hostname) || url.pathname !== "/costflow_test") {
