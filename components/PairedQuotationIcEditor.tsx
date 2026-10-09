@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import QuotationTotalsEditor from "./QuotationTotalsEditor";
 import QuotationIcLineage from "./QuotationIcLineage";
@@ -21,20 +20,6 @@ import {
   type DragEvent,
   type ReactNode
 } from "react";
-import {
-  Plus,
-  ChevronDown,
-  ChevronRight,
-  Paperclip,
-  ArrowUp,
-  ArrowDown,
-  GripVertical,
-  ChevronsDownUp,
-  ChevronsUpDown,
-  Sparkles,
-  Settings2,
-  RotateCcw
-} from "lucide-react";
 import type { Finance } from "./CostFlowPanel";
 import { costFlowAction, type CostFlowActionState } from "@/app/actions/costflow";
 import { blankPairedRow, pairedFromLegacy, normalizePairedRows } from "@/lib/costflow/pairedDraft";
@@ -42,14 +27,12 @@ import {
   displayMoney,
   exact,
   subtract,
-  source as moneySource,
   divide,
   multiply,
   decimal,
   round
 } from "@/lib/costflow/money";
-import { formatPriceInput, ungroupPriceInput } from "@/lib/costflow/inputFormat";
-import { childrenOf, orderedRows, groupAmount, pricedTotal } from "@/lib/costflow/pairedPricing";
+import { childrenOf, orderedRows, pricedTotal } from "@/lib/costflow/pairedPricing";
 import {
   projectSales,
   quotationReadinessIssues,
@@ -62,55 +45,18 @@ import CustomerQuotationView from "./CustomerQuotationView";
 import { Dialog } from "./ui/Dialog";
 import type { PairedDraft, PairedRow, Quotation } from "@/lib/costflow/types";
 import { Button } from "./ui/Button";
-import { Input, Select, Textarea } from "./ui/Field";
+import { Input, Select } from "./ui/Field";
 import { Alert } from "./ui/Presentation";
 import { moveQuotationTree, quotationOutline } from "@/lib/costflow/quotationHierarchy";
-import { rowCompletion, WORKSPACE_CAPABILITIES, workspaceSaveLabel } from "@/lib/costflow/workspaceFlow";
+import { WORKSPACE_CAPABILITIES } from "@/lib/costflow/workspaceFlow";
 import QuotationSettingsDrawer from "./QuotationSettingsDrawer";
 import { evaluateFormula, type QuotationParameterSnapshot } from "@/lib/costflow/quotationParameters";
 
-const PERCENT_FORMATTER = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 });
-
-function calcRowMargin(
-  sellCost: { net: string; rawNet: string } | null | undefined,
-  buyCost: { net: string; rawNet: string } | null | undefined
-): {
-  marginDisplay: string;
-  percentDisplay: string;
-  percentNum: number;
-  hasData: boolean;
-  isPositive: boolean;
-} | null {
-  if (!sellCost || !buyCost || sellCost.rawNet === undefined || buyCost.rawNet === undefined) {
-    return null;
-  }
-  try {
-    const sNet = exact(sellCost.rawNet);
-    const bNet = exact(buyCost.rawNet);
-    const diff = subtract(sNet, bNet);
-    const isPositive = diff.numerator >= BigInt(0);
-    const marginDisplay = displayMoney(moneySource(diff));
-    if (sNet.numerator === BigInt(0)) {
-      return {
-        marginDisplay,
-        percentDisplay: "0%",
-        percentNum: 0,
-        hasData: true,
-        isPositive
-      };
-    }
-    const pctRatio = Number(round(multiply(divide(diff, sNet), decimal("10000")))) / 100;
-    return {
-      marginDisplay,
-      percentDisplay: PERCENT_FORMATTER.format(pctRatio) + "%",
-      percentNum: pctRatio,
-      hasData: true,
-      isPositive
-    };
-  } catch {
-    return null;
-  }
-}
+import WorksheetHeader from "./costflow/paired/WorksheetHeader";
+import WorksheetGrid from "./costflow/paired/WorksheetGrid";
+import WorksheetSaveBar from "./costflow/paired/WorksheetSaveBar";
+import WorksheetDetailDrawer from "./costflow/paired/WorksheetDetailDrawer";
+import { PERCENT_FORMATTER } from "./costflow/paired/WorksheetHelpers";
 
 export default function PairedQuotationIcEditor({
   finance,
@@ -192,8 +138,6 @@ export default function PairedQuotationIcEditor({
   const [preflightOpen, setPreflightOpen] = useState(false);
   const [totalsOpen, setTotalsOpen] = useState(false);
   const [priceReviewed, setPriceReviewed] = useState(false);
-  const [addOpen, setAddOpen] = useState(false);
-  const [insertMenuId, setInsertMenuId] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [drop, setDrop] = useState<{ id: string; position: "before" | "inside" | "after" } | null>(null);
   const [createdBeneficiaries, setCreatedBeneficiaries] = useState<{ id: string; name: string }[]>([]);
@@ -230,7 +174,6 @@ export default function PairedQuotationIcEditor({
   const detail = rows.find(row => row.itemId === detailId);
   const outline = useMemo(() => quotationOutline(rows), [rows]);
   const outlineById = useMemo(() => new Map(outline.map(entry => [entry.row.itemId, entry])), [outline]);
-  const detailRole = detail ? outline.find(entry => entry.row.itemId === detail.itemId)?.role : undefined;
   const customerName =
     finance.clients?.find(c => c.id === clientId)?.name ?? initial?.customer ?? source?.customer ?? "";
   const beneficiaryOptions = useMemo(() => {
@@ -270,27 +213,6 @@ export default function PairedQuotationIcEditor({
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
-
-  useEffect(() => {
-    const close = (event: PointerEvent) => {
-      if (!(event.target as Element).closest("[data-paired-menu]")) {
-        setAddOpen(false);
-        setInsertMenuId(null);
-      }
-    };
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setAddOpen(false);
-        setInsertMenuId(null);
-      }
-    };
-    document.addEventListener("pointerdown", close);
-    document.addEventListener("keydown", escape);
-    return () => {
-      document.removeEventListener("pointerdown", close);
-      document.removeEventListener("keydown", escape);
-    };
-  }, []);
 
   const wrapper = useRef<HTMLElement>(null);
   const focusRow = useRef<string | null>(null);
@@ -558,6 +480,27 @@ export default function PairedQuotationIcEditor({
     setDetailTarget("general");
   };
 
+  const handleRemoveFromQuote = (detailItemId: string) => {
+    const affected = new Set([
+      detailItemId,
+      ...orderedRows(rows, detailItemId).map(x => x.row.itemId)
+    ]);
+    setRows(current =>
+      current.flatMap(r =>
+        affected.has(r.itemId)
+          ? locked ||
+            childrenOf(current, r.itemId).length ||
+            r.buy.unitPrice ||
+            r.buy.evidenceIds.length ||
+            r.buy.evidenceReason
+            ? [{ ...r, saleRemoved: true }]
+            : []
+          : [r]
+      )
+    );
+    setDetailId(null);
+  };
+
   const focusNextPrice = (rowId: string, scope: "sell" | "buy") => {
     const inputs = Array.from(
       wrapper.current?.querySelectorAll<HTMLInputElement>(`input[data-price-scope="${scope}"]:not(:disabled)`) ?? []
@@ -655,49 +598,34 @@ export default function PairedQuotationIcEditor({
 
   return (
     <section ref={wrapper} className={`tf-paired-editor tf-paired-workspace tf-workspace-${mode}`}>
-      {/* HEADER SECTION */}
-      <div className="tf-section-heading tf-paired-workspace-heading">
-        <div>
-          <div className="flex items-center gap-2">
-            <p className="tf-paired-eyebrow">
-              {mode === "quote" ? "Scope / Báo giá" : mode === "ic" ? "IC từ báo giá" : "Báo giá & IC song song"}
-            </p>
-          </div>
-          <h2>{title || "Chưa đặt tên báo giá"}</h2>
-          {embedded && mode === "quote" && (
-            <p className="tf-ui-help">
-              {finance.clients?.find(c => c.id === clientId)?.name || "Chưa chọn khách hàng"}
-            </p>
-          )}
-        </div>
-        {embedded && mode === "quote" && source ? (
-          <div className="tf-scope-version-actions" aria-label="Thao tác phiên bản báo giá">
-            <Button variant="secondary" size="sm" disabled={pending} onClick={() => setInfoOpen(true)}>
-              Thiết lập báo giá
-            </Button>
-            <Link
-              className="tf-button-secondary tf-button-size-sm"
-              href={`/projects/${finance.project.id}/costflow/quotations/${source.id}/print`}
-            >
-              Xuất báo giá
-            </Link>
-            <Link
-              className="tf-button-secondary tf-button-size-sm"
-              href={`/projects/${finance.project.id}/costflow/quotations/${source.id}/ic`}
-            >
-              Lập IC từ BG-{source.number}
-            </Link>
-            {versionAction}
-            <Button size="sm" disabled={pending} onClick={requestFinalize}>
-              Chốt phiên bản BG
-            </Button>
-          </div>
-        ) : !embedded && (
-          <Button variant="secondary" size="sm" disabled={pending} onClick={() => (dirty ? setConfirmExit(true) : onClose())}>
-            Quay lại
-          </Button>
-        )}
-      </div>
+      <WorksheetHeader
+        mode={mode}
+        title={title}
+        source={source}
+        clientId={clientId}
+        clientName={customerName}
+        targetRevenue={targetRevenue}
+        embedded={embedded}
+        versionAction={versionAction}
+        pending={pending}
+        locked={locked}
+        viewFilter={viewFilter}
+        onViewFilterChange={setViewFilter}
+        visibleRowsCount={visibleRows.length}
+        totalRowsCount={rows.length}
+        groupRowsCount={rows.filter(r => r.rowType === "GROUP").length}
+        selectedCount={selected.length}
+        globalEvidenceCount={globalIds.length}
+        projectId={finance.project.id}
+        onCollapseGroups={() => setCollapsed(rows.filter(r => r.rowType === "GROUP").map(r => r.itemId))}
+        onExpandAll={() => setCollapsed([])}
+        onAddRow={type => add(type)}
+        onOpenEvidenceTargets={() => setEvidenceTargets(selected)}
+        onOpenGlobalEvidence={() => setEvidenceTargets(["GLOBAL"])}
+        onOpenSettings={() => setInfoOpen(true)}
+        onFinalize={requestFinalize}
+        onBack={() => (dirty ? setConfirmExit(true) : onClose())}
+      />
 
       {mode === "quote" && initial?.priceReviewRequired && initial.reuseSource && (
         <Alert tone="warning" title="Nội dung được sao chép từ nguồn cũ">
@@ -760,910 +688,48 @@ export default function PairedQuotationIcEditor({
       )}
 
       <fieldset disabled={pending} className="tf-paired-form">
-        {!(embedded && mode === "quote") && (
-          <div className="tf-paired-info-summary">
-            <div>
-              <span className="tf-paired-info-label">{mode === "ic" ? "Báo giá nguồn" : "Khách hàng"}</span>
-              <strong>
-                {mode === "ic"
-                  ? source
-                    ? `BG-${source.number} · ${source.title}`
-                    : "Chưa chọn báo giá"
-                  : finance.clients?.find(c => c.id === clientId)?.name || "Chưa chọn khách hàng"}
-              </strong>
-            </div>
-            {targetRevenue && (
-              <div className="bg-[var(--surface-soft)] border border-[var(--border)] rounded px-3 py-1.5 flex items-center gap-2">
-                <span className="text-xs text-[var(--text-secondary)] font-medium">Doanh thu mục tiêu PO:</span>
-                <strong className="text-[var(--success)] font-semibold">{displayMoney(String(targetRevenue))}</strong>
-              </div>
-            )}
-            {mode !== "ic" && (
-              <Button variant="secondary" size="sm" onClick={() => setInfoOpen(true)}>
-                Thiết lập báo giá
-              </Button>
-            )}
-          </div>
-        )}
-
-        {/* SHARED WORKSHEET TOOLBAR */}
-        <div className="tf-worksheet-toolbar">
-          <div className="tf-worksheet-toolbar-group">
-            {/* View Segmented Toggle (Chỉ hiện khi ở mode paired) */}
-            {mode === "paired" && (
-              <div className="tf-worksheet-view-segmented" role="radiogroup" aria-label="Góc nhìn">
-                <button
-                  type="button"
-                  className={`tf-worksheet-view-btn ${viewFilter === "ALL" ? "is-active" : ""}`}
-                  onClick={() => setViewFilter("ALL")}
-                >
-                  Song song
-                </button>
-                <button
-                  type="button"
-                  className={`tf-worksheet-view-btn ${viewFilter === "SELL" ? "is-active" : ""}`}
-                  onClick={() => setViewFilter("SELL")}
-                >
-                  Chỉ Báo giá khách
-                </button>
-                <button
-                  type="button"
-                  className={`tf-worksheet-view-btn ${viewFilter === "BUY" ? "is-active" : ""}`}
-                  onClick={() => setViewFilter("BUY")}
-                >
-                  Chỉ Giá vốn IC
-                </button>
-              </div>
-            )}
-
-            {/* 1-Click Collapse/Expand All */}
-            <button
-              type="button"
-              className="tf-worksheet-btn-pill"
-              onClick={() => setCollapsed(rows.filter(r => r.rowType === "GROUP").map(r => r.itemId))}
-              title="Thu gọn nhanh về các nhóm"
-            >
-              <ChevronsDownUp size={14} /> Thu gọn về nhóm ({rows.filter(r => r.rowType === "GROUP").length})
-            </button>
-            <button
-              type="button"
-              className="tf-worksheet-btn-pill"
-              onClick={() => setCollapsed([])}
-              title="Mở rộng toàn bộ các dòng"
-            >
-              <ChevronsUpDown size={14} /> Mở rộng tất cả
-            </button>
-
-            {/* Add row (Chỉ cho phép thêm ở quote hoặc paired) */}
-            {mode !== "ic" && (
-              <div className="tf-quotation-add-wrap tf-paired-add-wrap" data-paired-menu>
-                <button
-                  type="button"
-                  className="tf-worksheet-btn-pill"
-                  aria-haspopup="menu"
-                  aria-expanded={addOpen}
-                  onClick={() => setAddOpen(value => !value)}
-                >
-                  <Plus size={14} aria-hidden="true" /> Thêm dòng
-                </button>
-                {addOpen && (
-                  <PairedInsertMenu
-                    actions={[
-                      { label: "Thêm nhóm", onSelect: () => { add("GROUP"); setAddOpen(false); } },
-                      { label: "Thêm hạng mục", onSelect: () => { add("ITEM"); setAddOpen(false); } }
-                    ]}
-                  />
-                )}
-              </div>
-            )}
-
-            {/* Evidence Triggers */}
-            {selected.length > 0 && mode !== "quote" && (
-              <button
-                type="button"
-                className="tf-worksheet-btn-pill"
-                disabled={locked}
-                onClick={() => setEvidenceTargets(selected)}
-              >
-                <Paperclip size={14} aria-hidden="true" /> Gắn cho {selected.length} dòng
-              </button>
-            )}
-            {mode !== "quote" && (
-              <button
-                type="button"
-                className="tf-worksheet-btn-pill"
-                onClick={() => setEvidenceTargets(["GLOBAL"])}
-              >
-                <Paperclip size={14} aria-hidden="true" /> Minh chứng chung ({globalIds.length})
-              </button>
-            )}
-          </div>
-
-          <div className="tf-worksheet-toolbar-group">
-            <span className="text-xs text-[var(--text-secondary)]">
-              Hiển thị <strong>{visibleRows.length}</strong> / <strong>{rows.length}</strong> dòng
-            </span>
-          </div>
-        </div>
-
-        {/* SHARED WORKSHEET TABLE WITH STICKY HEADER */}
-        <div className="tf-worksheet-table-container">
-          <table className="w-full border-collapse text-sm tf-quotation-hierarchy-table">
-            <thead>
-              <tr className="text-xs font-semibold text-[var(--foreground)] bg-[var(--surface-soft)] border-b border-[var(--border-strong)]">
-                {/* Checkbox select all */}
-                <th scope="col" className="p-2 text-center w-16">
-                  <label className="inline-flex items-center cursor-pointer" title="Chọn tất cả">
-                    <input
-                      type="checkbox"
-                      checked={rows.length > 0 && selected.length === rows.length}
-                      onChange={e => setSelected(e.target.checked ? rows.map(r => r.itemId) : [])}
-                      className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--focus-ring)] h-3.5 w-3.5"
-                    />
-                  </label>
-                </th>
-                <th scope="col" className="p-2 text-center w-12">STT</th>
-                <th scope="col" className="p-2 text-left">Hạng mục & Mô tả chi tiết</th>
-
-                {/* Sell Columns */}
-                {viewFilter !== "BUY" && (
-                  <>
-                    <th scope="col" className="p-2 text-center w-20 bg-[var(--surface-soft)] border-l border-[var(--border)]">ĐVT</th>
-                    <th scope="col" className="p-2 text-center w-16 bg-[var(--surface-soft)]">SL</th>
-                    <th scope="col" className="p-2 text-right w-28 bg-[var(--surface-soft)]">Đơn giá bán</th>
-                    <th scope="col" className="p-2 text-right w-32 bg-[var(--surface-soft)] font-bold">Thành tiền bán</th>
-                  </>
-                )}
-
-                {/* Buy Columns */}
-                {viewFilter !== "SELL" && (
-                  <>
-                    <th scope="col" className="p-2 text-right w-28 bg-[var(--surface-soft)] border-l border-[var(--border)]">
-                      {mode === "ic" ? "Đơn giá vốn" : "Giá vốn"}
-                    </th>
-                    <th scope="col" className="p-2 text-right w-32 bg-[var(--surface-soft)] font-bold">
-                      Thành tiền vốn (IC)
-                    </th>
-                    {mode === "ic" && (
-                      <th scope="col" className="p-2 text-center w-24 bg-[var(--surface-soft)]">
-                        Minh chứng
-                      </th>
-                    )}
-                  </>
-                )}
-
-                {/* Margin Column (Chỉ hiện khi xem song song hoặc mode ic) */}
-                {((mode === "paired" && viewFilter === "ALL") || mode === "ic") && (
-                  <th scope="col" className="p-2 text-right w-28 bg-[var(--surface-soft)] border-l border-[var(--border)]">
-                    Margin
-                  </th>
-                )}
-
-                <th scope="col" className="p-2 text-center w-12 border-l border-[var(--border)]">Chi tiết</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleRows.map(({ row }, i) => {
-                const group = childrenOf(rows, row.itemId).length > 0;
-                const structuralGroup = row.rowType === "GROUP";
-                const outlineEntry = outlineById.get(row.itemId);
-                const numberLabel = outlineEntry?.numberLabel ?? "";
-                const role = outlineEntry?.role ?? (structuralGroup ? "GROUP" : "ITEM");
-                const childCount = childrenOf(rows, row.itemId).length;
-                const sellAmount = groupAmount(rows, row, "sell")?.net;
-                const buyAmount = groupAmount(rows, row, "buy")?.net;
-                const collapsedRow = collapsed.includes(row.itemId);
-                const rowMargin = calcRowMargin(groupAmount(rows, row, "sell"), groupAmount(rows, row, "buy"));
-
-                // ==========================================
-                // CASE 1: GROUP LEVEL 1 (A, B, C...)
-                // ==========================================
-                if (structuralGroup) {
-                  return (
-                    <tr
-                      key={row.itemId}
-                      className="bg-[var(--primary-soft)] font-bold border-t-2 border-[var(--color-brand-300)] border-b border-[var(--border)] group hover:bg-[var(--color-brand-100)] transition-colors"
-                      data-drop-position={drop?.id === row.itemId ? drop.position : undefined}
-                      onDragOver={event => dragOver(event, row.itemId)}
-                      onDrop={event => performDrop(event, row)}
-                    >
-                      <td className="p-1 text-center w-16">
-                        <div className="flex items-center justify-center gap-1">
-                          {mode !== "ic" && (
-                            <div className="relative inline-block" data-paired-menu>
-                              <button
-                                type="button"
-                                className={`p-1 rounded text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-muted)] transition-opacity ${
-                                  insertMenuId === row.itemId ? "opacity-100 bg-[var(--surface-muted)]" : "opacity-0 group-hover:opacity-100"
-                                }`}
-                                title={`Thêm dòng trong nhóm ${row.name || numberLabel}`}
-                                aria-label={`Thêm dòng trong nhóm ${row.name || numberLabel}`}
-                                aria-haspopup="menu"
-                                aria-expanded={insertMenuId === row.itemId}
-                                onClick={() => setInsertMenuId(insertMenuId === row.itemId ? null : row.itemId)}
-                              >
-                                <Plus size={14} aria-hidden="true" />
-                              </button>
-                              {insertMenuId === row.itemId && (
-                                <div className="absolute left-0 top-full mt-1 z-50 bg-[var(--surface)] border border-[var(--border)] rounded-md shadow-lg py-1 min-w-[210px] text-left text-xs whitespace-nowrap">
-                                  <button
-                                    type="button"
-                                    className="w-full text-left px-3 py-1.5 text-[var(--foreground)] hover:bg-[var(--surface-soft)] hover:text-[var(--primary)] flex items-center gap-2"
-                                    onClick={() => {
-                                      add("GROUP", null, row.itemId);
-                                      setInsertMenuId(null);
-                                    }}
-                                  >
-                                    <Plus size={13} className="text-[var(--muted)]" /> Thêm nhóm bên dưới
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="w-full text-left px-3 py-1.5 text-[var(--foreground)] hover:bg-[var(--surface-soft)] hover:text-[var(--primary)] flex items-center gap-2"
-                                    onClick={() => {
-                                      add("ITEM", row.itemId);
-                                      setInsertMenuId(null);
-                                    }}
-                                  >
-                                    <Plus size={13} className="text-[var(--muted)]" /> Thêm hạng mục trong nhóm
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          <button
-                            type="button"
-                            className="p-1 rounded text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-muted)] cursor-grab active:cursor-grabbing transition-opacity opacity-40 group-hover:opacity-100"
-                            draggable={!locked && mode !== "ic"}
-                            onDragStart={event => {
-                              setDragId(row.itemId);
-                              event.dataTransfer.effectAllowed = "move";
-                              event.dataTransfer.setData("text/plain", row.itemId);
-                            }}
-                            onDragEnd={() => {
-                              setDragId(null);
-                              setDrop(null);
-                            }}
-                            title="Kéo để sắp xếp nhóm"
-                            aria-label={`Kéo để sắp xếp nhóm ${row.name || numberLabel}`}
-                          >
-                            <GripVertical size={14} aria-hidden="true" />
-                          </button>
-                          <label className="inline-flex items-center cursor-pointer p-0.5">
-                            <input
-                              type="checkbox"
-                              disabled={locked}
-                              checked={selected.includes(row.itemId)}
-                              onChange={e =>
-                                setSelected(current =>
-                                  e.target.checked ? [...current, row.itemId] : current.filter(id => id !== row.itemId)
-                                )
-                              }
-                              className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--focus-ring)] h-3.5 w-3.5 transition-opacity opacity-40 group-hover:opacity-100"
-                            />
-                          </label>
-                        </div>
-                      </td>
-                      <td className="p-2 text-center text-xs font-mono font-bold text-[var(--color-brand-900)]">
-                        <span className="tf-worksheet-outline-badge tf-worksheet-outline-level-1">{numberLabel}</span>
-                      </td>
-                      <td className="p-2">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <button
-                            type="button"
-                            className="p-1 hover:bg-[var(--surface-muted)] rounded text-[var(--foreground)]"
-                            aria-label={(collapsedRow ? "Mở rộng nhóm " : "Thu gọn nhóm ") + row.name}
-                            onClick={() =>
-                              setCollapsed(current =>
-                                current.includes(row.itemId) ? current.filter(id => id !== row.itemId) : [...current, row.itemId]
-                              )
-                            }
-                          >
-                            {collapsedRow ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                          </button>
-                          <button
-                            type="button"
-                            className="font-bold text-[var(--foreground)] text-sm hover:underline text-left uppercase"
-                            onClick={() => openDetail(row.itemId)}
-                          >
-                            {row.name || "Tên nhóm…"}
-                          </button>
-                          {row.description && (
-                            <span className="text-xs text-[var(--text-secondary)] italic ml-1">
-                              ({row.description})
-                            </span>
-                          )}
-                          <span className="text-[11px] text-[var(--text-secondary)] bg-[var(--surface-muted)] rounded px-1.5 py-0.5 ml-1">
-                            {childCount} hạng mục
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Sell Columns */}
-                      {viewFilter !== "BUY" && (
-                        <>
-                          <td className="p-2 text-center text-xs text-[var(--muted)] border-l border-[var(--border)]">—</td>
-                          <td className="p-2 text-center text-xs text-[var(--muted)]">—</td>
-                          <td className="p-2 text-right text-xs text-[var(--muted)]">—</td>
-                          <td className="p-2 text-right font-mono font-bold text-[var(--foreground)]">
-                            {sellAmount === undefined ? "—" : displayMoney(sellAmount)}
-                          </td>
-                        </>
-                      )}
-
-                      {/* Buy Columns */}
-                      {viewFilter !== "SELL" && (
-                        <>
-                          <td className="p-2 text-right text-xs text-[var(--muted)] border-l border-[var(--border)]">—</td>
-                          <td className="p-2 text-right font-mono font-bold text-[var(--foreground)]">
-                            {buyAmount === undefined ? "—" : displayMoney(buyAmount)}
-                          </td>
-                          {mode === "ic" && <td className="p-2 text-center text-xs text-[var(--muted)]">—</td>}
-                        </>
-                      )}
-
-                      {/* Margin Group Indicator */}
-                      {((mode === "paired" && viewFilter === "ALL") || mode === "ic") && (
-                        <td className="p-2 text-right font-mono text-xs border-l border-[var(--border)]">
-                          {rowMargin && rowMargin.hasData ? (
-                            <span
-                              className={`tf-worksheet-margin-badge ${
-                                rowMargin.percentNum >= 30
-                                  ? "is-high"
-                                  : rowMargin.percentNum >= 15
-                                  ? "is-medium"
-                                  : "is-low"
-                              }`}
-                            >
-                              {rowMargin.percentDisplay}
-                            </span>
-                          ) : (
-                            <span className="text-[var(--muted)]">—</span>
-                          )}
-                        </td>
-                      )}
-
-                      <td className="p-2 text-center border-l border-[var(--border)]">
-                        <button
-                          type="button"
-                          onClick={() => openDetail(row.itemId)}
-                          className="p-1 text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-muted)] rounded transition-colors"
-                          title="Thiết lập nhóm"
-                        >
-                          <Settings2 size={15} />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                }
-
-                // ==========================================
-                // CASE 2: ITEM WITH CHILDREN (LEVEL 2)
-                // ==========================================
-                if (group) {
-                  return (
-                    <tr
-                      key={row.itemId}
-                      className="bg-[var(--surface-soft)] font-semibold border-t border-[var(--border)] hover:bg-[var(--surface-muted)] group transition-colors"
-                      data-drop-position={drop?.id === row.itemId ? drop.position : undefined}
-                      onDragOver={event => dragOver(event, row.itemId)}
-                      onDrop={event => performDrop(event, row)}
-                    >
-                      <td className="p-1 text-center w-16">
-                        <div className="flex items-center justify-center gap-1">
-                          {mode !== "ic" && (
-                            <div className="relative inline-block" data-paired-menu>
-                              <button
-                                type="button"
-                                className={`p-1 rounded text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-muted)] transition-opacity ${
-                                  insertMenuId === row.itemId ? "opacity-100 bg-[var(--surface-muted)]" : "opacity-0 group-hover:opacity-100"
-                                }`}
-                                title={`Thêm dòng tại ${row.name || numberLabel}`}
-                                aria-label={`Thêm dòng tại ${row.name || numberLabel}`}
-                                aria-haspopup="menu"
-                                aria-expanded={insertMenuId === row.itemId}
-                                onClick={() => setInsertMenuId(insertMenuId === row.itemId ? null : row.itemId)}
-                              >
-                                <Plus size={14} aria-hidden="true" />
-                              </button>
-                              {insertMenuId === row.itemId && (
-                                <div className="absolute left-0 top-full mt-1 z-50 bg-[var(--surface)] border border-[var(--border)] rounded-md shadow-lg py-1 min-w-[210px] text-left text-xs whitespace-nowrap">
-                                  <button
-                                    type="button"
-                                    className="w-full text-left px-3 py-1.5 text-[var(--foreground)] hover:bg-[var(--surface-soft)] hover:text-[var(--primary)] flex items-center gap-2"
-                                    onClick={() => {
-                                      add("GROUP", null, row.itemId);
-                                      setInsertMenuId(null);
-                                    }}
-                                  >
-                                    <Plus size={13} className="text-[var(--muted)]" /> Thêm nhóm bên dưới
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="w-full text-left px-3 py-1.5 text-[var(--foreground)] hover:bg-[var(--surface-soft)] hover:text-[var(--primary)] flex items-center gap-2"
-                                    onClick={() => {
-                                      add("ITEM", row.parentItemId, row.itemId);
-                                      setInsertMenuId(null);
-                                    }}
-                                  >
-                                    <Plus size={13} className="text-[var(--muted)]" /> Thêm hạng mục cùng cấp
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="w-full text-left px-3 py-1.5 text-[var(--foreground)] hover:bg-[var(--surface-soft)] hover:text-[var(--primary)] flex items-center gap-2"
-                                    onClick={() => {
-                                      add("ITEM", row.itemId);
-                                      setInsertMenuId(null);
-                                    }}
-                                  >
-                                    <Plus size={13} className="text-[var(--muted)]" /> Thêm chi tiết con
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          <button
-                            type="button"
-                            className="p-1 rounded text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-muted)] cursor-grab active:cursor-grabbing transition-opacity opacity-40 group-hover:opacity-100"
-                            draggable={!locked && mode !== "ic"}
-                            onDragStart={event => {
-                              setDragId(row.itemId);
-                              event.dataTransfer.effectAllowed = "move";
-                              event.dataTransfer.setData("text/plain", row.itemId);
-                            }}
-                            onDragEnd={() => {
-                              setDragId(null);
-                              setDrop(null);
-                            }}
-                            title="Kéo để sắp xếp hạng mục"
-                            aria-label={`Kéo để sắp xếp ${row.name || numberLabel}`}
-                          >
-                            <GripVertical size={14} aria-hidden="true" />
-                          </button>
-                          <label className="inline-flex items-center cursor-pointer p-0.5">
-                            <input
-                              type="checkbox"
-                              disabled={locked}
-                              checked={selected.includes(row.itemId)}
-                              onChange={e =>
-                                setSelected(current =>
-                                  e.target.checked ? [...current, row.itemId] : current.filter(id => id !== row.itemId)
-                                )
-                              }
-                              className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--focus-ring)] h-3.5 w-3.5 transition-opacity opacity-40 group-hover:opacity-100"
-                            />
-                          </label>
-                        </div>
-                      </td>
-                      <td className="p-2 text-center text-xs font-mono font-semibold text-[var(--foreground)]">
-                        <span className="tf-worksheet-outline-badge tf-worksheet-outline-level-2">{numberLabel}</span>
-                      </td>
-                      <td className="p-2">
-                        <div className="flex items-center gap-1.5 flex-wrap" style={{ paddingLeft: "16px" }}>
-                          <button
-                            type="button"
-                            className="p-1 hover:bg-[var(--surface-muted)] rounded text-[var(--foreground)]"
-                            aria-label={(collapsedRow ? "Mở rộng " : "Thu gọn ") + row.name}
-                            onClick={() =>
-                              setCollapsed(current =>
-                                current.includes(row.itemId) ? current.filter(id => id !== row.itemId) : [...current, row.itemId]
-                              )
-                            }
-                          >
-                            {collapsedRow ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                          </button>
-                          <button
-                            type="button"
-                            className="font-semibold text-[var(--foreground)] text-sm hover:underline text-left"
-                            onClick={() => openDetail(row.itemId)}
-                          >
-                            {row.name || "Tên hạng mục…"}
-                          </button>
-                          {row.description && (
-                            <span className="text-xs text-[var(--text-secondary)] truncate max-w-sm ml-1">
-                              ({row.description})
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Sell Columns */}
-                      {viewFilter !== "BUY" && (
-                        <>
-                          <td className="p-2 text-center text-xs text-[var(--muted)] border-l border-[var(--border)]">—</td>
-                          <td className="p-2 text-center text-xs text-[var(--muted)]">—</td>
-                          <td className="p-2 text-right text-xs text-[var(--muted)]">—</td>
-                          <td className="p-2 text-right font-mono font-semibold text-[var(--foreground)]">
-                            {sellAmount === undefined ? "—" : displayMoney(sellAmount)}
-                          </td>
-                        </>
-                      )}
-
-                      {/* Buy Columns */}
-                      {viewFilter !== "SELL" && (
-                        <>
-                          <td className="p-2 text-right text-xs text-[var(--muted)] border-l border-[var(--border)]">—</td>
-                          <td className="p-2 text-right font-mono font-semibold text-[var(--foreground)]">
-                            {buyAmount === undefined ? "—" : displayMoney(buyAmount)}
-                          </td>
-                          {mode === "ic" && <td className="p-2 text-center text-xs text-[var(--muted)]">—</td>}
-                        </>
-                      )}
-
-                      {/* Margin Item Indicator */}
-                      {((mode === "paired" && viewFilter === "ALL") || mode === "ic") && (
-                        <td className="p-2 text-right font-mono text-xs border-l border-[var(--border)]">
-                          {rowMargin && rowMargin.hasData ? (
-                            <span
-                              className={`tf-worksheet-margin-badge ${
-                                rowMargin.percentNum >= 30
-                                  ? "is-high"
-                                  : rowMargin.percentNum >= 15
-                                  ? "is-medium"
-                                  : "is-low"
-                              }`}
-                            >
-                              {rowMargin.percentDisplay}
-                            </span>
-                          ) : (
-                            <span className="text-[var(--muted)]">—</span>
-                          )}
-                        </td>
-                      )}
-
-                      <td className="p-2 text-center border-l border-[var(--border)]">
-                        <button
-                          type="button"
-                          onClick={() => openDetail(row.itemId)}
-                          className="p-1 text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-muted)] rounded transition-colors"
-                          title={`Mở chi tiết ${row.name || ""}`}
-                        >
-                          <Settings2 size={15} />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                }
-
-                // ==========================================
-                // CASE 3: LEAF DETAIL ITEM (LEVEL 3 OR STANDALONE)
-                // ==========================================
-                const indentPx = role === "DETAIL" ? "36px" : "16px";
-                return (
-                  <tr
-                    key={row.itemId}
-                    className="border-b border-[var(--border)] hover:bg-[var(--surface-soft)] transition-colors group"
-                    data-drop-position={drop?.id === row.itemId ? drop.position : undefined}
-                    onDragOver={event => dragOver(event, row.itemId)}
-                    onDrop={event => performDrop(event, row)}
-                  >
-                    <td className="p-1 text-center w-16">
-                      <div className="flex items-center justify-center gap-1">
-                        {mode !== "ic" && (
-                          <div className="relative inline-block" data-paired-menu>
-                            <button
-                              type="button"
-                              className={`p-1 rounded text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-muted)] transition-opacity ${
-                                insertMenuId === row.itemId ? "opacity-100 bg-[var(--surface-muted)]" : "opacity-0 group-hover:opacity-100"
-                              }`}
-                              title={`Thêm dòng tại ${row.name || numberLabel}`}
-                              aria-label={`Thêm dòng tại ${row.name || numberLabel}`}
-                              aria-haspopup="menu"
-                              aria-expanded={insertMenuId === row.itemId}
-                              onClick={() => setInsertMenuId(insertMenuId === row.itemId ? null : row.itemId)}
-                            >
-                              <Plus size={14} aria-hidden="true" />
-                            </button>
-                            {insertMenuId === row.itemId && (
-                              <div className="absolute left-0 top-full mt-1 z-50 bg-[var(--surface)] border border-[var(--border)] rounded-md shadow-lg py-1 min-w-[210px] text-left text-xs whitespace-nowrap">
-                                <button
-                                  type="button"
-                                  className="w-full text-left px-3 py-1.5 text-[var(--foreground)] hover:bg-[var(--surface-soft)] hover:text-[var(--primary)] flex items-center gap-2"
-                                  onClick={() => {
-                                    add("GROUP", null, row.itemId);
-                                    setInsertMenuId(null);
-                                  }}
-                                >
-                                  <Plus size={13} className="text-[var(--muted)]" /> Thêm nhóm bên dưới
-                                </button>
-                                <button
-                                  type="button"
-                                  className="w-full text-left px-3 py-1.5 text-[var(--foreground)] hover:bg-[var(--surface-soft)] hover:text-[var(--primary)] flex items-center gap-2"
-                                  onClick={() => {
-                                    add("ITEM", row.parentItemId, row.itemId);
-                                    setInsertMenuId(null);
-                                  }}
-                                >
-                                  <Plus size={13} className="text-[var(--muted)]" /> Thêm hạng mục cùng cấp
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        <button
-                          type="button"
-                          className="p-1 rounded text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-muted)] cursor-grab active:cursor-grabbing transition-opacity opacity-40 group-hover:opacity-100"
-                          draggable={!locked && mode !== "ic"}
-                          onDragStart={event => {
-                            setDragId(row.itemId);
-                            event.dataTransfer.effectAllowed = "move";
-                            event.dataTransfer.setData("text/plain", row.itemId);
-                          }}
-                          onDragEnd={() => {
-                            setDragId(null);
-                            setDrop(null);
-                          }}
-                          title="Kéo để sắp xếp dòng"
-                          aria-label={`Kéo để sắp xếp ${row.name || numberLabel}`}
-                        >
-                          <GripVertical size={14} aria-hidden="true" />
-                        </button>
-                        <label className="inline-flex items-center cursor-pointer p-0.5">
-                          <input
-                            type="checkbox"
-                            disabled={locked}
-                            checked={selected.includes(row.itemId)}
-                            onChange={e =>
-                              setSelected(current =>
-                                e.target.checked ? [...current, row.itemId] : current.filter(id => id !== row.itemId)
-                              )
-                            }
-                            className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--focus-ring)] h-3.5 w-3.5 transition-opacity opacity-40 group-hover:opacity-100"
-                          />
-                        </label>
-                      </div>
-                    </td>
-                    <td className="p-2 text-center text-xs font-mono text-[var(--text-secondary)]">
-                      <span className="tf-worksheet-outline-badge tf-worksheet-outline-level-3">{numberLabel}</span>
-                    </td>
-                    <td className="p-2">
-                      <div className="flex items-center gap-1.5 flex-wrap" style={{ paddingLeft: indentPx }}>
-                        <button
-                          type="button"
-                          className="text-[var(--foreground)] text-sm hover:text-[var(--primary)] text-left font-normal"
-                          onClick={() => openDetail(row.itemId)}
-                        >
-                          {row.name || "Tên chi tiết…"}
-                        </button>
-                        {row.description && (
-                          <span className="text-xs text-[var(--text-secondary)] truncate max-w-sm ml-1" title={row.description}>
-                            ({row.description})
-                          </span>
-                        )}
-                        {row.saleRemoved && (
-                          <span className="text-[11px] text-[var(--warning)] bg-[var(--warning-soft)] rounded px-1 border border-[var(--warning)] ml-1">
-                            Đã bỏ khỏi BG
-                          </span>
-                        )}
-                        {/* Parameter / Formula Status Badges */}
-                        {row.sell.parameterBinding?.mode === "OVERRIDDEN" || row.buy.parameterBinding?.mode === "OVERRIDDEN" ? (
-                          <span
-                            className="text-[10px] font-medium text-[var(--warning)] bg-[var(--warning-soft)] rounded px-1.5 py-0.5 border border-[var(--warning)] inline-flex items-center gap-1 ml-1"
-                            title="Đã sửa tay đè lên công thức tham số. Bấm nút hoàn tác tại ô đơn giá để khôi phục công thức"
-                          >
-                            <RotateCcw size={10} aria-hidden="true" /> Đã sửa tay
-                          </span>
-                        ) : row.sell.parameterBinding?.mode === "PARAMETER" ||
-                          row.sell.parameterBinding?.mode === "FORMULA" ||
-                          row.buy.parameterBinding?.mode === "PARAMETER" ||
-                          row.buy.parameterBinding?.mode === "FORMULA" ? (
-                          <span
-                            className="text-[10px] font-medium text-[var(--color-brand-800)] bg-[var(--primary-soft)] rounded px-1.5 py-0.5 border border-[var(--color-brand-300)] inline-flex items-center gap-1 ml-1"
-                            title="Được tính tự động theo tham số sự kiện"
-                          >
-                            <Sparkles size={10} aria-hidden="true" /> Tham số
-                          </span>
-                        ) : null}
-                      </div>
-                    </td>
-
-                    {/* Sell Columns */}
-                    {viewFilter !== "BUY" && (
-                      <>
-                        <td className="p-1 text-center text-xs border-l border-[var(--border)]">
-                          <input
-                            type="text"
-                            value={row.sell.unit}
-                            disabled={row.saleRemoved || mode === "ic"}
-                            placeholder="ĐVT"
-                            onChange={e => side(row, "sell", "unit", e.target.value)}
-                            className="w-16 text-center text-xs py-1 px-1 rounded border border-transparent hover:border-[var(--border)] focus:border-[var(--focus-ring)] focus:bg-[var(--surface)] bg-transparent transition-colors"
-                          />
-                        </td>
-                        <td className="p-1 text-center text-xs">
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            value={row.sell.quantity}
-                            disabled={row.saleRemoved || mode === "ic"}
-                            placeholder="1"
-                            onChange={e => side(row, "sell", "quantity", e.target.value)}
-                            className="w-12 text-center text-xs py-1 px-1 rounded border border-transparent hover:border-[var(--border)] focus:border-[var(--focus-ring)] focus:bg-[var(--surface)] bg-transparent transition-colors"
-                          />
-                        </td>
-                        <td className="p-1 text-right">
-                          <div className="w-32 ml-auto flex items-center justify-end gap-1">
-                            {row.sell.parameterBinding?.mode === "OVERRIDDEN" && mode !== "ic" && (
-                              <button
-                                type="button"
-                                title="Đã sửa tay · Bấm để khôi phục công thức tham số"
-                                onClick={() => reuseFormula(row, "sell")}
-                                className="p-1 rounded text-[var(--warning)] hover:bg-[var(--warning-soft)] transition-colors flex-shrink-0"
-                              >
-                                <RotateCcw size={12} aria-hidden="true" />
-                              </button>
-                            )}
-                            <PairedPriceInput
-                              label={"Đơn giá bán " + (i + 1)}
-                              value={row.sell.unitPrice}
-                              disabled={row.saleRemoved || mode === "ic"}
-                              rowId={row.itemId}
-                              scope="sell"
-                              onChange={val => side(row, "sell", "unitPrice", val)}
-                              onNext={() => focusNextPrice(row.itemId, "sell")}
-                            />
-                          </div>
-                        </td>
-                        <td className="p-2 text-right font-mono text-xs font-semibold text-[var(--color-brand-800)]">
-                          {sellAmount === undefined ? "—" : displayMoney(sellAmount)}
-                        </td>
-                      </>
-                    )}
-
-                    {/* Buy Columns */}
-                    {viewFilter !== "SELL" && (
-                      <>
-                        <td className="p-1 text-right border-l border-[var(--border)]">
-                          <div className="w-32 ml-auto flex items-center justify-end gap-1">
-                            {row.buy.parameterBinding?.mode === "OVERRIDDEN" && (
-                              <button
-                                type="button"
-                                title="Đã sửa tay · Bấm để khôi phục công thức tham số"
-                                disabled={locked}
-                                onClick={() => reuseFormula(row, "buy")}
-                                className="p-1 rounded text-[var(--warning)] hover:bg-[var(--warning-soft)] transition-colors flex-shrink-0"
-                              >
-                                <RotateCcw size={12} aria-hidden="true" />
-                              </button>
-                            )}
-                            <PairedPriceInput
-                              label={"Giá vốn " + (i + 1)}
-                              value={row.buy.unitPrice}
-                              disabled={locked}
-                              rowId={row.itemId}
-                              scope="buy"
-                              onChange={val => side(row, "buy", "unitPrice", val)}
-                              onNext={() => focusNextPrice(row.itemId, "buy")}
-                            />
-                          </div>
-                        </td>
-                        <td className="p-2 text-right font-mono text-xs font-semibold text-[var(--info)]">
-                          {buyAmount === undefined ? "—" : displayMoney(buyAmount)}
-                        </td>
-                        {mode === "ic" && (
-                          <td className="p-1 text-center">
-                            <button
-                              type="button"
-                              onClick={() => setEvidenceTargets([row.itemId])}
-                              className={`p-1 rounded text-xs inline-flex items-center gap-1 ${
-                                row.buy.evidenceIds.length
-                                  ? "text-[var(--info)] bg-[var(--info-soft)]"
-                                  : row.buy.evidenceReason
-                                  ? "text-[var(--warning)] bg-[var(--warning-soft)]"
-                                  : "text-[var(--muted)] hover:text-[var(--foreground)]"
-                              }`}
-                              title={
-                                row.buy.evidenceIds.length
-                                  ? `${row.buy.evidenceIds.length} file minh chứng`
-                                  : row.buy.evidenceReason
-                                  ? `Lý do: ${row.buy.evidenceReason}`
-                                  : "Gắn minh chứng"
-                              }
-                            >
-                              <Paperclip size={13} />
-                              {row.buy.evidenceIds.length > 0 && <span>{row.buy.evidenceIds.length}</span>}
-                            </button>
-                          </td>
-                        )}
-                      </>
-                    )}
-
-                    {/* Margin Leaf Indicator */}
-                    {((mode === "paired" && viewFilter === "ALL") || mode === "ic") && (
-                      <td className="p-2 text-right font-mono text-xs border-l border-[var(--border)]">
-                        {rowMargin && rowMargin.hasData ? (
-                          <span
-                            className={`tf-worksheet-margin-badge ${
-                              rowMargin.percentNum >= 30
-                                ? "is-high"
-                                : rowMargin.percentNum >= 15
-                                ? "is-medium"
-                                : "is-low"
-                            }`}
-                          >
-                            {rowMargin.percentDisplay}
-                          </span>
-                        ) : (
-                          <span className="text-[var(--muted)]">—</span>
-                        )}
-                      </td>
-                    )}
-
-                    {/* Edit Trigger (Opens Slide-over Drawer) */}
-                    <td className="p-2 text-center border-l border-[var(--border)]">
-                      <button
-                        type="button"
-                        onClick={() => openDetail(row.itemId)}
-                        className="p-1 text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-muted)] rounded transition-colors"
-                        title={`Mở chi tiết ${row.name || ""}`}
-                      >
-                        <Settings2 size={15} />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              {displayedTotals.map(row => {
-                return (
-                  <tr
-                    key={row.id}
-                    className={
-                      row.id === "SYSTEM_GROSS"
-                        ? "bg-[var(--surface-soft)] font-bold border-t-2 border-[var(--border-strong)]"
-                        : "bg-[var(--surface)] border-t border-[var(--border)]"
-                    }
-                  >
-                    <td colSpan={3} className="py-2.5 px-3 text-[var(--foreground)] font-semibold text-right">
-                      {row.label}:
-                    </td>
-                    {viewFilter !== "BUY" && (
-                      <>
-                        <td colSpan={3} className="border-l border-[var(--border)]" />
-                        <td className="text-right font-mono font-bold text-xs py-2.5 px-3 text-[var(--color-brand-900)]">
-                          {row.incompleteSell || row.sell === undefined ? (
-                            <span className="text-[var(--warning)] text-xs font-normal">Chưa đủ dữ liệu</span>
-                          ) : (
-                            displayMoney(row.sell)
-                          )}
-                        </td>
-                      </>
-                    )}
-                    {viewFilter !== "SELL" && (
-                      <>
-                        <td className="border-l border-[var(--border)]" />
-                        <td className="text-right font-mono font-bold text-xs py-2.5 px-3 text-[var(--info)]">
-                          {row.buy === undefined ? (
-                            "—"
-                          ) : row.incompleteBuy ? (
-                            <span className="text-[var(--warning)] text-xs font-normal">Chưa đủ dữ liệu</span>
-                          ) : (
-                            displayMoney(row.buy)
-                          )}
-                        </td>
-                        {mode === "ic" && <td className="border-l border-[var(--border)]" />}
-                      </>
-                    )}
-                    {((mode === "paired" && viewFilter === "ALL") || mode === "ic") && (
-                      <td className="text-right font-mono font-bold text-xs py-2.5 px-3 border-l border-[var(--border)]">
-                        {row.id === "SYSTEM_NET" && marginPercent !== null ? (
-                          <span
-                            className={`tf-worksheet-margin-badge ${
-                              marginReady && estimatedMargin.numerator >= BigInt(0) ? "is-high" : "is-low"
-                            }`}
-                          >
-                            {marginPercent}
-                          </span>
-                        ) : null}
-                      </td>
-                    )}
-                    <td className="border-l border-[var(--border)]" />
-                  </tr>
-                );
-              })}
-            </tfoot>
-          </table>
-        </div>
+        <WorksheetGrid
+          rows={rows}
+          visibleRows={visibleRows}
+          outlineById={outlineById}
+          mode={mode}
+          viewFilter={viewFilter}
+          locked={locked}
+          selected={selected}
+          onSelectAll={checked => setSelected(checked ? rows.map(r => r.itemId) : [])}
+          onSelectRow={(id, checked) =>
+            setSelected(current => (checked ? [...current, id] : current.filter(itemId => itemId !== id)))
+          }
+          collapsed={collapsed}
+          onToggleCollapse={id =>
+            setCollapsed(current =>
+              current.includes(id) ? current.filter(itemId => itemId !== id) : [...current, id]
+            )
+          }
+          onOpenDetail={openDetail}
+          onSide={side}
+          onReuseFormula={reuseFormula}
+          onAdd={add}
+          onOpenEvidence={targets => setEvidenceTargets(targets)}
+          displayedTotals={displayedTotals}
+          marginPercent={marginPercent}
+          marginReady={marginReady}
+          estimatedMargin={estimatedMargin}
+          drop={drop}
+          dragId={dragId}
+          onDragOver={dragOver}
+          onPerformDrop={performDrop}
+          onDragStart={(id, event) => {
+            setDragId(id);
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", id);
+          }}
+          onDragEnd={() => {
+            setDragId(null);
+            setDrop(null);
+          }}
+          focusNextPrice={focusNextPrice}
+        />
 
         {mode !== "ic" && dragId && (
           <div className="tf-quotation-root-drop" onDragOver={event => event.preventDefault()} onDrop={dropAtRoot}>
@@ -1685,98 +751,34 @@ export default function PairedQuotationIcEditor({
         )}
       </fieldset>
 
-      {/* STICKY BOTTOM SAVE BAR */}
-      <div className="tf-paired-save-bar">
-        <div className="tf-paired-totals">
-          {mode !== "ic" && (
-            <span>
-              Báo giá · sau VAT <strong>{saleTotal.incomplete ? "Chưa đủ dữ liệu" : displayMoney(saleTotal.gross)}</strong>
-            </span>
-          )}
-          {mode !== "quote" && (
-            <span>
-              IC · sau VAT <strong>{buyTotal.incomplete ? "Chưa đủ dữ liệu" : displayMoney(buyTotal.gross)}</strong>
-            </span>
-          )}
-          {mode === "paired" && (
-            <span className="tf-paired-margin" title="Báo giá trước VAT − IC trước VAT; tỷ lệ trên báo giá trước VAT">
-              <span>Margin dự toán{marginPercent !== null ? " · " + marginPercent : ""}</span>
-              <strong>{marginReady ? displayMoney(moneySource(estimatedMargin)) : "Chưa đủ dữ liệu"}</strong>
-            </span>
-          )}
-        </div>
-
-        <div className="tf-paired-save-actions">
-          {mode === "paired" && !locked && (
-            <fieldset className="tf-paired-save-scope-group">
-              <legend>Lần lưu này</legend>
-              <label>
-                <input type="radio" name="save-scope" checked={saveIc} onChange={() => setSaveIc(true)} /> Báo giá & IC
-              </label>
-              <label>
-                <input type="radio" name="save-scope" checked={!saveIc} onChange={() => setSaveIc(false)} /> Chỉ Báo giá
-              </label>
-              {initial?.priceReviewRequired && (
-                <label className="tf-paired-price-review">
-                  <input
-                    type="checkbox"
-                    checked={priceReviewed}
-                    onChange={event => setPriceReviewed(event.target.checked)}
-                  />
-                  Đã rà giá bán, VAT và phí từ nguồn
-                </label>
-              )}
-            </fieldset>
-          )}
-          <div className="tf-paired-save-buttons">
-            {capabilities.previewCustomer && (
-              <Button variant="secondary" size="sm" disabled={pending} onClick={() => setPreview(true)}>
-                Xem bản khách
-              </Button>
-            )}
-            <Button size="sm" onClick={() => save()} loading={pending} loadingLabel="Đang lưu…">
-              {workspaceSaveLabel(mode, saveIc)}
-            </Button>
-            {mode === "quote" && !embedded && draftId && (
-              <Button variant="secondary" size="sm" disabled={pending || dirty} onClick={startPairedFromQuote}>
-                Thêm IC song song
-              </Button>
-            )}
-            {!embedded && capabilities.finalizeQuotation && (
-              <Button variant="secondary" size="sm" disabled={pending} onClick={requestFinalize}>
-                Chốt phiên bản BG
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {mode === "paired" && !saveIc && hasBuyInputs && (
-          <Alert tone="warning" title="Giá vốn và minh chứng chưa được lưu">
-            Lần lưu này chỉ lưu Báo giá. Chọn “Báo giá & IC” để lưu dữ liệu mua đang nhập.
-          </Alert>
-        )}
-        {state.error && <Alert tone="danger" title={state.error} />}
-        {state.success && (
-          <Alert tone="success" title={state.success}>
-            {mode !== "quote" && state.revisionId && (
-              <span className="tf-paired-next-actions">
-                <Link href={`/projects/${finance.project.id}/costflow?tab=ic`}>Mở Internal Cost</Link>
-                {state.requestId && <Link href={`/workflow#request-${state.requestId}`}>Mở hồ sơ IC</Link>}
-              </span>
-            )}
-          </Alert>
-        )}
-        {quotationId && (
-          <a
-            className="tf-link"
-            target="_blank"
-            rel="noopener"
-            href={"/projects/" + finance.project.id + "/costflow/quotations/" + quotationId + "/print"}
-          >
-            Mở báo giá đã xuất / lưu PDF ↗
-          </a>
-        )}
-      </div>
+      <WorksheetSaveBar
+        mode={mode}
+        locked={locked}
+        saveIc={saveIc}
+        onSaveIcChange={setSaveIc}
+        saleTotal={saleTotal}
+        buyTotal={buyTotal}
+        marginReady={marginReady}
+        estimatedMargin={estimatedMargin}
+        marginPercent={marginPercent}
+        hasBuyInputs={hasBuyInputs}
+        dirty={dirty}
+        pending={pending}
+        draftId={draftId}
+        quotationId={quotationId}
+        uncompletedRowCount={readinessIssues.length}
+        initial={initial}
+        priceReviewed={priceReviewed}
+        onPriceReviewedChange={setPriceReviewed}
+        state={state}
+        capabilities={capabilities}
+        embedded={embedded}
+        projectId={finance.project.id}
+        onSave={save}
+        onPreview={() => setPreview(true)}
+        onFinalize={requestFinalize}
+        onStartPairedFromQuote={startPairedFromQuote}
+      />
 
       <Dialog
         open={preflightOpen}
@@ -1824,383 +826,45 @@ export default function PairedQuotationIcEditor({
         }}
       />
 
-      {/* ROW DETAIL SLIDE-OVER RIGHT DRAWER */}
-      <Dialog
+      <WorksheetDetailDrawer
         open={!!detail}
         onClose={closeDetail}
-        title={
-          (mode === "ic"
-            ? "Chi tiết Internal Cost · "
-            : detail?.rowType === "GROUP"
-            ? "Thiết lập nhóm · "
-            : "Chi tiết · ") +
-          (detail
-            ? `${outlineById.get(detail.itemId)?.numberLabel ? `${outlineById.get(detail.itemId)?.numberLabel} · ` : ""}${
-                detail.name || (detail.rowType === "GROUP" ? "Nhóm" : "Hạng mục")
-              }`
-            : "Hạng mục")
+        detail={detail ?? null}
+        outlineById={outlineById}
+        outline={outline}
+        rows={rows}
+        mode={mode}
+        locked={locked}
+        pending={pending}
+        detailIndex={detailIndex}
+        detailOrderLength={detailOrder.length}
+        detailTarget={detailTarget}
+        detailBuySection={detailBuySection}
+        detailBuyDisabled={detailBuyDisabled}
+        detailSellDisabled={detailSellDisabled}
+        beneficiaryOptions={beneficiaryOptions}
+        parameterConfig={parameterConfig}
+        onAdjacentDetail={openAdjacentDetail}
+        onUpdate={update}
+        onSide={side}
+        onReuseFormula={reuseFormula}
+        onAdd={add}
+        onMove={move}
+        onChangeParent={changeParent}
+        onRemoveFromQuote={handleRemoveFromQuote}
+        onOpenEvidence={targets => setEvidenceTargets(targets)}
+        onCreateBeneficiaryClick={itemId =>
+          setNewBeneficiary({
+            itemId,
+            name: "",
+            bank: "",
+            account: "",
+            sourceFileId: ""
+          })
         }
-        description={
-          mode === "ic"
-            ? "Cấu trúc và giá bán lấy từ báo giá nguồn. Giá vốn và thông tin nội bộ được lưu trong nháp IC."
-            : "Thay đổi ở đây được giữ trong bảng. Bấm lưu nháp để lưu vào hệ thống."
-        }
-        footer={
-          <>
-            <Button variant="ghost" disabled={detailIndex <= 0} onClick={() => openAdjacentDetail(-1)}>
-              Dòng trước
-            </Button>
-            <Button
-              variant="ghost"
-              disabled={detailIndex < 0 || detailIndex >= detailOrder.length - 1}
-              onClick={() => openAdjacentDetail(1)}
-            >
-              Dòng sau
-            </Button>
-            <Button onClick={closeDetail}>Xong</Button>
-          </>
-        }
-      >
-        {detail && (
-          <fieldset
-            disabled={pending}
-            className="tf-paired-detail space-y-4"
-            onKeyDown={event => {
-              if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-                event.preventDefault();
-                openAdjacentDetail(1);
-              }
-            }}
-          >
-            <Input
-              label={detail.rowType === "GROUP" ? "Tên nhóm" : "Tên hạng mục"}
-              readOnly={mode === "ic"}
-              value={detail.name}
-              onChange={e => update(detail.itemId, { name: e.target.value })}
-            />
-            <Textarea
-              label={detail.rowType === "GROUP" ? "Mô tả nhóm" : "Mô tả hạng mục"}
-              rows={2}
-              readOnly={mode === "ic"}
-              value={detail.description}
-              onChange={e => update(detail.itemId, { description: e.target.value })}
-            />
-
-            {mode === "ic" && detail.rowType === "ITEM" && (
-              <div className="tf-ic-source-summary" aria-label="Giá bán nguồn chỉ đọc">
-                <span>
-                  <small>ĐVT / SL bán</small>
-                  <strong>
-                    {detail.sell.unit || "—"} / {detail.sell.quantity || "—"}
-                  </strong>
-                </span>
-                <span>
-                  <small>Đơn giá bán</small>
-                  <strong>{detail.sell.unitPrice ? formatPriceInput(detail.sell.unitPrice) : "—"}</strong>
-                </span>
-                <span>
-                  <small>Thành tiền bán trước VAT</small>
-                  <strong>
-                    {groupAmount(rows, detail, "sell") ? displayMoney(groupAmount(rows, detail, "sell")!.net) : "—"}
-                  </strong>
-                </span>
-              </div>
-            )}
-
-            {detail.rowType === "ITEM" && (
-              <div className="tf-paired-detail-pricing">
-                {((mode === "quote" ? ["sell"] : mode === "ic" ? ["buy"] : ["sell", "buy"]) as ("sell" | "buy")[]).map(
-                  scope => {
-                    const completion = rowCompletion(detail)[scope];
-                    const binding = detail[scope].parameterBinding;
-                    return (
-                      <section
-                        key={scope}
-                        ref={scope === "buy" ? detailBuySection : undefined}
-                        tabIndex={scope === "buy" ? -1 : undefined}
-                      >
-                        <h3>
-                          {scope === "sell" ? "Báo giá khách" : "IC nội bộ"}
-                          <span
-                            className="tf-paired-completion"
-                            data-complete={completion.complete === completion.total || undefined}
-                          >
-                            {completion.complete}/{completion.total}
-                          </span>
-                          {binding?.mode === "OVERRIDDEN" && (
-                            <span className="tf-parameter-override-badge">Đã ghi đè</span>
-                          )}
-                        </h3>
-                        {binding?.mode === "OVERRIDDEN" && (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            disabled={!parameterConfig || (scope === "buy" && locked)}
-                            onClick={() => reuseFormula(detail, scope)}
-                          >
-                            Dùng lại công thức
-                          </Button>
-                        )}
-                        <div className="grid grid-cols-2 gap-3">
-                          <Input
-                            label={"ĐVT " + (scope === "sell" ? "bán" : "mua")}
-                            disabled={scope === "buy" ? detailBuyDisabled : detailSellDisabled}
-                            value={detail[scope].unit}
-                            onChange={e => side(detail, scope, "unit", e.target.value)}
-                          />
-                          <Input
-                            label={"Số lượng " + (scope === "sell" ? "bán" : "mua")}
-                            inputMode="decimal"
-                            disabled={scope === "buy" ? detailBuyDisabled : detailSellDisabled}
-                            value={detail[scope].quantity}
-                            onChange={e => side(detail, scope, "quantity", e.target.value)}
-                          />
-                          <Input
-                            label={scope === "sell" ? "Đơn giá bán" : "Giá vốn"}
-                            inputMode="decimal"
-                            disabled={scope === "buy" ? detailBuyDisabled : detailSellDisabled}
-                            value={formatPriceInput(detail[scope].unitPrice)}
-                            onChange={e => side(detail, scope, "unitPrice", ungroupPriceInput(e.target.value))}
-                          />
-                          <Input
-                            label={"VAT " + (scope === "sell" ? "bán" : "mua") + " (%)"}
-                            inputMode="decimal"
-                            disabled={scope === "buy" ? detailBuyDisabled : detailSellDisabled}
-                            value={detail[scope].vatPercent}
-                            onChange={e => side(detail, scope, "vatPercent", e.target.value)}
-                          />
-                          <Select
-                            label={"Đơn giá " + (scope === "sell" ? "bán" : "mua") + " gồm VAT?"}
-                            disabled={scope === "buy" ? detailBuyDisabled : detailSellDisabled}
-                            value={detail[scope].basis}
-                            onChange={e => side(detail, scope, "basis", e.target.value)}
-                          >
-                            <option value="NET">Chưa VAT</option>
-                            <option value="GROSS">Gồm VAT</option>
-                          </Select>
-                        </div>
-                        {scope === "sell" ? (
-                          <Textarea
-                            label="Ghi chú cho khách · dòng này"
-                            rows={2}
-                            value={detail.sell.notes}
-                            disabled={!!detail.saleRemoved}
-                            onChange={e => side(detail, "sell", "notes", e.target.value)}
-                          />
-                        ) : (
-                          <>
-                            <Select
-                              label="Nhà cung cấp"
-                              value={detail.buy.vendorId}
-                              disabled={locked}
-                              onChange={e => {
-                                if (e.target.value === "__CREATE_BENEFICIARY__") {
-                                  setNewBeneficiary({
-                                    itemId: detail.itemId,
-                                    name: "",
-                                    bank: "",
-                                    account: "",
-                                    sourceFileId: ""
-                                  });
-                                  return;
-                                }
-                                side(detail, "buy", "vendorId", e.target.value);
-                              }}
-                            >
-                              <option value="">Chưa chọn</option>
-                              {beneficiaryOptions.map(b => (
-                                <option key={b.id} value={b.id}>
-                                  {b.name}
-                                </option>
-                              ))}
-                              <option value="__CREATE_BENEFICIARY__">＋ Tạo nhà cung cấp mới…</option>
-                            </Select>
-                            <Textarea
-                              label="Ghi chú nội bộ · không xuất cho khách"
-                              rows={2}
-                              value={detail.buy.notes}
-                              disabled={locked}
-                              onChange={e => side(detail, "buy", "notes", e.target.value)}
-                            />
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              onClick={() => setEvidenceTargets([detail.itemId])}
-                            >
-                              <Paperclip size={14} />
-                              Minh chứng ·{" "}
-                              {detail.buy.evidenceIds.length
-                                ? detail.buy.evidenceIds.length + " file"
-                                : detail.buy.evidenceReason
-                                ? "Có lý do"
-                                : "Chưa có nguồn"}
-                            </Button>
-                          </>
-                        )}
-                      </section>
-                    );
-                  }
-                )}
-              </div>
-            )}
-
-            {mode !== "ic" && detail.rowType === "GROUP" && (
-              <>
-                <label className="tf-paired-save-scope">
-                  <input
-                    type="checkbox"
-                    checked={detail.showGroupSubtotal}
-                    onChange={e => update(detail.itemId, { showGroupSubtotal: e.target.checked })}
-                  />{" "}
-                  Hiện tổng nhóm trên editor và bản khách
-                </label>
-                <label className="tf-paired-save-scope">
-                  <input
-                    type="checkbox"
-                    checked={detail.showChildren}
-                    onChange={e => update(detail.itemId, { showChildren: e.target.checked })}
-                  />{" "}
-                  Hiện hạng mục của nhóm trên bản khách
-                </label>
-              </>
-            )}
-
-            {mode !== "ic" && detail.rowType === "ITEM" && childrenOf(rows, detail.itemId).length > 0 && (
-              <>
-                <Select
-                  label={"Cách định giá " + detail.name}
-                  value={detail.pricingMode}
-                  onChange={e => setModeChange({ id: detail.itemId, mode: e.target.value as "PACKAGE" | "DETAIL" })}
-                >
-                  <option value="PACKAGE">Giá gói</option>
-                  <option value="DETAIL">Giá chi tiết</option>
-                </Select>
-                {detail.pricingMode === "PACKAGE" && (
-                  <Select
-                    label="Thông tin dòng con trên báo giá"
-                    value={detail.packageChildDisplay}
-                    onChange={e =>
-                      update(detail.itemId, { packageChildDisplay: e.target.value as "CONTENT" | "QUANTITY" })
-                    }
-                  >
-                    <option value="CONTENT">Chỉ tên và mô tả</option>
-                    <option value="QUANTITY">Hiện thêm ĐVT và số lượng</option>
-                  </Select>
-                )}
-                <label className="tf-paired-save-scope">
-                  <input
-                    type="checkbox"
-                    checked={detail.showChildren}
-                    onChange={e => update(detail.itemId, { showChildren: e.target.checked })}
-                  />{" "}
-                  Hiện dòng con trên báo giá khách
-                </label>
-              </>
-            )}
-
-            {detail.rowType === "ITEM" && (
-              <Select
-                disabled={mode === "ic"}
-                label="Thuộc nhóm / hạng mục"
-                value={detail.parentItemId ?? ""}
-                onChange={e => changeParent(detail, e.target.value || null)}
-              >
-                <option value="">Cấp gốc</option>
-                {outline
-                  .filter(
-                    entry =>
-                      entry.row.itemId !== detail.itemId &&
-                      !orderedRows(rows, detail.itemId).some(child => child.row.itemId === entry.row.itemId) &&
-                      (entry.role === "GROUP" || entry.role === "ITEM")
-                  )
-                  .map(entry => (
-                    <option key={entry.row.itemId} value={entry.row.itemId}>
-                      {entry.numberLabel ? entry.numberLabel + " · " : ""}
-                      {entry.row.name || (entry.role === "GROUP" ? "Nhóm chưa đặt tên" : "Hạng mục chưa đặt tên")}
-                    </option>
-                  ))}
-              </Select>
-            )}
-
-            {mode !== "ic" && (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    add(detail.rowType, detail.parentItemId, detail.itemId);
-                    setDetailId(null);
-                  }}
-                >
-                  Thêm dòng sau
-                </Button>
-                {detailRole !== "DETAIL" && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      if (
-                        detail.rowType === "ITEM" &&
-                        (detail.buy.unitPrice || detail.buy.evidenceIds.length || detail.buy.evidenceReason)
-                      ) {
-                        setState({
-                          error: "Dòng có chi phí riêng: chưa thể tạo chi tiết con vì sẽ làm trùng nguồn chi phí."
-                        });
-                        setDetailId(null);
-                        return;
-                      }
-                      add("ITEM", detail.itemId);
-                      setDetailId(null);
-                    }}
-                  >
-                    {detail.rowType === "GROUP" ? "Thêm hạng mục" : "Thêm chi tiết con"}
-                  </Button>
-                )}
-                <Button variant="ghost" size="sm" onClick={() => move(detail.itemId, -1)}>
-                  <ArrowUp size={14} aria-hidden="true" />
-                  Lên
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => move(detail.itemId, 1)}>
-                  <ArrowDown size={14} aria-hidden="true" />
-                  Xuống
-                </Button>
-                {!detail.saleRemoved ? (
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={() => {
-                      const affected = new Set([
-                        detail.itemId,
-                        ...orderedRows(rows, detail.itemId).map(x => x.row.itemId)
-                      ]);
-                      setRows(current =>
-                        current.flatMap(r =>
-                          affected.has(r.itemId)
-                            ? locked ||
-                              childrenOf(current, r.itemId).length ||
-                              r.buy.unitPrice ||
-                              r.buy.evidenceIds.length ||
-                              r.buy.evidenceReason
-                              ? [{ ...r, saleRemoved: true }]
-                              : []
-                            : [r]
-                        )
-                      );
-                      setDetailId(null);
-                    }}
-                  >
-                    Bỏ khỏi báo giá
-                  </Button>
-                ) : (
-                  <Button variant="secondary" size="sm" onClick={() => update(detail.itemId, { saleRemoved: false })}>
-                    Khôi phục bán dòng này
-                  </Button>
-                )}
-              </div>
-            )}
-          </fieldset>
-        )}
-      </Dialog>
+        onModeChangePrompt={setModeChange}
+        onError={msg => setState({ error: msg })}
+      />
 
       <Dialog
         open={!!newBeneficiary}
@@ -2307,7 +971,6 @@ export default function PairedQuotationIcEditor({
         <p>Nháp đã lưu trước đó vẫn được giữ.</p>
       </Dialog>
 
-      {/* IC EVIDENCE RIGHT DRAWER */}
       <IcEvidencePanel
         finance={finance}
         open={!!evidenceTargets}
@@ -2392,78 +1055,5 @@ export default function PairedQuotationIcEditor({
         . Giá đã nhập được giữ.
       </Dialog>
     </section>
-  );
-}
-
-function PairedInsertMenu({ actions }: { actions: { label: string; onSelect: () => void }[] }) {
-  return (
-    <div className="tf-quotation-row-menu tf-quotation-insert-menu" role="menu">
-      {actions.map(action => (
-        <button key={action.label} type="button" role="menuitem" onClick={action.onSelect}>
-          <Plus size={14} aria-hidden="true" />
-          {action.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function PairedPriceInput({
-  label,
-  value,
-  disabled,
-  rowId,
-  scope,
-  onChange,
-  onNext
-}: {
-  label: string;
-  value: string;
-  disabled?: boolean;
-  rowId: string;
-  scope: "sell" | "buy";
-  onChange: (value: string) => void;
-  onNext: () => void;
-}) {
-  const input = useRef<HTMLInputElement>(null);
-  const caret = useRef<number | null>(null);
-  const display = formatPriceInput(value);
-  useLayoutEffect(() => {
-    if (caret.current === null || !input.current) return;
-    let index = 0,
-      digits = 0;
-    while (index < display.length && digits < caret.current) {
-      if (display[index] !== ",") digits++;
-      index++;
-    }
-    input.current.setSelectionRange(index, index);
-    caret.current = null;
-  }, [display]);
-  return (
-    <input
-      ref={input}
-      aria-label={label}
-      inputMode="decimal"
-      placeholder="—"
-      data-price-row={rowId}
-      data-price-scope={scope}
-      className={`w-full text-right font-mono text-xs py-1 px-1.5 rounded border border-transparent hover:border-[var(--border)] focus:border-[var(--focus-ring)] focus:bg-[var(--surface)] bg-transparent transition-colors tabular-nums${
-        display ? "" : " text-[var(--muted)]"
-      }`}
-      value={display}
-      disabled={disabled}
-      onKeyDown={event => {
-        if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-          event.preventDefault();
-          onNext();
-        }
-      }}
-      onChange={event => {
-        caret.current = ungroupPriceInput(
-          event.target.value.slice(0, event.target.selectionStart ?? event.target.value.length)
-        ).length;
-        onChange(ungroupPriceInput(event.target.value));
-      }}
-    />
   );
 }
