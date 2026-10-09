@@ -26,6 +26,7 @@ import { diffPaymentDossiers, type PaymentDossierSnapshot, type PaymentDocumentS
 import { derivePaymentProgress } from "./paymentCash";
 import { projectPaymentLedger, type BeneficiaryVerification } from "./paymentReadModel";
 import { resolveProductionApprovedActualCost } from "./approvedActualCost";
+import { loadActualCosts } from "./actualCostReadModel";
 
 type Actor = { id: string; role: string };
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -38,7 +39,8 @@ export async function loadFinance(projectId: string, actor: Actor) {
   if (!activeActor) return null;
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true, name: true, ownerId: true, client: { select: { id: true, name: true } }, members: { select: { userId: true } } } });
   if (!project) return null;
-  const fullAccess = activeActor.role === "ADMIN" || project.members.some(m => m.userId === actor.id);
+  const ddGrant = await prisma.workflowRoleGrant.findFirst({ where: { userId: actor.id, role: "AC_DD", revokedAt: null }, select: { id: true } });
+  const fullAccess = activeActor.role === "ADMIN" || !!ddGrant || project.members.some(m => m.userId === actor.id);
   const requests = await prisma.workflowRequest.findMany({ where: { projectId, module: "COSTFLOW" }, include: { decisions: { orderBy: { createdAt: "asc" } }, approvalEvents: { orderBy: { createdAt: "asc" } } }, orderBy: { createdAt: "desc" } });
   const readerIds = fullAccess ? [] : (await prisma.workflowRequestReader.findMany({ where: { userId: actor.id, request: { projectId, module: "COSTFLOW" } }, select: { requestId: true } })).map(row => row.requestId);
   const visible = fullAccess ? requests : requests.filter(r => readerIds.includes(r.id) || r.creatorId === actor.id || r.cashAssigneeId === actor.id || (r.steps as ApprovalStep[]).some(s => s.assigneeId === actor.id));
@@ -130,7 +132,8 @@ export async function loadFinance(projectId: string, actor: Actor) {
     cash: cash.map(item => ({ id: item.id, projectId: item.projectId, requestId: item.requestId, recipientKey: item.recipientKey, direction: item.direction, amount: item.amount, evidenceId: item.evidenceId, normalizedAllocations: item.normalizedAllocations })),
     financialCloseState: savedData?.closed ? "CLOSED" : "OPEN",
   });
-  return { project: { ...project, members: fullAccess ? project.members : [], client: fullAccess ? project.client : null }, clients, fullAccess, version: workspace?.version ?? 0, data: fullAccess && savedData ? savedData : { ...emptyFinance(), closed: savedData?.closed ?? false }, requests: visible, cash, users, files, evidence, supplements, history, paymentDossiers, paymentLedger };
+  const actualCosts = fullAccess ? await loadActualCosts(projectId, actor) : null;
+  return { project: { ...project, members: fullAccess ? project.members : [], client: fullAccess ? project.client : null }, clients, fullAccess, version: workspace?.version ?? 0, data: fullAccess && savedData ? savedData : { ...emptyFinance(), closed: savedData?.closed ?? false }, requests: visible, cash, users, files, evidence, supplements, history, paymentDossiers, paymentLedger, actualCosts };
 }
 
 export async function executeFinance(projectId: string, expectedVersion: number, actor: Actor, form: FormData, upload: ProjectUpload | null) {

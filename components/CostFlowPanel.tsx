@@ -67,6 +67,10 @@ export type Finance = {
     diff: import("@/lib/costflow/paymentDiff").PaymentDossierDiff | null;
   }[];
   paymentLedger?: import("@/lib/costflow/paymentReadModel").PaymentLedgerRow[];
+  actualCosts?: {
+    lines: import("@/lib/costflow/actualCostReadModel").ActualCostReadLine[];
+    canDecide: boolean;
+  } | null;
 };
 
 import { KIND_LABELS, STATE_LABELS, STATE_TONES } from "@/lib/costflow/labels";

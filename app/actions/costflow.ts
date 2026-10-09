@@ -9,8 +9,71 @@ import { executeFinance } from "@/lib/costflow/service";
 import { executePaymentCash } from "@/lib/costflow/paymentCash";
 import { publicPaymentErrorMessage } from "@/lib/costflow/paymentPolicy";
 import { dispatchWorkflowNotifications } from "@/lib/workflow/notifications";
+import { executeActualCostCommand, type ActualCostCommand } from "@/lib/costflow/actualCostService";
 
 export type CostFlowActionState = { error?: string; success?: string; requestId?: string; revisionId?: string; quotationId?: string; draftId?: string; beneficiaryId?: string; cashId?: string; idempotent?: boolean; savedScopes?: string[]; version?: number; lineErrors?: { lineId: string; message: string }[] };
+
+export type ActualCostActionState = { error?: string; success?: string; lineId?: string; version?: number };
+
+export async function actualCostAction(_previous: ActualCostActionState, form: FormData): Promise<ActualCostActionState> {
+  const actor = await requireUser();
+  const projectId = String(form.get("projectId") ?? "").trim();
+  const action = String(form.get("actualCostCommand") ?? "").trim();
+  if (!projectId) return { error: "Thiếu Project." };
+  try {
+    let command: ActualCostCommand;
+    if (action === "CREATE_AND_SUBMIT") {
+      command = {
+        command: action,
+        projectId,
+        stableLineId: String(form.get("stableLineId") ?? ""),
+        revisionId: String(form.get("revisionId") ?? ""),
+        icLineId: String(form.get("icLineId") ?? ""),
+        recipientKey: String(form.get("recipientKey") ?? ""),
+        description: String(form.get("description") ?? ""),
+        fundingSource: String(form.get("fundingSource") ?? ""),
+        quantity: String(form.get("quantity") ?? ""),
+        days: String(form.get("days") ?? ""),
+        unitPrice: String(form.get("unitPrice") ?? ""),
+      };
+    } else if (action === "RESUBMIT") {
+      command = {
+        command: action,
+        projectId,
+        lineId: String(form.get("lineId") ?? ""),
+        expectedVersion: Number(form.get("version")),
+        description: String(form.get("description") ?? ""),
+        fundingSource: String(form.get("fundingSource") ?? ""),
+        quantity: String(form.get("quantity") ?? ""),
+        days: String(form.get("days") ?? ""),
+        unitPrice: String(form.get("unitPrice") ?? ""),
+      };
+    } else if (action === "DECIDE") {
+      const decision = String(form.get("decision") ?? "");
+      if (decision !== "APPROVED" && decision !== "RETURNED") return { error: "Quyết định AC không hợp lệ." };
+      command = {
+        command: action,
+        projectId,
+        lineId: String(form.get("lineId") ?? ""),
+        version: Number(form.get("version")),
+        action: decision,
+        reason: String(form.get("reason") ?? ""),
+      };
+    } else {
+      return { error: "Thao tác AC không hợp lệ." };
+    }
+    const result = await executeActualCostCommand(actor, command);
+    revalidatePath(`/projects/${projectId}/costflow`);
+    return { success: action === "DECIDE" ? "Đã lưu quyết định AC." : "AC đã được gửi DD.", lineId: result.lineId, version: result.version };
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2002") return { error: "Dòng, phiên bản hoặc quyết định AC đã tồn tại." };
+      if (error.code === "P2034") return { error: "Có thao tác AC đồng thời. Tải lại rồi thử lại." };
+    }
+    return { error: publicPaymentErrorMessage(error) };
+  }
+}
+
 export async function costFlowAction(_previous: CostFlowActionState, form: FormData): Promise<CostFlowActionState> {
   const actor = await requireUser();
   const projectId = String(form.get("projectId") ?? "");

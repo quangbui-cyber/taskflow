@@ -93,13 +93,17 @@ export async function executeWorkflow(actor: Actor, form: FormData, upload: Proj
       if (!admin) throw new Error("Chỉ Admin quản lý vai trò duyệt bổ sung.");
       const targetUserId = text(form, "userId");
       const role = text(form, "approvalRole");
-      if (!["MANAGER", "ACCOUNTANT", "CEO"].includes(role)) throw new Error("Vai trò duyệt không hợp lệ.");
+      if (!["MANAGER", "ACCOUNTANT", "CEO", "AC_DD"].includes(role)) throw new Error("Vai trò duyệt không hợp lệ.");
       if (!await tx.user.findFirst({ where: { id: targetUserId, isActive: true }, select: { id: true } })) throw new Error("Người được cấp vai trò không còn hoạt động.");
       const existing = await tx.workflowRoleGrant.findFirst({ where: { userId: targetUserId, role, revokedAt: null } });
       if (command === "GRANT_APPROVAL_ROLE") {
+        if (role === "AC_DD") {
+          await tx.workflowRoleGrant.updateMany({ where: { role: "AC_DD", revokedAt: null, userId: { not: targetUserId } }, data: { revokedAt: new Date() } });
+        }
         if (!existing) await tx.workflowRoleGrant.create({ data: { userId: targetUserId, role, grantedById: user.id } });
-        return { success: "Đã cấp vai trò duyệt bổ sung." };
+        return { success: role === "AC_DD" ? "Đã cấu hình một DD đang hoạt động cho toàn công ty." : "Đã cấp vai trò duyệt bổ sung." };
       }
+      if (role === "AC_DD") throw new Error("DD chỉ được thay thế bằng một người đang hoạt động, không được để trống.");
       if (!existing) throw new Error("Người này không có vai trò đang hiệu lực để thu hồi.");
       await tx.workflowRoleGrant.update({ where: { id: existing.id }, data: { revokedAt: new Date() } });
       return { success: "Đã thu hồi vai trò duyệt bổ sung." };

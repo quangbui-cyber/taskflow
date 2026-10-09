@@ -21,6 +21,11 @@ export type Beneficiary = { id: string; name: string; bank: string; account: str
  * Cả ĐNHTU và ĐNTT đều có thể tạo trước; có hiệu lực thanh toán khi AC tương ứng được duyệt.
  */
 export type ExpenseFundingSource = "ADVANCE" | "OUT_OF_POCKET" | "VENDOR_DIRECT";
+export type ActualCostFundingSource =
+  | "EMPLOYEE_ADVANCE"
+  | "EMPLOYEE_OUT_OF_POCKET"
+  | "VENDOR_ADVANCE"
+  | "VENDOR_PAYMENT";
 export type Expense = {
   id: string;
   revisionId: string;

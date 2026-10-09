@@ -23,6 +23,7 @@ import { recipientDisplayName } from "@/lib/costflow/labels";
 import type { Expense } from "@/lib/costflow/types";
 import ExpenseUploadModal from "@/components/ExpenseUploadModal";
 import ExpenseDetailDrawer from "@/components/ExpenseDetailDrawer";
+import ActualCostEditor from "@/components/costflow/actual-cost/ActualCostEditor";
 
 type Props = {
   finance: Finance;
@@ -250,6 +251,8 @@ export default function ActualCostPanel({ finance, user, canCreate, onSelectTab 
           </Button>
         )}
       </div>
+
+      <ActualCostEditor finance={finance} currentUserId={user.id} />
 
       {/* KPI METRICS (SUMMARY STRIP) */}
       <div className="tf-summary-strip">

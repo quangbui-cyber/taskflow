@@ -34,6 +34,22 @@ test("actual-cost integration: create, submit, return, resubmit and approve are 
       data: { name: prefix, ownerId: member.id, members: { create: [{ userId: member.id }, { userId: dd.id }, { userId: admin.id }] } },
     });
     projectId = project.id;
+    await prisma.costFlowWorkspace.create({
+      data: {
+        projectId,
+        data: {
+          config: { accountantId: "", ceoId: "", managerId: "" },
+          closed: false,
+          revisions: [{ id: `${prefix}-revision`, number: 1, requestId: `${prefix}-ic-request`, effective: true, lines: [{ id: `${prefix}-ic-line`, description: "Dòng IC nguồn", unit: "gói", quantity: "2", days: "3", unitPrice: "100000", basis: "GROSS", vatPercent: "0", cost: { rawNet: "600000/1", rawVat: "0/1", rawGross: "600000/1", net: "600000", vat: "0", gross: "600000" } }], poIds: [], evidenceIds: [], createdBy: member.id }],
+          beneficiaries: [],
+          expenses: [],
+          pos: [],
+          quotations: [],
+          briefs: [],
+          vendorPaymentMilestones: [],
+        },
+      },
+    });
     await prisma.workflowRoleGrant.create({ data: { userId: dd.id, role: "AC_DD", grantedById: admin.id } });
 
     const created = await executeActualCostCommand(member, {
@@ -104,6 +120,7 @@ test("actual-cost integration: create, submit, return, resubmit and approve are 
       await prisma.actualCostVersion.deleteMany({ where: { projectId } });
       await prisma.actualCostLine.deleteMany({ where: { projectId } });
       await prisma.workflowRoleGrant.deleteMany({ where: { userId: { in: userIds }, role: "AC_DD" } });
+      await prisma.costFlowWorkspace.deleteMany({ where: { projectId } });
       await prisma.project.deleteMany({ where: { id: projectId, name: prefix } });
     }
     if (userIds.length) await prisma.user.deleteMany({ where: { id: { in: userIds }, email: { startsWith: prefix } } });
@@ -124,6 +141,7 @@ test("actual-cost integration: legacy JSON remains legacy/needsReview with no ap
     projectId = project.id;
     await prisma.costFlowWorkspace.create({ data: { projectId, data: { config: { accountantId: "", ceoId: "", managerId: "" }, closed: false, revisions: [], beneficiaries: [], pos: [], expenses: [{ id: `${prefix}-expense`, revisionId: "legacy-revision", lineId: "legacy-line", recipientKey: `USER:${user.id}`, description: "Legacy", input: { quantity: "1", unitPrice: "100000", basis: "GROSS", vatPercent: "0" }, cost: { rawNet: "100000/1", rawVat: "0/1", rawGross: "100000/1", net: "100000", vat: "0", gross: "100000" }, invoiceId: "invoice", paymentProofId: "proof", createdBy: user.id }], quotations: [], briefs: [], vendorPaymentMilestones: [] } } });
     const result = await loadActualCosts(projectId, user);
+    assert.ok(result);
     assert.equal(result.lines.length, 1);
     assert.equal(result.lines[0].source, "legacy");
     assert.equal(result.lines[0].reviewState, "needsReview");
