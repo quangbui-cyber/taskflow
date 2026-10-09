@@ -112,6 +112,69 @@ test("actual-cost integration: create, submit, return, resubmit and approve are 
     );
     assert.equal(await prisma.actualCostApproval.count({ where: { projectId, action: "APPROVED" } }), 1);
     assert.equal(await prisma.costFlowCash.count({ where: { projectId } }), 0);
+
+    const replacementDd = await createUser("replacement-dd");
+    await prisma.projectMember.create({ data: { projectId, userId: replacementDd.id } });
+    const replacementForm = new FormData();
+    replacementForm.set("command", "GRANT_APPROVAL_ROLE");
+    replacementForm.set("userId", replacementDd.id);
+    replacementForm.set("approvalRole", "AC_DD");
+    const { executeWorkflow } = await import("../lib/workflow/service");
+    await executeWorkflow(admin, replacementForm, null);
+    assert.deepEqual(
+      await prisma.workflowRoleGrant.findMany({ where: { role: "AC_DD", revokedAt: null }, select: { userId: true } }),
+      [{ userId: replacementDd.id }],
+      "Admin replacement keeps exactly one active company DD",
+    );
+    await assert.rejects(
+      () => prisma.workflowRoleGrant.create({ data: { userId: dd.id, role: "AC_DD", grantedById: admin.id } }),
+      /Unique constraint failed/,
+      "the partial unique index rejects a second active AC_DD",
+    );
+
+    const notificationFailure = await executeActualCostCommand(member, {
+      command: "CREATE_AND_SUBMIT",
+      projectId,
+      stableLineId: `${prefix}-notification-durable`,
+      revisionId: `${prefix}-revision`,
+      icLineId: `${prefix}-ic-line`,
+      recipientKey: `USER:${member.id}`,
+      description: "AC survives notification failure",
+      fundingSource: "EMPLOYEE_ADVANCE",
+      quantity: "1",
+      days: "1",
+      unitPrice: "50000",
+    }, { notify: async () => { throw new Error("synthetic notification outage"); } });
+    assert.equal(await prisma.actualCostVersion.count({ where: { id: notificationFailure.versionId, state: "SUBMITTED" } }), 1, "durable event survives notification failure");
+    const beforeOldDd = await prisma.actualCostApproval.count({ where: { lineId: notificationFailure.lineId } });
+    await assert.rejects(
+      () => executeActualCostCommand(dd, { command: "DECIDE", projectId, lineId: notificationFailure.lineId, version: 1, action: "APPROVED", reason: "Old DD" }),
+      /AC_DD/,
+    );
+    assert.equal(await prisma.actualCostApproval.count({ where: { lineId: notificationFailure.lineId } }), beforeOldDd, "stale DD writes no decision");
+    await executeActualCostCommand(replacementDd, { command: "DECIDE", projectId, lineId: notificationFailure.lineId, version: 1, action: "APPROVED", reason: "Replacement DD approved" });
+
+    await prisma.workflowRoleGrant.updateMany({ where: { role: "AC_DD", revokedAt: null }, data: { revokedAt: new Date() } });
+    const missingDdLine = await executeActualCostCommand(member, {
+      command: "CREATE_AND_SUBMIT",
+      projectId,
+      stableLineId: `${prefix}-missing-dd`,
+      revisionId: `${prefix}-revision`,
+      icLineId: `${prefix}-ic-line`,
+      recipientKey: `USER:${member.id}`,
+      description: "AC waits when DD is missing",
+      fundingSource: "EMPLOYEE_ADVANCE",
+      quantity: "1",
+      days: "1",
+      unitPrice: "25000",
+    });
+    const beforeMissingDd = await prisma.actualCostApproval.count({ where: { lineId: missingDdLine.lineId } });
+    await assert.rejects(
+      () => executeActualCostCommand(replacementDd, { command: "DECIDE", projectId, lineId: missingDdLine.lineId, version: 1, action: "APPROVED", reason: "No active DD" }),
+      /duy nhất một AC_DD/,
+    );
+    assert.equal(await prisma.actualCostApproval.count({ where: { lineId: missingDdLine.lineId } }), beforeMissingDd, "missing DD writes no decision");
+    await executeWorkflow(admin, replacementForm, null);
   } finally {
     if (projectId) {
       await prisma.actualCostApplication.deleteMany({ where: { projectId } });

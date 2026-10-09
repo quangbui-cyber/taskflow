@@ -60,8 +60,9 @@ async function assertProjectActor(tx: Prisma.TransactionClient, projectId: strin
   const project = await tx.project.findUnique({ where: { id: projectId }, select: { id: true, ownerId: true, members: { select: { userId: true } } } });
   if (!project) throw new Error("Project không tồn tại.");
   const member = project.members.some(item => item.userId === activeActor.id);
-  if (!member && activeActor.role !== "ADMIN") throw new Error("Bạn không có quyền trên Project này.");
-  return { actor: activeActor, project, member };
+  const isDd = !!await tx.workflowRoleGrant.findFirst({ where: { userId: activeActor.id, role: "AC_DD", revokedAt: null }, select: { id: true } });
+  if (!member && activeActor.role !== "ADMIN" && !isDd) throw new Error("Bạn không có quyền trên Project này.");
+  return { actor: activeActor, project, member, isDd };
 }
 
 async function resolveIcSource(tx: Prisma.TransactionClient, projectId: string, revisionId: string, icLineId: string) {
@@ -102,7 +103,11 @@ async function assertRecipient(tx: Prisma.TransactionClient, projectId: string, 
   throw new Error("Chọn người nhận hoặc NCC hợp lệ.");
 }
 
-export async function executeActualCostCommand(actor: ActualCostActor, command: ActualCostCommand) {
+export async function executeActualCostCommand(
+  actor: ActualCostActor,
+  command: ActualCostCommand,
+  options: { notify?: (input: { userId: string; message: string; projectId: string; dedupeKey: string }) => Promise<void> } = {},
+) {
   const result = await prisma.$transaction(async tx => {
     const context = await assertProjectActor(tx, command.projectId, actor);
 
@@ -231,15 +236,16 @@ export async function executeActualCostCommand(actor: ActualCostActor, command: 
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15000 });
 
   if (result.notificationUserId) {
-    await prisma.notification.create({
-      data: {
-        dedupeKey: `actual-cost:${result.lineId}:${result.version}:${result.action ?? "SUBMITTED"}`,
-        userId: result.notificationUserId,
-        type: "costflow",
-        message: result.notificationMessage,
-        projectId: command.projectId,
-      },
-    }).catch(() => undefined);
+    const notification = {
+      dedupeKey: `actual-cost:${result.lineId}:${result.version}:${result.action ?? "SUBMITTED"}`,
+      userId: result.notificationUserId,
+      message: result.notificationMessage,
+      projectId: command.projectId,
+    };
+    await (options.notify
+      ? options.notify(notification)
+      : prisma.notification.create({ data: { ...notification, type: "costflow" } }).then(() => undefined)
+    ).catch(() => undefined);
   }
   return {
     lineId: result.lineId,
