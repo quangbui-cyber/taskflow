@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { ProjectUpload } from "@/lib/projectFiles";
+import { authorizeSettlementCash } from "./paymentSettlement";
 
 type Actor = { id: string; role: string };
 type AllocationInput = { requestLineId: string; amount: string };
@@ -58,7 +59,7 @@ async function executeOnce(projectId: string, expectedVersion: number, actor: Ac
     const allocations = parseAllocations(form);
     const occurredAt = new Date(required(text(form, "occurredAt"), "thời điểm giao dịch"));
     if (!Number.isFinite(occurredAt.getTime())) throw new Error("Thời điểm giao dịch không hợp lệ.");
-    if (direction !== "OUT") throw new Error("Thu hoàn sau AC chưa khả dụng cho đến khi Phase 8 cung cấp AC đã duyệt.");
+    if (!new Set(["OUT", "IN"]).has(direction)) throw new Error("Chiều giao dịch không hợp lệ.");
     if (!new Set(["BANK_TRANSFER", "CASH", "OTHER"]).has(channel)) throw new Error("Hình thức giao dịch không hợp lệ.");
 
     const currentActor = await tx.user.findFirst({ where: { id: actor.id, isActive: true }, select: { role: true } });
@@ -68,7 +69,13 @@ async function executeOnce(projectId: string, expectedVersion: number, actor: Ac
       include: { paymentRecipients: true, paymentLines: true },
     });
     if (!request || request.state !== "APPROVED" || request.cashAssigneeId !== actor.id) throw new Error("Chỉ người được giao xử lý tiền cho hồ sơ đã duyệt mới xác nhận tiền.");
-    if (request.kind !== "ADVANCE") throw new Error("Thanh toán/hoàn ứng sau AC chưa khả dụng cho đến khi Phase 8 cung cấp AC đã duyệt.");
+    if (!new Set(["ADVANCE", "VENDOR_PAYMENT", "REIMBURSEMENT"]).has(request.kind)) throw new Error("Loại hồ sơ không hỗ trợ giao dịch tiền.");
+    if (request.kind === "ADVANCE" && direction !== "OUT") throw new Error("Đề nghị tạm ứng chỉ cho phép giao dịch OUT.");
+    if (request.kind === "VENDOR_PAYMENT" && direction !== "OUT") throw new Error("Thanh toán NCC chỉ cho phép giao dịch OUT.");
+    if (request.kind === "REIMBURSEMENT") {
+      const payload = request.payload && typeof request.payload === "object" ? request.payload as Record<string, unknown> : {};
+      authorizeSettlementCash({ direction: direction as "IN" | "OUT", amount: amount.toString(), refundDue: String(payload.refund ?? "0"), additionalDue: String(payload.additional ?? "0"), ordinaryApproved: request.state === "APPROVED" });
+    }
     const recipient = request.paymentRecipients.find(item => item.recipientKey === recipientKey);
     if (!recipient) throw new Error("Người nhận không thuộc phiên bản hồ sơ đã duyệt.");
 
@@ -99,7 +106,7 @@ async function executeOnce(projectId: string, expectedVersion: number, actor: Ac
     const allocationTotal = allocations.reduce((sum, item) => sum + exactVnd(item.amount, "số tiền phân bổ"), BigInt(0));
     if (allocationTotal !== amount) throw new Error("Tổng phân bổ phải bằng đúng số tiền giao dịch.");
 
-    const prior = await tx.costFlowCashAllocation.findMany({ where: { projectId, requestId, recipientKey, direction: "OUT" } });
+    const prior = await tx.costFlowCashAllocation.findMany({ where: { projectId, requestId, recipientKey, direction } });
     const paidByLine = new Map<string, bigint>();
     for (const item of prior) paidByLine.set(item.requestLineId, (paidByLine.get(item.requestLineId) ?? BigInt(0)) + BigInt(item.amount));
     for (const allocation of allocations) {

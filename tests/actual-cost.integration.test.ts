@@ -160,6 +160,27 @@ test("actual-cost integration: create, submit, return, resubmit and approve are 
     assert.deepEqual(await prisma.actualCostApproval.findFirst({ where: { projectId, lineId: created.lineId, action: "APPROVED" }, select: { warningCodes: true } }).then(item => item?.warningCodes), ["MISSING_ACCEPTANCE_HANDOVER", "MISSING_VAT_INVOICE", "MISSING_PAYMENT_PROOF"]);
     assert.equal(await prisma.costFlowCash.count({ where: { projectId } }), 0);
 
+    const createdApproval = await prisma.actualCostApproval.findFirstOrThrow({ where: { lineId: created.lineId, action: "APPROVED" } });
+    const unbudgetedApproval = await prisma.actualCostApproval.findFirstOrThrow({ where: { lineId: unbudgeted.lineId, action: "APPROVED" } });
+    const { resolveProductionApprovedActualCost } = await import("../lib/costflow/approvedActualCost");
+    const resolvedApproved = await resolveProductionApprovedActualCost({ projectId, lineIds: [
+      `${prefix}-stable-line`, `${prefix}-unbudgeted`,
+    ], lineRefs: [
+      { stableLineId: `${prefix}-stable-line`, versionId: resubmitted.versionId, approvalEventId: createdApproval.id, approvalAttemptId: createdApproval.attemptId },
+      { stableLineId: `${prefix}-unbudgeted`, versionId: unbudgeted.versionId, approvalEventId: unbudgetedApproval.id, approvalAttemptId: unbudgetedApproval.attemptId },
+    ] });
+    assert.deepEqual(resolvedApproved.map(line => line.stableLineId).sort(), [`${prefix}-stable-line`, `${prefix}-unbudgeted`].sort(), "independently approved lines retain per-line provenance");
+    await assert.rejects(() => resolveProductionApprovedActualCost({ projectId, versionId: resubmitted.versionId, approvalEventId: unbudgetedApproval.id, approvalAttemptId: createdApproval.attemptId, lineIds: [`${prefix}-stable-line`] }), /không khớp|chưa có đủ/);
+
+    const consumingRequest = await prisma.workflowRequest.create({ data: { projectId, module: "COSTFLOW", kind: "REIMBURSEMENT", title: `${prefix} settlement`, creatorId: member.id, cashAssigneeId: member.id, state: "SUBMITTED", steps: [], payload: {} } });
+    const application = await prisma.actualCostApplication.create({ data: { projectId, lineId: created.lineId, versionId: resubmitted.versionId, approvalId: createdApproval.id, requestId: consumingRequest.id, recipientKey: `USER:${member.id}`, amount: resubmitted.amount, createdById: member.id } });
+    const lateBytes = new TextEncoder().encode("locked evidence");
+    await assert.rejects(() => attachActualCostEvidence(member, { projectId, lineId: created.lineId, expectedVersion: 2, kind: "FIELD_PHOTO_REPORT" }, [{ name: "locked.txt", mimeType: "text/plain", size: lateBytes.byteLength, data: lateBytes }]), /đã bị khóa/);
+    await prisma.workflowRequest.update({ where: { id: consumingRequest.id }, data: { state: "CANCELLED" } });
+    await prisma.actualCostApplication.update({ where: { id: application.id }, data: { state: "RELEASED", releasedAt: new Date() } });
+    const unlocked = await attachActualCostEvidence(member, { projectId, lineId: created.lineId, expectedVersion: 2, kind: "FIELD_PHOTO_REPORT" }, [{ name: "released.txt", mimeType: "text/plain", size: lateBytes.byteLength, data: lateBytes }]);
+    assert.equal(unlocked.version, 3, "valid cancellation release unlocks a new immutable manifest version");
+
     const replacementDd = await createUser("replacement-dd");
     await prisma.projectMember.create({ data: { projectId, userId: replacementDd.id } });
     const replacementForm = new FormData();
@@ -254,6 +275,7 @@ test("actual-cost integration: create, submit, return, resubmit and approve are 
       await prisma.actualCostVersion.deleteMany({ where: { projectId } });
       await prisma.actualCostLine.deleteMany({ where: { projectId } });
       await prisma.costFlowEvidence.deleteMany({ where: { projectId } });
+      await prisma.workflowRequest.deleteMany({ where: { projectId, title: { startsWith: prefix } } });
       await prisma.workflowRoleGrant.deleteMany({ where: { userId: { in: userIds }, role: "AC_DD" } });
       await prisma.costFlowWorkspace.deleteMany({ where: { projectId } });
       await prisma.project.deleteMany({ where: { id: projectId, name: prefix } });

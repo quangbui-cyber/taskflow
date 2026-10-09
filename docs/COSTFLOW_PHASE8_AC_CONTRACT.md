@@ -1,6 +1,6 @@
 # Phase 8 approved-AC producer contract
 
-Phase 7 consumes approved actual-cost facts but does not own their authoritative persistence. Production binding remains deliberately unavailable until Phase 8 implements this producer. Invoice/payment-proof completeness, an expense row, or a browser flag is never approval.
+Phase 7 consumes approved actual-cost facts but does not own their authoritative persistence. Phase 8 now provides the production DB binding over normalized AC lines, immutable versions and DD approval decisions. Invoice/payment-proof completeness, a legacy expense row, or a browser flag is never approval.
 
 ## Producer output
 
@@ -15,9 +15,10 @@ Phase 7 consumes approved actual-cost facts but does not own their authoritative
 | `approvalState` | Literal `APPROVED`; returned, rejected, withdrawn, cancelled or draft data is invalid. |
 | `stableLineId` | Stable AC line identity inside the immutable version. All requested IDs must resolve exactly once. |
 | `recipientKey` | Authoritative employee/vendor recipient for the approved actual line. |
+| `fundingSource` | Persisted funding route: employee/vendor advance, employee out-of-pocket or vendor payment. |
 | `approvedAmount` | Positive integer VND actual amount approved for that line. |
 
-The query contains `projectId`, `versionId`, `approvalEventId`, `approvalAttemptId` and unique `lineIds`. The producer must not accept browser-provided role, recipient, amount or approval status as authority. It must re-resolve all ownership and approval facts from persisted server state.
+The query accepts the original shared tuple (`versionId`, `approvalEventId`, `approvalAttemptId`, unique `lineIds`) and the backward-compatible per-line `lineRefs` form for lines approved independently. The producer does not accept browser-provided role, recipient, amount, funding route or approval status as authority; all facts are re-resolved from persisted server state.
 
 ## Freshness and ownership rules
 
@@ -25,25 +26,19 @@ The query contains `projectId`, `versionId`, `approvalEventId`, `approvalAttempt
 - The approval event and attempt must belong to the same Project and version, be current for that immutable submission, and represent final authoritative approval.
 - Every requested stable line must belong to that version and Project. Missing, duplicated, foreign or stale lines fail the complete request; partial resolution is not allowed.
 - Recipient identity comes from the approved line snapshot. Cross-recipient settlement or advance application is rejected.
-- Phase 8 must define how superseded/revoked AC approval becomes unavailable without rewriting Phase 7 cash history.
+- A submitted settlement creates an `ActualCostApplication`. Active applications lock resubmission and evidence mutation; a valid withdrawal or approved no-cash cancellation releases the lock without rewriting cash history.
 
-## Consumer behavior already present
+## Implemented consumer behavior
 
-Phase 7 validates the producer output in `lib/costflow/approvedActualCost.ts`, calculates selected-source settlement without FIFO, and rejects cross-Project, cross-recipient, duplicate or over-consumed advance sources. The Account selects exact advance sources and amounts; evidence does not select or approve them.
+The production resolver in `lib/costflow/approvedActualCost.ts` requires an exact Project/line/version/event/attempt match and a persisted `APPROVED` version. Partial, legacy, draft, returned, stale and duplicated sets fail atomically.
 
-The 10m advance → 8m approved actual = 2m refund and 10m → 12m = 2m additional payment cases currently have pure, test-only contract proof through `ApprovedAcConsumerFixture`. That fixture is never imported by production code.
+Settlement re-resolves Account-selected advance line IDs, gross OUT cash and previously applied amounts in the same serializable transaction. It does not apply FIFO. Employee/vendor advances require explicit eligible sources; employee out-of-pocket routes to reimbursement/additional OUT; vendor-payment AC routes to the vendor obligation. Creating or approving AC and creating a settlement request never imply cash or financial close.
 
-## Required Phase 8 proof before enabling production actions
+Refund IN and additional OUT are authorized only against the exact server-derived obligation. The 10m advance → 8m approved actual = 2m refund and 10m → 12m = 2m additional-payment paths are covered by guarded DB integration tests using persisted AC approvals, advance lines, cash allocations and application locks. `ApprovedAcConsumerFixture` remains test-only and is not imported by production code.
 
-Phase 8, or a gap plan after Phase 8, owns:
+## Verification boundary
 
-1. Persisted approved AC versions, events/attempts and stable lines with the fields above.
-2. A production `ApprovedActualCostConsumer` binding with transaction-safe stale and ownership checks.
-3. Atomic advance application persistence and replay/concurrency protection.
-4. Real refund IN and ordinary-approved additional OUT authorization and cash recording.
-5. Guarded DB tests plus authenticated desktop/390px browser proof for both 10m/8m and 10m/12m flows.
-
-Until those gates pass, `PAYMENT`, `ADVANCE_SETTLEMENT`, refund and additional-payment controls remain fail closed. Local Phase 7 tests are not evidence of company accounting acceptance, pilot acceptance, deployment or production readiness.
+This is local technical evidence only. It does not establish authenticated desktop/390px acceptance, company accounting acceptance, pilot acceptance, deployment or production readiness. Those remain separate Phase 8 verification and human-acceptance gates.
 
 ## PAY-06 boundary
 

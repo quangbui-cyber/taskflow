@@ -31,6 +31,7 @@ export type ActualCostReadLine = {
   revisionId: string | null;
   icLineId: string | null;
   createdById: string | null;
+  lockedByApplications: boolean;
   decisionReason: string;
   acknowledgedWarningCodes: string[];
   missingEvidenceWarnings: string[];
@@ -62,6 +63,7 @@ export async function loadActualCosts(projectId: string, actor: Actor) {
     prisma.actualCostLine.findMany({
       where: { projectId },
       include: {
+        applications: { where: { state: "ACTIVE", request: { state: { notIn: ["WITHDRAWN", "REJECTED", "CANCELLED"] } } }, select: { id: true } },
         versions: {
           orderBy: { version: "desc" },
           take: 1,
@@ -111,6 +113,7 @@ export async function loadActualCosts(projectId: string, actor: Actor) {
       revisionId: line.icRevisionId,
       icLineId: line.icLineId,
       createdById: line.createdById,
+      lockedByApplications: line.applications.length > 0,
       decisionReason: decision?.reason ?? "",
       acknowledgedWarningCodes: Array.isArray(decision?.warningCodes) ? decision.warningCodes.filter((value): value is string => typeof value === "string") : [],
       missingEvidenceWarnings: actualCostEvidenceWarnings(version.evidenceLinks.map(link => link.kind)),
@@ -148,6 +151,7 @@ export async function loadActualCosts(projectId: string, actor: Actor) {
       saleSnapshot: null,
       revisionId: line.revisionId,
       createdById: null,
+      lockedByApplications: false,
       decisionReason: "",
       acknowledgedWarningCodes: [],
       missingEvidenceWarnings: [],

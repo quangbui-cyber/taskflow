@@ -39,7 +39,9 @@ test("payment UI: cash and post-AC meanings stay separate and fail closed", () =
   assert.match(cash, /Gross tạm ứng OUT/);
   assert.match(cash, /một người nhận/);
   assert.match(cash, /Hoàn IN, chi thêm OUT, net cash, approved actual và đóng tài chính/);
-  assert.match(settlement, /Approved AC producer unavailable until Phase 8/);
+  assert.match(settlement, /AC đã duyệt/);
+  assert.match(settlement, /Hoàn IN hoặc chi thêm OUT đúng phần chênh lệch/);
+  assert.match(settlement, /duyệt hồ sơ và cash vẫn là các trục riêng/);
   assert.match(settlement, /không FIFO/);
   assert.doesNotMatch(settlement, /command=/);
 });

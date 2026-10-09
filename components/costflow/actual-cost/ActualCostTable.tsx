@@ -47,6 +47,7 @@ export default function ActualCostTable({ actualCosts }: { actualCosts: ActualCo
                   <div className="font-medium text-[var(--foreground)]">{line.description}</div>
                   <div className="mt-1 text-[var(--text-secondary)]">{line.unit}</div>
                   {line.sourceKind === "UNBUDGETED" && <Badge tone="warning">[Phát sinh ngoài IC]</Badge>}
+                  {line.lockedByApplications && <div className="mt-1"><Badge tone="neutral">Đã khóa · đang dùng cho settlement</Badge></div>}
                   {line.billable && <div className="mt-1 text-[var(--info)]">Thu thêm từ khách</div>}
                 </td>
                 <td className="px-2 py-3 text-right">{firstOccurrence ? comparison?.ic?.quantity ?? "—" : "↳"}</td>

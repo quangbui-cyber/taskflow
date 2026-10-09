@@ -225,6 +225,7 @@ export async function executeActualCostCommand(
 
     if (command.command === "RESUBMIT") {
       if (!context.member || line.createdById !== context.actor.id) throw new Error("Chỉ người lập AC trong Project được gửi lại.");
+      if (await tx.actualCostApplication.count({ where: { lineId: line.id, state: "ACTIVE", request: { state: { notIn: ["WITHDRAWN", "REJECTED", "CANCELLED"] } } } })) throw new Error("AC đang được hồ sơ thanh toán/hoàn ứng sử dụng và đã bị khóa.");
       if (command.expectedVersion !== line.currentVersion) throw new Error("Phiên bản đã thay đổi. Tải lại trước khi gửi lại.");
       const nextVersion = nextActualCostVersion(line.currentVersion, current.state);
       const fundingSource = normalizeActualCostFundingSource(command.fundingSource);
@@ -344,6 +345,7 @@ export async function attachActualCostEvidence(
     });
     const current = line?.versions[0];
     if (!line || !current || line.currentVersion !== input.expectedVersion) throw new Error("Phiên bản AC đã thay đổi. Tải lại trước khi bổ sung chứng từ.");
+    if (await tx.actualCostApplication.count({ where: { lineId: line.id, state: "ACTIVE", request: { state: { notIn: ["WITHDRAWN", "REJECTED", "CANCELLED"] } } } })) throw new Error("AC đang được hồ sơ thanh toán/hoàn ứng sử dụng và đã bị khóa.");
     const evidence = await Promise.all(uploads.map(upload => tx.costFlowEvidence.create({
       data: {
         projectId: input.projectId,

@@ -1,5 +1,17 @@
 import type { ApprovedActualCostLine } from "./approvedActualCost";
 
+export function approvedActualSettlementRoute(lines: ApprovedActualCostLine[]) {
+  if (!lines.length) throw new Error("Cần AC đã duyệt để xác định đường settlement.");
+  const sources = new Set(lines.map(line => line.fundingSource));
+  if (sources.has("VENDOR_PAYMENT")) {
+    if (sources.size !== 1) throw new Error("AC thanh toán trực tiếp NCC không được trộn với nguồn settlement khác.");
+    return "VENDOR_PAYMENT" as const;
+  }
+  if (sources.has("VENDOR_ADVANCE") && [...sources].some(source => source.startsWith("EMPLOYEE_"))) throw new Error("Không được trộn nguồn tạm ứng NCC và nhân sự.");
+  if (sources.has("EMPLOYEE_ADVANCE") || sources.has("VENDOR_ADVANCE")) return "ADVANCE_SETTLEMENT" as const;
+  return "REIMBURSEMENT" as const;
+}
+
 export type AdvanceSourceSelection = {
   projectId: string;
   recipientKey: string;

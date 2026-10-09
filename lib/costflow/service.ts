@@ -2,8 +2,8 @@ import "server-only";
 import { randomUUID, createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { calculateCost, calculateLineCost, compare, decimal, round, sum } from "./money";
-import { closeBlockers, settlement } from "./reconciliation";
+import { calculateCost, calculateLineCost, compare, decimal } from "./money";
+import { closeBlockers } from "./reconciliation";
 import { emptyFinance, type FinanceData, type IcLine, type QuotationLine, type RequestPayload } from "./types";
 import { decide, validateSteps, type ApprovalStep, type Decision } from "@/lib/workflow/approval";
 import type { ProjectUpload } from "@/lib/projectFiles";
@@ -27,6 +27,7 @@ import { derivePaymentProgress } from "./paymentCash";
 import { projectPaymentLedger, type BeneficiaryVerification } from "./paymentReadModel";
 import { resolveProductionApprovedActualCost } from "./approvedActualCost";
 import { loadActualCosts } from "./actualCostReadModel";
+import { approvedActualSettlementRoute, calculateSelectedAdvanceSettlement, type AdvanceSourceSelection } from "./paymentSettlement";
 
 type Actor = { id: string; role: string };
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -290,6 +291,97 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         return { recipientKey: `VENDOR:${id}`, sourceVersion: beneficiary.version, proofId: beneficiary.proofId, proofSha256: proof.sha256 };
       });
       return { projection, evidenceById, vendorSnapshots };
+    };
+    const resolveApprovedActuals = async () => {
+      let lineRefs: { stableLineId: string; versionId: string; approvalEventId: string; approvalAttemptId: string }[] | undefined;
+      const rawRefs = text(form, "acLineRefs");
+      if (rawRefs) {
+        const parsed = JSON.parse(rawRefs) as unknown;
+        if (!Array.isArray(parsed)) throw new Error("Danh sách nguồn AC đã duyệt không hợp lệ.");
+        lineRefs = parsed.map(item => {
+          if (!item || typeof item !== "object") throw new Error("Nguồn AC đã duyệt không hợp lệ.");
+          const value = item as Record<string, unknown>;
+          return { stableLineId: String(value.stableLineId ?? ""), versionId: String(value.versionId ?? ""), approvalEventId: String(value.approvalEventId ?? ""), approvalAttemptId: String(value.approvalAttemptId ?? "") };
+        });
+      }
+      return resolveProductionApprovedActualCost({
+        projectId,
+        versionId: text(form, "acVersionId"),
+        approvalEventId: text(form, "acApprovalEventId"),
+        approvalAttemptId: text(form, "acApprovalAttemptId"),
+        lineIds: lineRefs?.map(ref => ref.stableLineId) ?? form.getAll("acLineIds").map(String).filter(Boolean),
+        lineRefs,
+      });
+    };
+    const applyActualCosts = async (requestId: string, approvedLines: Awaited<ReturnType<typeof resolveApprovedActuals>>) => {
+      for (const approved of approvedLines) {
+        if (!approved.lineId) throw new Error("Dòng AC đã duyệt thiếu định danh nguồn.");
+        const activeUse = await tx.actualCostApplication.findFirst({ where: { versionId: approved.versionId, state: "ACTIVE", request: { state: { notIn: ["WITHDRAWN", "REJECTED", "CANCELLED"] } } }, select: { id: true } });
+        if (activeUse) throw new Error("Dòng AC đã được một hồ sơ settlement đang hoạt động sử dụng.");
+        await tx.actualCostApplication.create({ data: {
+          projectId,
+          lineId: approved.lineId,
+          versionId: approved.versionId,
+          approvalId: approved.approvalEventId,
+          requestId,
+          recipientKey: approved.recipientKey,
+          amount: approved.approvedAmount,
+          createdById: actor.id,
+        } });
+      }
+    };
+    const resolveSelectedAdvances = async (recipientKey: string): Promise<AdvanceSourceSelection[]> => {
+      const raw = text(form, "selectedAdvances");
+      if (!raw) return [];
+      const parsed = JSON.parse(raw) as unknown;
+      if (!Array.isArray(parsed) || !parsed.length) throw new Error("Account phải chọn rõ nguồn tạm ứng; hệ thống không áp dụng FIFO.");
+      const requested = parsed.map(item => {
+        if (!item || typeof item !== "object") throw new Error("Nguồn tạm ứng được chọn không hợp lệ.");
+        const value = item as Record<string, unknown>;
+        const advanceLineId = String(value.advanceLineId ?? "");
+        const selectedAmount = String(value.selectedAmount ?? "");
+        if (!advanceLineId || !/^[1-9]\d*$/.test(selectedAmount)) throw new Error("Nguồn và số tiền tạm ứng được chọn phải hợp lệ.");
+        return { advanceLineId, selectedAmount };
+      });
+      if (new Set(requested.map(item => item.advanceLineId)).size !== requested.length) throw new Error("Nguồn tạm ứng bị chọn trùng hoặc đã tái sử dụng.");
+      const rows = await tx.paymentRequestLine.findMany({
+        where: { projectId, id: { in: requested.map(item => item.advanceLineId) } },
+        include: {
+          request: { select: { id: true, projectId: true, kind: true, state: true } },
+          cashAllocations: { where: { direction: "OUT" }, select: { amount: true } },
+          advanceApplications: { select: { amount: true } },
+        },
+      });
+      if (rows.length !== requested.length) throw new Error("Nguồn tạm ứng không thuộc Project hoặc không còn khả dụng.");
+      return requested.map(selection => {
+        const row = rows.find(candidate => candidate.id === selection.advanceLineId)!;
+        if (row.request.projectId !== projectId || row.request.kind !== "ADVANCE" || row.request.state !== "APPROVED") throw new Error("Chỉ được chọn dòng tạm ứng đã duyệt trong cùng Project.");
+        if (row.recipientKey !== recipientKey) throw new Error("Không được chọn nguồn tạm ứng chéo người nhận.");
+        return {
+          projectId,
+          recipientKey,
+          advanceRequestId: row.request.id,
+          advanceLineId: row.id,
+          grossOutAmount: row.cashAllocations.reduce((sum, allocation) => sum + BigInt(allocation.amount), BigInt(0)).toString(),
+          alreadyAppliedAmount: row.advanceApplications.reduce((sum, application) => sum + BigInt(application.amount), BigInt(0)).toString(),
+          selectedAmount: selection.selectedAmount,
+        };
+      });
+    };
+    const applySelectedAdvances = async (requestId: string, approvedLines: Awaited<ReturnType<typeof resolveApprovedActuals>>, sources: AdvanceSourceSelection[]) => {
+      if (!sources.length) return;
+      const expenseId = approvedLines.length === 1 ? approvedLines[0].stableLineId : `AC_SET:${requestId}`;
+      for (const source of sources) {
+        await tx.advanceApplication.create({ data: {
+          projectId,
+          advanceRequestId: source.advanceRequestId,
+          advanceLineId: source.advanceLineId,
+          expenseId,
+          recipientKey: source.recipientKey,
+          amount: source.selectedAmount,
+          createdBy: actor.id,
+        } });
+      }
     };
 
     switch (command) {
@@ -807,14 +899,8 @@ export async function executeFinance(projectId: string, expectedVersion: number,
       }
       case "PAYMENT":
       case "ADVANCE_SETTLEMENT": {
-        await resolveProductionApprovedActualCost({
-          projectId,
-          versionId: text(form, "acVersionId"),
-          approvalEventId: text(form, "acApprovalEventId"),
-          approvalAttemptId: text(form, "acApprovalAttemptId"),
-          lineIds: form.getAll("acLineIds").map(String).filter(Boolean),
-        });
-        throw new Error("Approved AC producer unavailable until Phase 8.");
+        await resolveApprovedActuals();
+        break;
       }
       case "CREATE_REQUEST": {
         const kind = text(form, "kind");
@@ -833,10 +919,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
           break;
         }
         if (!["ADVANCE", "VENDOR_PAYMENT", "REIMBURSEMENT"].includes(kind)) throw new Error("Loại hồ sơ không hợp lệ.");
-        if (["VENDOR_PAYMENT", "REIMBURSEMENT"].includes(kind)) {
-          await resolveProductionApprovedActualCost({ projectId, versionId: text(form, "acVersionId"), approvalEventId: text(form, "acApprovalEventId"), approvalAttemptId: text(form, "acApprovalAttemptId"), lineIds: form.getAll("acLineIds").map(String).filter(Boolean) });
-          throw new Error("Approved AC producer unavailable until Phase 8.");
-        }
+        const approvedActuals = ["VENDOR_PAYMENT", "REIMBURSEMENT"].includes(kind) ? await resolveApprovedActuals() : [];
         const key = await recipient(text(form, "recipientKey"));
         if (kind === "ADVANCE" && !key.startsWith("USER:")) throw new Error("Tạm ứng dành cho nhân viên.");
         if (kind === "VENDOR_PAYMENT" && !key.startsWith("VENDOR:")) throw new Error("Chi NCC cần người thụ hưởng NCC.");
@@ -844,26 +927,44 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         const revision = requireEffectiveIc(text(form, "revisionId"));
         const beneficiary = data.beneficiaries.find(b => `VENDOR:${b.id}` === key);
         const body: RequestPayload = { revisionId: revision.id, recipientKey: key, beneficiaryVersion: beneficiary?.version, explanation: text(form, "explanation"), lines: revision.lines, beneficiary: beneficiary ? { name: beneficiary.name, bank: beneficiary.bank, account: beneficiary.account } : undefined };
+        let selectedAdvances: AdvanceSourceSelection[] = [];
         if (kind === "REIMBURSEMENT") {
-          Object.assign(body, settlement(data, cash, key, { allowPendingAc: true }));
-          body.advance = round(sum(cash.filter(c => c.recipientKey === key && c.direction === "OUT" && requests.some(r => r.id === c.requestId && r.kind === "ADVANCE")).map(c => decimal(c.amount))));
+          if (approvedActuals.some(line => line.recipientKey !== key)) throw new Error("AC đã duyệt phải cùng người nhận của hồ sơ hoàn tạm ứng.");
+          const settlementRoute = approvedActualSettlementRoute(approvedActuals);
+          if (settlementRoute === "VENDOR_PAYMENT") throw new Error("AC chi trực tiếp NCC phải đi qua hồ sơ thanh toán NCC.");
+          if (approvedActuals.some(line => line.fundingSource.startsWith("EMPLOYEE_") && !key.startsWith("USER:"))) throw new Error("Nguồn AC nhân sự phải gắn người nhận nhân sự.");
+          if (approvedActuals.some(line => line.fundingSource === "VENDOR_ADVANCE" && !key.startsWith("VENDOR:"))) throw new Error("Nguồn AC tạm ứng NCC phải gắn đúng NCC.");
+          selectedAdvances = await resolveSelectedAdvances(key);
+          const needsAdvance = settlementRoute === "ADVANCE_SETTLEMENT";
+          if (needsAdvance && !selectedAdvances.length) throw new Error("Account phải chọn rõ nguồn tạm ứng; hệ thống không áp dụng FIFO.");
+          if (!needsAdvance && selectedAdvances.length) throw new Error("AC tự chi không được gắn nguồn tạm ứng.");
+          const settlement = selectedAdvances.length
+            ? calculateSelectedAdvanceSettlement({ projectId, recipientKey: key, approvedActualLines: approvedActuals, selectedAdvances })
+            : { selectedAdvanceLineIds: [], actualUsed: approvedActuals.reduce((total, line) => total + BigInt(line.approvedAmount), BigInt(0)).toString(), advanceApplied: "0", unusedOrRefundDue: "0", overspendOrAdditionalDue: approvedActuals.reduce((total, line) => total + BigInt(line.approvedAmount), BigInt(0)).toString() };
+          body.advance = settlement.advanceApplied;
+          body.advanceLineIds = settlement.selectedAdvanceLineIds;
+          body.actual = settlement.actualUsed;
+          body.refund = settlement.unusedOrRefundDue;
+          body.additional = settlement.overspendOrAdditionalDue;
           body.amount = body.additional !== "0" ? body.additional : body.refund;
-          body.evidenceIds = data.expenses.filter(e => body.expenseIds?.includes(e.id)).flatMap(e => [e.invoiceId, e.paymentProofId].filter(Boolean) as string[]);
+          body.expenseIds = approvedActuals.map(line => line.stableLineId);
         } else if (kind === "VENDOR_PAYMENT") {
-          body.amount = positive(text(form, "amount"));
-          const rawExpenseIds = text(form, "expenseIds");
-          if (rawExpenseIds) {
-            try {
-              const parsed = JSON.parse(rawExpenseIds);
-              if (Array.isArray(parsed) && parsed.length) {
-                body.expenseIds = parsed;
-                body.evidenceIds = data.expenses.filter(e => parsed.includes(e.id)).flatMap(e => [e.invoiceId, e.paymentProofId].filter(Boolean) as string[]);
-              }
-            } catch {}
-          }
+          if (approvedActuals.some(line => line.recipientKey !== key)) throw new Error("AC đã duyệt phải cùng NCC của hồ sơ thanh toán.");
+          if (approvedActualSettlementRoute(approvedActuals) !== "VENDOR_PAYMENT") throw new Error("Hồ sơ thanh toán NCC chỉ nhận AC nguồn VENDOR_PAYMENT.");
+          body.amount = approvedActuals.reduce((total, line) => total + BigInt(line.approvedAmount), BigInt(0)).toString();
+          body.expenseIds = approvedActuals.map(line => line.stableLineId);
         } else body.amount = positive(text(form, "amount"));
         if (kind === "ADVANCE" && requests.some(r => r.kind === "ADVANCE" && (r.payload as RequestPayload).recipientKey === key && !["WITHDRAWN", "REJECTED", "CANCELLED"].includes(r.state))) requireValue(body.explanation ?? "", "giải trình tạm ứng bổ sung");
         const saved = await createRequest(kind, body, await ordinarySteps());
+        if (approvedActuals.length) {
+          await applyActualCosts(saved.id, approvedActuals);
+          await applySelectedAdvances(saved.id, approvedActuals, selectedAdvances);
+          const recipientType = key.startsWith("VENDOR:") ? "VENDOR" : "EMPLOYEE";
+          const displayName = recipientType === "VENDOR" ? data.beneficiaries.find(item => `VENDOR:${item.id}` === key)?.name ?? "NCC" : (await tx.user.findUnique({ where: { id: key.slice(5) }, select: { name: true } }))?.name ?? "Nhân sự";
+          await tx.paymentRecipientSnapshot.create({ data: { projectId, requestId: saved.id, recipientKey: key, recipientType, displayName, totalAmount: body.amount! } });
+          const source = await tx.actualCostLine.findUniqueOrThrow({ where: { id: approvedActuals[0].lineId! }, select: { icRevisionId: true, icLineId: true } });
+          await tx.paymentRequestLine.create({ data: { projectId, requestId: saved.id, stableKey: `settlement:${saved.id}`, position: 0, description: kind === "REIMBURSEMENT" ? "Đối soát AC đã duyệt" : "Thanh toán AC đã duyệt", amount: body.amount!, icRevisionId: source.icRevisionId ?? revision.id, icLineId: source.icLineId ?? revision.lines[0]?.id ?? "UNBUDGETED", sourceSnapshot: json({ approvedActualRefs: approvedActuals.map(line => ({ stableLineId: line.stableLineId, versionId: line.versionId, approvalEventId: line.approvalEventId, approvalAttemptId: line.approvalAttemptId })) }), recipientKey: key, evidenceManifest: json([]) } });
+        }
         if (beneficiary) {
           const original = await tx.costFlowEvidence.findUnique({ where: { id: beneficiary.proofId } });
           if (!original) throw new Error("Thiếu căn cứ người thụ hưởng.");
@@ -927,6 +1028,10 @@ export async function executeFinance(projectId: string, expectedVersion: number,
           if (revision && cash.some(c => (requests.find(r => r.id === c.requestId)?.payload as RequestPayload)?.revisionId === revision.id)) throw new Error("Đã chi theo IC này, không được hủy theo nhánh chưa chi.");
           if (revision) revision.effective = false;
           await tx.workflowRequest.update({ where: { id: target.id }, data: { state: "CANCELLED", version: { increment: 1 } } });
+          await tx.actualCostApplication.updateMany({ where: { requestId: target.id, state: "ACTIVE" }, data: { state: "RELEASED", releasedAt: new Date() } });
+          await tx.advanceApplication.deleteMany({ where: { expenseId: `AC_SET:${target.id}` } });
+          const targetActuals = await tx.actualCostApplication.findMany({ where: { requestId: target.id }, select: { line: { select: { stableLineId: true } } } });
+          await tx.advanceApplication.deleteMany({ where: { expenseId: { in: targetActuals.map(item => item.line.stableLineId) }, projectId } });
         }
         if (request.kind === "IC") {
           const revision = data.revisions.find(r => r.requestId === request.id);
@@ -942,6 +1047,11 @@ export async function executeFinance(projectId: string, expectedVersion: number,
           ? [request.creatorId, steps.find(step => step.role === "MANAGER")?.assigneeId, steps.find(step => step.role === "ACCOUNTANT")?.assigneeId].filter((id): id is string => !!id)
           : [];
         if ((await tx.workflowRequest.updateMany({ where: { id: request.id, version: request.version }, data: { ...next, currentStepArrivedAt: next.state === "SUBMITTED" && action === "APPROVE" ? new Date() : next.state === "SUBMITTED" ? request.currentStepArrivedAt : null, version: { increment: 1 } } })).count !== 1) throw new Error("Dữ liệu đã thay đổi. Tải lại trang trước khi thao tác.");
+        if (action === "WITHDRAW" && next.state === "WITHDRAWN") {
+          const requestActuals = await tx.actualCostApplication.findMany({ where: { requestId: request.id }, select: { line: { select: { stableLineId: true } } } });
+          await tx.actualCostApplication.updateMany({ where: { requestId: request.id, state: "ACTIVE" }, data: { state: "RELEASED", releasedAt: new Date() } });
+          await tx.advanceApplication.deleteMany({ where: { projectId, OR: [{ expenseId: `AC_SET:${request.id}` }, { expenseId: { in: requestActuals.map(item => item.line.stableLineId) } }] } });
+        }
         await tx.workflowDecision.create({ data: { requestId: request.id, version: request.version + 1, step: request.currentStep, actorId: actor.id, action, reason: text(form, "reason") } });
         const decisionDetails = corrections.length || vendorChecks.length ? json({ ...(corrections.length ? { correctionItems: corrections } : {}), ...(vendorChecks.length ? { vendorChecks } : {}) }) : undefined;
         await recordApprovalEvent(tx, { requestId: request.id, module: request.module, attemptId: request.currentAttemptId, submittedVersion, mutationVersion: request.version + 1, stepIndex: request.currentStep, role: role ?? "CREATOR", actorId: actor.id, action, reason: text(form, "reason"), details: decisionDetails, recipients: ceoRecipients.length ? ceoRecipients : nextAssignee ? [nextAssignee] : [] });

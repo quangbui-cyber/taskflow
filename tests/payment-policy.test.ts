@@ -5,7 +5,7 @@ import { projectPaymentDossiers } from "../lib/costflow/paymentCompatibility";
 import type { PaymentDraftInput } from "../lib/costflow/paymentTypes";
 import { derivePaymentProgress } from "../lib/costflow/paymentCash";
 import { validateApprovedActualCostLines } from "../lib/costflow/approvedActualCost";
-import { authorizeSettlementCash, calculateSelectedAdvanceSettlement } from "../lib/costflow/paymentSettlement";
+import { approvedActualSettlementRoute, authorizeSettlementCash, calculateSelectedAdvanceSettlement } from "../lib/costflow/paymentSettlement";
 import { ApprovedAcConsumerFixture } from "./fixtures/approved-ac-consumer-fixture";
 
 const projectId = "project-phase-7";
@@ -180,7 +180,15 @@ test("payment-cash: canonical 75m sequence derives cash progress independently",
 });
 
 const acQuery = { projectId, versionId: "ac-v2", approvalEventId: "event-approved", approvalAttemptId: "attempt-2", lineIds: ["ac-line"] };
-const acLine = { ...acQuery, approvalState: "APPROVED" as const, stableLineId: "ac-line", recipientKey: "USER:employee", approvedAmount: "8000000" };
+const acLine = { ...acQuery, approvalState: "APPROVED" as const, stableLineId: "ac-line", recipientKey: "USER:employee", fundingSource: "EMPLOYEE_ADVANCE" as const, approvedAmount: "8000000" };
+
+test("payment-policy: four approved AC funding sources route without collapsing approval into cash", () => {
+  assert.equal(approvedActualSettlementRoute([{ ...acLine, fundingSource: "EMPLOYEE_ADVANCE" }]), "ADVANCE_SETTLEMENT");
+  assert.equal(approvedActualSettlementRoute([{ ...acLine, recipientKey: "VENDOR:vendor", fundingSource: "VENDOR_ADVANCE" }]), "ADVANCE_SETTLEMENT");
+  assert.equal(approvedActualSettlementRoute([{ ...acLine, fundingSource: "EMPLOYEE_OUT_OF_POCKET" }]), "REIMBURSEMENT");
+  assert.equal(approvedActualSettlementRoute([{ ...acLine, recipientKey: "VENDOR:vendor", fundingSource: "VENDOR_PAYMENT" }]), "VENDOR_PAYMENT");
+  assert.throws(() => approvedActualSettlementRoute([{ ...acLine, fundingSource: "VENDOR_PAYMENT" }, { ...acLine, stableLineId: "other", fundingSource: "EMPLOYEE_ADVANCE" }]), /không được trộn/i);
+});
 
 test("payment-policy: ApprovedAcConsumerFixture selects newer advance without FIFO", async () => {
   const consumer = new ApprovedAcConsumerFixture([acLine]);
