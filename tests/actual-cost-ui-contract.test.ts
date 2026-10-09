@@ -72,3 +72,37 @@ test("customer acceptance UI keeps sales actuals and billable additions explicit
   assert.match(component, /customer-acceptance\/xlsx/);
   assert.match(panel, /CustomerAcceptanceExport/);
 });
+
+test("actual cost operational UI keeps desktop, 390px mobile and atomic DD bulk controls", () => {
+  const table = source("components/costflow/actual-cost/ActualCostTable.tsx");
+  const editor = source("components/costflow/actual-cost/ActualCostEditor.tsx");
+  const css = source("app/modules.css");
+  for (const label of ["Theo dòng IC", "Theo NCC", "Theo nhân sự", "DRAFT / needsReview", "SUBMITTED", "APPROVED", "RETURNED", "Tìm Actual Cost"]) assert.match(table, new RegExp(label));
+  for (const field of ["IC GROSS", "AC GROSS", "Chênh lệch", "Khối lượng AC", "Chứng từ", "Mở chi tiết & thao tác"]) assert.match(table, new RegExp(field));
+  assert.match(table, /<Table caption=/);
+  assert.match(table, /scope="col"/);
+  assert.match(table, /scope="row"/);
+  assert.match(table, /BULK_DECIDE/);
+  assert.match(table, /bulkSelection/);
+  assert.match(editor, /actual-cost-detail-/);
+  assert.match(css, /\.tf-ac-desktop/);
+  assert.match(css, /\.tf-ac-mobile/);
+  assert.match(css, /@media \(max-width: 767px\)/);
+  assert.match(css, /overflow-x: auto/);
+  assert.match(css, /min-height: 44px/);
+  assert.doesNotMatch(table, /Tổng số lượng/);
+});
+
+test("customer accounting UI labels AR, AC, margin and cash axes separately at mobile", () => {
+  const liquidation = source("components/costflow/customer/CustomerLiquidationPanel.tsx");
+  const acceptance = source("components/costflow/customer/CustomerAcceptanceExport.tsx");
+  const css = source("app/modules.css");
+  for (const label of ["Doanh thu Net thanh lý", "Đã thu từ khách", "Khách còn nợ", "AC Net phát sinh", "Margin thực tế"]) assert.match(liquidation, new RegExp(label));
+  assert.match(liquidation, /AR cash-in · gross, không phải tiền chi/);
+  assert.match(liquidation, /Chế độ chỉ đọc/);
+  assert.match(acceptance, /Mặc định không chọn/);
+  assert.match(acceptance, /snapshotId=/);
+  assert.match(css, /\.tf-customer-accounting-grid/);
+  assert.match(css, /grid-template-columns: minmax\(0,1fr\)/);
+  assert.match(css, /@media \(pointer: coarse\)/);
+});
