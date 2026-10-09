@@ -77,8 +77,9 @@ test("preview and apply preserve manual and overridden fields and keep sell and 
   const computed = blankPairedRow("computed");
   computed.name = "Computed";
   computed.sell.quantity = "100";
+  computed.sell.days = "2";
   computed.sell.unitPrice = "10";
-  computed.sell.parameterBinding = { mode: "PARAMETER", moduleId: "team", quantityFormula: { op: "PARAM", key: "participants" }, lastCalculated: { quantity: "100" } };
+  computed.sell.parameterBinding = { mode: "PARAMETER", moduleId: "team", quantityFormula: { op: "PARAM", key: "participants" }, daysFormula: { op: "PARAM", key: "factor" }, lastCalculated: { quantity: "100", days: "2" } };
   computed.buy.quantity = "7";
   computed.buy.unitPrice = "4";
   const manual = blankPairedRow("manual");
@@ -93,11 +94,13 @@ test("preview and apply preserve manual and overridden fields and keep sell and 
   const rows = normalizePairedRows([computed, manual, overridden]);
   const proposed = snapshot();
   proposed.sharedValues.participants = "120";
+  proposed.sharedValues.factor = "3";
   const preview = previewParameterImpact(rows, snapshot(), proposed);
-  assert.deepEqual(preview.affected.map(item => [item.rowId, item.side, item.field, item.oldValue, item.newValue]), [["computed", "sell", "quantity", "100", "120"]]);
+  assert.deepEqual(preview.affected.map(item => [item.rowId, item.side, item.field, item.oldValue, item.newValue]), [["computed", "sell", "quantity", "100", "120"], ["computed", "sell", "days", "2", "3"]]);
   assert.equal(rows[0].sell.quantity, "100", "preview must be pure");
   const applied = applyParameterImpact(rows, snapshot(), preview);
   assert.equal(applied.rows[0].sell.quantity, "120");
+  assert.equal(applied.rows[0].sell.days, "3");
   assert.equal(applied.rows[0].buy.quantity, "7");
   assert.equal(applied.rows[1].sell.quantity, "3");
   assert.equal(applied.rows[2].sell.quantity, "99");

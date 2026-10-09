@@ -196,6 +196,7 @@ export default function PairedQuotationIcEditor({
     rows.some(
       row =>
         row.buy.quantity ||
+        row.buy.days ||
         row.buy.unitPrice ||
         row.buy.unit ||
         row.buy.notes ||
@@ -244,7 +245,7 @@ export default function PairedQuotationIcEditor({
 
   const side = (row: PairedRow, scope: "sell" | "buy", field: string, value: string) => {
     const current = row[scope];
-    const computedField = field === "quantity" || field === "unitPrice";
+    const computedField = field === "quantity" || field === "days" || field === "unitPrice";
     const parameterBinding =
       computedField && current.parameterBinding && current.parameterBinding.mode !== "MANUAL"
         ? { ...current.parameterBinding, mode: "OVERRIDDEN" as const }
@@ -261,13 +262,14 @@ export default function PairedQuotationIcEditor({
         ...binding,
         mode:
           binding.quantityFormula?.op === "PARAM" &&
+          (!binding.daysFormula || binding.daysFormula.op === "PARAM") &&
           (!binding.unitPriceFormula || binding.unitPriceFormula.op === "PARAM")
             ? ("PARAMETER" as const)
             : ("FORMULA" as const)
       }
     };
-    for (const field of ["quantity", "unitPrice"] as const) {
-      const formula = field === "quantity" ? binding.quantityFormula : binding.unitPriceFormula;
+    for (const field of ["quantity", "days", "unitPrice"] as const) {
+      const formula = field === "quantity" ? binding.quantityFormula : field === "days" ? binding.daysFormula : binding.unitPriceFormula;
       if (!formula) continue;
       const result = evaluateFormula(formula, parameterConfig, binding.moduleId);
       if (result.issue) {

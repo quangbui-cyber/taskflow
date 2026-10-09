@@ -59,6 +59,7 @@ export default function EditIcLineModal({
   }, [line, quotations, revision.quotationId]);
 
   const initialQuoteQty = initialMatch?.line?.quantity || initialMatch?.salesRow?.sell?.quantity || "";
+  const initialQuoteDays = initialMatch?.line?.days || initialMatch?.salesRow?.sell?.days || "1";
   const initialQuoteUnit = initialMatch?.line?.unit || initialMatch?.salesRow?.sell?.unit || "";
 
   // Quotation binding state
@@ -73,7 +74,7 @@ export default function EditIcLineModal({
   const [description, setDescription] = useState(line?.description ?? "");
   const [unit, setUnit] = useState(line?.unit?.trim() ? line.unit : (initialQuoteUnit || "Gói"));
   const [quantity, setQuantity] = useState(line?.quantity?.trim() ? line.quantity : (initialQuoteQty || "1"));
-  const [days, setDays] = useState(line?.days ?? "1");
+  const [days, setDays] = useState(line?.days ?? "");
   const [unitPrice, setUnitPrice] = useState(line?.unitPrice ?? "");
   const [basis, setBasis] = useState<"NET" | "GROSS">((line?.basis as "NET" | "GROSS") || "NET");
   const [vatPercent, setVatPercent] = useState(line?.vatPercent ?? "8");
@@ -136,7 +137,7 @@ export default function EditIcLineModal({
   // Live Cost Calculation for IC (Buy side)
   const liveCost = useMemo(() => {
     try {
-      if (!quantity || !unitPrice || parseFloat(quantity) <= 0 || parseFloat(unitPrice) < 0) {
+      if (!quantity || !days || !unitPrice || parseFloat(quantity) <= 0 || parseFloat(days) <= 0 || parseFloat(unitPrice) < 0) {
         return null;
       }
       return calculateLineCost({
@@ -235,6 +236,7 @@ export default function EditIcLineModal({
     description,
     unit,
     quantity,
+    days,
     unitPrice,
     basis,
     vatPercent,
@@ -575,7 +577,7 @@ export default function EditIcLineModal({
                     </div>
 
                     {/* 2. SỐ LƯỢNG, ĐƠN GIÁ, CƠ SỞ & VAT */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                       <div>
                         <Input
                           label="Số lượng *"
@@ -589,6 +591,23 @@ export default function EditIcLineModal({
                           <span className="text-[10px] text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-1 font-medium">
                             <Sparkles size={10} /> Tự động từ Báo giá
                           </span>
+                        )}
+                      </div>
+
+                      <div>
+                        <Input
+                          label="Số ngày mua *"
+                          type="number"
+                          step="any"
+                          min="0"
+                          value={days}
+                          onChange={(e) => setDays(e.target.value)}
+                          required
+                        />
+                        {initialQuoteDays && days !== initialQuoteDays && (
+                          <Button variant="ghost" size="sm" onClick={() => setDays(initialQuoteDays)}>
+                            Dùng ngày bán ({initialQuoteDays})
+                          </Button>
                         )}
                       </div>
 

@@ -8,13 +8,13 @@ export function draftLineIssues(line: Partial<IcLine>) {
     const value = line[key]?.trim() ?? "";
     if (!value) issues.push(key === "unitPrice" ? "missing-price" : key === "vatPercent" ? "missing-VAT" : key === "days" ? "missing-days" : "missing-quantity");
     else if (key === "days" && compare(decimal(value), decimal("0")) <= 0) issues.push("invalid-days");
-    else if (compare(decimal(value), decimal("0")) < 0) throw new Error("Số lượng, đơn giá và VAT không được âm.");
+    else if (compare(decimal(value), decimal("0")) < 0) throw new Error("Số lượng, số ngày, đơn giá và VAT không được âm.");
   }
   if (line.basis !== undefined && !["NET", "GROSS"].includes(line.basis)) throw new Error("Chọn net hoặc gross.");
   return issues;
 }
 
 export function completeIcLines(lines: IcLine[]): (IcLine & { cost: CalculatedCost })[] {
-  if (!lines.length || lines.some(line => draftLineIssues(line).length)) throw new Error("IC cần đủ nội dung, số lượng, giá vốn và VAT trước khi gửi duyệt.");
+  if (!lines.length || lines.some(line => draftLineIssues(line).length)) throw new Error("IC cần đủ nội dung, số lượng, số ngày, giá vốn và VAT trước khi gửi duyệt.");
   return lines.map(line => ({ ...line, cost: calculateLineCost(line) }));
 }

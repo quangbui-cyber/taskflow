@@ -47,8 +47,8 @@ test("row completion separates customer and internal readiness without treating 
   const row = blankPairedRow("complete");
   row.name = "Production";
   row.sell = { ...row.sell, unit: "gói", quantity: "1", unitPrice: "0", vatPercent: "0" };
-  row.buy = { ...row.buy, unit: "gói", quantity: "1", unitPrice: "80", vatPercent: "8", evidenceReason: "Đang chờ báo giá NCC" };
-  assert.deepEqual(rowCompletion(row), { sell: { complete: 5, total: 5 }, buy: { complete: 6, total: 6 } });
+  row.buy = { ...row.buy, unit: "gói", quantity: "1", days: "1", unitPrice: "80", vatPercent: "8", evidenceReason: "Đang chờ báo giá NCC" };
+  assert.deepEqual(rowCompletion(row), { sell: { complete: 6, total: 6 }, buy: { complete: 7, total: 7 } });
 });
 
 test("quote drafts open as separate paired drafts without copying internal cost", () => {

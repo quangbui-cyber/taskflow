@@ -125,6 +125,9 @@ test("quotation readiness distinguishes missing values from valid zero amounts",
   assert.equal(projected.incomplete, false);
   assert.equal(projected.amountIncomplete, false);
   assert.equal(projected.amount.gross, "0");
+  assert.equal(projected.rows[0].days, "1");
+  row.sell.days = "0";
+  assert.match(quotationReadinessIssues([row], "Quote", "Client")[0].message, /lớn hơn 0/);
 });
 test("IC evidence gate uses actual line links or trimmed reason, never global coverage", () => {
   const line = { id: "cost-one", description: "Estimate", unit: "", quantity: "1", days: "1", unitPrice: "0", vatPercent: "0", basis: "NET" as const, cost: null };

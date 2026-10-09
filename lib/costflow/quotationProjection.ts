@@ -1,11 +1,11 @@
 import { calculateQuotationTotals, normalizeQuotationTotalLayout, type QuotationTotalLayoutRow, type QuotationTotalLine } from "./quotationTotals";
-import { totals, type CalculatedCost } from "./money";
+import { compare, decimal, totals, type CalculatedCost } from "./money";
 import { blankPairedRow, normalizePairedRows } from "./pairedDraft";
 import { childrenOf, groupAmount, pricedTotal, saleContributors } from "./pairedPricing";
 import { quotationOutline, type QuotationOutlineRole } from "./quotationHierarchy";
 import type { PairedRow, PairedDraft, Quotation } from "./types";
 
-export type CustomerRow = { id: string; name: string; description: string; depth: number; role: QuotationOutlineRole; numberLabel: string; childCount: number; showSubtotal: boolean; unit: string; quantity: string; unitPrice: string; basis: string; vat: string; notes: string; amount: CalculatedCost | null; summary: boolean };
+export type CustomerRow = { id: string; name: string; description: string; depth: number; role: QuotationOutlineRole; numberLabel: string; childCount: number; showSubtotal: boolean; unit: string; quantity: string; days: string; unitPrice: string; basis: string; vat: string; notes: string; amount: CalculatedCost | null; summary: boolean };
 export type QuotationReadinessIssue = { id: string; message: string; target: "INFO" | "ROW" | "TOTALS"; rowId?: string };
 export type CustomerQuotation = { title: string; customer: string; notes: string; number?: number; id?: string; createdAt?: string; totalLines?: ReturnType<typeof calculateQuotationTotals>["lines"]; totalLayout?: QuotationTotalLayoutRow[]; rows: CustomerRow[]; amount: CalculatedCost; amountIncomplete: boolean; incomplete: boolean; issues: QuotationReadinessIssue[] };
 
@@ -19,6 +19,14 @@ export function quotationReadinessIssues(rows: PairedRow[], title: string, custo
     const label = row.name.trim() || `Hạng mục ${index + 1}`;
     if (!row.name.trim()) issues.push({ id: `${row.itemId}:name`, message: `${label}: nhập tên hạng mục.`, target: "ROW", rowId: row.itemId });
     if (!row.sell.quantity.trim()) issues.push({ id: `${row.itemId}:quantity`, message: `${label}: nhập số lượng bán.`, target: "ROW", rowId: row.itemId });
+    if (!row.sell.days.trim()) issues.push({ id: `${row.itemId}:days`, message: `${label}: nhập số ngày bán.`, target: "ROW", rowId: row.itemId });
+    else {
+      try {
+        if (compare(decimal(row.sell.days), decimal("0")) <= 0) issues.push({ id: `${row.itemId}:days`, message: `${label}: số ngày bán phải lớn hơn 0.`, target: "ROW", rowId: row.itemId });
+      } catch {
+        issues.push({ id: `${row.itemId}:days`, message: `${label}: số ngày bán không hợp lệ.`, target: "ROW", rowId: row.itemId });
+      }
+    }
     if (!row.sell.unitPrice.trim()) issues.push({ id: `${row.itemId}:unitPrice`, message: `${label}: nhập đơn giá bán.`, target: "ROW", rowId: row.itemId });
     if (!row.sell.vatPercent.trim()) issues.push({ id: `${row.itemId}:vat`, message: `${label}: nhập VAT, dùng 0 nếu không VAT.`, target: "ROW", rowId: row.itemId });
   }
@@ -44,7 +52,7 @@ export function projectSales(rows: PairedRow[], title: string, customer: string,
       const hidePrice = descriptive || structuralGroup;
       const hideQuantity = hidePrice && !quantityOnly;
       // Explicit allowlist: no buy/vendor/evidence/internal-note fields cross this boundary.
-      publicRows.push({ id: row.itemId, name: row.name, description: row.description, depth, role: entry.role, numberLabel: entry.numberLabel, childCount: children.length, showSubtotal: structuralGroup ? row.showGroupSubtotal : true, unit: hideQuantity || summary ? "" : row.sell.unit, quantity: hideQuantity || summary ? "" : row.sell.quantity, unitPrice: hidePrice || summary ? "" : row.sell.unitPrice, basis: hidePrice || summary ? "" : row.sell.basis, vat: hidePrice ? "" : rates.length === 1 ? `${rates[0]}%` : rates.map(r => `${r}%`).join(" / "), notes: row.sell.notes, amount: hidePrice && !structuralGroup ? null : groupAmount(rows, row, "sell"), summary });
+      publicRows.push({ id: row.itemId, name: row.name, description: row.description, depth, role: entry.role, numberLabel: entry.numberLabel, childCount: children.length, showSubtotal: structuralGroup ? row.showGroupSubtotal : true, unit: hideQuantity || summary ? "" : row.sell.unit, quantity: hideQuantity || summary ? "" : row.sell.quantity, days: hideQuantity || summary ? "" : row.sell.days, unitPrice: hidePrice || summary ? "" : row.sell.unitPrice, basis: hidePrice || summary ? "" : row.sell.basis, vat: hidePrice ? "" : rates.length === 1 ? `${rates[0]}%` : rates.map(r => `${r}%`).join(" / "), notes: row.sell.notes, amount: hidePrice && !structuralGroup ? null : groupAmount(rows, row, "sell"), summary });
       if (children.length && row.showChildren) {
         const packageChildren = row.rowType === "ITEM" && row.pricingMode === "PACKAGE";
         walk(row.itemId, depth + 1, descriptive || packageChildren, packageChildren && row.packageChildDisplay === "QUANTITY");
@@ -64,5 +72,5 @@ export function projectQuotation(quote: Quotation): CustomerQuotation {
     return { ...projectSales(rows, quote.title, quote.customer, quote.notes, quote.totalLines, quote.totalLayout), number: quote.number, id: quote.id, createdAt: quote.createdAt };
   }
   return { title: quote.title, customer: quote.customer, notes: quote.notes, number: quote.number, id: quote.id, createdAt: quote.createdAt, incomplete: false, amountIncomplete: false, issues: [],
-    rows: quote.lines.map((line, index) => ({ id: line.id, name: line.description, description: "", depth: 0, role: "ITEM" as const, numberLabel: String(index + 1), childCount: 0, showSubtotal: true, unit: line.unit, quantity: line.quantity, unitPrice: line.unitPrice, basis: line.basis, vat: `${line.vatPercent}%`, notes: "", amount: line.cost, summary: false })), amount: totals(quote.lines.map(l => l.cost)) };
+    rows: quote.lines.map((line, index) => ({ id: line.id, name: line.description, description: "", depth: 0, role: "ITEM" as const, numberLabel: String(index + 1), childCount: 0, showSubtotal: true, unit: line.unit, quantity: line.quantity, days: line.days || "1", unitPrice: line.unitPrice, basis: line.basis, vat: `${line.vatPercent}%`, notes: "", amount: line.cost, summary: false })), amount: totals(quote.lines.map(l => l.cost)) };
 }

@@ -142,9 +142,9 @@ export default function WorksheetDetailDrawer({
         {mode === "ic" && detail.rowType === "ITEM" && (
           <div className="tf-ic-source-summary" aria-label="Giá bán nguồn chỉ đọc">
             <span>
-              <small>ĐVT / SL bán</small>
+              <small>ĐVT / SL / Số ngày bán</small>
               <strong>
-                {detail.sell.unit || "—"} / {detail.sell.quantity || "—"}
+                {detail.sell.unit || "—"} / {detail.sell.quantity || "—"} / {detail.sell.days || "—"}
               </strong>
             </span>
             <span>
@@ -208,6 +208,25 @@ export default function WorksheetDetailDrawer({
                         value={detail[scope].quantity}
                         onChange={e => onSide(detail, scope, "quantity", e.target.value)}
                       />
+                      <div>
+                        <Input
+                          label={"Số ngày " + (scope === "sell" ? "bán" : "mua")}
+                          inputMode="decimal"
+                          disabled={scope === "buy" ? detailBuyDisabled : detailSellDisabled}
+                          value={detail[scope].days}
+                          onChange={e => onSide(detail, scope, "days", e.target.value)}
+                        />
+                        {scope === "buy" && detail.sell.days && detail.buy.days !== detail.sell.days && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={detailBuyDisabled}
+                            onClick={() => onSide(detail, "buy", "days", detail.sell.days)}
+                          >
+                            Dùng ngày bán ({detail.sell.days})
+                          </Button>
+                        )}
+                      </div>
                       <Input
                         label={scope === "sell" ? "Đơn giá bán" : "Giá vốn"}
                         inputMode="decimal"

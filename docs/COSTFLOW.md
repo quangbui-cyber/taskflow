@@ -121,6 +121,14 @@ Trình duyệt chỉ xử lý timeline, quyết định và evidence; Hồ sơ &
 
 Local DB proof chỉ dùng `postgresql://postgres@127.0.0.1:55439/taskflow`; test từ chối host/port/database khác và xóa đúng fixture riêng. Hiệu lực IC không đồng nghĩa quyền thanh toán, tiền thực tế, chữ ký, hoàn tất công việc hoặc đóng tài chính. Nghiệm thu vai trò thật, đối soát Kế toán, delivery provider và production vẫn Pending.
 
+## Số ngày trên dòng báo giá và IC — Phase 3.1 Wave 8
+
+Dòng báo giá và IC dùng công thức `Số lượng × Số ngày × Đơn giá`; Expense/Actual Cost vẫn dùng công thức riêng hiện hữu. `Số ngày chương trình` trong Thiết lập báo giá chỉ là nguồn cho công thức của từng dòng, không phải hệ số nhân toàn báo giá.
+
+Mỗi dòng giữ độc lập `Số ngày bán` và `Số ngày mua`. Dòng bán mới mặc định `1`; phía mua để trống và chỉ nhận ngày bán khi người dùng bấm **Dùng ngày bán**. Nháp được phép còn thiếu, nhưng chốt báo giá/gửi IC yêu cầu số ngày tương ứng lớn hơn 0. Dữ liệu cũ thiếu trường này được đọc với giá trị tương thích `1` trên dòng đã có giá, không sửa snapshot bất biến cũ.
+
+Customer projection, preview và bản in chỉ xuất số ngày bán. Snapshot mới dùng `linePricingSchemaVersion: 2`; schema này độc lập với `parameterConfig.schemaVersion`.
+
 ## Phase 7 — ĐNTU đa khoản, tiền tạm ứng và sổ đối soát
 
 Luồng vận hành chuẩn Phase 7 là một hồ sơ ADVANCE có nhiều khoản và nhiều người nhận, nhưng chỉ một milestone và một chuỗi duyệt toàn hồ sơ. Mỗi khoản giữ stable key, thứ tự, dòng/revision IC hiệu lực, người nhận và số VND nguyên dương; server tự tải lại nguồn/người nhận, tính tổng phiếu và tổng theo người nhận. `clientTotal`, role, recipient facts hoặc trạng thái gửi từ trình duyệt không có authority.

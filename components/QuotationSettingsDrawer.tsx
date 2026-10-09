@@ -315,6 +315,7 @@ export default function QuotationSettingsDrawer({
                       <tr>
                         <th className="p-1.5 text-left font-semibold">Hạng mục</th>
                         <th className="p-1.5 text-center font-semibold">Phía</th>
+                        <th className="p-1.5 text-center font-semibold">Trường</th>
                         <th className="p-1.5 text-right font-semibold">Cũ</th>
                         <th className="p-1.5 text-right font-semibold">Mới</th>
                       </tr>
@@ -329,6 +330,9 @@ export default function QuotationSettingsDrawer({
                             <span className={`px-1 rounded text-[10px] font-semibold ${change.side === "sell" ? "bg-[var(--primary-soft)] text-[var(--color-brand-800)]" : "bg-[var(--info-soft)] text-[var(--info)]"}`}>
                               {change.side === "sell" ? "Bán" : "IC"}
                             </span>
+                          </td>
+                          <td className="p-1.5 text-center text-[var(--text-secondary)]">
+                            {change.field === "quantity" ? "Số lượng" : change.field === "days" ? "Số ngày" : "Đơn giá"}
                           </td>
                           <td className="p-1.5 text-right font-mono text-[var(--text-secondary)]">
                             {change.oldValue || "—"}

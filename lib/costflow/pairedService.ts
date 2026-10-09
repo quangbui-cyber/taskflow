@@ -29,7 +29,8 @@ function assertCalculatedValues(rows: PairedDraft["rows"], config?: QuotationPar
       const formula = field === "quantity" ? binding.quantityFormula : field === "days" ? binding.daysFormula : binding.unitPriceFormula;
       if (!formula) continue;
       const evaluated = evaluateFormula(formula, config, binding.moduleId);
-      if (!evaluated.issue && row[side][field] !== evaluated.value) throw new Error(`${row.name || row.itemId}: ${side === "sell" ? "Bán" : "IC"} ${field === "quantity" ? "số lượng" : "đơn giá"} không khớp công thức đã áp dụng.`);
+      const fieldLabel = field === "quantity" ? "số lượng" : field === "days" ? "số ngày" : "đơn giá";
+      if (!evaluated.issue && row[side][field] !== evaluated.value) throw new Error(`${row.name || row.itemId}: ${side === "sell" ? "Bán" : "IC"} ${fieldLabel} không khớp công thức đã áp dụng.`);
     }
   }
 }
@@ -145,7 +146,7 @@ export function finalizePairedQuotation(data: FinanceData, draftId: string, acto
     const issue = parameterIssues[0];
     throw new Error(`${issue.rowName || issue.rowId || "Hạng mục"}: ${issue.message}`);
   }
-  if (projectDraft(draft).incomplete) throw new Error("Báo giá cần tên, khách hàng và đủ giá bán, số lượng, VAT của các dòng đang tính trước khi xuất.");
+  if (projectDraft(draft).incomplete) throw new Error("Báo giá cần tên, khách hàng và đủ giá bán, số lượng, số ngày, VAT của các dòng đang tính trước khi xuất.");
   const previous = data.quotations?.find(q => q.id === (draft.latestQuotationId ?? draft.sourceQuotationId));
   const lines = saleContributors(draft.rows).map(row => ({ ...row.sell, id: randomUUID(), description: row.name || row.description, cost: calculateLineCost(row.sell), ...(row.quotationLineId && previous?.lines.some(l => l.id === row.quotationLineId) ? { parentQuotationLineId: row.quotationLineId } : {}) }));
   const id = randomUUID();
