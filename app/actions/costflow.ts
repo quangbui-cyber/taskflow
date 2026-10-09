@@ -11,7 +11,7 @@ import { publicPaymentErrorMessage } from "@/lib/costflow/paymentPolicy";
 import { dispatchWorkflowNotifications } from "@/lib/workflow/notifications";
 import { executeActualCostCommand, type ActualCostCommand } from "@/lib/costflow/actualCostService";
 
-export type CostFlowActionState = { error?: string; success?: string; requestId?: string; revisionId?: string; quotationId?: string; draftId?: string; beneficiaryId?: string; cashId?: string; idempotent?: boolean; savedScopes?: string[]; version?: number; lineErrors?: { lineId: string; message: string }[] };
+export type CostFlowActionState = { error?: string; success?: string; requestId?: string; revisionId?: string; quotationId?: string; draftId?: string; beneficiaryId?: string; cashId?: string; customerAcceptanceId?: string; customerAcceptanceVersion?: number; idempotent?: boolean; savedScopes?: string[]; version?: number; lineErrors?: { lineId: string; message: string }[] };
 
 export type ActualCostActionState = { error?: string; success?: string; lineId?: string; version?: number };
 

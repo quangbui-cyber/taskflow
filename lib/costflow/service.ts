@@ -30,6 +30,7 @@ import { loadActualCosts } from "./actualCostReadModel";
 import { approvedActualSettlementRoute, calculateSelectedAdvanceSettlement, type AdvanceSourceSelection } from "./paymentSettlement";
 import { deriveCustomerAccounting, validateLiquidationAmounts } from "./customerAccounting";
 import { projectQuotation } from "./quotationProjection";
+import { createCustomerAcceptanceSnapshot, parseCustomerAcceptanceProjection, type CustomerAcceptanceActualInput } from "./customerAcceptanceProjection";
 
 type Actor = { id: string; role: string };
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -166,7 +167,16 @@ export async function loadFinance(projectId: string, actor: Actor) {
     actualCosts: (actualCosts?.lines ?? []).flatMap(line => line.cost ? [{ stableLineId: line.stableLineId, source: line.source, cost: line.cost }] : []),
   });
   const canManageCustomerAccounting = activeActor.role === "ADMIN" || project.members.some(item => item.userId === actor.id);
-  return { project: { ...project, members: fullAccess ? project.members : [], client: fullAccess ? project.client : null }, clients, fullAccess, canManageCustomerAccounting, version: workspace?.version ?? 0, data: fullAccess && savedData ? savedData : { ...emptyFinance(), closed: savedData?.closed ?? false }, requests: visible, cash, users, files, evidence, supplements, history, paymentDossiers, paymentLedger, actualCosts, customerAccounting };
+  const customerAcceptanceSnapshots = fullAccess ? (await prisma.customerAcceptanceSnapshot.findMany({
+    where: { projectId },
+    select: { id: true, version: true, quotationId: true, projection: true, createdAt: true },
+    orderBy: { version: "desc" },
+    take: 20,
+  })).flatMap(snapshot => {
+    const projection = parseCustomerAcceptanceProjection(snapshot.projection);
+    return projection ? [{ id: snapshot.id, version: snapshot.version, quotationId: snapshot.quotationId, projection, createdAt: snapshot.createdAt.toISOString() }] : [];
+  }) : [];
+  return { project: { ...project, members: fullAccess ? project.members : [], client: fullAccess ? project.client : null }, clients, fullAccess, canManageCustomerAccounting, version: workspace?.version ?? 0, data: fullAccess && savedData ? savedData : { ...emptyFinance(), closed: savedData?.closed ?? false }, requests: visible, cash, users, files, evidence, supplements, history, paymentDossiers, paymentLedger, actualCosts, customerAccounting, customerAcceptanceSnapshots };
 }
 
 export async function executeFinance(projectId: string, expectedVersion: number, actor: Actor, form: FormData, upload: ProjectUpload | null) {
@@ -192,6 +202,8 @@ export async function executeFinance(projectId: string, expectedVersion: number,
     let savedQuotationId: string | undefined;
     let savedDraftId: string | undefined;
     let savedBeneficiaryId: string | undefined;
+    let savedCustomerAcceptanceId: string | undefined;
+    let savedCustomerAcceptanceVersion: number | undefined;
     let savedScopes: string[] | undefined;
     let customerCashFingerprint: string | undefined;
     let customerCashIdempotencyKey: string | undefined;
@@ -440,6 +452,27 @@ export async function executeFinance(projectId: string, expectedVersion: number,
     };
 
     switch (command) {
+      case "SAVE_CUSTOMER_ACCEPTANCE": {
+        needCreator();
+        const rawActualRows = JSON.parse(text(form, "actualRows") || "[]") as unknown;
+        if (!Array.isArray(rawActualRows) || rawActualRows.some(row => !row || typeof row !== "object" || Array.isArray(row))) throw new Error("Dữ liệu nghiệm thu thực tế không hợp lệ.");
+        const actualRows: CustomerAcceptanceActualInput[] = rawActualRows.map(row => {
+          const value = row as Record<string, unknown>;
+          if (typeof value.rowId !== "string" || typeof value.quantity !== "string" || typeof value.days !== "string") throw new Error("Dữ liệu nghiệm thu thực tế không hợp lệ.");
+          return { rowId: value.rowId, quantity: value.quantity, days: value.days };
+        });
+        const result = await createCustomerAcceptanceSnapshot(tx, {
+          projectId,
+          quotationId: requireValue(text(form, "quotationId"), "phiên bản báo giá"),
+          liquidationId: text(form, "liquidationId") || undefined,
+          actorId: actor.id,
+          actualRows,
+          selectedActualCostVersionIds: form.getAll("selectedActualCostVersionIds").map(String),
+        });
+        savedCustomerAcceptanceId = result.id;
+        savedCustomerAcceptanceVersion = result.version;
+        break;
+      }
       case "SAVE_CUSTOMER_LIQUIDATION": {
         if (!member && !isAdmin) throw new Error("Bạn không có quyền lưu thanh lý khách hàng trên Project này.");
         const documentNumber = bounded(text(form, "documentNumber"), "số biên bản thanh lý", 120);
@@ -1221,7 +1254,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
     const updated = await tx.costFlowWorkspace.updateMany({ where: { projectId, version: expectedVersion }, data: { version: { increment: 1 }, data: json(data) } });
     if (updated.count !== 1) throw new Error("Dữ liệu đã thay đổi. Tải lại để tránh ghi trùng.");
     await tx.costFlowHistory.create({ data: { projectId, version: expectedVersion + 1, actorId: actor.id, action: command, snapshot: json(data) } });
-    return { success: savedScopes ? `Đã lưu ${savedScopes.join(" và ")}.` : "Đã lưu hồ sơ và lịch sử.", requestId: affectedRequestId, revisionId: savedRevisionId, quotationId: savedQuotationId, draftId: savedDraftId, beneficiaryId: savedBeneficiaryId, savedScopes, version: expectedVersion + 1 };
+    return { success: savedCustomerAcceptanceId ? `Đã lưu snapshot nghiệm thu khách hàng v${savedCustomerAcceptanceVersion}.` : savedScopes ? `Đã lưu ${savedScopes.join(" và ")}.` : "Đã lưu hồ sơ và lịch sử.", requestId: affectedRequestId, revisionId: savedRevisionId, quotationId: savedQuotationId, draftId: savedDraftId, beneficiaryId: savedBeneficiaryId, customerAcceptanceId: savedCustomerAcceptanceId, customerAcceptanceVersion: savedCustomerAcceptanceVersion, savedScopes, version: expectedVersion + 1 };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15000 });
 }
 
