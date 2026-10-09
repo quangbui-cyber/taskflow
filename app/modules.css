@@ -38,6 +38,12 @@
 .tf-metric-icon { color: #87916d; }
 .tf-metric-value { margin-top: 12px; color: var(--foreground); font-size: clamp(18px,1.65vw,26px); font-weight: 650; line-height: 1.2; letter-spacing: -.035em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .tf-metric-hint { margin-top: 8px; color: var(--text-secondary); font-size: 12px; }
+.tf-summary-strip { display: flex; flex-wrap: wrap; gap: 24px; padding: 16px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-sm); }
+.tf-summary-item { display: flex; flex-direction: column; gap: 2px; min-width: 140px; flex: 1 1 auto; }
+.tf-summary-label { font-size: 12px; color: var(--text-secondary); }
+.tf-summary-value { font-size: clamp(16px,1.4vw,22px); font-weight: 700; color: var(--foreground); font-variant-numeric: tabular-nums; line-height: 1.25; }
+.tf-summary-hint { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+.tf-summary-item-accent .tf-summary-value { color: #587216; }
 .tf-process-strip { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden; }
 .tf-process-item { display: flex; gap: 10px; align-items: center; padding: 16px; border-right: 1px solid var(--border); min-width: 0; }
 .tf-process-item:last-child { border: 0; }

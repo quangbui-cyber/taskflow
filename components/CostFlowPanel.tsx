@@ -10,8 +10,8 @@ import QuotationPanel from "@/components/QuotationPanel";
 import SettlementPanel from "@/components/SettlementPanel";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Field";
-import { Badge, Panel, Table } from "@/components/ui/Presentation";
-import { MetricCard, ModuleTabs } from "@/components/ui/ModuleUI";
+import { Alert, Badge, Panel, Table } from "@/components/ui/Presentation";
+import { ModuleTabs } from "@/components/ui/ModuleUI";
 import { completeIcLines } from "@/lib/costflow/budgetDraft";
 import { workingIcRevision } from "@/lib/costflow/budgetRevisions";
 import { displayMoney, totals } from "@/lib/costflow/money";
@@ -19,7 +19,7 @@ import { projectQuotation } from "@/lib/costflow/quotationProjection";
 import { margin } from "@/lib/costflow/reconciliation";
 import type { CashRow, FinanceData, IcRevision, RequestPayload } from "@/lib/costflow/types";
 import type { ApprovalStep } from "@/lib/workflow/approval";
-import { ArrowRight, CircleDollarSign, FilePlus2, FileText, Layers3, Paperclip, Plus, TrendingUp, Wallet } from "lucide-react";
+import { ArrowRight, FilePlus2, FileText, Plus } from "lucide-react";
 
 export type Request = {
   id: string;
@@ -94,8 +94,19 @@ function PersonSelect({ finance, name, label, defaultValue }: { finance: Finance
   return <Select name={name} label={label} required defaultValue={defaultValue}><option value="">Chọn người xử lý</option>{finance.users.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</Select>;
 }
 
+function SummaryItem({ label, value, hint, accent }: { label: string; value: string; hint: string; accent?: boolean }) {
+  return (
+    <div className={`tf-summary-item${accent ? " tf-summary-item-accent" : ""}`}>
+      <span className="tf-summary-label">{label}</span>
+      <span className="tf-summary-value">{value}</span>
+      <span className="tf-summary-hint">{hint}</span>
+    </div>
+  );
+}
+
 export default function CostFlowPanel({ finance, user, projectHeading, initialTab }: { finance: Finance; user: { id: string; role: string }; projectHeading: ReactNode; initialTab?: string }) {
   const [tab, setTabState] = useState<CostFlowTabId | null>(resolveTab(initialTab));
+  const [scopeCreateDialogOpen, setScopeCreateDialogOpen] = useState(false);
   const anchor = useSyncExternalStore(subscribeRequestAnchor, requestAnchor, serverRequestAnchor);
   const canCreate = finance.fullAccess && ["ADMIN", "ACCOUNT"].includes(user.role);
   const latestQuotation = finance.data.quotations?.at(-1);
@@ -105,6 +116,7 @@ export default function CostFlowPanel({ finance, user, projectHeading, initialTa
   })();
   const cashTotal = finance.cash.reduce((sum, row) => sum + Number(row.amount || 0) * (row.direction === "IN" ? -1 : 1), 0);
   const missingEvidence = finance.data.expenses.filter(expense => !expense.invoiceId || !expense.paymentProofId).length;
+  const pendingRequests = finance.requests.filter(request => request.state === "SUBMITTED").length;
   const effective = finance.data.revisions.find(revision => revision.effective);
   const metrics = margin(finance.data);
   const users = new Map(finance.users.map(person => [person.id, person.name]));
@@ -187,36 +199,89 @@ export default function CostFlowPanel({ finance, user, projectHeading, initialTa
   return <div className="space-y-4">
     <section className="tf-costflow-hero">
       <div className="tf-costflow-hero-heading">{projectHeading}<div className="flex flex-wrap items-center gap-2">
-        <Link className="tf-button-secondary" href="/workflow">Hồ sơ của tôi</Link>
-        {canCreate && !finance.data.closed && <><Link className="tf-button-secondary tf-button-size-sm" href={worksheetHref(working ?? effective)}><Plus size={15} aria-hidden="true" />Tạo IC</Link><Button size="sm" onClick={() => {
-          setTab("approvals");
-          const url = new URL(window.location.href);
-          url.searchParams.set("tab", "approvals");
-          url.searchParams.set("openCreateRequest", "1");
-          window.history.pushState(null, "", `${url.pathname}${url.search}`);
-          window.dispatchEvent(new Event("popstate"));
-        }}><FilePlus2 size={15} aria-hidden="true" />Lập hồ sơ chi</Button></>}
+        {activeTab === "overview" && <Link className="tf-button-secondary" href="/workflow">Hồ sơ của tôi</Link>}
+        {activeTab === "scope" && canCreate && !finance.data.closed && (
+          <Button size="sm" onClick={() => setScopeCreateDialogOpen(true)}>
+            <Plus size={15} aria-hidden="true" />Tạo báo giá mới
+          </Button>
+        )}
+        {activeTab === "ic" && canCreate && !finance.data.closed && (
+          <Link className="tf-button-primary tf-button-size-sm" href={worksheetHref(working ?? effective)}>
+            <Plus size={15} aria-hidden="true" />{working ? "Tiếp tục IC" : "Tạo IC"}
+          </Link>
+        )}
+        {activeTab === "approvals" && canCreate && !finance.data.closed && (
+          <Button size="sm" onClick={() => {
+            setTab("approvals");
+            const url = new URL(window.location.href);
+            url.searchParams.set("tab", "approvals");
+            url.searchParams.set("openCreateRequest", "1");
+            window.history.pushState(null, "", `${url.pathname}${url.search}`);
+            window.dispatchEvent(new Event("popstate"));
+          }}><FilePlus2 size={15} aria-hidden="true" />Lập hồ sơ chi</Button>
+        )}
       </div></div>
-      <ModuleTabs label="CostFlow" tabs={tabs.map(([id, label]) => ({ id, label, ...(id === "approvals" ? { count: finance.requests.filter(request => request.state === "SUBMITTED").length } : {}) }))} active={activeTab} onChange={setTab} />
+      <ModuleTabs label="CostFlow" tabs={tabs.map(([id, label]) => ({ id, label, ...(id === "approvals" ? { count: pendingRequests } : {}) }))} active={activeTab} onChange={setTab} />
     </section>
 
-    {finance.fullAccess && activeTab === "overview" && <div className="tf-metric-grid">
-      <MetricCard label="Báo giá hiện hành" value={latestQuotationGross ? displayMoney(latestQuotationGross) : "Chưa có"} hint={latestQuotation ? `BG-${latestQuotation.number} · gồm VAT` : "Tạo từ Scope & Báo giá"} icon={CircleDollarSign} />
-      <MetricCard label="IC hiệu lực" value={effective ? displayMoney(totals(completeIcLines(effective.lines).map(line => line.cost)).net) : "Chưa có"} hint={effective ? `Revision ${effective.number} · net` : "Cần Quản lý duyệt"} icon={Layers3} />
-      <MetricCard label="AC phát sinh" value={displayMoney(metrics.incurred)} hint={`${finance.data.expenses.length} khoản chi · net`} icon={Wallet} />
-      <MetricCard label="Tiền thực tế" value={displayMoney(String(cashTotal))} hint={`${finance.cash.length} giao dịch · chi trừ thu hoàn`} icon={TrendingUp} accent />
-      <MetricCard label="Hồ sơ chờ xử lý" value={String(finance.requests.filter(request => request.state === "SUBMITTED").length)} hint="Mở tab Trình duyệt để xử lý" icon={FileText} />
-      <MetricCard label="Chứng từ còn thiếu" value={String(missingEvidence)} hint="AC thiếu hóa đơn hoặc bằng chứng chi" icon={Paperclip} />
-    </div>}
+    {finance.fullAccess && activeTab === "overview" && (
+      <div className="space-y-3">
+        <div className="tf-summary-strip">
+          <SummaryItem
+            label="Báo giá hiện hành"
+            value={latestQuotationGross ? displayMoney(latestQuotationGross) : "Chưa có"}
+            hint={latestQuotation ? `BG-${latestQuotation.number} · gồm VAT` : "Tạo từ Scope & Báo giá"}
+          />
+          <SummaryItem
+            label="IC hiệu lực"
+            value={effective ? displayMoney(totals(completeIcLines(effective.lines).map(line => line.cost)).net) : "Chưa có"}
+            hint={effective ? `Revision ${effective.number} · net` : "Cần Quản lý duyệt"}
+          />
+          <SummaryItem
+            label="AC phát sinh"
+            value={displayMoney(metrics.incurred)}
+            hint={`${finance.data.expenses.length} khoản chi · net`}
+          />
+          <SummaryItem
+            label="Tiền thực tế"
+            value={displayMoney(String(cashTotal))}
+            hint={`${finance.cash.length} giao dịch · chi trừ thu hoàn`}
+            accent
+          />
+        </div>
+        {(pendingRequests > 0 || missingEvidence > 0) && (
+          <Alert tone="warning" title="Cần xử lý">
+            <div className="text-xs space-y-1">
+              {pendingRequests > 0 && (
+                <p>
+                  Có <strong>{pendingRequests}</strong> hồ sơ đang chờ duyệt.{" "}
+                  <button type="button" className="tf-link font-semibold underline" onClick={() => setTab("approvals")}>
+                    Mở tab Hồ sơ & Trình duyệt
+                  </button>
+                </p>
+              )}
+              {missingEvidence > 0 && (
+                <p>
+                  Có <strong>{missingEvidence}</strong> khoản chi AC còn thiếu hóa đơn hoặc bằng chứng chi.{" "}
+                  <button type="button" className="tf-link font-semibold underline" onClick={() => setTab("expense")}>
+                    Mở tab Actual Cost
+                  </button>
+                </p>
+              )}
+            </div>
+          </Alert>
+        )}
+      </div>
+    )}
 
     {activeTab === "overview" && <div className="tf-workspace-grid">
-      <Panel><div className="tf-section-heading"><div><h2>{finance.data.revisions.length ? "Hồ sơ gần đây" : "Bắt đầu ngân sách dự án"}</h2><p>Theo dõi dự toán, hồ sơ chi và tiền thực tế trong cùng project.</p></div><FileText size={20} className="text-[var(--text-secondary)]" aria-hidden="true" /></div>
+      <Panel><div className="tf-section-heading"><div><h2>{finance.data.revisions.length ? "Hồ sơ gần đây" : "Bắt đầu ngân sách dự án"}</h2><p>Theo dõi dự toán, hồ sơ chi và tiền thực tế trong cùng project.</p></div></div>
         {finance.requests.length ? <Table caption="Các hồ sơ cập nhật gần đây"><thead><tr><th scope="col">Hồ sơ</th><th scope="col">Loại</th><th scope="col">Trạng thái</th></tr></thead><tbody>{finance.requests.slice(0, 5).map(request => <tr key={request.id}><td><button type="button" className="tf-inbox-row-title text-left" onClick={() => openApproval(request.id)}>{request.title}</button></td><td>{KIND_LABELS[request.kind] ?? request.kind}</td><td><Badge tone={STATE_TONES[request.state] ?? "neutral"}>{STATE_LABELS[request.state] ?? request.state}</Badge></td></tr>)}</tbody></Table> : <div className="py-8"><p className="mb-2 text-lg font-semibold">Project chưa có IC</p><p className="mb-6 max-w-lg text-sm text-[var(--text-secondary)]">Tạo dự toán đầu tiên, chọn nguồn và nhập chi phí theo từng hạng mục.</p>{canCreate && !finance.data.closed && <Link className="tf-button-primary" href={worksheetHref()}><Plus size={16} aria-hidden="true" />Tạo IC đầu tiên</Link>}</div>}
       </Panel>
       <aside className="tf-summary-card"><h3>Thiết lập project</h3><div className="mt-4 space-y-4">{[["Kế toán", finance.data.config.accountantId], ["CEO", finance.data.config.ceoId], ["Quản lý đóng/mở", finance.data.config.managerId]].map(([label, id]) => <div key={label}><p className="tf-list-meta">{label}</p><p className={`mt-1 text-sm font-medium${!id ? " text-[var(--warning)]" : ""}`}>{users.get(id) ?? "Chưa phân công"}</p></div>)}{user.role === "ADMIN" && <Button variant="secondary" size="sm" onClick={() => setTab("settings")}>Cập nhật phân công<ArrowRight size={14} aria-hidden="true" /></Button>}<div className="border-t border-[var(--border)] pt-4"><Link className="tf-link inline-flex items-center gap-2 text-sm" href={`/projects/${finance.project.id}?tab=files`}><FileText size={15} aria-hidden="true" />Tài liệu project</Link><p className="tf-ui-help">Chứng từ đã lưu được dùng cho hồ sơ chi.</p></div></div></aside>
     </div>}
 
-    {activeTab === "scope" && <QuotationPanel userId={user.id} finance={finance} canCreate={canCreate && !finance.data.closed} />}
+    {activeTab === "scope" && <QuotationPanel userId={user.id} finance={finance} canCreate={canCreate && !finance.data.closed} createDialogOpen={scopeCreateDialogOpen} onOpenCreateChange={setScopeCreateDialogOpen} />}
     {activeTab === "settings" && <Panel><h2 className="mb-4 font-semibold">Phân công tài chính</h2><ActionForm finance={finance} command="CONFIGURE" label="Lưu phân công"><PersonSelect finance={finance} label="Kế toán" name="accountantId" defaultValue={finance.data.config.accountantId} /><PersonSelect finance={finance} label="CEO" name="ceoId" defaultValue={finance.data.config.ceoId} /><PersonSelect finance={finance} label="Quản lý phụ trách project (đóng/mở tài chính)" name="managerId" defaultValue={finance.data.config.managerId} /><p className="tf-ui-help">Bước Quản lý khi trình IC/hồ sơ chi lấy theo quản lý trực tiếp của người lập.</p></ActionForm></Panel>}
     {activeTab === "ic" && <InternalCostPanel finance={finance} user={user} canCreate={canCreate && !finance.data.closed} working={working} workingError={workingError} onOpenApproval={openApproval} onOpenAdvance={openAdvance} />}
     {activeTab === "expense" && <ActualCostPanel finance={finance} user={user} canCreate={canCreate} onSelectTab={setTab} />}

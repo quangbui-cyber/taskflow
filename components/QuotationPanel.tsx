@@ -32,12 +32,25 @@ type Props = {
   finance: Finance;
   canCreate: boolean;
   userId?: string;
+  createDialogOpen?: boolean;
+  onOpenCreateChange?: (open: boolean) => void;
 };
 
-export default function QuotationPanel({ finance, canCreate, userId }: Props) {
+export default function QuotationPanel({
+  finance,
+  canCreate,
+  userId,
+  createDialogOpen: controlledCreateDialogOpen,
+  onOpenCreateChange
+}: Props) {
   const quotations = useMemo(() => finance.data.quotations ?? [], [finance.data.quotations]);
   const [selectedId, setSelectedId] = useState<string>("");
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [internalCreateDialogOpen, setInternalCreateDialogOpen] = useState(false);
+  const isCreateDialogOpen = controlledCreateDialogOpen !== undefined ? controlledCreateDialogOpen : internalCreateDialogOpen;
+  const setCreateDialogOpen = (open: boolean) => {
+    onOpenCreateChange?.(open);
+    setInternalCreateDialogOpen(open);
+  };
   const [previewQuotation, setPreviewQuotation] = useState<Quotation | null>(null);
   const [cloneSourceId, setCloneSourceId] = useState<string>(quotations.at(-1)?.id ?? "");
 
@@ -551,7 +564,7 @@ export default function QuotationPanel({ finance, canCreate, userId }: Props) {
 
       {/* 5. DIALOG: TẠO BÁO GIÁ MỚI */}
       <Dialog
-        open={createDialogOpen}
+        open={isCreateDialogOpen}
         onClose={() => setCreateDialogOpen(false)}
         title="Tạo báo giá mới"
         description="Chọn phương thức khởi tạo phù hợp với yêu cầu của dự án."
