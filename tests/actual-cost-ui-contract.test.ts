@@ -34,3 +34,16 @@ test("actual cost UI: server action receives identifiers and raw inputs only", (
   assert.match(service, /RETURNED/);
   assert.doesNotMatch(action, /trustedApprovedAmount|clientApprovedAmount/);
 });
+
+test("actual cost UI: comparison table keeps mixed units separate and totals VND only", () => {
+  const table = source("components/costflow/actual-cost/ActualCostTable.tsx");
+  const editor = source("components/costflow/actual-cost/ActualCostEditor.tsx");
+  for (const label of ["SL", "Ngày", "Đơn giá", "Thành tiền", "Tiết kiệm", "Vượt ngân sách", "Tổng NET", "Tổng VAT", "Tổng GROSS"]) {
+    assert.match(table, new RegExp(label));
+  }
+  assert.doesNotMatch(table, /Tổng số lượng|totalQuantity/);
+  assert.match(table, /line\.unit/);
+  assert.match(editor, /\[Phát sinh ngoài IC\]/);
+  assert.match(editor, /Thu thêm từ khách/);
+  assert.match(editor, /Cần ít nhất một chứng từ/);
+});
