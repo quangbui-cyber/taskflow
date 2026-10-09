@@ -47,3 +47,15 @@ test("actual cost UI: comparison table keeps mixed units separate and totals VND
   assert.match(editor, /Thu thêm từ khách/);
   assert.match(editor, /Cần ít nhất một chứng từ/);
 });
+
+test("actual cost UI: evidence vault exposes five typed kinds and explicit DD acknowledgement", () => {
+  const vault = source("components/costflow/actual-cost/ActualCostEvidenceVault.tsx");
+  const decisions = source("components/costflow/actual-cost/ActualCostDecisionBar.tsx");
+  for (const kind of ["VENDOR_CONTRACT_PO", "ACCEPTANCE_HANDOVER", "VAT_INVOICE", "PAYMENT_PROOF", "FIELD_PHOTO_REPORT"]) {
+    assert.match(vault, new RegExp(kind));
+  }
+  for (const fact of ["sha256", "createdAt", "createdByName", "preview", "Tải xuống"]) assert.match(vault, new RegExp(fact));
+  assert.match(decisions, /reviewToken/);
+  assert.match(decisions, /acknowledgeMissingEvidence/);
+  assert.match(decisions, /Tôi xác nhận duyệt dù còn thiếu chứng từ/);
+});

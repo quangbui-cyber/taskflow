@@ -3,12 +3,18 @@ import assert from "node:assert/strict";
 
 import {
   actualCostVariance,
+  actualCostEvidenceWarnings,
   calculateActualCost,
   nextActualCostVersion,
   normalizeLegacyActualCosts,
   validateUnbudgetedActualCost,
   validateActualCostDecision,
 } from "../lib/costflow/actualCost";
+
+test("actual cost: evidence warnings are explicit and independent from approval", () => {
+  assert.deepEqual(actualCostEvidenceWarnings([]), ["MISSING_ACCEPTANCE_HANDOVER", "MISSING_VAT_INVOICE", "MISSING_PAYMENT_PROOF"]);
+  assert.deepEqual(actualCostEvidenceWarnings(["VAT_INVOICE", "PAYMENT_PROOF"]), ["MISSING_ACCEPTANCE_HANDOVER"]);
+});
 
 test("actual cost: derives the approved VND amount from quantity, days and unit price", () => {
   const result = calculateActualCost({

@@ -18,6 +18,27 @@ export const ACTUAL_COST_FUNDING_SOURCES = [
   "VENDOR_PAYMENT",
 ] as const satisfies readonly ActualCostFundingSource[];
 
+export const ACTUAL_COST_EVIDENCE_KINDS = [
+  "VENDOR_CONTRACT_PO",
+  "ACCEPTANCE_HANDOVER",
+  "VAT_INVOICE",
+  "PAYMENT_PROOF",
+  "FIELD_PHOTO_REPORT",
+] as const;
+export type ActualCostEvidenceKind = typeof ACTUAL_COST_EVIDENCE_KINDS[number];
+
+const REQUIRED_ACTUAL_COST_EVIDENCE = ["ACCEPTANCE_HANDOVER", "VAT_INVOICE", "PAYMENT_PROOF"] as const;
+
+export function normalizeActualCostEvidenceKind(value: string): ActualCostEvidenceKind {
+  if (!ACTUAL_COST_EVIDENCE_KINDS.includes(value as ActualCostEvidenceKind)) throw new Error("Loại chứng từ AC không hợp lệ.");
+  return value as ActualCostEvidenceKind;
+}
+
+export function actualCostEvidenceWarnings(kinds: string[]) {
+  const present = new Set(kinds);
+  return REQUIRED_ACTUAL_COST_EVIDENCE.filter(kind => !present.has(kind)).map(kind => `MISSING_${kind}`);
+}
+
 export type ActualCostDecisionAction = "APPROVED" | "RETURNED";
 export type ActualCostSourceKind = "IC_LINKED" | "UNBUDGETED";
 
