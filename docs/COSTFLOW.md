@@ -75,6 +75,18 @@ Minh chứng IC theo dòng hoặc nguồn toàn IC; một blob có thể gắn n
 
 Local verification và pending PDF/IME/pilot: workspace .planning/phases/03.1-bao-gia-ic-song-song/03.1-IMPLEMENTATION-EVIDENCE.md và 03.1-HUMAN-UAT.md. Không đồng nghĩa nghiệm thu toàn nghiệp vụ hoặc deployment.
 
+### Excel Intake v4 — PAIR-21
+
+Account/Admin có quyền tạo báo giá trong Project có thể tải **Tải mẫu Excel v4** tại `Scope & Báo giá`. Route tải là `/api/projects/[id]/costflow/excel-intake/template`; server xác thực lại tài khoản, vai trò và membership Project trước mỗi lần tạo file, trả XLSX ở chế độ `private, no-store`.
+
+Workbook có sheet làm việc `BAO_GIA_IC`: metadata Project/khách hàng/thời gian/địa điểm ở đầu file, miền Báo giá màu xanh, miền IC màu vàng và ví dụ cây ba cấp. `_IMPORT` và `_META` ở trạng thái `veryHidden`; technical candidate key, parent và thứ tự do hệ thống sinh, không phải ID nghiệp vụ do người dùng nhập. Template không chứa bytes/ID minh chứng, credentials hoặc trạng thái duyệt, ngân sách, tiền, ký, thực hiện, doanh thu hay quyết toán.
+
+Contract chuẩn là schema version `4`. Mỗi phía bán/mua giữ độc lập `quantity`, `days`, `unitPrice`, `basis` (`NET`/`GROSS`) và `vatPercent`; công thức dòng là `quantity × days × unitPrice`. Ô trống là chưa biết và khác số `0`. Số ngày/số lượng đã nhập phải lớn hơn 0; VAT từ 0 đến 100. Đơn giá `0` là FOC hợp lệ khi có ghi chú giải thích. `sell.days` không tự chép sang `buy.days`.
+
+Công thức NET/VAT/GROSS và tổng trong Excel chỉ là preview. Mọi adapter/import sau này chỉ được nhận primitive allowlist kèm tọa độ nguồn, bỏ qua cached formula/total và tính lại bằng engine CostFlow phía server. Customer projection chỉ lấy allowlist phía bán; không bao gồm giá mua, NCC, ghi chú nội bộ, evidence hoặc metadata kỹ thuật.
+
+Phạm vi của PAIR-21 dừng ở contract và template tải xuống. Plan này **không** parse file upload/paste, tạo hoặc ghi đè draft, round-trip stable ID, finalize, submit/approve, tác động budget/cash/revenue/settlement, hoặc xác nhận nghiệm thu công ty/Kế toán/production. Import mới thuộc Plans 10–11; kiểm thử file thật, native Vietnamese IME và pilot công ty tiếp tục Pending ở Phase 12.
+
 ## Nền phê duyệt dùng chung Phase 5
 
 CostFlow dùng cùng sự kiện lần trình, khóa phiên bản/bước, yêu cầu xác nhận Kế toán, trả hồ sơ có danh sách nội dung cần sửa, gửi lại có phản hồi chung và thông báo bền vững như Workflow. Chuyển giao bước duyệt chỉ cho người đang hoạt động có cùng vai trò hợp lệ; người cũ đọc đúng hồ sơ/chứng từ được chuyển nhưng không thành project member và không có `fullAccess`. Chuyển giao xác nhận tiền vẫn là quyền riêng, không trộn với chuyển giao bước duyệt.

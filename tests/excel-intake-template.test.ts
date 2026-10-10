@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import ExcelJS from "exceljs";
+import JSZip from "jszip";
 import { createExcelIntakeTemplate } from "../lib/costflow/quotationExcel";
 
 test("v4 workbook reopens with paired layout, three levels and preview-only formulas", async () => {
@@ -51,4 +52,30 @@ test("template route and visible action retain Project-scoped authorization and 
   const panel = await readFile(path.join(process.cwd(), "components/QuotationPanel.tsx"), "utf8");
   assert.match(panel, /canCreate[\s\S]*excel-intake\/template/);
   assert.match(panel, /Tải mẫu Excel v4/);
+});
+
+test("derived v4 artifact reopens without formula errors, active content or external relationships", async () => {
+  const artifactDirectory = path.join(process.cwd(), ".codex-tmp");
+  const artifactPath = path.join(artifactDirectory, "excel-intake-v4-derived-test.xlsx");
+  await mkdir(artifactDirectory, { recursive: true });
+  const bytes = await createExcelIntakeTemplate({ generatedAt: "2026-10-10T00:00:00.000Z" });
+  await writeFile(artifactPath, Buffer.from(bytes));
+  assert.ok((await stat(artifactPath)).size > 0);
+  const saved = await readFile(artifactPath);
+  const reopened = new ExcelJS.Workbook();
+  await reopened.xlsx.load(saved.buffer.slice(saved.byteOffset, saved.byteOffset + saved.byteLength) as ArrayBuffer);
+  const formulas: string[] = [];
+  reopened.eachSheet(sheet => sheet.eachRow(row => row.eachCell(cell => {
+    if (cell.type !== ExcelJS.ValueType.Formula) return;
+    const value = cell.value as ExcelJS.CellFormulaValue;
+    formulas.push(value.formula);
+    assert.doesNotMatch(value.formula, /\[[^\]]+\]|https?:|file:/i);
+    if (typeof value.result === "string") assert.doesNotMatch(value.result, /^#(?:REF|VALUE|DIV\/0|NAME|N\/A|NUM|NULL)!?$/i);
+  })));
+  assert.ok(formulas.length >= 24, "expected preview formula coverage for the example rows");
+  const zip = await JSZip.loadAsync(saved);
+  const entryNames = Object.keys(zip.files);
+  assert.ok(!entryNames.some(name => /vbaProject\.bin|externalLinks|connections\.xml|embeddings\//i.test(name)));
+  const xmlText = (await Promise.all(entryNames.filter(name => name.endsWith(".xml") || name.endsWith(".rels")).map(name => zip.file(name)!.async("string")))).join("\n");
+  for (const privateToken of ["EVIDENCE_PRIVATE", "PASSWORD_PRIVATE", "SECRET_PRIVATE", "APPROVAL_PRIVATE", "CASH_PRIVATE"]) assert.ok(!xmlText.includes(privateToken));
 });
