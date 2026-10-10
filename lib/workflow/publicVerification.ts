@@ -50,14 +50,28 @@ export function digestPublicVerificationToken(token: string) {
 export async function ensurePublicCapabilityForSnapshot(snapshotId: string) {
   const existing = await prisma.workflowPublicVerificationCapability.findUnique({
     where: { snapshotId },
-    include: { snapshot: { select: { projectionSha256: true } } },
+    include: { snapshot: { select: { projectionSha256: true, mode: true, evidenceState: true } } },
   });
-  if (existing) return existing;
+  if (existing) {
+    if (
+      (existing.snapshot.mode === "DIGITAL" && existing.snapshot.evidenceState !== "DIGITAL_CONFIRMED") ||
+      (existing.snapshot.mode === "PHYSICAL" && existing.snapshot.evidenceState !== "PHYSICAL_CONFIRMED")
+    ) {
+      throw new Error("Bằng chứng ký của snapshot chưa được xác nhận.");
+    }
+    return existing;
+  }
   const snapshot = await prisma.workflowApprovedSnapshot.findUnique({
     where: { id: snapshotId },
-    select: { id: true, projectionSha256: true, attestationKeyId: true },
+    select: { id: true, projectionSha256: true, attestationKeyId: true, mode: true, evidenceState: true },
   });
   if (!snapshot) throw new Error("Không tìm thấy snapshot đã duyệt.");
+  if (
+    (snapshot.mode === "DIGITAL" && snapshot.evidenceState !== "DIGITAL_CONFIRMED") ||
+    (snapshot.mode === "PHYSICAL" && snapshot.evidenceState !== "PHYSICAL_CONFIRMED")
+  ) {
+    throw new Error("Bằng chứng ký của snapshot chưa được xác nhận.");
+  }
   const id = randomUUID();
   const publicNonce = randomBytes(32).toString("base64url");
   const token = derivePublicVerificationToken({
@@ -176,8 +190,14 @@ export async function verifyPublicCapability(tokenInput: string): Promise<{ stat
       algorithm: "HMAC-SHA256",
       value: capability.snapshot.attestation,
     })) return { status: "INVALID" };
-    const roles = projection.signatures.map(item => item.role);
-    if (!["CREATOR", "MANAGER", "ACCOUNTANT", "CEO"].every(role => roles.includes(role))) return { status: "INVALID" };
+    if (capability.snapshot.mode === "DIGITAL") {
+      const roles = projection.signatures.map(item => item.role);
+      if (capability.snapshot.evidenceState !== "DIGITAL_CONFIRMED" || !["CREATOR", "MANAGER", "ACCOUNTANT", "CEO"].every(role => roles.includes(role))) return { status: "INVALID" };
+    } else if (capability.snapshot.mode === "PHYSICAL") {
+      if (capability.snapshot.evidenceState !== "PHYSICAL_CONFIRMED") return { status: "INVALID" };
+    } else {
+      return { status: "INVALID" };
+    }
     return { status: "VALID", data: publicDto(projection, capability.snapshot.projectionSha256) };
   } catch {
     return { status: "INVALID" };

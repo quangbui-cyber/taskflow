@@ -458,6 +458,8 @@ model WorkflowRequest {
   signingLifecycle            WorkflowSigningLifecycle?
   signingCommands             WorkflowSigningCommand[]
   workflowSigningEvents       WorkflowSigningEvent[]
+  physicalScanBatches         WorkflowPhysicalScanBatch[]
+  physicalSigningTransitions WorkflowPhysicalSigningTransition[]
 
   @@index([projectId, module, createdAt])
   @@index([creatorId, state])
@@ -596,6 +598,60 @@ model WorkflowSigningLifecycle {
 
   @@index([snapshotId])
   @@index([mode, evidenceState])
+}
+
+model WorkflowPhysicalScanBatch {
+  id                 String                    @id @default(cuid())
+  requestId          String
+  request            WorkflowRequest           @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  version            Int
+  status             String                    @default("PENDING")
+  keeperDeclared     String
+  locationDeclared   String
+  keeperNormalized   String?
+  locationNormalized String?
+  uploadedById       String
+  returnedReason     String?
+  confirmedById      String?
+  confirmedAt        DateTime?
+  supersededAt       DateTime?
+  createdAt          DateTime                  @default(now())
+  files              WorkflowPhysicalScanFile[]
+  transitions        WorkflowPhysicalSigningTransition[]
+
+  @@unique([requestId, version])
+  @@index([requestId, status, createdAt])
+}
+
+model WorkflowPhysicalScanFile {
+  id        String                    @id @default(cuid())
+  batchId   String
+  batch     WorkflowPhysicalScanBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  name      String
+  mimeType  String
+  size      Int
+  data      Bytes
+  sha256    String
+  createdAt DateTime                  @default(now())
+
+  @@index([batchId, createdAt])
+  @@index([sha256])
+}
+
+model WorkflowPhysicalSigningTransition {
+  id        String                    @id @default(cuid())
+  requestId String
+  request   WorkflowRequest           @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  batchId   String
+  batch     WorkflowPhysicalScanBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  actorId   String
+  action    String
+  reason    String                    @default("")
+  details   Json?
+  createdAt DateTime                  @default(now())
+
+  @@index([requestId, createdAt])
+  @@index([batchId, createdAt])
 }
 
 model WorkflowSigningCommand {

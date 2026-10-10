@@ -15,12 +15,13 @@ import type { ApprovalStep } from "@/lib/workflow/approval";
 import { WORKFLOW_HUB_HREF, workflowDocumentHref, workflowPrintHref, workflowRequestHref as requestHref } from "@/lib/workflow/routes";
 import WorkflowDecisionDialog from "@/components/WorkflowDecisionDialog";
 import { SignaturePad } from "@/components/SignaturePad";
+import PaperSigningSection from "@/components/workflow/PaperSigningSection";
 
 type Person = { id: string; name: string };
 type Template = { requirements: Requirements | null; familyId: string; category: string; purpose: string; changeNote: string; id: string; kind: string; name: string; version: number; parentId: string | null; ownerId: string; accountantId: string; ceoId: string; signerNames: string; instructions: string; fileId: string | null; ownerConfirmedAt: string | null; publishedAt: string | null; revision: number };
-type Summary = { id: string; code: string; projectId: string | null; module: string; kind: string; title: string; creatorId: string; parentId: string | null; state: string; version: number; financeVersion: number | null; replacesRequestId: string | null; replacedByRequestId: string | null; pendingReplacementRequestId: string | null; supersededAt: string | null; steps: ApprovalStep[]; currentStep: number; currentAttemptId: string | null; submittedVersion: number | null; currentRole: string | null; currentAssigneeId: string | null; currentStepArrivedAt: string | null; createdAt: string; attemptNumber: number; resubmission: boolean; processedAt: string | null; project: { name: string } | null; approvalEvents: { id: string; actorId: string; action: string; attemptId: string | null; submittedVersion: number | null; createdAt: string }[] };
+type Summary = { id: string; code: string; projectId: string | null; module: string; kind: string; title: string; creatorId: string; parentId: string | null; state: string; version: number; financeVersion: number | null; signingMode: string | null; replacesRequestId: string | null; replacedByRequestId: string | null; pendingReplacementRequestId: string | null; supersededAt: string | null; steps: ApprovalStep[]; currentStep: number; currentAttemptId: string | null; submittedVersion: number | null; currentRole: string | null; currentAssigneeId: string | null; currentStepArrivedAt: string | null; createdAt: string; attemptNumber: number; resubmission: boolean; processedAt: string | null; project: { name: string } | null; approvalEvents: { id: string; actorId: string; action: string; attemptId: string | null; submittedVersion: number | null; createdAt: string }[] };
 type ListData = { admin: boolean; templates: Template[]; managedTemplates: Template[]; projects: Person[]; requests: Summary[]; views: { pending: Summary[]; processed: Summary[]; mine: Summary[] }; users: Person[] };
-type Document = Summary & { templateId: string | null; template: Template | null; version: number; parentId: string | null; payload: DocumentPayload; files: { id: string; kind: string; name: string; size: number; sha256: string; createdAt: string }[]; decisions: { id: string; actorId: string; action: string; reason: string; createdAt: string }[]; history: { id: string; actorId: string; action: string; version: number; createdAt: string }[] };
+type Document = Summary & { templateId: string | null; template: Template | null; version: number; parentId: string | null; payload: DocumentPayload; files: { id: string; kind: string; name: string; size: number; sha256: string; createdAt: string }[]; decisions: { id: string; actorId: string; action: string; reason: string; createdAt: string }[]; history: { id: string; actorId: string; action: string; version: number; createdAt: string }[]; physicalScanBatches: { id: string; version: number; status: string; keeperDeclared: string; locationDeclared: string; keeperNormalized: string | null; locationNormalized: string | null; returnedReason: string | null; createdAt: string; files: { id: string; name: string; size: number; sha256: string }[]; transitions: { id: string; action: string; reason: string; createdAt: string }[] }[] };
 type Submission = {attempts:{id:string;requestId:string;number:number;createdAt:string}[];historical:boolean;selection:string;currentRequestId:string;legacyMissingManifest:boolean};
 type Detail = { request: Document; users: Person[]; canTransfer: boolean; linked: { id: string; module: string; projectId: string | null; title: string } | null };
 const STATES: Record<string, string> = { DRAFT: "Nháp", SUBMITTED: "Chờ duyệt", APPROVED: "Đã duyệt", RETURNED: "Đã trả", REJECTED: "Từ chối", WITHDRAWN: "Đã rút", CANCELLED: "Đã hủy" };
@@ -57,6 +58,7 @@ function SubmitDocumentForm({ request }: { request: Document }) {
     return result;
   }, {});
   const requiresSignature = ["PROPOSAL", "PROPOSAL_ADVANCE", "PROPOSAL_ADVANCE_SETTLEMENT", "SERVICE_CONTRACT"].includes(request.kind);
+  const [signingMode, setSigningMode] = useState<"DIGITAL" | "PHYSICAL">("DIGITAL");
   const [signatureOpen, setSignatureOpen] = useState(false);
   const [signatureData, setSignatureData] = useState("");
   const [signaturePin, setSignaturePin] = useState("");
@@ -67,15 +69,17 @@ function SubmitDocumentForm({ request }: { request: Document }) {
       <input type="hidden" name="version" value={request.version} />
       <input type="hidden" name="signatureData" value={signatureData} />
       <input type="hidden" name="signaturePin" value={signaturePin} />
+      <input type="hidden" name="signingMode" value={signingMode} />
       <p className="tf-ui-help">Cần đủ thông tin và tài liệu theo checklist của mẫu, cùng người duyệt được phân công. Nháp dùng mẫu cũ vẫn lưu được; cần tạo nháp riêng theo mẫu hiện tại để gửi.</p>
-      {requiresSignature && <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+      {requiresSignature && <Select label="Hình thức ký" value={signingMode} onChange={event => setSigningMode(event.target.value as "DIGITAL" | "PHYSICAL")}><option value="DIGITAL">Ký điện tử nội bộ + PIN</option><option value="PHYSICAL">Ký giấy và tải batch scan sau duyệt</option></Select>}
+      {requiresSignature && signingMode === "DIGITAL" && <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
         <p className="text-sm font-medium">Chữ ký nội bộ của người lập</p>
         <p className="tf-ui-help">Chữ ký PNG và PIN chỉ được gửi khi bạn xác nhận; máy chủ kiểm tra lại trước khi ghi sự kiện.</p>
         <Button type="button" variant="secondary" onClick={() => setSignatureOpen(true)}>{signatureData ? "Ký lại" : "Ký và xác nhận PIN"}</Button>
       </div>}
       {state.error && <Alert tone="danger" title={state.error} />}
       {state.success && <Alert tone="success" title={state.success} />}
-      <div className="flex justify-end border-t border-zinc-100 pt-4"><Button type="submit" loading={pending} loadingLabel="Đang gửi…" disabled={requiresSignature && !signatureData}>Gửi duyệt</Button></div>
+      <div className="flex justify-end border-t border-zinc-100 pt-4"><Button type="submit" loading={pending} loadingLabel="Đang gửi…" disabled={requiresSignature && signingMode === "DIGITAL" && !signatureData}>Gửi duyệt</Button></div>
     </form>
     {signatureOpen && <SignaturePad open={signatureOpen} onClose={() => setSignatureOpen(false)} onConfirm={(dataUrl, pin) => { setSignatureData(dataUrl); setSignaturePin(pin); setSignatureOpen(false); }} userName="Người lập hồ sơ" userRoleTitle="Người lập" title={`Ký gửi — ${request.title}`} />}
   </>;
@@ -219,53 +223,6 @@ export function WorkflowDocumentPanel({ detail, templates, projects, user, submi
             </div>
           </div>
 
-          {/* Track 2: Ký giấy vật lý & Bản lưu trữ */}
-          <div className="p-4 rounded-xl border border-zinc-200 bg-zinc-50/50 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Hình thức 2</span>
-                <Badge tone={body.signature?.state === "CONFIRMED" ? "success" : body.signature ? "warning" : "neutral"}>
-                  {body.signature?.state === "CONFIRMED" ? "Đã đủ bản ký" : body.signature ? "Chờ quản lý xác nhận" : "Chưa tải bản scan"}
-                </Badge>
-              </div>
-              <h3 className="font-semibold text-zinc-900 text-sm mb-1">Ký giấy vật lý & Lưu trữ</h3>
-              <p className="text-xs text-zinc-600 mb-3 leading-relaxed">
-                In biểu mẫu A4 ra giấy, thu thập chữ ký sống, số hóa bản scan và lưu trữ hồ sơ gốc tại phòng hành chính.
-              </p>
-              {body.signature && (
-                <div className="mb-3 p-2.5 bg-white rounded-lg border border-zinc-200 text-xs space-y-1">
-                  <p><span className="text-zinc-500">Người giữ bản gốc:</span> <strong className="text-zinc-800">{body.signature.keeper}</strong></p>
-                  <p><span className="text-zinc-500">Nơi lưu bản gốc:</span> <strong className="text-zinc-800">{body.signature.location}</strong></p>
-                </div>
-              )}
-            </div>
-            <div>
-              {owner && (
-                <details className="text-xs">
-                  <summary className="cursor-pointer font-medium text-indigo-600 hover:text-indigo-700 py-1">
-                    {body.signature ? "Cập nhật lại bản scan & nơi lưu" : "+ Tải bản scan hồ sơ đã ký"}
-                  </summary>
-                  <div className="mt-3 p-3 bg-white rounded-lg border border-zinc-200">
-                    <Form command="UPLOAD_SIGNED" requestId={r.id} version={r.version} label="Lưu bản ký, chờ xác nhận">
-                      <UploadField label="Bản scan / ảnh bộ hồ sơ đã ký" required />
-                      <Input label="Người giữ bản gốc" name="keeper" required />
-                      <Input label="Nơi lưu bản gốc" name="location" required />
-                    </Form>
-                  </div>
-                </details>
-              )}
-              {body.signature?.state === "PENDING" && body.responsibleManagerId === user.id && (
-                <div className="mt-3 pt-3 border-t border-zinc-200">
-                  <Form command="CONFIRM_SIGNED" requestId={r.id} version={r.version} label="Xác nhận đủ bản ký">
-                    <label className="flex items-start gap-2 text-xs text-zinc-700">
-                      <input name="signatureConfirmed" type="checkbox" value="yes" required className="mt-0.5" />
-                      Đã kiểm tra đủ chữ ký theo mẫu và thông tin lưu bản gốc.
-                    </label>
-                  </Form>
-                </div>
-              )}
-            </div>
-          </div>
         </div>
 
         {signPadOpen && (
@@ -283,6 +240,7 @@ export function WorkflowDocumentPanel({ detail, templates, projects, user, submi
         )}
       </Panel>
     )}
+    {r.state === "APPROVED" && r.signingMode === "PHYSICAL" && <PaperSigningSection requestId={r.id} version={r.version} creator={owner} manager={body.responsibleManagerId === user.id} batches={r.physicalScanBatches ?? []} />}
     {detail.canTransfer && r.currentAttemptId && <Panel><details><summary className="cursor-pointer font-semibold">Chuyển giao xử lý</summary><div className="mt-3"><Form command="TRANSFER_DOCUMENT" requestId={r.id} request={r} version={r.version} label="Chuyển giao"><Select name="target" label="Phần việc"><option value="STEP">Bước duyệt đang chờ</option><option value="SIGNATURE">Quản lý xác nhận bản ký</option></Select><PersonField users={detail.users} label="Người nhận" name="assigneeId" /><Textarea label="Lý do chuyển giao" name="reason" required /></Form></div></details></Panel>}
     <Panel><h2 className="mb-3 font-semibold">Lịch sử quyết định</h2>{r.decisions.map(d => <p className="my-2 text-sm" key={d.id}>{name(d.actorId)} · {ACTIONS[d.action] ?? d.action} · {new Date(d.createdAt).toLocaleString("vi-VN")}{d.reason && ` · ${d.reason}`}</p>)}<details className="mt-3"><summary className="cursor-pointer">Lịch sử phiên bản ({r.history.length})</summary>{r.history.map(h => <p className="my-2 text-sm" key={h.id}>v{h.version} · {ACTIONS[h.action] ?? h.action} · {name(h.actorId)} · {new Date(h.createdAt).toLocaleString("vi-VN")}</p>)}</details></Panel>
   </div></div>;

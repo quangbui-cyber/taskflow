@@ -278,3 +278,28 @@ export async function finalizeDigitalApprovedSnapshot(
   await tx.workflowSigningLifecycle.update({ where: { requestId: request.id }, data: { snapshotId: snapshot.id } });
   return snapshot;
 }
+
+export async function finalizePhysicalApprovedSnapshot(tx: Prisma.TransactionClient, input: { requestId: string; version: number }) {
+  const request = await tx.workflowRequest.findUnique({
+    where: { id: input.requestId },
+    include: { template: true, files: { select: { id: true, kind: true, name: true, sha256: true } }, decisions: { orderBy: [{ step: "asc" }, { createdAt: "asc" }] }, paymentLines: { orderBy: { position: "asc" } } },
+  });
+  if (!request || !requiresDigitalSignature(request.kind)) return null;
+  const lifecycle = await tx.workflowSigningLifecycle.findUnique({ where: { requestId: request.id } });
+  if (!lifecycle || lifecycle.mode !== "PHYSICAL" || lifecycle.expectedVersion !== input.version || lifecycle.evidenceState !== "CHO_KY") throw new Error("Hồ sơ không ở chế độ chờ ký giấy đúng phiên bản.");
+  const creator = await tx.user.findUnique({ where: { id: request.creatorId }, select: { name: true } });
+  const payload = request.payload && typeof request.payload === "object" ? request.payload as Record<string, unknown> : {};
+  const projection = buildApprovedProjection({
+    request: { id: request.id, version: input.version, module: request.module, kind: request.kind, creatorId: request.creatorId, creatorName: creator?.name ?? "", title: request.title, approvedAt: new Date().toISOString() },
+    template: { familyId: request.template?.familyId ?? "", version: request.template?.version ?? 0, name: request.template?.name ?? request.kind },
+    document: { purpose: String(payload.purpose ?? payload.milestone ?? ""), content: String(payload.content ?? payload.explanation ?? ""), counterparty: String(payload.counterparty ?? ""), beneficiary: String(payload.beneficiary ?? ""), bankAccount: String(payload.bankAccount ?? ""), bankName: String(payload.bankName ?? ""), dueDate: String(payload.dueDate ?? "") },
+    finance: { source: request.module, snapshotId: `${request.id}:${input.version}`, amount: String(payload.amount ?? ""), lines: request.paymentLines.map(line => ({ id: line.stableKey, description: line.description, amount: line.amount })) },
+    files: request.files,
+    decisions: request.decisions.map(decision => ({ step: decision.step, role: DIGITAL_SIGNING_ROLES[decision.step + 1] ?? "UNKNOWN", actorId: decision.actorId, action: decision.action, decidedAt: decision.createdAt.toISOString() })),
+    signatures: [],
+  });
+  const attestation = attestApprovedProjection(projection);
+  const snapshot = await tx.workflowApprovedSnapshot.create({ data: { requestId: request.id, version: input.version, mode: "PHYSICAL", evidenceState: "CHO_KY", projection: json(projection), projectionSha256: computeApprovedProjectionSha256(projection), attestationKeyId: attestation.keyId, attestation: attestation.value } });
+  await tx.workflowSigningLifecycle.update({ where: { requestId: request.id }, data: { snapshotId: snapshot.id } });
+  return snapshot;
+}

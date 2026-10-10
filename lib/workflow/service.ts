@@ -10,8 +10,8 @@ import { latestPublished } from "./catalog";
 import { effectiveRequirements, evaluateDocumentCompleteness, parseRequirements } from "./requirements";
 import { assertApprovalToken, correctionItems, recordApprovalEvent } from "./approvalEvents";
 import { assertEligibleApprovalReceiver } from "./permissions";
-import { assertWorkflowLifecycleAllows } from "./lifecycle";
-import { appendDigitalSigningEvent, finalizeDigitalApprovedSnapshot, requiresDigitalSignature, type DigitalSigningRole } from "./signing";
+import { assertWorkflowLifecycleAllows, normalizeArchiveText, validatePhysicalScanBatch } from "./lifecycle";
+import { appendDigitalSigningEvent, finalizeDigitalApprovedSnapshot, finalizePhysicalApprovedSnapshot, requiresDigitalSignature, type DigitalSigningRole } from "./signing";
 
 type Actor = { id: string; role: string };
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -31,6 +31,7 @@ export async function loadWorkflow(actor: Actor) {
   const managedTemplates = admin ? available : available.filter(t => t.ownerId === user.id);
   const projects = await prisma.project.findMany({ where: admin ? {} : { members: { some: { userId: user.id } } }, select: { id: true, name: true }, orderBy: { name: "asc" } });
   const all = await prisma.workflowRequest.findMany({ where: admin ? {} : { OR: [{ creatorId: user.id }, { projectId: { in: projects.map(p => p.id) } }, ...["MANAGER", "ACCOUNTANT", "CEO"].map(role => ({ steps: { array_contains: [{ role, assigneeId: user.id }] } })), { cashAssigneeId: user.id, module: "COSTFLOW" }, { module: "WORKFLOW", payload: { path: ["responsibleManagerId"], equals: user.id } }, { readers: { some: { userId: user.id } } }, { approvalEvents: { some: { actorId: user.id } } }] }, select: { id: true, projectId: true, module: true, kind: true, title: true, creatorId: true, parentId: true, state: true, version: true, steps: true, currentStep: true, currentAttemptId: true, currentStepArrivedAt: true, replacesRequestId: true, replacedByRequestId: true, pendingReplacementRequestId: true, supersededAt: true, createdAt: true, updatedAt: true, project: { select: { name: true, costFlow: { select: { version: true } } } }, approvalEvents: { select: { id: true, actorId: true, action: true, attemptId: true, submittedVersion: true, createdAt: true } } }, orderBy: [{ currentStepArrivedAt: "asc" }, { id: "asc" }] });
+  const signingModeByRequest = new Map((await prisma.workflowSigningLifecycle.findMany({ where: { requestId: { in: all.map(item => item.id) } }, select: { requestId: true, mode: true } })).map(item => [item.requestId, item.mode]));
   const summaries = all.map((request) => {
     const steps = request.steps as unknown as ApprovalStep[];
     const current = steps[request.currentStep];
@@ -44,6 +45,7 @@ export async function loadWorkflow(actor: Actor) {
       resubmission: !!request.parentId,
       submittedVersion: request.approvalEvents.find(event => event.action.includes("SUBMIT") && event.attemptId === request.currentAttemptId)?.submittedVersion ?? null,
       financeVersion: request.project?.costFlow?.version ?? null,
+      signingMode: signingModeByRequest.get(request.id) ?? null,
       processedAt: request.approvalEvents.filter(event => event.actorId === user.id && !event.action.includes("SUBMIT")).at(-1)?.createdAt ?? null,
     };
   });
@@ -58,7 +60,7 @@ export async function loadWorkflow(actor: Actor) {
 }
 export async function loadDocument(id: string, actor: Actor) {
   const user = await activeActor(actor);
-  const request = await prisma.workflowRequest.findFirst({ where: { id, module: "WORKFLOW" }, include: { template: true, project: { select: { id: true, name: true } }, approvalEvents: { orderBy: { createdAt: "asc" } }, decisions: { orderBy: { createdAt: "asc" } }, files: { select: { id: true, kind: true, name: true, size: true, sha256: true, createdAt: true }, orderBy: { createdAt: "asc" } }, history: { select: { id: true, actorId: true, action: true, version: true, createdAt: true }, orderBy: { version: "desc" } } } });
+  const request = await prisma.workflowRequest.findFirst({ where: { id, module: "WORKFLOW" }, include: { template: true, project: { select: { id: true, name: true } }, approvalEvents: { orderBy: { createdAt: "asc" } }, decisions: { orderBy: { createdAt: "asc" } }, files: { select: { id: true, kind: true, name: true, size: true, sha256: true, createdAt: true }, orderBy: { createdAt: "asc" } }, history: { select: { id: true, actorId: true, action: true, version: true, createdAt: true }, orderBy: { version: "desc" } }, physicalScanBatches: { include: { files: { select: { id: true, name: true, mimeType: true, size: true, sha256: true, createdAt: true } }, transitions: { select: { id: true, actorId: true, action: true, reason: true, createdAt: true }, orderBy: { createdAt: "asc" } } }, orderBy: { version: "desc" } } } });
   if (!request) return null;
   const member = !!request.projectId && !!await prisma.projectMember.findUnique({ where: { projectId_userId: { projectId: request.projectId, userId: user.id } } });
   const dossierReader = !!await prisma.workflowRequestReader.findUnique({ where: { requestId_userId: { requestId: request.id, userId: user.id } } });
@@ -75,9 +77,10 @@ export async function loadDocument(id: string, actor: Actor) {
   }
   const current = steps[request.currentStep];
   const submittedVersion = request.approvalEvents.find(event => event.action === "SUBMIT_DOCUMENT" && event.attemptId === request.currentAttemptId)?.submittedVersion ?? null;
-  return { request: { ...request, code: `HS-${request.id.slice(-8).toUpperCase()}`, currentRole: current?.role ?? null, currentAssigneeId: current?.assigneeId ?? null, submittedVersion, attemptNumber: request.parentId ? 2 : 1, resubmission: !!request.parentId, processedAt: null }, users, canTransfer, linked };
+  const signingLifecycle = await prisma.workflowSigningLifecycle.findUnique({ where: { requestId: request.id }, select: { mode: true, evidenceState: true } });
+  return { request: { ...request, signingMode: signingLifecycle?.mode ?? null, signingEvidenceState: signingLifecycle?.evidenceState ?? null, code: `HS-${request.id.slice(-8).toUpperCase()}`, currentRole: current?.role ?? null, currentAssigneeId: current?.assigneeId ?? null, submittedVersion, attemptNumber: request.parentId ? 2 : 1, resubmission: !!request.parentId, processedAt: null }, users, canTransfer, linked };
 }
-export async function executeWorkflow(actor: Actor, form: FormData, upload: ProjectUpload | null) {
+export async function executeWorkflow(actor: Actor, form: FormData, upload: ProjectUpload | null, physicalUploads: ProjectUpload[] = []) {
   if (upload) assertWorkflowFile(upload);
   const actorData = await activeActor(actor);
   return prisma.$transaction(async tx => {
@@ -156,7 +159,19 @@ export async function executeWorkflow(actor: Actor, form: FormData, upload: Proj
 
     let request = text(form, "requestId") ? await tx.workflowRequest.findFirst({ where: { id: text(form, "requestId"), module: "WORKFLOW" } }) : null;
     if (text(form, "requestId") && !request) throw new Error("Không tìm thấy hồ sơ Workflow.");
-    if (request && request.version !== version(form)) conflict();
+    const submittedFormVersion = version(form);
+    const physicalCommand = ["UPLOAD_SIGNED", "RETURN_SIGNED", "CONFIRM_SIGNED"].includes(command);
+    const physicalCommandKey = physicalCommand ? `PHYSICAL:${command}:${submittedFormVersion}` : "";
+    const physicalFingerprint = physicalCommand ? createHash("sha256").update(JSON.stringify({
+      actorId: user.id, command, version: submittedFormVersion,
+      keeper: text(form, "keeper"), location: text(form, "location"), reason: text(form, "reason"),
+      keeperNormalized: text(form, "keeperNormalized"), locationNormalized: text(form, "locationNormalized"),
+      files: physicalUploads.map(item => ({ name: item.name, size: item.size, sha256: createHash("sha256").update(item.data).digest("hex") })),
+    })).digest("hex") : "";
+    const priorPhysicalCommand = request && physicalCommand ? await tx.workflowSigningCommand.findUnique({ where: { requestId_commandKey: { requestId: request.id, commandKey: physicalCommandKey } } }) : null;
+    if (priorPhysicalCommand && priorPhysicalCommand.fingerprint !== physicalFingerprint) throw new Error("Khóa thao tác ký giấy đã được dùng cho nội dung khác.");
+    if (priorPhysicalCommand) return { success: "Thao tác ký giấy đã được ghi nhận trước đó.", requestId: request!.id };
+    if (request && request.version !== submittedFormVersion) conflict();
     if (request && !documentReader(request, user.id, admin, await member(request.projectId))) throw new Error("Bạn không có quyền trên hồ sơ này.");
     const body: DocumentPayload = request ? request.payload as unknown as DocumentPayload : { content: "", counterparty: "", amount: "", linkedRequestId: "", mainFileId: "" };
     const oldVersion = request?.version ?? 0;
@@ -243,15 +258,11 @@ export async function executeWorkflow(actor: Actor, form: FormData, upload: Proj
           if (!parent || parentBody?.signature || parentBody?.execution?.startedAt || parentBody?.cancellation?.status === "PENDING") throw new Error("Bản hiện hành đã thay đổi. Liên hệ Quản lý trước khi gửi bản thay thế.");
           await tx.workflowRequest.update({ where: { id: parent.id }, data: { pendingReplacementRequestId: request.id, version: { increment: 1 } } });
         }
-        await appendDigitalSigningEvent(tx, {
-          requestId: request.id,
-          version: oldVersion + 1,
-          kind: request.kind,
-          role: "CREATOR",
-          actorId: user.id,
-          signatureData: form.get("signatureData"),
-          signaturePin: form.get("signaturePin"),
-          commandKey: `SUBMIT_DOCUMENT:${attemptId}:CREATOR`,
+        if (requiresDigitalSignature(request.kind) && text(form, "signingMode") === "PHYSICAL") {
+          await tx.workflowSigningLifecycle.create({ data: { requestId: request.id, mode: "PHYSICAL", evidenceState: "CHO_KY", expectedVersion: oldVersion + 1 } });
+        } else await appendDigitalSigningEvent(tx, {
+          requestId: request.id, version: oldVersion + 1, kind: request.kind, role: "CREATOR", actorId: user.id,
+          signatureData: form.get("signatureData"), signaturePin: form.get("signaturePin"), commandKey: `SUBMIT_DOCUMENT:${attemptId}:CREATOR`,
         });
         await update({ state: "SUBMITTED", steps: json(chain), currentStep: 0, currentAttemptId: attemptId, currentStepArrivedAt: arrivedAt, payload: json(body) });
         await recordApprovalEvent(tx, { requestId: request.id, module: request.module, attemptId, submittedVersion: oldVersion + 1, mutationVersion: oldVersion + 1, stepIndex: 0, role: chain[0].role, actorId: user.id, action: "SUBMIT_DOCUMENT", recipients: [chain[0].assigneeId] });
@@ -263,7 +274,8 @@ export async function executeWorkflow(actor: Actor, form: FormData, upload: Proj
         const result = decide({ ...request, steps: steps! }, user.id, action, text(form, "reason"));
         const signingRole = steps?.[request.currentStep]?.role as DigitalSigningRole | undefined;
         if (action === "APPROVE" && steps?.[request.currentStep]?.role === "ACCOUNTANT" && text(form, "reviewConfirmed") !== "yes") throw new Error("Kế toán cần xác nhận đã kiểm tra thông tin, chứng từ và phiên bản trước khi chuyển CEO.");
-        if (action === "APPROVE" && requiresDigitalSignature(request.kind)) {
+        const signingLifecycle = requiresDigitalSignature(request.kind) ? await tx.workflowSigningLifecycle.findUnique({ where: { requestId: request.id } }) : null;
+        if (action === "APPROVE" && requiresDigitalSignature(request.kind) && signingLifecycle?.mode !== "PHYSICAL") {
           if (!submittedVersion || !signingRole || !["MANAGER", "ACCOUNTANT", "CEO"].includes(signingRole)) throw new Error("Không xác định được vai trò hoặc phiên bản ký số hiện tại.");
           await appendDigitalSigningEvent(tx, {
             requestId: request.id,
@@ -290,7 +302,8 @@ export async function executeWorkflow(actor: Actor, form: FormData, upload: Proj
         await tx.workflowDecision.create({ data: { requestId: request.id, version: oldVersion + 1, step: request.currentStep, actorId: user.id, action, reason: text(form, "reason") } });
         await recordApprovalEvent(tx, { requestId: request.id, module: request.module, attemptId: request.currentAttemptId, submittedVersion, mutationVersion: oldVersion + 1, stepIndex: request.currentStep, role: steps?.[request.currentStep]?.role ?? "CREATOR", actorId: user.id, action, reason: text(form, "reason"), details: corrections.length ? json({ correctionItems: corrections }) : undefined, recipients: nextAssignee ? [nextAssignee] : [] });
         if (action === "APPROVE" && result.state === "APPROVED" && requiresDigitalSignature(request.kind)) {
-          await finalizeDigitalApprovedSnapshot(tx, { requestId: request.id, version: submittedVersion! });
+          if (signingLifecycle?.mode === "PHYSICAL") await finalizePhysicalApprovedSnapshot(tx, { requestId: request.id, version: submittedVersion! });
+          else await finalizeDigitalApprovedSnapshot(tx, { requestId: request.id, version: submittedVersion! });
         }
         break;
       }
@@ -332,14 +345,54 @@ export async function executeWorkflow(actor: Actor, form: FormData, upload: Proj
       case "UPLOAD_SIGNED": {
         if (request.creatorId !== user.id || request.state !== "APPROVED") throw new Error("Người lập chỉ tải bản ký khi hồ sơ đã duyệt.");
         assertWorkflowLifecycleAllows(request, "SIGN");
-        body.signature = { state: "PENDING", keeper: required(text(form, "keeper"), "người giữ bản gốc"), location: required(text(form, "location"), "nơi lưu bản gốc"), fileId: (await file({ requestId: request.id }, "SIGNED")).id };
+        const limits = validatePhysicalScanBatch(physicalUploads);
+        const lifecycle = await tx.workflowSigningLifecycle.findUnique({ where: { requestId: request.id } });
+        if (lifecycle?.mode === "DIGITAL") throw new Error("Hồ sơ đã chọn ký điện tử; không thể thêm bằng chứng ký giấy.");
+        const previous = await tx.workflowPhysicalScanBatch.findFirst({ where: { requestId: request.id }, orderBy: { version: "desc" } });
+        if (previous && previous.status !== "RETURNED") throw new Error("Batch scan hiện tại phải được Quản lý trả trước khi tải lại.");
+        const batchVersion = (previous?.version ?? 0) + 1;
+        const keeper = normalizeArchiveText(form.get("keeper"), "người giữ bản gốc");
+        const location = normalizeArchiveText(form.get("location"), "nơi lưu bản gốc");
+        if (previous) await tx.workflowPhysicalScanBatch.update({ where: { id: previous.id }, data: { status: "SUPERSEDED", supersededAt: new Date() } });
+        const batch = await tx.workflowPhysicalScanBatch.create({ data: {
+          requestId: request.id, version: batchVersion, keeperDeclared: keeper, locationDeclared: location, uploadedById: user.id,
+          files: { create: physicalUploads.map(item => ({ name: item.name, mimeType: item.mimeType, size: item.size, data: item.data, sha256: createHash("sha256").update(item.data).digest("hex") })) },
+        } });
+        await tx.workflowPhysicalSigningTransition.create({ data: { requestId: request.id, batchId: batch.id, actorId: user.id, action: previous ? "REUPLOAD_SIGNED" : "UPLOAD_SIGNED", details: json(limits) } });
+        if (lifecycle) await tx.workflowSigningLifecycle.update({ where: { requestId: request.id }, data: { evidenceState: "PENDING" } });
+        else await tx.workflowSigningLifecycle.create({ data: { requestId: request.id, mode: "PHYSICAL", evidenceState: "PENDING", expectedVersion: request.version } });
+        body.signature = { state: "PENDING", keeper, location, fileId: batch.id };
+        await update({ payload: json(body) }); break;
+      }
+      case "RETURN_SIGNED": {
+        if (request.state !== "APPROVED" || body.responsibleManagerId !== user.id) throw new Error("Chỉ Quản lý phụ trách được trả batch scan.");
+        const reason = required(text(form, "reason"), "lý do trả bản scan");
+        const lifecycle = await tx.workflowSigningLifecycle.findUnique({ where: { requestId: request.id } });
+        if (lifecycle?.mode !== "PHYSICAL") throw new Error("Hồ sơ không ở chế độ ký giấy.");
+        const batch = await tx.workflowPhysicalScanBatch.findFirst({ where: { requestId: request.id, status: "PENDING" }, orderBy: { version: "desc" } });
+        if (!batch) throw new Error("Không có batch scan đang chờ kiểm tra.");
+        await tx.workflowPhysicalScanBatch.update({ where: { id: batch.id }, data: { status: "RETURNED", returnedReason: reason } });
+        await tx.workflowPhysicalSigningTransition.create({ data: { requestId: request.id, batchId: batch.id, actorId: user.id, action: "RETURN_SIGNED", reason } });
+        await tx.workflowSigningLifecycle.update({ where: { requestId: request.id }, data: { evidenceState: "RETURNED" } });
+        body.signature = { ...body.signature!, state: "RETURNED" };
         await update({ payload: json(body) }); break;
       }
       case "CONFIRM_SIGNED": {
         if (request.state !== "APPROVED" || body.responsibleManagerId !== user.id || body.signature?.state !== "PENDING") throw new Error("Chỉ Quản lý phụ trách được xác nhận bộ hồ sơ đang chờ kiểm tra bản ký.");
         assertWorkflowLifecycleAllows(request, "SIGN");
         if (text(form, "signatureConfirmed") !== "yes") throw new Error("Cần xác nhận đủ chữ ký theo mẫu và thông tin lưu gốc.");
-        body.signature = { ...body.signature, state: "CONFIRMED", confirmedBy: user.id, confirmedAt: new Date().toISOString() };
+        const lifecycle = await tx.workflowSigningLifecycle.findUnique({ where: { requestId: request.id } });
+        if (lifecycle?.mode !== "PHYSICAL") throw new Error("Hồ sơ không ở chế độ ký giấy.");
+        const batch = await tx.workflowPhysicalScanBatch.findFirst({ where: { requestId: request.id, status: "PENDING" }, orderBy: { version: "desc" } });
+        if (!batch) throw new Error("Không có batch scan đang chờ kiểm tra.");
+        const keeperNormalized = normalizeArchiveText(form.get("keeperNormalized") || batch.keeperDeclared, "người giữ bản gốc chuẩn hóa");
+        const locationNormalized = normalizeArchiveText(form.get("locationNormalized") || batch.locationDeclared, "nơi lưu bản gốc chuẩn hóa");
+        const confirmedAt = new Date();
+        await tx.workflowPhysicalScanBatch.update({ where: { id: batch.id }, data: { status: "CONFIRMED", keeperNormalized, locationNormalized, confirmedById: user.id, confirmedAt } });
+        await tx.workflowPhysicalSigningTransition.create({ data: { requestId: request.id, batchId: batch.id, actorId: user.id, action: "CONFIRM_SIGNED", details: json({ keeperNormalized, locationNormalized }) } });
+        await tx.workflowSigningLifecycle.update({ where: { requestId: request.id }, data: { evidenceState: "PHYSICAL_CONFIRMED" } });
+        if (lifecycle.snapshotId) await tx.workflowApprovedSnapshot.update({ where: { id: lifecycle.snapshotId }, data: { evidenceState: "PHYSICAL_CONFIRMED" } });
+        body.signature = { ...body.signature, keeper: keeperNormalized, location: locationNormalized, state: "CONFIRMED", confirmedBy: user.id, confirmedAt: confirmedAt.toISOString() };
         await update({ payload: json(body) }); break;
       }
       case "REQUEST_DOCUMENT_CANCEL": {
@@ -362,6 +415,7 @@ export async function executeWorkflow(actor: Actor, form: FormData, upload: Proj
       }
       default: throw new Error("Thao tác Workflow không được hỗ trợ.");
     }
+    if (physicalCommand) await tx.workflowSigningCommand.create({ data: { requestId: request.id, commandKey: physicalCommandKey, fingerprint: physicalFingerprint, result: json({ requestId: request.id, command }) } });
     await audit(command);
     return { success: "Đã lưu hồ sơ và lịch sử.", requestId: request.id };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20000 });

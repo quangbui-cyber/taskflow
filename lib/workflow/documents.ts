@@ -20,7 +20,7 @@ export type DocumentPayload = {
   resubmission?: { sourceRequestId: string; sourceAttemptId: string; response: string };
   cancellation?: { status: "PENDING" | "CONFIRMED" | "REJECTED"; requestedById: string; requestedAt: string; reason: string; decidedById?: string; decidedAt?: string; decisionReason?: string };
   execution?: { startedAt?: string; startedById?: string };
-  signature?: { state: "PENDING" | "CONFIRMED"; fileId: string; keeper: string; location: string; confirmedBy?: string; confirmedAt?: string };
+  signature?: { state: "PENDING" | "RETURNED" | "CONFIRMED"; fileId: string; keeper: string; location: string; confirmedBy?: string; confirmedAt?: string };
 };
 export const isTemplateKind = (value: string): value is keyof typeof TEMPLATE_KINDS => Object.prototype.hasOwnProperty.call(TEMPLATE_KINDS, value);
 export function documentReader(request: { creatorId: string; steps: unknown; payload?: unknown }, actorId: string, admin: boolean, member: boolean) {

@@ -13,8 +13,12 @@ export async function approvedSnapshotPrintDocument(snapshot: WorkflowApprovedSn
   if (snapshot.attestationKeyId !== "v1" || !verifyApprovedProjectionAttestation(projection, { keyId: "v1", algorithm: "HMAC-SHA256", value: snapshot.attestation })) {
     throw new Error("Không xác thực được nguồn phát hành snapshot.");
   }
-  const token = await deriveAuthorizedPublicTokenForSnapshot(snapshot.id);
-  const verifyUrl = absolutePublicVerificationUrl(token);
+  const evidenceConfirmed =
+    (snapshot.mode === "DIGITAL" && snapshot.evidenceState === "DIGITAL_CONFIRMED") ||
+    (snapshot.mode === "PHYSICAL" && snapshot.evidenceState === "PHYSICAL_CONFIRMED");
+  const qrDataUrl = evidenceConfirmed
+    ? await createVerificationQrDataUrl(absolutePublicVerificationUrl(await deriveAuthorizedPublicTokenForSnapshot(snapshot.id)))
+    : undefined;
   return {
     code: `HS-${projection.request.id.slice(-8).toUpperCase()}`,
     title: projection.request.title,
@@ -27,7 +31,7 @@ export async function approvedSnapshotPrintDocument(snapshot: WorkflowApprovedSn
     signatures: projection.signatures.map(item => ({ role: item.role, name: item.actorName, signedAt: item.signedAt })),
     projectionSha256: snapshot.projectionSha256,
     signingMode: snapshot.mode as "DIGITAL" | "PHYSICAL",
-    qrDataUrl: await createVerificationQrDataUrl(verifyUrl),
+    qrDataUrl,
     isDraft: false,
   };
 }

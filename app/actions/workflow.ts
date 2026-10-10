@@ -12,7 +12,12 @@ export type WorkflowActionState = { error?: string; success?: string; requestId?
 export async function workflowAction(_previous: WorkflowActionState, form: FormData): Promise<WorkflowActionState> {
   const user = await requireUser();
   try {
-    const result = await executeWorkflow(user, form, await readProjectUpload(form.get("document")));
+    const physicalValues = form.getAll("signedDocuments");
+    if (physicalValues.length > 10) throw new Error("Mỗi batch tối đa 10 file scan.");
+    const physicalBytes = physicalValues.reduce((sum, value) => sum + (value instanceof File ? value.size : 0), 0);
+    if (physicalBytes > 20 * 1024 * 1024) throw new Error("Tổng dung lượng batch scan không được vượt 20 MiB.");
+    const physicalUploads = (await Promise.all(physicalValues.map(value => readProjectUpload(value)))).filter((value): value is NonNullable<typeof value> => value !== null);
+    const result = await executeWorkflow(user, form, await readProjectUpload(form.get("document")), physicalUploads);
     await dispatchWorkflowNotifications(result.requestId).catch(() => undefined);
     revalidatePath("/workflow");
     if (result.requestId) revalidatePath(`/workflow/${result.requestId}`);

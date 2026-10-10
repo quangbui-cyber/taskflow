@@ -17,6 +17,7 @@ type QueueRequest = {
   projectId: string | null;
   version: number;
   financeVersion: number | null;
+  signingMode: string | null;
   currentAttemptId: string | null;
   submittedVersion: number | null;
   currentStep: number;
@@ -34,7 +35,7 @@ export default function WorkflowDecisionDialog({ request }: { request: QueueRequ
   const trigger = useRef<HTMLButtonElement>(null);
   const router = useRouter();
   const ceoIcDecision = request.module === "COSTFLOW" && request.kind === "IC" && request.currentRole === "CEO";
-  const requiresSignature = ["ADVANCE", "VENDOR_PAYMENT", "REIMBURSEMENT", "PROPOSAL", "PROPOSAL_ADVANCE", "PROPOSAL_ADVANCE_SETTLEMENT", "SERVICE_CONTRACT"].includes(request.kind);
+  const requiresSignature = request.signingMode !== "PHYSICAL" && ["ADVANCE", "VENDOR_PAYMENT", "REIMBURSEMENT", "PROPOSAL", "PROPOSAL_ADVANCE", "PROPOSAL_ADVANCE_SETTLEMENT", "SERVICE_CONTRACT"].includes(request.kind);
   const [state, action, pending] = useActionState(async (previous: WorkflowActionState, form: FormData) => {
     const result = await workflowQueueAction(previous, form);
     if (result.success) {
