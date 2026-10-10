@@ -1194,6 +1194,22 @@ dialog.tf-ui-dialog:not([open]) {
   display: none !important;
 }
 
+.tf-round-trip-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.tf-round-trip { display:grid; gap:16px; min-width:0; }
+.tf-round-trip .tf-ui-label { display:grid; gap:6px; font-size:13px; font-weight:600; }
+.tf-round-trip-groups { display:grid; gap:12px; }
+.tf-round-trip-groups section { border:1px solid var(--border); border-radius:10px; padding:12px; min-width:0; }
+.tf-round-trip-groups h3 { margin:0 0 8px; font-size:14px; }
+.tf-round-trip-groups p, .tf-round-trip-groups label { display:block; margin:6px 0; overflow-wrap:anywhere; }
+.tf-round-trip-summary { padding:12px; border-radius:10px; background:var(--surface-subtle); font-variant-numeric:tabular-nums; }
+
+@media (max-width: 767px) {
+  .tf-round-trip-actions { align-items:stretch; }
+  .tf-round-trip-actions > * { width:100%; }
+  .tf-round-trip { width:100%; max-width:100%; overflow-x:hidden; }
+  .tf-round-trip-groups section { padding:10px; }
+}
+
 dialog.tf-ui-dialog[open]:has(.tf-paired-detail),
 dialog.tf-ui-dialog[open]:has(.tf-ic-evidence-panel),
 dialog.tf-ui-dialog[open]:has(.tf-quotation-settings-panel) {

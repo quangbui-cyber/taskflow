@@ -62,7 +62,8 @@ test("live apply keeps unconfirmed deletions, confirms selected deletion and enf
     const makeRow = (id: string, parent: string | null = null) => { const row = blankPairedRow(id, parent, parent ? "ITEM" : "GROUP"); row.name = id; if (parent) { row.sell = { ...row.sell, unit: "gói", quantity: "1", days: "1", unitPrice: "1000", vatPercent: "8" }; row.buy = { ...row.buy, unit: "gói", quantity: "1", days: "1", unitPrice: "500", vatPercent: "8" }; } return row; };
     const rows = [makeRow(`${prefix}-group`), makeRow(`${prefix}-keep`, `${prefix}-group`), makeRow(`${prefix}-delete-a`, `${prefix}-group`), makeRow(`${prefix}-delete-b`, `${prefix}-group`)];
     const draft: PairedDraft = { linePricingSchemaVersion: 2, id: `${prefix}-draft`, version: 1, createdBy: actor.id, workspaceMode: "paired", title: "Apply draft", clientId: "", customer: "Customer", notes: "", rows, globalEvidenceIds: [] };
-    const data: FinanceData = { ...emptyFinance(), quotationDrafts: [draft], quotations: [{ id: `${prefix}-quote`, number: 1, parentId: null, title: "Frozen quote", customer: "Customer", notes: "", lines: [], poIds: [], evidenceIds: [], createdBy: actor.id, createdAt: "2026-10-10T00:00:00.000Z" }] };
+    const protectedRevision = { id: `${prefix}-effective`, number: 1, requestId: `${prefix}-protected-request`, effective: true, createdBy: actor.id, lines: [], poIds: [], briefIds: [] };
+    const data: FinanceData = { ...emptyFinance(), quotationDrafts: [draft], quotations: [{ id: `${prefix}-quote`, number: 1, parentId: null, title: "Frozen quote", customer: "Customer", notes: "", lines: [], poIds: [], evidenceIds: [], createdBy: actor.id, createdAt: "2026-10-10T00:00:00.000Z" }], revisions: [protectedRevision] };
     await prisma.costFlowWorkspace.create({ data: { projectId: project.id, version: 1, data: data as never } });
     const projection = createRoundTripProjection(project.id, draft);
     const imported = { schemaVersion: projection.schemaVersion, projectId: project.id, draftId: draft.id, draftVersion: draft.version, fingerprint: projection.fingerprint, rows: projection.rows.filter(entry => !entry.itemId.endsWith("delete-a") && !entry.itemId.endsWith("delete-b")).map(entry => ({ ...structuredClone(entry), row: structuredClone(entry.row), source: { sheet: "BAO_GIA_IC", row: 7 + entry.order, cell: `C${7 + entry.order}` } })) };
@@ -78,6 +79,7 @@ test("live apply keeps unconfirmed deletions, confirms selected deletion and enf
     assert.ok(saved.rows.some(row => row.itemId.endsWith("delete-b")), "unconfirmed missing row must remain");
     assert.ok(!saved.rows.some(row => row.itemId.endsWith("delete-a")), "selected deletion must apply");
     assert.equal((workspace.data as unknown as FinanceData).quotations![0].title, "Frozen quote");
+    assert.deepEqual((workspace.data as unknown as FinanceData).revisions[0], protectedRevision);
     const replay = await confirmRoundTripMerge({ id: actor.id, role: "ACCOUNT" }, base);
     assert.equal(replay.idempotent, true);
     await assert.rejects(() => confirmRoundTripMerge({ id: actor.id, role: "ACCOUNT" }, { ...base, selectedDeletionIds: [`${prefix}-delete-b`] }), /dữ liệu khác/i);

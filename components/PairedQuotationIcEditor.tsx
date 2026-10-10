@@ -57,6 +57,7 @@ import WorksheetGrid from "./costflow/paired/WorksheetGrid";
 import WorksheetSaveBar from "./costflow/paired/WorksheetSaveBar";
 import WorksheetDetailDrawer from "./costflow/paired/WorksheetDetailDrawer";
 import { PERCENT_FORMATTER } from "./costflow/paired/WorksheetHelpers";
+import ExcelRoundTripDialog from "./ExcelRoundTripDialog";
 
 export default function PairedQuotationIcEditor({
   finance,
@@ -663,6 +664,21 @@ export default function PairedQuotationIcEditor({
         saveIc={saveIc}
         locked={locked}
       />
+
+      {mode === "paired" && draftId && !locked && (
+        <ExcelRoundTripDialog
+          projectId={finance.project.id}
+          draftId={draftId}
+          dirty={dirty}
+          onApplied={result => {
+            setRows(result.rows);
+            setVersion(result.version);
+            setSavedSnapshot(JSON.stringify({ rows: result.rows, title, clientId, notes, parameterConfig, globalIds, saveIc, totalLines, totalLayout }));
+            setState({ success: `Đã áp dụng Excel round-trip vào nháp v${result.draftVersion}.` });
+            router.refresh();
+          }}
+        />
+      )}
 
       {locked && revision && (
         <details className="tf-paired-revision">

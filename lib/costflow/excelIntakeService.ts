@@ -7,10 +7,13 @@ import type { ExcelIntakePreview } from "./excelIntakeParser";
 import { emptyFinance, type FinanceData, type PairedRow } from "./types";
 import { hydrateLinePricingData, normalizePairedRows } from "./pairedDraft";
 import { calculateLineCost, compare, decimal } from "./money";
+import { applyRoundTripDiff, createRoundTripProjection, diffRoundTripDraft, type RoundTripImport } from "./excelRoundTrip";
 
 type Actor = { id: string; role: string };
 export type ConfirmExcelIntakeCommand = { projectId: string; expectedVersion: number; idempotencyKey: string; fingerprint: string; preview: ExcelIntakePreview; corrections?: Record<string, string> };
 export type ConfirmExcelIntakeResult = { draftId: string; version: number; idempotent: boolean };
+export type ConfirmRoundTripMergeCommand = { projectId: string; draftId: string; expectedWorkspaceVersion: number; expectedDraftVersion: number; expectedDraftFingerprint: string; previewFingerprint: string; imported: RoundTripImport; selectedDeletionIds: string[]; idempotencyKey: string };
+export type ConfirmRoundTripMergeResult = { draftId: string; draftVersion: number; version: number; idempotent: boolean; rows: PairedRow[] };
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 
 function previewFingerprint(preview: ExcelIntakePreview) {
@@ -105,5 +108,48 @@ export async function confirmExcelIntake(actor: Actor, command: ConfirmExcelInta
     if (updated.count !== 1) throw new Error("Có thao tác đồng thời. Tải lại rồi thử lại.");
     await tx.costFlowHistory.create({ data: { projectId: command.projectId, version: command.expectedVersion + 1, actorId: actor.id, action: "CONFIRM_EXCEL_INTAKE", snapshot: json(data) } });
     return { draftId, version: command.expectedVersion + 1, idempotent: false };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15000 });
+}
+
+export async function confirmRoundTripMerge(actor: Actor, command: ConfirmRoundTripMergeCommand): Promise<ConfirmRoundTripMergeResult> {
+  if (!command.projectId || !command.draftId || !Number.isSafeInteger(command.expectedWorkspaceVersion) || !Number.isSafeInteger(command.expectedDraftVersion)) throw new Error("Phiên bản round-trip không hợp lệ.");
+  if (!/^[A-Za-z0-9._:-]{8,200}$/.test(command.idempotencyKey)) throw new Error("Mã chống ghi trùng không hợp lệ.");
+  if (!Array.isArray(command.selectedDeletionIds) || command.selectedDeletionIds.some(id => typeof id !== "string")) throw new Error("Danh sách xác nhận xóa không hợp lệ.");
+  const selectedDeletionIds = [...command.selectedDeletionIds].sort();
+  const operationFingerprint = createHash("sha256").update(JSON.stringify({ draftId: command.draftId, expectedDraftVersion: command.expectedDraftVersion, expectedDraftFingerprint: command.expectedDraftFingerprint, previewFingerprint: command.previewFingerprint, imported: command.imported, selectedDeletionIds })).digest("hex");
+
+  return prisma.$transaction(async tx => {
+    const [project, currentActor, workspace] = await Promise.all([
+      tx.project.findUnique({ where: { id: command.projectId }, select: { members: { where: { userId: actor.id }, select: { userId: true } } } }),
+      tx.user.findFirst({ where: { id: actor.id, isActive: true }, select: { role: true } }),
+      tx.costFlowWorkspace.findUnique({ where: { projectId: command.projectId } }),
+    ]);
+    if (!project || !currentActor || !workspace || !["ADMIN", "ACCOUNT"].includes(currentActor.role) || (currentActor.role !== "ADMIN" && !project.members.length)) throw new Error("Không tìm thấy nháp hoặc bạn không có quyền.");
+    const data = hydrateLinePricingData(workspace.data as unknown as FinanceData);
+    const prior = data.excelIntakeReceipts?.find(receipt => receipt.idempotencyKey === command.idempotencyKey);
+    if (prior) {
+      if (prior.fingerprint !== operationFingerprint || prior.actorId !== actor.id || prior.draftId !== command.draftId) throw new Error("Mã chống ghi trùng đã được dùng với dữ liệu khác.");
+      const replayDraft = data.quotationDrafts?.find(value => value.id === prior.draftId);
+      if (!replayDraft) throw new Error("Nháp round-trip không còn tồn tại.");
+      return { draftId: replayDraft.id, draftVersion: replayDraft.version, version: workspace.version, idempotent: true, rows: structuredClone(replayDraft.rows) };
+    }
+    if (workspace.version !== command.expectedWorkspaceVersion) throw new Error("Nháp trên máy chủ đã thay đổi. Tải lại và xuất workbook mới trước khi thử lại.");
+    const draft = data.quotationDrafts?.find(value => value.id === command.draftId);
+    if (!draft || draft.createdBy !== actor.id || draft.workspaceMode !== "paired" || data.closed) throw new Error("Nháp không còn ở trạng thái được phép chỉnh sửa.");
+    if (draft.version !== command.expectedDraftVersion || createRoundTripProjection(command.projectId, draft).fingerprint !== command.expectedDraftFingerprint) throw new Error("Nháp trên máy chủ đã thay đổi. Tải lại và xuất workbook mới trước khi thử lại.");
+    if (draft.icRevisionId) {
+      const revision = data.revisions.find(value => value.id === draft.icRevisionId);
+      const request = revision ? await tx.workflowRequest.findUnique({ where: { id: revision.requestId }, select: { state: true, creatorId: true } }) : null;
+      if (!revision || revision.effective || request?.state !== "DRAFT" || request.creatorId !== actor.id) throw new Error("IC đã gửi hoặc có hiệu lực phải đi qua lifecycle revision hiện có.");
+    }
+    const diff = diffRoundTripDraft(draft, command.imported, command.projectId);
+    if (diff.previewFingerprint !== command.previewFingerprint) throw new Error("Xem trước round-trip không còn khớp. Hãy xem lại diff trước khi áp dụng.");
+    draft.rows = applyRoundTripDiff(draft, diff, selectedDeletionIds);
+    draft.version += 1;
+    data.excelIntakeReceipts = [...(data.excelIntakeReceipts ?? []).slice(-99), { idempotencyKey: command.idempotencyKey, fingerprint: operationFingerprint, draftId: draft.id, actorId: actor.id, createdAt: new Date().toISOString() }];
+    const updated = await tx.costFlowWorkspace.updateMany({ where: { projectId: command.projectId, version: command.expectedWorkspaceVersion }, data: { data: json(data), version: { increment: 1 } } });
+    if (updated.count !== 1) throw new Error("Có thao tác đồng thời. Tải lại và xuất workbook mới trước khi thử lại.");
+    await tx.costFlowHistory.create({ data: { projectId: command.projectId, version: command.expectedWorkspaceVersion + 1, actorId: actor.id, action: "CONFIRM_EXCEL_ROUND_TRIP", snapshot: json(data) } });
+    return { draftId: draft.id, draftVersion: draft.version, version: command.expectedWorkspaceVersion + 1, idempotent: false, rows: structuredClone(draft.rows) };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15000 });
 }

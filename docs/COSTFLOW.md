@@ -186,3 +186,11 @@ Các trục vẫn độc lập: kết quả DD, completeness chứng từ, payme
 - Upload được kiểm tra chữ ký ZIP, giới hạn tài nguyên và nội dung chủ động trước khi ExcelJS đọc; công thức, macro, external link, DDE, OLE/ActiveX và sheet NCC/chứng từ không trở thành dữ liệu nghiệp vụ.
 - Preview không ghi dữ liệu. Xác nhận yêu cầu Account/Admin hiện hành, Project membership, fingerprint, workspace CAS và idempotency key trong transaction Serializable; kết quả duy nhất là một paired draft mới với ID hệ thống.
 - Import không finalize báo giá, không tạo/gửi/duyệt/làm hiệu lực IC và không đổi budget, cash, revenue hay settlement. Company pilot, native IME, accounting và production acceptance vẫn Pending cho Phase 12.
+
+### Excel round-trip nháp Báo giá & IC — PAIR-23
+
+- Chỉ nháp `paired` hiện tại, còn chỉnh sửa và thuộc Account/Admin đang hoạt động mới có thể xuất workbook round-trip nội bộ. Workbook giữ stable row/parent/order, Project, draft version và fingerprint trong sheet `veryHidden`; route dùng `private, no-store`, không chứa evidence bytes hoặc trạng thái approval/budget/cash/revenue/settlement.
+- Re-import chạy cùng preflight ZIP/active-content của Excel Intake, đọc primitive phía bán/mua rồi tạo diff riêng cho thêm, thay đổi trường, di chuyển và dòng có thể xóa. Preview không ghi database; công thức trong ô dữ liệu, stable ID giả/trùng/chéo nháp, hierarchy lỗi và version/fingerprint cũ đều bị chặn.
+- Dòng vắng khỏi workbook chỉ là deletion candidate. Mỗi dòng xóa mặc định chưa chọn và phải được người dùng xác nhận riêng; dòng không xác nhận được giữ nguyên. Apply re-authorize và kiểm tra workspace/draft CAS, preview fingerprint, selected deletions và lifecycle trong transaction Serializable; retry cùng payload là idempotent, race chỉ có một winner.
+- Finalized quotation và IC đã submit/effective không bị round-trip sửa. Muốn đổi các bản đó phải dùng revision lifecycle hiện có. Customer quotation/PDF/XLSX vẫn dùng allowlist bán, không xuất buy, supplier, stable ID, draft version hay metadata round-trip.
+- Phase 12 vẫn phải đo bằng file công ty thật: thời gian từ file đến nháp, số ô cần sửa và đối chiếu chênh lệch tổng. Test local/synthetic, browser local hay workbook reopen không phải nghiệm thu Kế toán, pilot công ty, deployment hoặc production acceptance.
