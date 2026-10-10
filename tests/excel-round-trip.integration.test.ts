@@ -45,3 +45,63 @@ test("live round-trip preview is authorized, zero-write and preserves immutable 
     await prisma.$disconnect();
   }
 });
+
+test("live apply keeps unconfirmed deletions, confirms selected deletion and enforces CAS replay race", { skip: !process.env.COSTFLOW_TEST_DATABASE_URL }, async () => {
+  const canonicalUrl = "postgresql://postgres@127.0.0.1:55439/costflow_test";
+  assert.equal(process.env.COSTFLOW_TEST_DATABASE_URL, canonicalUrl);
+  process.env.DATABASE_URL = canonicalUrl;
+  const { prisma } = await import("../lib/prisma");
+  const { confirmRoundTripMerge } = await import("../lib/costflow/excelIntakeService");
+  const { diffRoundTripDraft } = await import("../lib/costflow/excelRoundTrip");
+  const prefix = `excel-round-trip-apply-${randomUUID()}`;
+  const projectIds: string[] = [];
+  const userIds: string[] = [];
+  try {
+    const actor = await prisma.user.create({ data: { name: prefix, email: `${prefix}@example.test`, passwordHash: "unused", role: "ACCOUNT" } }); userIds.push(actor.id);
+    const project = await prisma.project.create({ data: { name: prefix, ownerId: actor.id, revenue: 777, members: { create: { userId: actor.id } } } }); projectIds.push(project.id);
+    const makeRow = (id: string, parent: string | null = null) => { const row = blankPairedRow(id, parent, parent ? "ITEM" : "GROUP"); row.name = id; if (parent) { row.sell = { ...row.sell, unit: "gói", quantity: "1", days: "1", unitPrice: "1000", vatPercent: "8" }; row.buy = { ...row.buy, unit: "gói", quantity: "1", days: "1", unitPrice: "500", vatPercent: "8" }; } return row; };
+    const rows = [makeRow(`${prefix}-group`), makeRow(`${prefix}-keep`, `${prefix}-group`), makeRow(`${prefix}-delete-a`, `${prefix}-group`), makeRow(`${prefix}-delete-b`, `${prefix}-group`)];
+    const draft: PairedDraft = { linePricingSchemaVersion: 2, id: `${prefix}-draft`, version: 1, createdBy: actor.id, workspaceMode: "paired", title: "Apply draft", clientId: "", customer: "Customer", notes: "", rows, globalEvidenceIds: [] };
+    const data: FinanceData = { ...emptyFinance(), quotationDrafts: [draft], quotations: [{ id: `${prefix}-quote`, number: 1, parentId: null, title: "Frozen quote", customer: "Customer", notes: "", lines: [], poIds: [], evidenceIds: [], createdBy: actor.id, createdAt: "2026-10-10T00:00:00.000Z" }] };
+    await prisma.costFlowWorkspace.create({ data: { projectId: project.id, version: 1, data: data as never } });
+    const projection = createRoundTripProjection(project.id, draft);
+    const imported = { schemaVersion: projection.schemaVersion, projectId: project.id, draftId: draft.id, draftVersion: draft.version, fingerprint: projection.fingerprint, rows: projection.rows.filter(entry => !entry.itemId.endsWith("delete-a") && !entry.itemId.endsWith("delete-b")).map(entry => ({ ...structuredClone(entry), row: structuredClone(entry.row), source: { sheet: "BAO_GIA_IC", row: 7 + entry.order, cell: `C${7 + entry.order}` } })) };
+    imported.rows.find(entry => entry.itemId.endsWith("keep"))!.row.sell.unitPrice = "1200";
+    const diff = diffRoundTripDraft(draft, imported, project.id);
+    const base = { projectId: project.id, draftId: draft.id, expectedWorkspaceVersion: 1, expectedDraftVersion: 1, expectedDraftFingerprint: projection.fingerprint, previewFingerprint: diff.previewFingerprint, imported, selectedDeletionIds: [`${prefix}-delete-a`], idempotencyKey: `${prefix}:apply` };
+    const applied = await confirmRoundTripMerge({ id: actor.id, role: "USER" }, base);
+    assert.equal(applied.idempotent, false);
+    let workspace = await prisma.costFlowWorkspace.findUniqueOrThrow({ where: { projectId: project.id } });
+    let saved = (workspace.data as unknown as FinanceData).quotationDrafts![0];
+    assert.equal(saved.version, 2);
+    assert.equal(saved.rows.find(row => row.itemId.endsWith("keep"))!.sell.unitPrice, "1200");
+    assert.ok(saved.rows.some(row => row.itemId.endsWith("delete-b")), "unconfirmed missing row must remain");
+    assert.ok(!saved.rows.some(row => row.itemId.endsWith("delete-a")), "selected deletion must apply");
+    assert.equal((workspace.data as unknown as FinanceData).quotations![0].title, "Frozen quote");
+    const replay = await confirmRoundTripMerge({ id: actor.id, role: "ACCOUNT" }, base);
+    assert.equal(replay.idempotent, true);
+    await assert.rejects(() => confirmRoundTripMerge({ id: actor.id, role: "ACCOUNT" }, { ...base, selectedDeletionIds: [`${prefix}-delete-b`] }), /dữ liệu khác/i);
+    await assert.rejects(() => confirmRoundTripMerge({ id: actor.id, role: "ACCOUNT" }, { ...base, idempotencyKey: `${prefix}:stale` }), /thay đổi|tải lại/i);
+    workspace = await prisma.costFlowWorkspace.findUniqueOrThrow({ where: { projectId: project.id } });
+    saved = (workspace.data as unknown as FinanceData).quotationDrafts![0];
+    const nextProjection = createRoundTripProjection(project.id, saved);
+    const nextImported = { schemaVersion: nextProjection.schemaVersion, projectId: project.id, draftId: saved.id, draftVersion: saved.version, fingerprint: nextProjection.fingerprint, rows: nextProjection.rows.map(entry => ({ ...structuredClone(entry), row: structuredClone(entry.row), source: { sheet: "BAO_GIA_IC", row: 7 + entry.order, cell: `C${7 + entry.order}` } })) };
+    nextImported.rows.find(entry => entry.itemId.endsWith("keep"))!.row.sell.unitPrice = "1300";
+    const nextDiff = diffRoundTripDraft(saved, nextImported, project.id);
+    const raceBase = { projectId: project.id, draftId: saved.id, expectedWorkspaceVersion: workspace.version, expectedDraftVersion: saved.version, expectedDraftFingerprint: nextProjection.fingerprint, previewFingerprint: nextDiff.previewFingerprint, imported: nextImported, selectedDeletionIds: [], idempotencyKey: "" };
+    const race = await Promise.allSettled([confirmRoundTripMerge({ id: actor.id, role: "ACCOUNT" }, { ...raceBase, idempotencyKey: `${prefix}:race-a` }), confirmRoundTripMerge({ id: actor.id, role: "ACCOUNT" }, { ...raceBase, idempotencyKey: `${prefix}:race-b` })]);
+    assert.equal(race.filter(result => result.status === "fulfilled").length, 1);
+    assert.equal(await prisma.costFlowHistory.count({ where: { projectId: project.id, action: "CONFIRM_EXCEL_ROUND_TRIP" } }), 2);
+    assert.equal(await prisma.costFlowCash.count({ where: { projectId: project.id } }), 0);
+    assert.equal((await prisma.project.findUniqueOrThrow({ where: { id: project.id } })).revenue, 777);
+  } finally {
+    if (projectIds.length) {
+      await prisma.costFlowHistory.deleteMany({ where: { projectId: { in: projectIds } } });
+      await prisma.costFlowWorkspace.deleteMany({ where: { projectId: { in: projectIds } } });
+      await prisma.projectMember.deleteMany({ where: { projectId: { in: projectIds } } });
+      await prisma.project.deleteMany({ where: { id: { in: projectIds } } });
+    }
+    if (userIds.length) await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    await prisma.$disconnect();
+  }
+});
