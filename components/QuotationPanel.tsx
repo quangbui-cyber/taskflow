@@ -12,7 +12,8 @@ import {
   Sparkles,
   ExternalLink,
   Copy,
-  LayoutTemplate
+  LayoutTemplate,
+  Download
 } from "lucide-react";
 import type { Finance } from "@/components/CostFlowPanel";
 import { Button } from "@/components/ui/Button";
@@ -100,10 +101,19 @@ export default function QuotationPanel({
             Tài liệu dự án ({files.length})
           </Link>
           {canCreate && !finance.data.closed && (
-            <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
-              <Plus size={15} className="mr-1" aria-hidden="true" />
-              Tạo báo giá mới
-            </Button>
+            <>
+              <a
+                className="tf-button-secondary tf-button-size-sm"
+                href={`/api/projects/${finance.project.id}/costflow/excel-intake/template`}
+              >
+                <Download size={15} className="mr-1" aria-hidden="true" />
+                Tải mẫu Excel v4
+              </a>
+              <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
+                <Plus size={15} className="mr-1" aria-hidden="true" />
+                Tạo báo giá mới
+              </Button>
+            </>
           )}
         </div>
       </div>

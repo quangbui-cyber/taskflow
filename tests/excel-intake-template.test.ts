@@ -16,13 +16,16 @@ test("v4 workbook reopens with paired layout, three levels and preview-only form
   assert.equal(sheet.getCell("B1").value, "EXCEL INTAKE v4 · BÁO GIÁ & IC");
   assert.deepEqual(["E6", "F6", "G6", "H6", "I6", "J6", "K6", "L6", "M6", "N6"].map(ref => sheet.getCell(ref).value), ["ĐVT", "SỐ LƯỢNG", "SỐ NGÀY", "ĐƠN GIÁ", "CƠ SỞ", "VAT %", "NET", "VAT", "GROSS", "GHI CHÚ KHÁCH"]);
   assert.deepEqual(["O6", "P6", "Q6", "R6", "S6", "T6", "U6", "V6", "W6", "X6", "Y6"].map(ref => sheet.getCell(ref).value), ["ĐVT MUA", "SL MUA", "SỐ NGÀY MUA", "GIÁ VỐN", "CƠ SỞ MUA", "VAT MUA %", "NET IC", "VAT IC", "GROSS IC", "NHÀ CUNG CẤP", "GHI CHÚ NỘI BỘ"]);
-  assert.equal(sheet.getCell("E6").fill.type, "pattern");
-  assert.equal(sheet.getCell("E6").fill.fgColor?.argb, "FFC6E0B4");
-  assert.equal(sheet.getCell("O6").fill.fgColor?.argb, "FFFFD966");
+  const sellFill = sheet.getCell("E6").fill;
+  const buyFill = sheet.getCell("O6").fill;
+  assert.equal(sellFill.type, "pattern");
+  assert.equal(buyFill.type, "pattern");
+  if (sellFill.type === "pattern") assert.equal(sellFill.fgColor?.argb, "FFC6E0B4");
+  if (buyFill.type === "pattern") assert.equal(buyFill.fgColor?.argb, "FFFFD966");
   assert.deepEqual([7, 8, 9].map(row => sheet.getCell(`A${row}`).value), [1, 2, 3]);
   assert.equal(sheet.getCell("H10").value, 0);
   assert.match(String(sheet.getCell("N10").value), /FOC/);
-  assert.deepEqual(sheet.getCell("G8").dataValidation.formulae, ["0"]);
+  assert.deepEqual(sheet.getCell("G8").dataValidation.formulae, [0]);
   assert.deepEqual(sheet.getCell("I8").dataValidation.formulae, ['"NET,GROSS"']);
   assert.equal((sheet.getCell("K8").value as ExcelJS.CellFormulaValue).formula, 'IF(OR(F8="",G8="",H8="",I8="",J8=""),"",IF(I8="NET",F8*G8*H8,F8*G8*H8/(1+J8/100)))');
   assert.equal(sheet.views[0].state, "frozen");
@@ -30,7 +33,8 @@ test("v4 workbook reopens with paired layout, three levels and preview-only form
   assert.equal(sheet.pageSetup.orientation, "landscape");
   assert.equal(workbook.getWorksheet("_META")!.getCell("B1").value, 4);
   assert.match(String(workbook.getWorksheet("_META")!.getCell("B4").value), /preview.*server|server.*preview/i);
-  for (const sentinel of ["EVIDENCE_PRIVATE", "PASSWORD_PRIVATE", "SECRET_PRIVATE", "VENDOR_SOURCE_SHEET"]) assert.ok(!bytes.toString("utf8").includes(sentinel));
+  const text = Buffer.from(bytes).toString("utf8");
+  for (const sentinel of ["EVIDENCE_PRIVATE", "PASSWORD_PRIVATE", "SECRET_PRIVATE", "VENDOR_SOURCE_SHEET"]) assert.ok(!text.includes(sentinel));
 });
 
 test("template route and visible action retain Project-scoped authorization and private headers", async () => {
