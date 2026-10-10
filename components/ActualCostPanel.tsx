@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { Fragment, useCallback, useMemo, useState } from "react";
 import {
   AlertCircle,
   Plus,
@@ -530,9 +530,8 @@ export default function ActualCostPanel({ finance, user, canCreate, onSelectTab 
                     const isUnderBudget = variance < 0;
 
                     return (
-                      <>
+                      <Fragment key={line.id}>
                         <tr
-                          key={line.id}
                           className="hover:bg-[var(--surface-soft)] cursor-pointer"
                           onClick={() => toggleLineExpand(line.id)}
                         >
@@ -622,7 +621,7 @@ export default function ActualCostPanel({ finance, user, canCreate, onSelectTab 
                             </td>
                           </tr>
                         )}
-                      </>
+                      </Fragment>
                     );
                   })}
                 </tbody>
