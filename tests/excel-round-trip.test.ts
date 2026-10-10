@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import ExcelJS from "exceljs";
-import { createRoundTripProjection, diffRoundTripDraft, type RoundTripImport } from "../lib/costflow/excelRoundTrip";
+import { createRoundTripProjection, diffRoundTripDraft, parseRoundTripWorkbook, type RoundTripImport } from "../lib/costflow/excelRoundTrip";
 import { createExcelRoundTripWorkbook } from "../lib/costflow/quotationExcel";
 import type { PairedDraft } from "../lib/costflow/types";
 
@@ -129,5 +129,15 @@ test("diff rejects stale, duplicate, unknown, cross-draft and invalid hierarchy 
   const foreign = importFromDraft(); foreign.projectId = "project-2";
   assert.throws(() => diffRoundTripDraft(draft, foreign, "project-1"), /Project/i);
   const cycle = importFromDraft(); cycle.rows[0].parentItemId = "item-1";
-  assert.throws(() => diffRoundTripDraft(draft, cycle, "project-1"), /vòng|cấu trúc/i);
+  assert.throws(() => diffRoundTripDraft(draft, cycle, "project-1"), /vòng|cấu trúc|cấp gốc/i);
+});
+
+test("round-trip parser rejects formulas in primitive cells before diffing", async () => {
+  const projection = createRoundTripProjection("project-1", draft);
+  const bytes = await createExcelRoundTripWorkbook(projection);
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(bytes);
+  workbook.getWorksheet("BAO_GIA_IC")!.getCell("F8").value = { formula: "1+1", result: 2 };
+  const forged = Buffer.from(await workbook.xlsx.writeBuffer());
+  await assert.rejects(() => parseRoundTripWorkbook(forged), /công thức/i);
 });
