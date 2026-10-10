@@ -77,12 +77,25 @@ export async function ensurePublicCapabilityForSnapshot(snapshotId: string) {
 export async function deriveAuthorizedPublicTokenForSnapshot(snapshotId: string) {
   const capability = await ensurePublicCapabilityForSnapshot(snapshotId);
   if (capability.revokedAt || capability.replacedAt) throw new Error("Capability xác thực công khai không còn hoạt động.");
-  return derivePublicVerificationToken({
+  const token = derivePublicVerificationToken({
     capabilityId: capability.id,
     publicNonce: capability.publicNonce,
     snapshotDigest: capability.snapshot.projectionSha256,
     keyId: capability.attestationKeyId,
   });
+  if (digestPublicVerificationToken(token) !== capability.tokenDigest) throw new Error("Capability công khai không còn khớp digest đã phát hành.");
+  return token;
+}
+
+export function absolutePublicVerificationUrl(token: string, origin = process.env.APP_PUBLIC_ORIGIN ?? "http://localhost:3017") {
+  const parsed = new URL(origin);
+  if (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && ["localhost", "127.0.0.1"].includes(parsed.hostname))) {
+    throw new Error("APP_PUBLIC_ORIGIN phải dùng HTTPS hoặc localhost khi kiểm thử.");
+  }
+  parsed.pathname = `/workflow/verify/${encodeURIComponent(token)}`;
+  parsed.search = "";
+  parsed.hash = "";
+  return parsed.toString();
 }
 
 async function consumeAttempt(tokenDigest: string) {

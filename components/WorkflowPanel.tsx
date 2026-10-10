@@ -12,7 +12,7 @@ import { ModuleTabs } from "@/components/ui/ModuleUI";
 import { TEMPLATE_KINDS, type DocumentPayload } from "@/lib/workflow/documents";
 import { FIELD_LABELS, effectiveRequirements, evaluateDocumentCompleteness, type Requirements, type RequiredField } from "@/lib/workflow/requirements";
 import type { ApprovalStep } from "@/lib/workflow/approval";
-import { WORKFLOW_HUB_HREF, workflowDocumentHref, workflowPrintHref, workflowRequestHref as requestHref, workflowVerifyHref } from "@/lib/workflow/routes";
+import { WORKFLOW_HUB_HREF, workflowDocumentHref, workflowPrintHref, workflowRequestHref as requestHref } from "@/lib/workflow/routes";
 import WorkflowDecisionDialog from "@/components/WorkflowDecisionDialog";
 import { SignaturePad } from "@/components/SignaturePad";
 
@@ -173,14 +173,10 @@ export function WorkflowDocumentPanel({ detail, templates, projects, user, submi
               <Printer size={13} aria-hidden="true" />
               In / Lưu PDF biểu mẫu A4
             </Link>
-            <Link
-              href={workflowVerifyHref(r.id)}
-              target="_blank"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors"
-            >
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg">
               <ShieldCheck size={13} aria-hidden="true" />
-              Tra cứu QR công khai
-            </Link>
+              QR an toàn nằm trên bản in đã duyệt
+            </span>
           </div>
         </div>
 

@@ -947,14 +947,10 @@ function RequestInspectionModal({
               <Printer size={13} aria-hidden="true" />
               In / Lưu PDF biểu mẫu A4
             </Link>
-            <Link
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors"
-              href={`/workflow/verify/${request.id}`}
-              target="_blank"
-            >
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg">
               <ShieldCheck size={13} aria-hidden="true" />
-              Tra cứu QR công khai
-            </Link>
+              QR an toàn nằm trên bản in đã duyệt
+            </span>
             {request.kind === "REIMBURSEMENT" && (
               <Link
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-700 bg-zinc-50 border border-zinc-200 rounded-lg hover:bg-zinc-100 transition-colors"
@@ -1035,24 +1031,9 @@ function RequestInspectionModal({
               ))}
             </div>
 
-            {/* SHA-256 Fingerprint & Verification Link */}
+            {/* Snapshot fingerprint and opaque QR are emitted only by the approved print route. */}
             <div className="p-2.5 rounded-lg bg-white border border-emerald-200/70 flex flex-wrap items-center justify-between gap-2 text-xs">
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-medium text-zinc-600">Mã băm toàn vẹn (SHA-256):</span>
-                <code className="text-[11px] font-mono text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                  sha256:{request.id.slice(0, 8)}...{request.id.slice(-6)}
-                </code>
-              </div>
-              <div className="flex items-center gap-2">
-                <Link
-                  href={`/workflow/verify/${request.id}`}
-                  target="_blank"
-                  className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 hover:text-emerald-900 underline"
-                >
-                  <ExternalLink size={11} />
-                  Trang xác thực QR công khai
-                </Link>
-              </div>
+              <span className="text-[11px] text-zinc-600">Mã băm snapshot và QR capability chỉ hiển thị trên bản in đã duyệt; không dùng mã hồ sơ nội bộ làm URL công khai.</span>
             </div>
 
             {/* Dual-Track Action Buttons */}

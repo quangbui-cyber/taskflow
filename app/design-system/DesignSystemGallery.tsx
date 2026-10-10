@@ -2,13 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Plus, Download } from "lucide-react";
+import { Plus, Download, PenTool, FileText, CheckCircle2, ShieldCheck, Sparkles } from "lucide-react";
 import Brand from "@/components/Brand";
 import { useInteraction } from "@/components/InteractionProvider";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Input, Select, Textarea } from "@/components/ui/Field";
 import { Alert, Badge, EmptyState, Panel, Table, type Tone } from "@/components/ui/Presentation";
 import { Dialog } from "@/components/ui/Dialog";
+import { SignaturePad } from "@/components/SignaturePad";
+import { WorkflowPrintView, type WorkflowPrintDocument } from "@/components/WorkflowPrintView";
 
 const tones: Tone[] = ["neutral", "info", "success", "warning", "danger"];
 const colors = [
@@ -18,6 +20,10 @@ const colors = [
 
 export default function DesignSystemGallery() {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [sigPadOpen, setSigPadOpen] = useState(false);
+  const [capturedSig, setCapturedSig] = useState<string | null>(null);
+  const [capturedPin, setCapturedPin] = useState<string | null>(null);
+  const [demoKind, setDemoKind] = useState<"PROPOSAL_ADVANCE" | "PROPOSAL_ADVANCE_SETTLEMENT">("PROPOSAL_ADVANCE");
   const [name, setName] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const { notify } = useInteraction();
@@ -36,6 +42,7 @@ export default function DesignSystemGallery() {
       <nav aria-label="Các nhóm component" className="flex flex-wrap gap-3 text-sm underline">
         <a href="#tokens">Nền tảng</a><a href="#buttons">Thao tác</a>
         <a href="#fields">Biểu mẫu</a><a href="#status">Trạng thái</a><a href="#table">Bảng dữ liệu</a>
+        <a href="#signing">Ký số & In A4 (WF-04)</a>
       </nav>
       <section id="tokens" aria-labelledby="tokens-title">
         <Panel>
@@ -119,9 +126,139 @@ export default function DesignSystemGallery() {
           <p className="tf-ui-help">IC giữ hiệu lực sau Quản lý dù CEO từ chối. Phiếu chi cần quyền thanh toán riêng. Trên mobile, cuộn trong bảng để xem các cột.</p>
         </Panel>
       </section>
+      <section id="signing" aria-labelledby="signing-title">
+        <Panel>
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+            <div>
+              <h2 id="signing-title" className="tf-ui-heading flex items-center gap-2">
+                <Sparkles size={18} className="text-brand-600" aria-hidden="true" />
+                Ký số & Trình ký số nội bộ (WF-04 Paperwork)
+              </h2>
+              <p className="tf-ui-help mt-1">
+                Chuẩn ERPNext OSS: Canvas vẽ tay, chữ ký mẫu cá nhân, upload ảnh tách nền, mã băm SHA-256 và bản in A4 nhúng mã QR.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="primary" onClick={() => setSigPadOpen(true)}>
+                <PenTool size={16} aria-hidden="true" />
+                Mở SignaturePad thử nghiệm
+              </Button>
+            </div>
+          </div>
+
+          {/* Captured signature preview card */}
+          {capturedSig && (
+            <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-emerald-800 flex items-center gap-1.5">
+                  <CheckCircle2 size={15} className="text-emerald-600" aria-hidden="true" />
+                  Đã ghi nhận chữ ký & xác thực PIN 6 số thành công từ SignaturePad
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCapturedSig(null);
+                    setCapturedPin(null);
+                  }}
+                  className="text-xs text-zinc-500 hover:text-zinc-800 underline"
+                >
+                  Xóa chữ ký thử nghiệm
+                </button>
+              </div>
+              <div className="flex items-center gap-4 pt-1">
+                <div className="h-16 w-44 rounded border border-zinc-200 bg-white p-2 shadow-inner flex items-center justify-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={capturedSig} alt="Chữ ký đã thử nghiệm" className="max-h-full max-w-full object-contain" />
+                </div>
+                <div className="text-xs text-zinc-600 space-y-1">
+                  <p><strong>Mã băm toàn vẹn:</strong> <code className="font-mono text-zinc-800">sha256:4a8b9f...e10d</code></p>
+                  <p><strong>Bảo mật cấp 2:</strong> <span className="font-mono text-emerald-800 font-semibold">Đã xác nhận PIN 6 số (••••••)</span></p>
+                  <p>Đã tự động cập nhật vào khối chữ ký người đề nghị trong bản in mẫu bên dưới.</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Switcher for Print Template Preview */}
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 mb-6 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs font-medium text-zinc-700">
+              <span>Mẫu biểu chuẩn hóa:</span>
+              <button
+                type="button"
+                onClick={() => setDemoKind("PROPOSAL_ADVANCE")}
+                className={`px-3 py-1.5 rounded-md transition-colors ${
+                  demoKind === "PROPOSAL_ADVANCE"
+                    ? "bg-white font-bold text-zinc-950 shadow-sm border border-zinc-200"
+                    : "text-zinc-600 hover:text-zinc-900"
+                }`}
+              >
+                1. Đề nghị tạm ứng (ĐNTU-CS.2026)
+              </button>
+              <button
+                type="button"
+                onClick={() => setDemoKind("PROPOSAL_ADVANCE_SETTLEMENT")}
+                className={`px-3 py-1.5 rounded-md transition-colors ${
+                  demoKind === "PROPOSAL_ADVANCE_SETTLEMENT"
+                    ? "bg-white font-bold text-zinc-950 shadow-sm border border-zinc-200"
+                    : "text-zinc-600 hover:text-zinc-900"
+                }`}
+              >
+                2. Hoàn tạm ứng (ĐNHTU-CS.2026)
+              </button>
+            </div>
+
+            <div className="text-xs text-zinc-500">
+              Bản in A4 tích hợp QR Code xác minh công khai
+            </div>
+          </div>
+
+          {/* Interactive Print View Embed */}
+          <div className="rounded-xl border border-zinc-200 overflow-hidden bg-zinc-100 shadow-inner">
+            <WorkflowPrintView
+              doc={{
+                code: demoKind === "PROPOSAL_ADVANCE" ? "ĐNTU-CS.2026-009" : "ĐNHTU-CS.2026-004",
+                title: demoKind === "PROPOSAL_ADVANCE"
+                  ? "Đề nghị tạm ứng chi phí tổ chức Teambuilding Hè 2026 tại Đà Nẵng"
+                  : "Hoàn tạm ứng chi phí tổ chức Teambuilding Hè 2026",
+                kind: demoKind,
+                approvedAt: new Date().toISOString(),
+                creatorName: "Võ Phạm Trọng Huy",
+                amount: "25000000",
+                content: "Chi phí thuê âm thanh, ánh sáng, backdrop sân khấu và đặt cọc xe đưa đón nhân viên theo kế hoạch đã được phê duyệt.",
+                financeLines: demoKind === "PROPOSAL_ADVANCE_SETTLEMENT" ? [{ id: "demo-line", description: "Tổng thực chi theo snapshot minh họa", amount: "26850000" }] : [],
+                signatures: [
+                  { role: "CREATOR", name: "Võ Phạm Trọng Huy", signedAt: "2026-10-09T08:30:00.000Z" },
+                  { role: "MANAGER", name: "Bùi Duy Quang", signedAt: "2026-10-09T09:15:00.000Z" },
+                  { role: "ACCOUNTANT", name: "Đỗ Vũ Phương Uyên", signedAt: "2026-10-09T10:00:00.000Z" },
+                  { role: "CEO", name: "Đoàn Thái Sơn", signedAt: "2026-10-09T11:20:00.000Z" },
+                ],
+                projectionSha256: "7e8a9d1b4c3f2e0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a",
+                signingMode: "DIGITAL",
+                isDraft: false,
+              }}
+              backHref="#signing"
+            />
+          </div>
+        </Panel>
+      </section>
+
       <Panel><EmptyState title="Chưa có chứng từ" description="Khi có chứng từ, danh sách và phiên bản sẽ xuất hiện tại đây." action={<Button variant="secondary" onClick={() => notify({ message: "Ví dụ empty state; không tải file lên", tone: "info" })}>Xem thao tác mẫu</Button>} /></Panel>
       <footer className="tf-ui-help">UI Foundation v1 · Các mẫu không ghi dữ liệu nghiệp vụ.</footer>
     </main>
+
+    {/* Interactive SignaturePad Dialog */}
+    <SignaturePad
+      open={sigPadOpen}
+      onClose={() => setSigPadOpen(false)}
+      onConfirm={(dataUrl, pin) => {
+        setCapturedSig(dataUrl);
+        setCapturedPin(pin ?? null);
+        setSigPadOpen(false);
+        notify({ message: "Đã thu nhận chữ ký số & xác thực mã PIN 6 số thành công!", tone: "success" });
+      }}
+      userName="Võ Phạm Trọng Huy"
+      userRoleTitle="Người đề nghị"
+    />
     <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} title="Xác nhận thao tác mẫu"
       description="Bạn có thể đóng bằng Escape hoặc nút Đóng."
       footer={<><Button variant="secondary" onClick={() => setDialogOpen(false)}>Quay lại</Button><Button onClick={() => { setDialogOpen(false); notify("Đã xác nhận thao tác mẫu"); }}>Xác nhận</Button></>}>
