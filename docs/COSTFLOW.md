@@ -180,3 +180,9 @@ Thanh lý khách hàng là chuỗi version bất biến kèm số biên bản, n
 Customer Acceptance dùng dòng bán của báo giá finalized và actual quantity/days do Account nhập; không dùng quantity/giá mua của supplier làm customer actual. Phát sinh ngoài IC chỉ vào artifact khi đã DD approve, được đánh dấu billable và Account chọn exact current version. PDF/XLSX render cùng một snapshot allowlist, có contract/actual/delta và chữ ký hai bên; không xuất recipient/NCC, buy price, evidence ID/bytes, DD event, internal note hoặc margin.
 
 Các trục vẫn độc lập: kết quả DD, completeness chứng từ, payment authorization, request lifecycle, actual cash, customer receipt, settlement, signature/execution và financial close. PAY-06 vẫn Pending. Không có bank integration, cross-Project offset, chữ ký số hoặc đồng bộ hóa đơn điện tử. Kiểm chứng local không phải nghiệm thu Kế toán/công ty, pilot, deployment hay production acceptance.
+### Excel Intake v4 — nhập nháp mới (PAIR-22)
+
+- `Dán bảng` và `Tải XLSX` dùng chung một normalizer, giữ tọa độ sheet/dòng/ô và tách lỗi chặn khỏi cảnh báo.
+- Upload được kiểm tra chữ ký ZIP, giới hạn tài nguyên và nội dung chủ động trước khi ExcelJS đọc; công thức, macro, external link, DDE, OLE/ActiveX và sheet NCC/chứng từ không trở thành dữ liệu nghiệp vụ.
+- Preview không ghi dữ liệu. Xác nhận yêu cầu Account/Admin hiện hành, Project membership, fingerprint, workspace CAS và idempotency key trong transaction Serializable; kết quả duy nhất là một paired draft mới với ID hệ thống.
+- Import không finalize báo giá, không tạo/gửi/duyệt/làm hiệu lực IC và không đổi budget, cash, revenue hay settlement. Company pilot, native IME, accounting và production acceptance vẫn Pending cho Phase 12.

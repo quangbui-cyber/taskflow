@@ -110,7 +110,7 @@ export default function QuotationPanel({
                 <Download size={15} className="mr-1" aria-hidden="true" />
                 Tải mẫu Excel v4
               </a>
-              <ExcelIntakeDialog projectId={finance.project.id} />
+              <ExcelIntakeDialog projectId={finance.project.id} version={finance.version} />
               <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
                 <Plus size={15} className="mr-1" aria-hidden="true" />
                 Tạo báo giá mới

@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useReducer, useRef, type ChangeEvent } from "react";
+import { useEffect, useReducer, useRef, useState, useTransition, type ChangeEvent } from "react";
+import { useRouter } from "next/navigation";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { Input as Field, Textarea } from "@/components/ui/Field";
 import { Alert, Table } from "@/components/ui/Presentation";
 import type { ExcelIntakePreview } from "@/lib/costflow/excelIntakeParser";
+import { confirmExcelIntakeAction } from "@/app/actions/costflowExcelIntake";
 
 type IntakeState = {
   open: boolean;
@@ -46,8 +48,11 @@ export function excelIntakeReducer(state: IntakeState, action: IntakeAction): In
   return { ...state, pending: false, error: action.message };
 }
 
-export default function ExcelIntakeDialog({ projectId, disabled = false }: { projectId: string; disabled?: boolean }) {
+export default function ExcelIntakeDialog({ projectId, version, disabled = false }: { projectId: string; version: number; disabled?: boolean }) {
   const [state, dispatch] = useReducer(excelIntakeReducer, initialExcelIntakeState);
+  const [confirmError, setConfirmError] = useState("");
+  const [confirmPending, startConfirm] = useTransition();
+  const router = useRouter();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const sequence = useRef(0);
   const blocking = state.preview?.errors.length ?? 0;
@@ -74,13 +79,22 @@ export default function ExcelIntakeDialog({ projectId, disabled = false }: { pro
 
   const corrected = (rowKey: string, field: string, fallback: string | null) => state.corrections[`${rowKey}.${field}`] ?? fallback ?? "";
   const focusIssue = (field: string, candidateKey?: string) => document.getElementById(`excel-intake-row-${candidateKey ?? state.preview?.rows[0]?.candidateKey}-${field.replace(".", "-")}`)?.focus();
+  const confirm = () => {
+    if (!state.preview || blocking) return;
+    setConfirmError("");
+    startConfirm(async () => {
+      const result = await confirmExcelIntakeAction({ projectId, expectedVersion: version, idempotencyKey: crypto.randomUUID(), fingerprint: state.preview!.fingerprint, preview: state.preview!, corrections: state.corrections });
+      if ("error" in result) { setConfirmError(result.error); return; }
+      router.push(`/projects/${projectId}/costflow/paired?draftId=${encodeURIComponent(result.draftId)}`);
+    });
+  };
 
   return <>
     <Button ref={triggerRef} variant="secondary" size="sm" disabled={disabled} onClick={() => dispatch({ type: "OPEN" })}>Nhập từ Excel</Button>
     <Dialog open={state.open} onClose={() => dispatch({ type: "CLOSE" })} title="Nhập Báo giá & IC" description="Dán bảng hoặc tải XLSX để xem trước. Chưa có hồ sơ nào được ghi." className="excel-intake-dialog"
       footer={<>
         <Button variant="secondary" onClick={preview} loading={state.pending}>Cập nhật xem trước</Button>
-        <Button disabled={state.pending || blocking > 0 || !state.preview}>Tạo nháp mới</Button>
+        <Button onClick={confirm} loading={confirmPending} disabled={state.pending || confirmPending || blocking > 0 || !state.preview}>Tạo nháp mới</Button>
       </>}>
       <div className="excel-intake-source-grid">
         <Button variant={state.mode === "PASTE" ? "primary" : "secondary"} onClick={() => dispatch({ type: "SET_MODE", mode: "PASTE" })}>Dán bảng</Button>
@@ -92,6 +106,7 @@ export default function ExcelIntakeDialog({ projectId, disabled = false }: { pro
         <Field label="Tệp XLSX" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event: ChangeEvent<HTMLInputElement>) => dispatch({ type: "SET_FILE", file: event.target.files?.[0] ?? null })} />}
       <p className="tf-ui-help" aria-live="polite">{state.pending ? "Đang kiểm tra dữ liệu…" : state.error || (state.preview ? `Đã nhận diện ${state.preview.adapter} · ${state.preview.rows.length} dòng.` : "Chọn nguồn rồi cập nhật xem trước.")}</p>
       {state.error && <Alert tone="danger" title="Chưa thể xem trước">{state.error} Dữ liệu và các ô đã sửa vẫn được giữ.</Alert>}
+      {confirmError && <Alert tone="danger" title="Chưa thể tạo nháp">{confirmError} Dữ liệu và các ô đã sửa vẫn được giữ.</Alert>}
       {!!state.preview?.errors.length && <Alert tone="danger" title="Lỗi cần sửa"><ul>{state.preview.errors.map((issue, index) => <li key={`${issue.source.cell}-${index}`}><button type="button" className="tf-link" onClick={() => focusIssue(issue.field)}>{issue.message}</button> — {issue.source.sheet} · dòng {issue.source.row} · ô {issue.source.cell}</li>)}</ul></Alert>}
       {!!state.preview?.warnings.length && <Alert tone="warning" title="Cảnh báo"><ul>{state.preview.warnings.map((issue, index) => <li key={`${issue.source.cell}-${index}`}>{issue.message} — {issue.source.sheet} · dòng {issue.source.row} · ô {issue.source.cell}</li>)}</ul></Alert>}
       {state.preview && <div className="excel-intake-table-scroll"><p className="tf-ui-help">Sheet · dòng · ô được giữ cho từng trường nguồn.</p><Table caption="Xem trước Báo giá xanh và IC vàng">

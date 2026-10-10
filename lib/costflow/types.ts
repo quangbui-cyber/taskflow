@@ -59,6 +59,7 @@ export type VendorPaymentMilestone = {
   notes?: string;
   linkedRequestId?: string;
 };
+export type ExcelIntakeReceipt = { idempotencyKey: string; fingerprint: string; draftId: string; actorId: string; createdAt: string };
 export type FinanceData = {
   config: { accountantId: string; ceoId: string; managerId: string; operationUserIds?: string[] };
   closed: boolean;
@@ -73,6 +74,7 @@ export type FinanceData = {
   quotationDrafts?: PairedDraft[];
   evidenceSupplements?: IcEvidenceSupplement[];
   vendorPaymentMilestones?: VendorPaymentMilestone[];
+  excelIntakeReceipts?: ExcelIntakeReceipt[];
 };
 export type CashRow = { id: string; requestId: string; recipientKey: string; direction: string; amount: string; reference: string; evidenceId: string; channel?: string; occurredAt?: string | Date; normalizedAllocations?: { requestLineId: string; amount: string; direction: string }[] };
 export type RequestPayload = { revisionId?: string; recipientKey?: string; amount?: string; beneficiaryVersion?: number; explanation?: string; targetRequestId?: string; expenseIds?: string[]; evidenceIds?: string[]; actual?: string; actualGross?: string; advance?: string; advanceLineIds?: string[]; additional?: string; refund?: string; reconciliation?: string; lines?: IcLine[]; beneficiary?: { name: string; bank: string; account: string }; expenseRevision?: { previousVersion: number; proposed: Expense }; resubmission?: { sourceRequestId: string; sourceAttemptId: string; response: string } };
