@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import ExcelJS from "exceljs";
-import { createRoundTripProjection } from "../lib/costflow/excelRoundTrip";
+import { createRoundTripProjection, diffRoundTripDraft, type RoundTripImport } from "../lib/costflow/excelRoundTrip";
 import { createExcelRoundTripWorkbook } from "../lib/costflow/quotationExcel";
 import type { PairedDraft } from "../lib/costflow/types";
 
@@ -83,4 +83,51 @@ test("round-trip route is exact-draft authorized and private while customer expo
   assert.match(route, /createRoundTripProjection/);
   const customerExport = await readFile(path.join(process.cwd(), "lib/costflow/quotationExport.ts"), "utf8");
   assert.doesNotMatch(customerExport, /createExcelRoundTripWorkbook|draftVersion|parentItemId/);
+});
+
+function importFromDraft(): RoundTripImport {
+  const projection = createRoundTripProjection("project-1", draft);
+  return {
+    schemaVersion: projection.schemaVersion,
+    projectId: projection.projectId,
+    draftId: projection.draftId,
+    draftVersion: projection.draftVersion,
+    fingerprint: projection.fingerprint,
+    rows: projection.rows.map(entry => ({ ...structuredClone(entry), source: { sheet: "BAO_GIA_IC", row: 7 + entry.order, cell: `C${7 + entry.order}` } })),
+  };
+}
+
+test("deterministic diff separates add, field change, deletion candidate and move", () => {
+  const noOp = diffRoundTripDraft(draft, importFromDraft(), "project-1");
+  assert.deepEqual([noOp.adds, noOp.changes, noOp.deletionCandidates, noOp.moves].map(group => group.length), [0, 0, 0, 0]);
+
+  const edited = importFromDraft();
+  edited.rows[1].row.sell.quantity = "0";
+  edited.rows[1].parentItemId = null;
+  edited.rows[1].order = 0;
+  edited.rows = edited.rows.filter(row => row.itemId !== "group-1");
+  edited.rows.push({
+    itemId: null, parentItemId: null, order: 2, level: 1,
+    row: { ...structuredClone(draft.rows[1]), itemId: "temporary-client-value", parentItemId: null, name: "Dòng mới", sell: { ...draft.rows[1].sell, quantity: "1" } },
+    source: { sheet: "BAO_GIA_IC", row: 9, cell: "C9" },
+  });
+  const diff = diffRoundTripDraft(draft, edited, "project-1");
+  assert.equal(diff.adds.length, 1);
+  assert.ok(diff.changes.some(change => change.itemId === "item-1" && change.field === "sell.quantity" && change.oldValue === "2" && change.newValue === "0"));
+  assert.deepEqual(diff.deletionCandidates.map(row => row.itemId), ["group-1"]);
+  assert.ok(diff.moves.some(move => move.itemId === "item-1" && move.oldParentItemId === "group-1" && move.newParentItemId === null));
+  assert.equal(diff.adds[0].source.cell, "C9");
+});
+
+test("diff rejects stale, duplicate, unknown, cross-draft and invalid hierarchy metadata", () => {
+  const stale = importFromDraft(); stale.draftVersion -= 1;
+  assert.throws(() => diffRoundTripDraft(draft, stale, "project-1"), /phiên bản|thay đổi/i);
+  const duplicate = importFromDraft(); duplicate.rows.push(structuredClone(duplicate.rows[1]));
+  assert.throws(() => diffRoundTripDraft(draft, duplicate, "project-1"), /trùng/i);
+  const unknown = importFromDraft(); unknown.rows[1].itemId = "foreign-stable-id";
+  assert.throws(() => diffRoundTripDraft(draft, unknown, "project-1"), /không thuộc|không hợp lệ/i);
+  const foreign = importFromDraft(); foreign.projectId = "project-2";
+  assert.throws(() => diffRoundTripDraft(draft, foreign, "project-1"), /Project/i);
+  const cycle = importFromDraft(); cycle.rows[0].parentItemId = "item-1";
+  assert.throws(() => diffRoundTripDraft(draft, cycle, "project-1"), /vòng|cấu trúc/i);
 });
