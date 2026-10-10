@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import ExcelJS from "exceljs";
 import { prisma } from "@/lib/prisma";
 import { preflightExcelWorkbook } from "./excelIntakeSecurity";
@@ -229,10 +229,16 @@ export async function previewRoundTripMerge(actor: Actor, projectId: string, byt
     const request = revision ? await prisma.workflowRequest.findUnique({ where: { id: revision.requestId }, select: { state: true, creatorId: true } }) : null;
     if (!revision || revision.effective || request?.state !== "DRAFT" || request.creatorId !== actor.id) throw new Error("Nháp không còn ở trạng thái được phép chỉnh sửa.");
   }
-  return { workspaceVersion: workspace.version, draft: { id: draft.id, version: draft.version }, diff: diffRoundTripDraft(draft, imported, projectId) };
+  return { workspaceVersion: workspace.version, draft: { id: draft.id, version: draft.version }, imported, diff: diffRoundTripDraft(draft, imported, projectId) };
 }
 
-// Implemented by Task 11.3 after deletion selection and CAS have been revalidated.
-export function applyRoundTripDiff(): never {
-  throw new Error("Round-trip apply is not available yet.");
+export function applyRoundTripDiff(draft: PairedDraft, diff: RoundTripDiff, selectedDeletionIds: string[]) {
+  const candidates = new Set(diff.deletionCandidates.map(row => row.itemId));
+  const selected = new Set(selectedDeletionIds);
+  if (selected.size !== selectedDeletionIds.length || [...selected].some(id => !candidates.has(id))) throw new Error("Danh sách xác nhận xóa không hợp lệ.");
+  const retainedMissing = draft.rows.filter(row => candidates.has(row.itemId) && !selected.has(row.itemId)).map(row => structuredClone(row));
+  const provisional = [...diff.mergedRows.map(row => structuredClone(row)), ...retainedMissing];
+  const newIds = new Map(provisional.filter(row => row.itemId.startsWith("preview-new-")).map(row => [row.itemId, randomUUID()]));
+  const applied = provisional.map(row => ({ ...row, itemId: newIds.get(row.itemId) ?? row.itemId, parentItemId: row.parentItemId ? newIds.get(row.parentItemId) ?? row.parentItemId : null }));
+  return normalizePairedRows(applied);
 }
