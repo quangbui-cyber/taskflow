@@ -128,7 +128,7 @@ test("schema persists one signing mode, distinct evidence states and idempotency
   assert.match(schema, /model WorkflowSigningEvent \{/);
   assert.match(schema, /model WorkflowSigningLifecycle \{/);
   assert.match(schema, /model WorkflowSigningCommand \{/);
-  assert.match(schema, /@@unique\(\[snapshotId, role\]\)/);
+  assert.match(schema, /@@unique\(\[requestId, version, role\]\)/);
   assert.match(schema, /@@unique\(\[requestId, commandKey\]\)/);
   assert.match(schema, /signerIpNormalized\s+String\?/);
   assert.match(schema, /signerIpSource\s+String/);
