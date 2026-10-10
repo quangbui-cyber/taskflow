@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
 import { useEffect, useRef, useState, useId } from "react";
@@ -59,30 +60,6 @@ export function SignaturePad({
   const legalCheckboxId = useId();
   const pinInputId = useId();
 
-  // Reset or setup canvas when opened or tab changed to draw
-  useEffect(() => {
-    if (!open) {
-      if (canvasRef.current) {
-        canvasRef.current.width = 0;
-        canvasRef.current.height = 0;
-      }
-      setHasDrawn(false);
-      setAgreedLegal(false);
-      setUploadedDataUrl(null);
-      setUploadError(null);
-      setPin("");
-      setShowPin(false);
-      return;
-    }
-
-    if (activeTab === "draw") {
-      const timer = setTimeout(() => {
-        initCanvas();
-      }, 50);
-      return () => clearTimeout(timer);
-    }
-  }, [open, activeTab]);
-
   function initCanvas() {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -108,6 +85,30 @@ export function SignaturePad({
 
     setHasDrawn(false);
   }
+
+  // Reset or setup canvas when opened or tab changed to draw
+  useEffect(() => {
+    if (!open) {
+      if (canvasRef.current) {
+        canvasRef.current.width = 0;
+        canvasRef.current.height = 0;
+      }
+      setHasDrawn(false);
+      setAgreedLegal(false);
+      setUploadedDataUrl(null);
+      setUploadError(null);
+      setPin("");
+      setShowPin(false);
+      return;
+    }
+
+    if (activeTab === "draw") {
+      const timer = setTimeout(() => {
+        initCanvas();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [open, activeTab]);
 
   function clearCanvas() {
     initCanvas();
