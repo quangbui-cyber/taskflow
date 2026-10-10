@@ -48,6 +48,9 @@ Manager approval may activate an IC baseline. Accountant/CEO decisions remain ap
 - `prisma/migrations/20261002*` adds the standard CostFlow/Workflow foundation, template catalog, and requirement snapshots.
 - `prisma/migrations/20261003050000_approval_provenance` strengthens decision provenance.
 - `prisma/migrations/20261005180000_quotation_reuse_templates` adds reusable quotation sources.
+- `prisma/migrations/20261008140000_phase7_payment_dossier_lines` adds recipient/source-specific payment lines and settlement lineage.
+- `prisma/migrations/20261009_phase8_actual_cost_authority` adds normalized Actual Cost occurrences, evidence, approval attempts, customer liquidation, and AR receipts.
+- `prisma/migrations/20261010_phase9_*` add signature assets/PINs, approved snapshots, ordered signing events, public capability verification, physical scans, and revision guards.
 
 The migrations are additive. Reviewer attention should focus on unique constraints, parent/attempt/version bindings, delete behavior, project linkage, and indices used by inbox/project reads.
 
@@ -59,11 +62,15 @@ The migrations are additive. Reviewer attention should focus on unique constrain
 | PO/IC versions | `budgetSources.ts`, `budgetDraft.ts`, `budgetLineage.ts`, `budgetRevisions.ts` | source lineage, immutable submitted revisions, replacement semantics |
 | Quotation | `budgetQuotation.ts`, `quotationHierarchy.ts`, `quotationProjection.ts`, `quotationTotals.ts` | hierarchy, customer allowlist, totals and reference-cycle validation |
 | Paired pricing | `pairedPricing.ts`, `workspaceFlow.ts` | independent sales/IC fields and mode capabilities |
+| Excel intake/round-trip | `excelIntake*.ts`, `excelRoundTrip.ts`, `quotationExcel.ts` | file limits, MIME/magic-byte checks, opaque preview ownership, lossless semantics, atomic confirm/apply, stale-source rejection |
 | IC effect | `icEffectiveness.ts` | Manager effect separate from later approval outcome |
-| Evidence | `icEvidence.ts`, `exportData.ts`, `export.ts` | evidence-or-reason gates and customer/internal export separation |
-| Reconciliation | `reconciliation.ts` | employee/vendor balances and cash allocation boundaries |
+| Actual Cost | `actualCost*.ts`, `approvedActualCost.ts` | immutable DD approval tuple, IC-to-AC comparison, evidence completeness, role-scoped projection |
+| Customer accounting | `customerAccounting.ts`, `customerAcceptance*.ts` | liquidation/AR/margin separation and customer-safe PDF/XLSX snapshot |
+| Evidence | `icEvidence.ts`, `actualCostService.ts`, `exportData.ts`, `export.ts` | evidence-or-reason gates, authorized bytes, and customer/internal export separation |
+| Reconciliation | `paymentSettlement.ts`, `paymentCash.ts`, `reconciliation.ts` | exact selected sources, employee/vendor balances, explicit cash, replay/race safety |
 | Approval | `lib/workflow/approval.ts`, `approvalEvents.ts` | assigned actor, attempt/version token, no step skipping |
-| Workflow docs | `documents.ts`, `lifecycle.ts`, `permissions.ts` | immutable submissions, replacement, signing and reader boundaries |
+| Workflow docs | `documents.ts`, `lifecycle.ts`, `permissions.ts` | immutable submissions, replacement, physical custody, execution and reader boundaries |
+| Governed signing | `signatureAssets.ts`, `approvedSnapshot.ts`, `signing.ts`, `printDocument.ts`, `publicVerification.ts` | six-digit PIN, immutable projection, ordered role events, signature privacy, hash/QR verification, revision/replacement |
 | Notifications | `workflow/notifications.ts` | durable intent vs post-commit transport result |
 
 ### Service and mutation boundaries
@@ -85,10 +92,15 @@ Expected rule: client state can improve interaction, but server input validation
 | `/projects/[id]/costflow/quotations/[quotationId]/ic` | IC from an immutable quotation source |
 | `/projects/[id]/costflow/quotations/[quotationId]/print` | Customer-safe print projection |
 | `/projects/[id]/costflow/requests/[requestId]/print` | Request/record print view |
+| `/api/projects/[id]/costflow/excel-intake/**` | Authorized template, opaque preview, atomic confirmation, and round-trip preview |
+| `/api/projects/[id]/costflow/customer-acceptance/**` | Customer-safe frozen PDF/XLSX acceptance artifacts |
 | `/api/projects/[id]/costflow/evidence/**` | Authorized evidence upload/download/preview |
 | `/workflow` | Authorized inbox/list/create surfaces |
 | `/workflow/[id]` | Dossier detail, decisions, files, signing, and history |
+| `/workflow/[id]/print` | Approved/draft print projection with four sign blocks and QR when eligible |
+| `/workflow/verify/[token]` | Zero-auth privacy-safe capability verification with uniform invalid state |
 | `/api/workflow/files/[fileId]` | Authorized Workflow file bytes |
+| `/api/workflow/physical-scans/[fileId]` | Re-authorized private physical-scan download |
 
 ### UI composition
 
@@ -97,8 +109,11 @@ Expected rule: client state can improve interaction, but server input validation
 - `QuotationPanel` is the version/source hub.
 - `CostFlowWorksheet` selects the correct shared editor mode and source.
 - `PairedQuotationIcEditor` owns the editable worksheet interaction while domain helpers own calculations and validation.
+- `ExcelIntakeDialog` and `ExcelRoundTripDialog` expose preview-first import/export without granting browser state persistence authority.
 - `InternalCostPanel`, `ApprovalRequestsPanel`, `ActualCostPanel`, `PaymentCashPanel`, and `SettlementPanel` expose distinct lifecycle screens.
-- `WorkflowPanel` exposes document/template/approval/signing/history states.
+- `ActualCostControlCenter` composes canonical IC-to-AC comparison, editing, evidence, decision, and role views from a server-scoped projection.
+- `ProfileSignatureForm`, `SignaturePad`, `WorkflowPrintView`, `PaperSigningSection`, and `PublicVerificationCard` expose signing capabilities while server services remain authoritative.
+- `WorkflowPanel` exposes document/template/approval/signing/history states and routes CostFlow records back to the exact project approval anchor.
 
 ## Key invariants for review
 
@@ -114,6 +129,9 @@ Expected rule: client state can improve interaction, but server input validation
 10. Customer projections never include internal costs, suppliers, internal evidence, or internal notes.
 11. Formula definitions are normalized allowlisted data, not executable JavaScript.
 12. Financial close is explicit and reversible only through the governed reopen path.
+13. A signature confirmation authorizes the signed artifact only; it never writes a cash transaction.
+14. Public verification stores a token digest and returns an allowlisted DTO; reusable signature bytes, PIN hashes, bank data, files, payloads, and normalized signer IP stay private.
+15. DIGITAL and PHYSICAL signing lifecycles cannot be mixed, and document revision preserves/replaces immutable approved snapshots rather than rewriting history.
 
 ## Test map
 
@@ -126,10 +144,18 @@ Expected rule: client state can improve interaction, but server input validation
 | `workflow-approval*.test.ts` | step assignment, attempts, returns/rejections, concurrency |
 | `workflow-documents*.test.ts` | templates, slots, immutable submission files |
 | `workflow.integration.test.ts` | persisted end-to-end Workflow lifecycle |
+| `actual-cost*.test.ts`, `customer-*.test.ts` | normalized AC authority, evidence, role projections, customer liquidation/AR/export |
+| `excel-intake*.test.ts`, `excel-round-trip*.test.ts` | workbook contract, parser/security, preview ownership, atomic persistence, editable merge |
+| `payment*.test.ts` | request/read-model/cash/settlement authorization, replay and race safety |
+| `workflow-profile-signature.test.ts`, `signature-pad.test.tsx` | reusable signature/PIN and transient signing UI contract |
+| `workflow-approved-snapshot.test.ts`, `workflow-digital-sign.integration.test.ts` | immutable approved projection and ordered digital signing |
+| `workflow-print-layout.test.ts`, `workflow-qr-roundtrip.test.ts`, `workflow-public-verification.test.ts` | print projection, QR, token privacy, tamper states |
+| `workflow-paper-sign.integration.test.ts`, `workflow-revision.integration.test.ts` | physical scan custody, revisions, references, execution and replacement history |
+| `workflow-signing-security.test.ts`, `workflow-phase9-full.integration.test.ts` | cross-cutting Phase 9 security and full lifecycle regression |
 | `costflow*.test.ts` | CostFlow service, evidence, cash, export, permissions |
 | `workspace-flow.test.ts` | editor-mode capability and save-scope boundaries |
 
-The `test:costflow` runner covers the currently registered 50 unit/static tests. DB-backed integration evidence from phase work remains useful, but final PR validation should rerun the intended integration suites against the isolated test database before deployment.
+The `test:costflow` runner covers the registered unit/static suites and selected DB-backed suites run separately against the pinned local database. Phase-specific integration evidence remains useful, but staging must rerun migrations and the intended integration suites against a production-like restored database before deployment.
 
 ## Reviewer decision log
 

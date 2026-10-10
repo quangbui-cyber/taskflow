@@ -1,10 +1,10 @@
-# PR: CostFlow & Workflow foundation, quotation/IC workspace, and shared approvals
+# PR: CostFlow/Workflow finance, Excel intake, actual cost, and governed signing
 
 > Copy this document into the GitHub pull request body. Update the branch/commit and final validation fields after all follow-up code changes are committed.
 
 ## Summary
 
-This PR extends TaskFlow with the first persisted CostFlow and Workflow foundation while preserving existing authentication, project membership, tasks, files, revenue reporting, and notification behavior.
+This PR extends TaskFlow with a persisted CostFlow and Workflow operating slice while preserving existing authentication, project membership, tasks, files, revenue reporting, and notification behavior.
 
 The change introduces:
 
@@ -13,6 +13,9 @@ The change introduces:
 - project-linked CostFlow workspaces with multiple PO versions, quotations, IC revisions, evidence, approval state, actual costs, requests, cash records, reconciliation, and financial close state;
 - dedicated quotation, paired quotation/IC, IC-from-quotation, print, evidence, request, approval, Actual Cost, cash, and settlement surfaces;
 - reusable quotation templates and typed event-pricing parameters with impact preview;
+- guarded Excel intake and editable round-trip for paired quotation/IC drafts;
+- normalized Actual Cost authority, evidence vault, role-scoped control center, customer liquidation, AR cash-in, margin, and customer-safe acceptance exports;
+- profile-managed signature assets and six-digit PIN, immutable approved snapshots, ordered four-role digital signing, physical scan custody, SHA-256 verification, QR print/verification, revision, and post-signing cash separation;
 - a shared TaskFlow UI foundation and module shell.
 
 This is a feature-branch integration PR. It is not a production-release approval and does not mark all CostFlow/Workflow roadmap requirements complete.
@@ -20,10 +23,10 @@ This is a feature-branch integration PR. It is not a production-release approval
 ## Branch and review baseline
 
 - **Head branch:** `codex/costflow-ui-refactor`
-- **Feature checkpoint:** `codex/costflow-paperwork` at `0646ba6`
-- **Expected target:** the shared repository default branch after confirming it is current
-- **Checkpoint relationship:** `codex/costflow-paperwork` is a direct ancestor of the head branch; no old-branch-only commits are omitted.
-- **Snapshot size before PR docs:** 147 files changed, 16,794 insertions, 111 deletions compared with the locally known `origin/main`.
+- **Expected target:** `origin/main`
+- **Remote refresh:** 2026-10-10; the local head was 103 commits ahead and 0 behind `origin/main` before the final documentation/validation commit.
+- **Feature-branch remote:** the local head was 76 commits ahead and 0 behind `origin/codex/costflow-ui-refactor` before the final documentation/validation commit.
+- **Final pushed SHA:** record the verified remote SHA in the PR after push.
 
 Do not merge using a stale target branch. Refresh remote refs and resolve target-branch changes before relying on the snapshot counts above.
 
@@ -64,6 +67,10 @@ In particular, Manager approval can make an IC revision effective while later Ac
 - Advance, vendor-payment, reimbursement, cancellation, close, and reopen request foundations.
 - Actual cash records and allocation/reconciliation helpers.
 - Customer and internal print/export routes with distinct projections.
+- Excel workbook template generation, parser hardening, opaque preview sessions, atomic paired-draft confirmation, and editable round-trip diff/apply.
+- Independent sell and buy `days` pricing inputs; blank buy days remain unknown and copying is explicit.
+- Normalized Actual Cost occurrences, immutable DD approval provenance, multi-type evidence, IC-to-AC reconciliation, role-scoped operational views, and exact settlement tuples.
+- Customer liquidation, AR Cash In, actual net margin, and customer-safe PDF/XLSX acceptance artifacts.
 
 ### Workflow
 
@@ -74,6 +81,9 @@ In particular, Manager approval can make an IC revision effective while later Ac
 - Sequential Manager → Accountant → CEO decisions.
 - Return, reject, withdrawal, resubmission, cancellation, replacement, and transfer history.
 - Signing upload/custody state kept separate from approval.
+- Reusable signature profile and six-digit signing PIN with password-gated reset.
+- Four-role in-app signing for financial vouchers, immutable approved projections, SHA-256 tamper detection, QR-backed public verification, and corporate print views.
+- Independent physical signing scans, keeper/location metadata, return/re-upload, archive confirmation, post-approval revision, reference-file additions, and execution start.
 - Authorized file download and printable dossier-information pages.
 - Inbox/history surfaces and durable notification intents.
 
@@ -89,14 +99,15 @@ In particular, Manager approval can make an IC revision effective while later Ac
 - Production deployment or production database migration.
 - Company acceptance of finance rules, legal wording, templates, signatures, or retention policy.
 - Native Vietnamese IME acceptance and company pilot completion.
-- Real bank integration, digital signature, object storage migration, FX, or multi-currency settlement.
+- Real bank integration, third-party certificate-authority signing, object storage migration, FX, or multi-currency settlement.
 - Automatic reminder/calendar policy where the company calendar and SLA are not yet confirmed.
+- A company-approved signing-IP retention duration or automatic purge policy.
 - Treating approval as proof of payment or cash movement.
 - Treating local fixtures, generated PDFs, screenshots, or test accounts as production evidence.
 
 ## Data and migration impact
 
-Six additive migrations are included:
+Fifteen feature-branch migrations are included relative to `origin/main`:
 
 1. `20261002040000_costflow_standard_workflow`
 2. `20261002060000_workflow_templates_documents`
@@ -104,6 +115,15 @@ Six additive migrations are included:
 4. `20261002090000_workflow_requirements`
 5. `20261003050000_approval_provenance`
 6. `20261005180000_quotation_reuse_templates`
+7. `20261007090000_add_meetings`
+8. `20261008140000_phase7_payment_dossier_lines`
+9. `20261009_phase8_actual_cost_authority`
+10. `20261010_phase9_approved_signing`
+11. `20261010_phase9_physical_scans`
+12. `20261010_phase9_public_verification`
+13. `20261010_phase9_revision_guard`
+14. `20261010_phase9_signature_assets`
+15. `20261010_phase9_signing_event_preapproval`
 
 They add Workflow requests/events/roles/readers/notifications/templates/files/history/decisions and CostFlow workspace/template/cash/evidence/history persistence. Existing Project/Task models remain the shared identity and project context.
 
@@ -135,7 +155,7 @@ Review by dependency, not filename order:
 
 1. **Schema and invariants**
    - `prisma/schema.prisma`
-   - the six migrations listed above
+   - the fifteen migrations listed above
    - `lib/costflow/types.ts`
 2. **Shared approval and Workflow lifecycle**
    - `lib/workflow/approval.ts`
@@ -176,18 +196,21 @@ Validated locally on Windows with Node 24.14.0, npm 11.9.0, Next.js 16.2.10, Typ
 
 | Check | Result | Scope |
 |---|---|---|
-| `npm.cmd run test:costflow` | PASS — 50/50 | Unit/static CostFlow, quotation, approval, Workflow, and workspace coverage discovered by the current runner |
+| `npm.cmd run test:costflow` | PASS — 140/140 | Registered unit/static CostFlow, Workflow, Excel intake/round-trip, Actual Cost, customer accounting, payment, route, and workspace coverage |
+| Phase 9 suite with `--conditions=react-server` | PASS — 56/56 | SignaturePad, PIN, immutable snapshot, DIGITAL/PHYSICAL signing, print/QR/public verification, revision/reference, cash separation, and full-lifecycle contracts |
 | `npx.cmd tsc --noEmit` | PASS | Current source tree |
-| `npm.cmd run lint` | PASS | Repository source after excluding generated `.next.*` and `.tmp` artifacts |
+| `npm.cmd run lint` | PASS | 0 errors; 10 non-blocking warnings recorded for reviewer follow-up |
 | `npx.cmd prisma validate` | PASS | Prisma schema; Prisma 7 config deprecation warning remains informational |
-| `npx.cmd next build --webpack` | PASS | Direct optimized Next build with local-only ephemeral environment values |
-| `git diff --check` | PASS | Committed application changes at consolidation time |
+| isolated `npx.cmd next build --webpack` | PASS | Direct optimized Next build in `.next.release-verify`; 23/23 static pages generated and all Phase 9 routes emitted |
+| `git diff --check` | PASS | Explicit release allowlist before commit |
 
 Important boundaries:
 
 - The direct Next build passed; this does not claim every deployment wrapper or external provider passed.
+- Node test workers and the Next build required execution outside the Windows sandbox after sandbox-only `spawn EPERM`; the same commands then passed.
+- Next temporarily adds isolated build type paths to `tsconfig.json`; those generated entries were removed from the release diff after the successful build.
 - Local tests/builds do not prove production database migration, real notification delivery, legal/template acceptance, or company pilot acceptance.
-- Browser evidence from earlier phase work is useful regression evidence but must not be represented as production acceptance.
+- Local browser evidence is partial: profile signing UI, Workflow hub, invalid public verification, and route round-trip were observed; valid signed-capability, mutation, print-preview, real-device, real-phone QR, A4, named-role, company, and production gates remain pending.
 
 ## Manual reviewer scenarios
 

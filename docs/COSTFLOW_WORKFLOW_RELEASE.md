@@ -28,11 +28,15 @@ Do not proceed with unnamed migration or rollback ownership.
 
 ```powershell
 npm.cmd run test:costflow
+node --conditions=react-server --import=tsx --test tests/signature-pad.test.tsx
+node --conditions=react-server --import=tsx --test tests/workflow-profile-signature.test.ts tests/workflow-approved-snapshot.test.ts tests/workflow-digital-sign.integration.test.ts tests/workflow-print-layout.test.ts tests/workflow-qr-roundtrip.test.ts tests/workflow-public-verification.test.ts tests/workflow-paper-sign.integration.test.ts tests/workflow-revision.integration.test.ts tests/workflow-signing-security.test.ts tests/workflow-phase9-full.integration.test.ts
 npx.cmd tsc --noEmit
 npm.cmd run lint
 npx.cmd prisma validate
 npx.cmd next build --webpack
 ```
+
+The Phase 9 component/lifecycle suites require the `react-server` condition because the codebase intentionally uses `server-only`. Treat omission of that condition as a command defect, not a reason to bypass the guard.
 
 Use process-scoped local environment values for validation. Never write validation secrets into repository files.
 
@@ -47,6 +51,15 @@ The release contains these migrations:
 20261002090000_workflow_requirements
 20261003050000_approval_provenance
 20261005180000_quotation_reuse_templates
+20261007090000_add_meetings
+20261008140000_phase7_payment_dossier_lines
+20261009_phase8_actual_cost_authority
+20261010_phase9_approved_signing
+20261010_phase9_physical_scans
+20261010_phase9_public_verification
+20261010_phase9_revision_guard
+20261010_phase9_signature_assets
+20261010_phase9_signing_event_preapproval
 ```
 
 Before staging or production migration:
@@ -70,7 +83,7 @@ npx.cmd prisma migrate deploy
 
 Then verify:
 
-- [ ] all six migrations are recorded once and in order;
+- [ ] all fifteen feature-branch migrations are recorded once and in order;
 - [ ] existing User/Project/member/task/file counts are unchanged;
 - [ ] new tables and constraints exist;
 - [ ] no orphaned project/user relationships were created;
@@ -94,9 +107,14 @@ Then verify:
 - [ ] Create, save, reload, preview, and print a customer quotation.
 - [ ] Confirm customer output excludes IC/internal evidence/supplier details.
 - [ ] Create paired and IC-from-quotation drafts.
+- [ ] Download the Excel template, reject invalid/MIME-mismatched files, preview a valid workbook, confirm it once, and prove replay/stale-source attempts fail closed.
+- [ ] Export a draft round-trip workbook, preview a deterministic diff, apply selected changes atomically, and verify stable row identity after row moves.
 - [ ] Submit IC and process assigned approval steps.
 - [ ] Verify Manager budget effect and later approval outcome are shown independently.
 - [ ] Upload/download evidence and reject forged evidence URLs.
+- [ ] Compare IC against normalized Actual Cost, exercise the Account/self/DD-accountant/Project-Operation lenses, and confirm filtered totals do not leak hidden rows.
+- [ ] Approve one exact AC tuple and verify settlement consumes only that Project/version/stable-line/event/attempt tuple.
+- [ ] Freeze customer liquidation/AR/margin and inspect customer-safe PDF/XLSX outputs for internal-field leakage.
 - [ ] Create an expense/request without automatically creating cash.
 - [ ] Record cash only through the explicit authorized action.
 - [ ] Exercise close/reopen guards with history preserved.
@@ -109,6 +127,11 @@ Then verify:
 - [ ] Verify same-person multi-role steps remain separate.
 - [ ] Verify Admin cannot approve without assignment.
 - [ ] Upload signed evidence and confirm signing remains separate from approval.
+- [ ] Create/replace/delete the current user's saved signature and exercise the six-digit PIN/password reset gate without logging credentials or signature bytes.
+- [ ] Complete four ordered DIGITAL signatures and confirm no cash row is created.
+- [ ] Upload/return/re-upload/confirm a PHYSICAL scan batch and verify private downloads re-authorize.
+- [ ] Print an approved snapshot, scan its QR, verify the public allowlist, and confirm tampered/revoked/replaced/invalid tokens expose no private rejection reason.
+- [ ] Revise an approved document, add a reference file, and confirm the old snapshot remains readable until the new CEO-approved snapshot replaces it.
 - [ ] Verify authorized and unauthorized file access.
 
 ### UI
@@ -117,6 +140,8 @@ Then verify:
 - [ ] 390 px primary flows with no lost actions.
 - [ ] Keyboard navigation, focus restoration, error summaries, and dialog escape behavior.
 - [ ] Vietnamese text entry/IME on an actual supported browser/device.
+- [ ] Signature drawing/clearing on a real touch or stylus device without scroll conflict.
+- [ ] Physical A4 print inspection for page breaks, amounts, four signature blocks, QR legibility, and scanability on a real phone.
 
 ## 5. Business acceptance gate
 
@@ -126,6 +151,7 @@ Technical checks do not satisfy this gate. Obtain explicit approval for:
 - named role assignments and separation of duties;
 - exact Workflow template content and required documents;
 - signature/custody procedure;
+- signing-IP retention duration and purge authority (or an explicit manual/indefinite retention decision);
 - evidence retention/access policy;
 - pilot project and pilot users;
 - production notification destinations;
