@@ -58,7 +58,7 @@ export async function loadFinance(projectId: string, actor: Actor) {
   const savedData = workspace?.data ? hydrateLinePricingData(workspace.data as unknown as FinanceData) : undefined;
   const ddGrant = await prisma.workflowRoleGrant.findFirst({ where: { userId: actor.id, role: "AC_DD", revokedAt: null }, select: { id: true } });
   const fullAccess = activeActor.role === "ADMIN" || !!ddGrant || savedData?.config.accountantId === actor.id || project.members.some(m => m.userId === actor.id);
-  const requests = await prisma.workflowRequest.findMany({ where: { projectId, module: "COSTFLOW" }, include: { decisions: { orderBy: { createdAt: "asc" } }, approvalEvents: { orderBy: { createdAt: "asc" } } }, orderBy: { createdAt: "desc" } });
+  const requests = await prisma.workflowRequest.findMany({ where: { projectId, module: "COSTFLOW" }, include: { decisions: { orderBy: { createdAt: "asc" } }, approvalEvents: { orderBy: { createdAt: "asc" } }, signingLifecycle: { select: { mode: true, evidenceState: true } } }, orderBy: { createdAt: "desc" } });
   const readerIds = fullAccess ? [] : (await prisma.workflowRequestReader.findMany({ where: { userId: actor.id, request: { projectId, module: "COSTFLOW" } }, select: { requestId: true } })).map(row => row.requestId);
   const visible = fullAccess ? requests : requests.filter(r => readerIds.includes(r.id) || r.creatorId === actor.id || r.cashAssigneeId === actor.id || (r.steps as ApprovalStep[]).some(s => s.assigneeId === actor.id));
   if (!fullAccess && !visible.length) return null;
@@ -180,7 +180,7 @@ export async function loadFinance(projectId: string, actor: Actor) {
     const projection = parseCustomerAcceptanceProjection(snapshot.projection);
     return projection ? [{ id: snapshot.id, version: snapshot.version, quotationId: snapshot.quotationId, projection, createdAt: snapshot.createdAt.toISOString() }] : [];
   }) : [];
-  return { project: { ...project, members: fullAccess ? project.members : [], client: fullAccess ? project.client : null }, clients, fullAccess, canManageCustomerAccounting, version: workspace?.version ?? 0, data: fullAccess && savedData ? savedData : { ...emptyFinance(), closed: savedData?.closed ?? false }, requests: visible, cash, users, files, evidence, supplements, history, paymentDossiers, paymentLedger, actualCosts, customerAccounting, customerAcceptanceSnapshots };
+  return { project: { ...project, members: fullAccess ? project.members : [], client: fullAccess ? project.client : null }, clients, fullAccess, canManageCustomerAccounting, version: workspace?.version ?? 0, data: fullAccess && savedData ? savedData : { ...emptyFinance(), closed: savedData?.closed ?? false }, requests: visible.map(({ signingLifecycle, ...request }) => ({ ...request, signingMode: signingLifecycle?.mode ?? null, signingEvidenceState: signingLifecycle?.evidenceState ?? null })), cash, users, files, evidence, supplements, history, paymentDossiers, paymentLedger, actualCosts, customerAccounting, customerAcceptanceSnapshots };
 }
 
 export async function executeFinance(projectId: string, expectedVersion: number, actor: Actor, form: FormData, upload: ProjectUpload | null) {
@@ -515,6 +515,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         if (kind !== "ADVANCE") throw new Error("Lát cắt đa khoản hiện chỉ hỗ trợ Đề nghị tạm ứng.");
         const { projection, evidenceById, vendorSnapshots } = await resolvePaymentDraft();
         const chain = await ordinarySteps();
+        const expectedSettlementDate = calendarDate(text(form, "expectedSettlementDate"), "hạn hoàn ứng dự kiến").toISOString().slice(0, 10);
         const attemptId = randomUUID();
         const saved = await tx.workflowRequest.create({
           data: {
@@ -532,6 +533,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
               normalizedPayment: true,
               milestone: projection.milestone,
               explanation: projection.explanation,
+              expectedSettlementDate,
               amount: projection.totalAmount,
               recipientTotals: projection.recipientTotals,
               warnings: projection.warnings,
@@ -574,6 +576,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         const response = requireValue(text(form, "explanation"), "phản hồi chung cho nội dung được yêu cầu sửa");
         const { projection, evidenceById, vendorSnapshots } = await resolvePaymentDraft();
         const chain = await ordinarySteps();
+        const expectedSettlementDate = calendarDate(text(form, "expectedSettlementDate"), "hạn hoàn ứng dự kiến").toISOString().slice(0, 10);
         const attemptId = randomUUID();
         const parentPayload = parent.payload && typeof parent.payload === "object" ? parent.payload as Record<string, unknown> : {};
         const beforeSnapshot: PaymentDossierSnapshot = {
@@ -610,7 +613,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
           await tx.paymentRequestLine.create({ data: { projectId, requestId: request.id, stableKey: line.stableKey, position: line.position, description: line.description, amount: line.amount, icRevisionId: line.source.revisionId, icLineId: line.source.lineId, sourceSnapshot: json({ ...line.source, effective: true }), recipientKey: line.recipient.key, evidenceManifest: json(line.evidenceIds.map(id => evidenceById.get(id))) } });
         }
         await appendDigitalSigningEvent(tx, { requestId: request.id, version: request.version + 1, kind: request.kind, role: "CREATOR", actorId: actor.id, signatureData: form.get("signatureData"), signaturePin: form.get("signaturePin"), commandKey: `SUBMIT:${attemptId}:CREATOR` });
-        if ((await tx.workflowRequest.updateMany({ where: { id: request.id, version: request.version, state: "DRAFT" }, data: { title: nextTitle, state: "SUBMITTED", steps: json(chain), currentStep: 0, currentAttemptId: attemptId, currentStepArrivedAt: new Date(), payload: json({ normalizedPayment: true, milestone: projection.milestone, explanation: projection.explanation, amount: projection.totalAmount, recipientTotals: projection.recipientTotals, warnings: projection.warnings, vendorSnapshots, resubmission: { sourceRequestId: parent.id, sourceAttemptId: parent.currentAttemptId ?? "", response }, diff }), version: { increment: 1 } } })).count !== 1) throw new Error("Bản nháp đã thay đổi. Tải lại trước khi gửi.");
+        if ((await tx.workflowRequest.updateMany({ where: { id: request.id, version: request.version, state: "DRAFT" }, data: { title: nextTitle, state: "SUBMITTED", steps: json(chain), currentStep: 0, currentAttemptId: attemptId, currentStepArrivedAt: new Date(), payload: json({ normalizedPayment: true, milestone: projection.milestone, explanation: projection.explanation, expectedSettlementDate, amount: projection.totalAmount, recipientTotals: projection.recipientTotals, warnings: projection.warnings, vendorSnapshots, resubmission: { sourceRequestId: parent.id, sourceAttemptId: parent.currentAttemptId ?? "", response }, diff }), version: { increment: 1 } } })).count !== 1) throw new Error("Bản nháp đã thay đổi. Tải lại trước khi gửi.");
         await recordApprovalEvent(tx, { requestId: request.id, module: request.module, attemptId, submittedVersion: request.version + 1, mutationVersion: request.version + 1, stepIndex: 0, role: chain[0]?.role ?? "MANAGER", actorId: actor.id, action: "SUBMIT", details: json({ sourceRequestId: parent.id, diff }), recipients: chain[0]?.assigneeId ? [chain[0].assigneeId] : [] });
         affectedRequestId = request.id;
         break;

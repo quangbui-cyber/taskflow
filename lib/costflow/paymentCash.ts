@@ -66,10 +66,11 @@ async function executeOnce(projectId: string, expectedVersion: number, actor: Ac
     if (!currentActor || !["ACCOUNT", "ADMIN"].includes(currentActor.role)) throw new Error("Chỉ Account/Admin đang hoạt động được xác nhận tiền thực tế.");
     const request = await tx.workflowRequest.findFirst({
       where: { id: requestId, projectId, module: "COSTFLOW" },
-      include: { paymentRecipients: true, paymentLines: true },
+      include: { paymentRecipients: true, paymentLines: true, signingLifecycle: { select: { evidenceState: true } } },
     });
     if (!request || request.state !== "APPROVED" || request.cashAssigneeId !== actor.id) throw new Error("Chỉ người được giao xử lý tiền cho hồ sơ đã duyệt mới xác nhận tiền.");
     if (!new Set(["ADVANCE", "VENDOR_PAYMENT", "REIMBURSEMENT"]).has(request.kind)) throw new Error("Loại hồ sơ không hỗ trợ giao dịch tiền.");
+    if (!["DIGITAL_CONFIRMED", "PHYSICAL_CONFIRMED"].includes(request.signingLifecycle?.evidenceState ?? "")) throw new Error("Chỉ được Cash OUT/IN sau khi bằng chứng ký đã được xác nhận đầy đủ.");
     if (request.kind === "ADVANCE" && direction !== "OUT") throw new Error("Đề nghị tạm ứng chỉ cho phép giao dịch OUT.");
     if (request.kind === "VENDOR_PAYMENT" && direction !== "OUT") throw new Error("Thanh toán NCC chỉ cho phép giao dịch OUT.");
     if (request.kind === "REIMBURSEMENT") {

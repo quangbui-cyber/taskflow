@@ -564,7 +564,6 @@ export default function SettlementPanel({ finance, user, canCreate }: Props) {
         {selectedDisbursementReq ? (() => {
           const dossier = finance.paymentDossiers?.find(item => item.requestId === selectedDisbursementReq.id);
           if (!dossier) return <Alert tone="danger" title="Hồ sơ chưa có dữ liệu dòng thanh toán chuẩn hóa." />;
-          if (selectedDisbursementReq.kind !== "ADVANCE") return <Alert tone="warning" title="Thanh toán/hoàn ứng sau AC chưa khả dụng cho đến khi Phase 8 cung cấp AC đã duyệt." />;
           return <div className="space-y-4">{dossier.recipients.map(recipient => <CashConfirmationEditor key={recipient.recipientKey} finance={finance} request={selectedDisbursementReq} dossier={dossier} recipient={recipient} userId={user.id} onSuccess={() => setCashModalOpen(false)} />)}</div>;
         })() : <Alert tone="warning" title="Thu hoàn sau AC chưa khả dụng cho đến khi Phase 8 cung cấp AC đã duyệt." />}
       </Dialog>

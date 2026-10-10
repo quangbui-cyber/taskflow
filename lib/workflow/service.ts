@@ -124,7 +124,7 @@ export async function executeWorkflow(actor: Actor, form: FormData, upload: Proj
         const parentId = text(form, "parentTemplateId");
         const parent = parentId ? await tx.workflowTemplate.findUnique({ where: { id: parentId } }) : null;
         if (parentId && (!parent?.publishedAt || parent.kind !== kind)) throw new Error("Nguồn phải là mẫu cùng loại đã công bố.");
-        const values = { kind, category: text(form, "category"), purpose: text(form, "purpose"), changeNote: text(form, "changeNote"), name: required(text(form, "name"), "tên mẫu"), ownerId: text(form, "ownerId"), accountantId: text(form, "accountantId"), ceoId: text(form, "ceoId"), signerNames: text(form, "signerNames"), instructions: text(form, "instructions"), ownerConfirmedAt: null };
+        const values = { kind, category: text(form, "category"), purpose: text(form, "purpose"), changeNote: text(form, "changeNote"), name: required(text(form, "name"), "tên mẫu"), ownerId: text(form, "ownerId"), accountantId: text(form, "accountantId"), ceoId: text(form, "ceoId"), signerNames: text(form, "signerNames"), instructions: text(form, "instructions"), requiresExecutionTracking: text(form, "requiresExecutionTracking") === "yes", ownerConfirmedAt: null };
         const requirementsText = text(form,"requirements");
         if (!requirementsText && !template && !parent) throw new Error("Cần cấu hình rõ thông tin và tài liệu bắt buộc cho mẫu mới.");
         const requirements = requirementsText ? parseRequirements(JSON.parse(requirementsText)) : effectiveRequirements(template?.requirements ?? parent?.requirements);
@@ -196,14 +196,10 @@ export async function executeWorkflow(actor: Actor, form: FormData, upload: Proj
       if (projectId && !admin && !await member(projectId)) throw new Error("Bạn phải là member của project được chọn.");
       if (projectId && !await tx.project.findUnique({ where: { id: projectId }, select: { id: true } })) throw new Error("Không tìm thấy project.");
       const parentId = text(form, "parentRequestId");
-      const parent = parentId ? await tx.workflowRequest.findFirst({ where: { id: parentId, module: "WORKFLOW", creatorId: user.id, state: { in: ["RETURNED", "APPROVED", "WITHDRAWN", "REJECTED"] } } }) : null;
-      if (parentId && (!parent || parent.kind !== template.kind)) throw new Error("Bản nguồn phải là hồ sơ cùng loại của người lập, đã trả/duyệt/rút/từ chối.");
-      if (parent?.state === "APPROVED") {
-        const parentBody = parent.payload as unknown as DocumentPayload;
-        if (parentBody.signature || parentBody.execution?.startedAt || parentBody.cancellation?.status === "PENDING" || parent.pendingReplacementRequestId || parent.replacedByRequestId) throw new Error("Bản hiện hành đã ký, đã thực hiện hoặc đang có xử lý vòng đời khác. Liên hệ Quản lý.");
-      }
-      const replacementTargetId = parent?.state === "APPROVED" ? parent.id : parent?.replacesRequestId ?? null;
-      if (replacementTargetId && parent?.state !== "APPROVED") {
+      const parent = parentId ? await tx.workflowRequest.findFirst({ where: { id: parentId, module: "WORKFLOW", creatorId: user.id, state: { in: ["RETURNED", "WITHDRAWN", "REJECTED"] } } }) : null;
+      if (parentId && (!parent || parent.kind !== template.kind)) throw new Error("Bản nguồn phải là hồ sơ cùng loại của người lập đã trả, rút hoặc từ chối; hồ sơ đã duyệt phải dùng Tạo bản sửa đổi.");
+      const replacementTargetId = parent?.replacesRequestId ?? null;
+      if (replacementTargetId) {
         const target = await tx.workflowRequest.findFirst({ where: { id: replacementTargetId, module: "WORKFLOW", state: "APPROVED", pendingReplacementRequestId: null, replacedByRequestId: null } });
         const targetBody = target?.payload as unknown as DocumentPayload | undefined;
         if (!target || target.creatorId !== user.id || target.kind !== template.kind || targetBody?.signature || targetBody?.execution?.startedAt || targetBody?.cancellation?.status === "PENDING") throw new Error("Bản hiện hành của chuỗi thay thế đã đổi trạng thái. Liên hệ Quản lý.");
@@ -233,6 +229,46 @@ export async function executeWorkflow(actor: Actor, form: FormData, upload: Proj
       : null;
     if (["DECIDE_DOCUMENT", "TRANSFER_DOCUMENT", "REQUEST_DOCUMENT_CANCEL", "DECIDE_DOCUMENT_CANCEL"].includes(command)) assertApprovalToken(request, form, submittedVersion);
     switch (command) {
+      case "REVISE_DOCUMENT": {
+        if (request.creatorId !== user.id || request.state !== "APPROVED") throw new Error("Chỉ người lập được tạo bản sửa đổi từ hồ sơ đang hiệu lực.");
+        if (request.pendingReplacementRequestId || request.replacedByRequestId) throw new Error("Hồ sơ đã có bản thay thế đang xử lý hoặc đã được thay thế.");
+        const lifecycle = await tx.workflowSigningLifecycle.findUnique({ where: { requestId: request.id }, select: { evidenceState: true } });
+        const postSigningReason = text(form, "postSigningReason");
+        if (["DIGITAL_CONFIRMED", "PHYSICAL_CONFIRMED"].includes(lifecycle?.evidenceState ?? "") && !postSigningReason) {
+          throw new Error("Cần lý do sửa đổi sau khi hồ sơ đã ký.");
+        }
+        const existing = await tx.workflowRequest.findFirst({ where: { replacesRequestId: request.id, state: { in: ["DRAFT", "SUBMITTED", "RETURNED"] } }, orderBy: { createdAt: "desc" } });
+        if (existing) {
+          const existingPayload = existing.payload as unknown as DocumentPayload;
+          if ((existingPayload.resubmission?.response ?? "") !== postSigningReason) throw new Error("Hồ sơ đã có bản sửa đổi đang hoạt động với lý do khác.");
+          return { success: "Bản sửa đổi đã được tạo trước đó.", requestId: existing.id };
+        }
+        const cleanPayload: DocumentPayload = {
+          content: body.content,
+          counterparty: body.counterparty,
+          amount: body.amount,
+          linkedRequestId: body.linkedRequestId,
+          mainFileId: "",
+          supportingFiles: {},
+          resubmission: { sourceRequestId: request.id, sourceAttemptId: "", response: postSigningReason },
+        };
+        const revised = await tx.workflowRequest.create({ data: {
+          projectId: request.projectId,
+          templateId: request.templateId,
+          module: "WORKFLOW",
+          kind: request.kind,
+          title: `${request.title} · bản sửa đổi`,
+          creatorId: request.creatorId,
+          cashAssigneeId: request.cashAssigneeId,
+          parentId: request.id,
+          replacesRequestId: request.id,
+          state: "DRAFT",
+          steps: json([]),
+          payload: json(cleanPayload),
+        } });
+        await tx.workflowHistory.create({ data: { requestId: revised.id, version: revised.version, actorId: user.id, action: "REVISE_DOCUMENT", snapshot: json({ sourceRequestId: request.id, payload: cleanPayload }) } });
+        return { success: "Đã tạo bản sửa đổi sạch. Cần tải lại tài liệu và trình duyệt từ đầu.", requestId: revised.id };
+      }
       case "SUBMIT_DOCUMENT": {
         if (request.creatorId !== user.id || request.state !== "DRAFT") throw new Error("Chỉ người lập được gửi bản nháp.");
         const template = await tx.workflowTemplate.findFirst({ where: { id: request.templateId ?? "", publishedAt: { not: null } } });
@@ -247,7 +283,7 @@ export async function executeWorkflow(actor: Actor, form: FormData, upload: Proj
         for (const slot of requirements.requiredDocuments) if (!await tx.workflowFile.findFirst({where:{id:body.supportingFiles?.[slot.key] ?? "",requestId:request.id,kind:"SUPPORTING",supportingSlot:slot.key}})) throw new Error(`Tài liệu ${slot.label} không thuộc đúng hồ sơ/vị trí.`);
         const chain = validateSteps([{ role: "MANAGER", assigneeId: user.managerId ?? "" }, { role: "ACCOUNTANT", assigneeId: template.accountantId }, { role: "CEO", assigneeId: template.ceoId }]);
         for (const step of chain) await active(step.assigneeId);
-        body.templateSnapshot = { name: template.name, version: template.version, instructions: template.instructions, signerNames: template.signerNames, fileId: template.fileId!, ownerId: template.ownerId, accountantId: template.accountantId, ceoId: template.ceoId, requirements, familyId:template.familyId,category:template.category,purpose:template.purpose,changeNote:template.changeNote };
+        body.templateSnapshot = { name: template.name, version: template.version, instructions: template.instructions, signerNames: template.signerNames, fileId: template.fileId!, ownerId: template.ownerId, accountantId: template.accountantId, ceoId: template.ceoId, requirements, familyId:template.familyId,category:template.category,purpose:template.purpose,changeNote:template.changeNote,requiresExecutionTracking:template.requiresExecutionTracking };
         body.responsibleManagerId = chain[0].assigneeId;
         body.submittedFiles = {schemaVersion:1,mainFileId:body.mainFileId,supportingFiles:Object.fromEntries(requirements.requiredDocuments.map(slot=>[slot.key,body.supportingFiles![slot.key]])),referenceFileIds:(await tx.workflowFile.findMany({where:{requestId:request.id,kind:"REFERENCE"},select:{id:true}})).map(f=>f.id)};
         const attemptId = randomUUID();
@@ -295,15 +331,23 @@ export async function executeWorkflow(actor: Actor, form: FormData, upload: Proj
           const parent = await tx.workflowRequest.findFirst({ where: { id: request.replacesRequestId, state: "APPROVED", pendingReplacementRequestId: request.id, replacedByRequestId: null } });
           const parentBody = parent?.payload as unknown as DocumentPayload | undefined;
           if (!parent || parentBody?.signature || parentBody?.execution?.startedAt || parentBody?.cancellation?.status === "PENDING") throw new Error("Bản hiện hành đã ký, bắt đầu thực hiện hoặc đổi trạng thái. Liên hệ Quản lý.");
-          await tx.workflowRequest.update({ where: { id: parent.id }, data: { pendingReplacementRequestId: null, replacedByRequestId: request.id, supersededAt: new Date(), version: { increment: 1 } } });
+          await tx.workflowRequest.update({ where: { id: parent.id }, data: { state: "REPLACED", pendingReplacementRequestId: null, replacedByRequestId: request.id, supersededAt: new Date(), version: { increment: 1 } } });
         } else if (request.replacesRequestId && ["RETURN", "REJECT", "WITHDRAW"].includes(action)) {
           await tx.workflowRequest.updateMany({ where: { id: request.replacesRequestId, pendingReplacementRequestId: request.id }, data: { pendingReplacementRequestId: null, version: { increment: 1 } } });
         }
         await tx.workflowDecision.create({ data: { requestId: request.id, version: oldVersion + 1, step: request.currentStep, actorId: user.id, action, reason: text(form, "reason") } });
         await recordApprovalEvent(tx, { requestId: request.id, module: request.module, attemptId: request.currentAttemptId, submittedVersion, mutationVersion: oldVersion + 1, stepIndex: request.currentStep, role: steps?.[request.currentStep]?.role ?? "CREATOR", actorId: user.id, action, reason: text(form, "reason"), details: corrections.length ? json({ correctionItems: corrections }) : undefined, recipients: nextAssignee ? [nextAssignee] : [] });
         if (action === "APPROVE" && result.state === "APPROVED" && requiresDigitalSignature(request.kind)) {
-          if (signingLifecycle?.mode === "PHYSICAL") await finalizePhysicalApprovedSnapshot(tx, { requestId: request.id, version: submittedVersion! });
-          else await finalizeDigitalApprovedSnapshot(tx, { requestId: request.id, version: submittedVersion! });
+          const approvedSnapshot = signingLifecycle?.mode === "PHYSICAL"
+            ? await finalizePhysicalApprovedSnapshot(tx, { requestId: request.id, version: submittedVersion! })
+            : await finalizeDigitalApprovedSnapshot(tx, { requestId: request.id, version: submittedVersion! });
+          if (request.replacesRequestId && approvedSnapshot) {
+            const replacedSnapshots = await tx.workflowApprovedSnapshot.findMany({ where: { requestId: request.replacesRequestId }, select: { id: true } });
+            await tx.workflowPublicVerificationCapability.updateMany({
+              where: { snapshotId: { in: replacedSnapshots.map(snapshot => snapshot.id) }, replacedAt: null },
+              data: { replacedAt: new Date(), replacedBySnapshotId: approvedSnapshot.id },
+            });
+          }
         }
         break;
       }
@@ -339,7 +383,9 @@ export async function executeWorkflow(actor: Actor, form: FormData, upload: Proj
         await update({payload:json(body)}); break;
       }
       case "ADD_REFERENCE": {
-        if (request.creatorId !== user.id) throw new Error("Chỉ người lập bổ sung file tham khảo.");
+        const accountantId = body.templateSnapshot?.accountantId;
+        const allowed = request.creatorId === user.id || body.responsibleManagerId === user.id || accountantId === user.id;
+        if (!allowed || !["APPROVED", "REPLACED"].includes(request.state)) throw new Error("Chỉ người lập, Quản lý phụ trách hoặc Kế toán được bổ sung tham khảo sau duyệt.");
         await file({ requestId: request.id }, "REFERENCE"); await update({}); break;
       }
       case "UPLOAD_SIGNED": {
@@ -393,6 +439,15 @@ export async function executeWorkflow(actor: Actor, form: FormData, upload: Proj
         await tx.workflowSigningLifecycle.update({ where: { requestId: request.id }, data: { evidenceState: "PHYSICAL_CONFIRMED" } });
         if (lifecycle.snapshotId) await tx.workflowApprovedSnapshot.update({ where: { id: lifecycle.snapshotId }, data: { evidenceState: "PHYSICAL_CONFIRMED" } });
         body.signature = { ...body.signature, keeper: keeperNormalized, location: locationNormalized, state: "CONFIRMED", confirmedBy: user.id, confirmedAt: confirmedAt.toISOString() };
+        await update({ payload: json(body) }); break;
+      }
+      case "START_EXECUTION": {
+        if (request.kind !== "PROPOSAL" || request.state !== "APPROVED" || !body.templateSnapshot?.requiresExecutionTracking) throw new Error("Hồ sơ này không thuộc phạm vi theo dõi thực hiện.");
+        if (body.responsibleManagerId !== user.id) throw new Error("Chỉ Quản lý phụ trách được bắt đầu theo dõi thực hiện.");
+        if (body.execution?.startedAt) throw new Error("Hồ sơ đã bắt đầu theo dõi thực hiện.");
+        const lifecycle = await tx.workflowSigningLifecycle.findUnique({ where: { requestId: request.id }, select: { evidenceState: true } });
+        if (!["DIGITAL_CONFIRMED", "PHYSICAL_CONFIRMED"].includes(lifecycle?.evidenceState ?? "")) throw new Error("Cần hoàn tất bằng chứng ký trước khi theo dõi thực hiện.");
+        body.execution = { startedAt: new Date().toISOString(), startedById: user.id };
         await update({ payload: json(body) }); break;
       }
       case "REQUEST_DOCUMENT_CANCEL": {

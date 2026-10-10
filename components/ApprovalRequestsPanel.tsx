@@ -34,6 +34,7 @@ import { PaymentRequestEditor } from "@/components/costflow/payments/PaymentRequ
 import { PaymentRequestPreview } from "@/components/costflow/payments/PaymentRequestPreview";
 import { PaymentRequestReview } from "@/components/costflow/payments/PaymentRequestReview";
 import AdvanceSettlementAllocator from "@/components/costflow/payments/AdvanceSettlementAllocator";
+import CashConfirmationEditor from "@/components/costflow/payments/CashConfirmationEditor";
 import { WORKFLOW_HUB_HREF } from "@/lib/workflow/routes";
 
 import { KIND_INFO, STATE_INFO, ROLE_LABELS as ROLE_LABEL, ACTION_LABELS as ACTION_LABEL } from "@/lib/costflow/labels";
@@ -712,6 +713,7 @@ function RequestInspectionModal({
   const [approverSignedPin, setApproverSignedPin] = useState<string>("");
   const [approverSignPadOpen, setApproverSignPadOpen] = useState(false);
   const isSignedKind = ["ADVANCE", "VENDOR_PAYMENT", "REIMBURSEMENT"].includes(request.kind);
+  const signingEvidenceState = (request as Request & { signingEvidenceState?: string | null }).signingEvidenceState;
 
   const current = request.steps[request.currentStep];
   const isMyTurn = request.state === "SUBMITTED" && current?.assigneeId === user.id;
@@ -896,6 +898,12 @@ function RequestInspectionModal({
           </div>
         )}
 
+        {request.kind === "ADVANCE" && request.payload.expectedSettlementDate && request.state === "APPROVED" && new Date(`${request.payload.expectedSettlementDate}T23:59:59.999Z`) < new Date() && (
+          <Alert tone="warning" title="Quá hạn hoàn ứng">
+            Hạn dự kiến {new Date(`${request.payload.expectedSettlementDate}T00:00:00.000Z`).toLocaleDateString("vi-VN")}. Cảnh báo không tự chặn ĐNTU mới; người lập vẫn phải giải trình tạm ứng bổ sung.
+          </Alert>
+        )}
+
         {/* Người thụ hưởng (nếu có) */}
         {request.payload.beneficiary && (
           <div className="text-sm p-3 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)]">
@@ -964,7 +972,7 @@ function RequestInspectionModal({
         )}
 
         {/* Khối Chứng nhận Ký duyệt 4 cấp (4-Tier Digital Signature Certificate) */}
-        {isSignedKind && request.state === "APPROVED" && (
+        {isSignedKind && request.state === "APPROVED" && ["DIGITAL_CONFIRMED", "PHYSICAL_CONFIRMED"].includes(signingEvidenceState ?? "") && (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50/30 p-4 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-emerald-200/80">
               <div className="space-y-0.5">
@@ -1072,6 +1080,13 @@ function RequestInspectionModal({
                 title={`Ký xác nhận chứng từ — ${request.title}`}
               />
             )}
+          </div>
+        )}
+
+        {isSignedKind && request.state === "APPROVED" && request.cashAssigneeId === user.id && paymentDossier && (
+          <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
+            <div><h4 className="font-semibold">Cash OUT / IN sau ký</h4><p className="tf-ui-help">Đủ chữ ký chỉ cấp thẩm quyền. Giao dịch tiền chỉ phát sinh khi Kế toán/Thủ quỹ xác nhận dưới đây cùng chứng từ.</p></div>
+            {paymentDossier.recipients.map(recipient => <CashConfirmationEditor key={recipient.recipientKey} finance={finance} request={request} dossier={paymentDossier} recipient={recipient} userId={user.id} />)}
           </div>
         )}
 
