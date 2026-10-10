@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import ExcelJS from "exceljs";
 import JSZip from "jszip";
 import { previewPastedIntake, previewWorkbookIntake } from "../lib/costflow/excelIntakeParser";
@@ -36,7 +36,8 @@ test("preflight rejects active content, formulas, traversal and resource-limit v
   zip.file("[Content_Types].xml", "<Types/>");
   zip.file("xl/workbook.xml", "<workbook/>");
   zip.file("../evil.xml", "bad");
-  await assert.rejects(() => preflightExcelWorkbook(Buffer.from(await zip.generateAsync({ type: "nodebuffer" }))), /đường dẫn|ZIP/i);
+  const traversalBytes = Buffer.from(await zip.generateAsync({ type: "nodebuffer" }));
+  await assert.rejects(() => preflightExcelWorkbook(traversalBytes), /đường dẫn|ZIP/i);
 
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("BAO_GIA_IC");
