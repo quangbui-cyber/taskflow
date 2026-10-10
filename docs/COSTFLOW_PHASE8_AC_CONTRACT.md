@@ -40,6 +40,14 @@ Refund IN and additional OUT are authorized only against the exact server-derive
 
 This is local technical evidence only. It does not establish authenticated desktop/390px acceptance, company accounting acceptance, pilot acceptance, deployment or production readiness. Those remain separate Phase 8 verification and human-acceptance gates.
 
+## Actual Cost Control Center read contract
+
+- The server derives lens capabilities from the active account, active Project membership, the single active `AC_DD` grant, configured accountant ID and `operationUserIds`. The browser never supplies a role or capability.
+- `operationUserIds` is Project-scoped configuration. Admin may persist only active members of that Project; stale, inactive and foreign assignments are ignored on every read. Operations authority is read-only vendor/payment progress and never implies DD, accountant, cash-confirmation or financial-close authority.
+- Account/Admin and audit actors may receive the full canonical occurrence set. An ordinary Project USER receives only `USER:{session.user.id}` occurrences and payments. An assigned Operations user receives only vendor occurrences/payment progress, with evidence bytes, bank account and DD private reasons excluded.
+- Worksheet, employee, vendor and audit totals all reference one canonical AC occurrence identity. After role filtering, group actual/variance totals are recalculated from the allowed set so aggregate values cannot leak another employee or vendor.
+- IC/AC quantities remain per-unit facts and are never summed across unlike units. Monetary projections retain exact NET/VAT/GROSS and `AC - IC` variance.
+
 ## DD authority, evidence and exact calculations
 
 - The company has exactly one active `AC_DD`; Admin manages that grant but does not gain a decision bypass.

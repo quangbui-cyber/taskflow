@@ -250,7 +250,17 @@ export async function loadActualCosts(projectId: string, actor: Actor, paymentLe
     || (capabilities.vendorOperations && line.recipientKey.startsWith("VENDOR:"))
     || line.recipientKey === `USER:${activeActor.id}`)
     .map(line => capabilities.vendorOperations && !capabilities.account && !capabilities.audit ? { ...line, evidence: [], decisionReason: "", acknowledgedWarningCodes: [] } : line);
-  const scopedComparisons = controlCenter.worksheet.groups.map(({ occurrences: _occurrences, ...comparison }) => comparison);
+  const scopedComparisons = controlCenter.worksheet.groups.map(group => ({
+    key: group.key,
+    sourceKind: group.sourceKind,
+    description: group.description,
+    unit: group.unit,
+    ic: group.ic,
+    actualLineIds: group.actualLineIds,
+    actual: group.actual,
+    variance: group.variance,
+    status: group.status,
+  }));
   const summary = actualCostVariance(controlCenter.worksheet.totals.ic, lines.flatMap(line => line.cost ? [line.cost] : []));
   return { lines, comparisons: scopedComparisons, summary, canDecide: capabilities.canDecide, controlCenter };
 }
