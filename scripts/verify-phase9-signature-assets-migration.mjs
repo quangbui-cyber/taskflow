@@ -31,6 +31,15 @@ try {
       SELECT indexname FROM pg_indexes
       WHERE schemaname = 'public' AND tablename IN ('WorkflowSignatureAsset', 'WorkflowSignatureAssetAudit')
     `);
+    const foreignKeys = await client.$queryRawUnsafe(`
+      SELECT conname
+      FROM pg_constraint
+      WHERE contype = 'f'
+        AND conrelid IN (
+          '"WorkflowSignatureAsset"'::regclass,
+          '"WorkflowSignatureAssetAudit"'::regclass
+        )
+    `);
     const row = schema[0];
     if (!row.pin_column || !row.asset_table || !row.audit_table) {
       throw new Error("Phase 9 signature schema readback failed.");
@@ -43,6 +52,15 @@ try {
       "WorkflowSignatureAssetAudit_actorId_createdAt_idx",
     ]) {
       if (!names.has(expected)) throw new Error(`Missing index ${expected}`);
+    }
+    const fkNames = new Set(foreignKeys.map((entry) => entry.conname));
+    for (const expected of [
+      "WorkflowSignatureAsset_ownerId_fkey",
+      "WorkflowSignatureAssetAudit_assetId_fkey",
+      "WorkflowSignatureAssetAudit_ownerId_fkey",
+      "WorkflowSignatureAssetAudit_actorId_fkey",
+    ]) {
+      if (!fkNames.has(expected)) throw new Error(`Missing foreign key ${expected}`);
     }
   }
   console.log(JSON.stringify({ mode, database: database[0].name, counts: counts[0] }));
