@@ -66,7 +66,7 @@ test("round-trip workbook reopens with visible parity and veryHidden stable meta
   assert.equal(metadata.getCell("B10").value, 7);
   assert.equal(metadata.getCell("B11").value, projection.fingerprint);
   const stable = workbook.getWorksheet("_IMPORT")!;
-  assert.deepEqual(stable.getRow(3).values?.slice(1, 5), ["item-1", "group-1", 1, 2]);
+  assert.deepEqual((stable.getRow(3).values as ExcelJS.CellValue[]).slice(1, 5), ["item-1", "group-1", 1, 2]);
   const packageText = Buffer.from(bytes).toString("utf8");
   assert.ok(!packageText.includes("evidence-private"));
 });

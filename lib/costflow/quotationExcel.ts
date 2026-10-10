@@ -2,6 +2,7 @@ import "server-only";
 
 import ExcelJS from "exceljs";
 import { EXCEL_INTAKE_SCHEMA_VERSION } from "./excelIntake";
+import type { RoundTripProjection } from "./excelRoundTrip";
 
 const SELL_FILL = "FFC6E0B4";
 const BUY_FILL = "FFFFD966";
@@ -126,5 +127,57 @@ export async function createExcelIntakeTemplate(options: ExcelIntakeTemplateOpti
     ["futureImport", "Plan 10 must preflight file signature, size, compression ratio and macros before parsing."],
   ]);
   metadata.getColumn(1).width = 24; metadata.getColumn(2).width = 110;
+  return workbook.xlsx.writeBuffer();
+}
+
+function excelPrimitive(value: string) {
+  if (!value) return "";
+  const number = Number(value);
+  return Number.isFinite(number) ? number : value;
+}
+
+export async function createExcelRoundTripWorkbook(projection: RoundTripProjection, options: ExcelIntakeTemplateOptions = {}) {
+  if (projection.rows.length > LAST_DATA_ROW - FIRST_DATA_ROW + 1) throw new Error("Nháp vượt quá giới hạn 200 dòng của workbook.");
+  const template = await createExcelIntakeTemplate({ ...options, customer: projection.customer });
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(template);
+  const sheet = workbook.getWorksheet("BAO_GIA_IC")!;
+  for (let rowNumber = FIRST_DATA_ROW; rowNumber <= LAST_DATA_ROW; rowNumber++) {
+    const row = sheet.getRow(rowNumber);
+    for (const column of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 14, 15, 16, 17, 18, 19, 20, 24, 25]) row.getCell(column).value = "";
+  }
+  projection.rows.forEach((entry, index) => {
+    const rowNumber = FIRST_DATA_ROW + index;
+    const row = entry.row;
+    const values: unknown[] = [
+      entry.level, index + 1, row.name, row.description,
+      row.sell.unit, excelPrimitive(row.sell.quantity), excelPrimitive(row.sell.days), excelPrimitive(row.sell.unitPrice), row.sell.basis, excelPrimitive(row.sell.vatPercent),
+      undefined, undefined, undefined, row.sell.notes,
+      row.buy.unit, excelPrimitive(row.buy.quantity), excelPrimitive(row.buy.days), excelPrimitive(row.buy.unitPrice), row.buy.basis, excelPrimitive(row.buy.vatPercent),
+      undefined, undefined, undefined, row.buy.vendorId, row.buy.notes,
+    ];
+    values.forEach((value, column) => {
+      if (value !== undefined) sheet.getCell(rowNumber, column + 1).value = value as ExcelJS.CellValue;
+    });
+    addPreviewFormulas(sheet, rowNumber);
+  });
+  sheet.getCell("C2").value = options.projectName ?? "";
+  sheet.getCell("C3").value = projection.customer;
+
+  const stable = workbook.getWorksheet("_IMPORT")!;
+  for (let row = 1; row <= Math.max(stable.rowCount, projection.rows.length + 1); row++) stable.getRow(row).values = [];
+  stable.getRow(1).values = ["itemId", "parentItemId", "order", "level", "rowType", "sourceRow"];
+  projection.rows.forEach((entry, index) => { stable.getRow(index + 2).values = [entry.itemId, entry.parentItemId ?? "", entry.order, entry.level, entry.row.rowType, FIRST_DATA_ROW + index]; });
+  stable.getRow(1).font = { bold: true };
+
+  const metadata = workbook.getWorksheet("_META")!;
+  metadata.addRows([
+    ["projectId", projection.projectId],
+    ["draftId", projection.draftId],
+    ["draftVersion", projection.draftVersion],
+    ["draftFingerprint", projection.fingerprint],
+    ["roundTripSchemaVersion", projection.schemaVersion],
+    ["roundTripPrivacy", "Internal authenticated editable draft only; no evidence bytes or lifecycle/money state."],
+  ]);
   return workbook.xlsx.writeBuffer();
 }
