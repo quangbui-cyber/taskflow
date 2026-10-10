@@ -57,12 +57,15 @@ test("public route is token-based, dynamic, noindex and renders uniform invalid 
   assert.match(card, /Không xác minh được hồ sơ/);
 });
 
-test("public verifier checks revocation, replacement, digest, HMAC and four roles", async () => {
+test("public verifier checks revocation, replacement, digest, HMAC and mode-specific confirmed evidence", async () => {
   const source = await readFile(new URL("../lib/workflow/publicVerification.ts", import.meta.url), "utf8");
   assert.match(source, /capability\.revokedAt \|\| capability\.replacedAt/);
   assert.match(source, /computeApprovedProjectionSha256/);
   assert.match(source, /verifyApprovedProjectionAttestation/);
   assert.match(source, /CREATOR.*MANAGER.*ACCOUNTANT.*CEO/);
+  assert.match(source, /mode === "PHYSICAL"/);
+  assert.match(source, /evidenceState !== "PHYSICAL_CONFIRMED"/);
+  assert.match(source, /evidenceState !== "DIGITAL_CONFIRMED"/);
   assert.match(source, /WorkflowPublicVerificationRateLimit|workflowPublicVerificationRateLimit/);
   assert.doesNotMatch(source, /findUnique\(\{\s*where:\s*\{\s*requestId:/);
 });
