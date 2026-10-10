@@ -1281,3 +1281,29 @@ dialog.tf-ui-dialog:has(.tf-quotation-settings-panel) .tf-ui-actions {
   .tf-payment-cash-editor .tf-ui-actions { align-items: stretch; }
   .tf-payment-cash-editor .tf-ui-actions > * { width: 100%; }
 }
+.excel-intake-dialog {
+  width: min(1180px, calc(100vw - 32px));
+  max-width: 1180px;
+}
+
+.excel-intake-source-grid {
+  display: grid;
+  grid-template-columns: auto auto minmax(150px, 1fr) minmax(170px, 1fr);
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 16px;
+}
+
+.excel-intake-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.excel-intake-table-scroll .tf-field { min-width: 108px; min-height: 44px; }
+
+@media (max-width: 390px) {
+  .excel-intake-dialog { width: calc(100vw - 16px); }
+  .excel-intake-source-grid { grid-template-columns: 1fr; }
+  .excel-intake-row-card { min-width: 860px; }
+}

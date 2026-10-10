@@ -25,6 +25,7 @@ import { projectQuotation } from "@/lib/costflow/quotationProjection";
 import type { Quotation } from "@/lib/costflow/types";
 import CustomerQuotationView from "./CustomerQuotationView";
 import QuotationTemplateProposalButton from "./QuotationTemplateProposalButton";
+import ExcelIntakeDialog from "./ExcelIntakeDialog";
 
 type Props = {
   finance: Finance;
@@ -109,6 +110,7 @@ export default function QuotationPanel({
                 <Download size={15} className="mr-1" aria-hidden="true" />
                 Tải mẫu Excel v4
               </a>
+              <ExcelIntakeDialog projectId={finance.project.id} />
               <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
                 <Plus size={15} className="mr-1" aria-hidden="true" />
                 Tạo báo giá mới
