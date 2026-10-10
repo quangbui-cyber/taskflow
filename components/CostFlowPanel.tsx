@@ -21,6 +21,7 @@ import { projectQuotation } from "@/lib/costflow/quotationProjection";
 import type { CustomerAccountingReadModel } from "@/lib/costflow/customerAccounting";
 import type { CashRow, FinanceData, IcRevision, RequestPayload } from "@/lib/costflow/types";
 import type { ApprovalStep } from "@/lib/workflow/approval";
+import { WORKFLOW_HUB_HREF } from "@/lib/workflow/routes";
 import { ArrowRight, FilePlus2, FileText, Plus } from "lucide-react";
 
 export type Request = {
@@ -217,7 +218,7 @@ export default function CostFlowPanel({ finance, user, projectHeading, initialTa
   return <div className="space-y-4">
     <section className="tf-costflow-hero">
       <div className="tf-costflow-hero-heading">{projectHeading}<div className="flex flex-wrap items-center gap-2">
-        {activeTab === "overview" && <Link className="tf-button-secondary" href="/workflow">Hồ sơ của tôi</Link>}
+        {activeTab === "overview" && <Link className="tf-button-secondary" href={WORKFLOW_HUB_HREF}>Hồ sơ & Trình duyệt</Link>}
         {activeTab === "scope" && canCreate && !finance.data.closed && (
           <Button size="sm" onClick={() => setScopeCreateDialogOpen(true)}>
             <Plus size={15} aria-hidden="true" />Tạo báo giá mới
