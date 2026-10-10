@@ -11,6 +11,7 @@ import { effectiveRequirements, evaluateDocumentCompleteness, parseRequirements 
 import { assertApprovalToken, correctionItems, recordApprovalEvent } from "./approvalEvents";
 import { assertEligibleApprovalReceiver } from "./permissions";
 import { assertWorkflowLifecycleAllows } from "./lifecycle";
+import { appendDigitalSigningEvent, finalizeDigitalApprovedSnapshot, requiresDigitalSignature, type DigitalSigningRole } from "./signing";
 
 type Actor = { id: string; role: string };
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -242,6 +243,16 @@ export async function executeWorkflow(actor: Actor, form: FormData, upload: Proj
           if (!parent || parentBody?.signature || parentBody?.execution?.startedAt || parentBody?.cancellation?.status === "PENDING") throw new Error("Bản hiện hành đã thay đổi. Liên hệ Quản lý trước khi gửi bản thay thế.");
           await tx.workflowRequest.update({ where: { id: parent.id }, data: { pendingReplacementRequestId: request.id, version: { increment: 1 } } });
         }
+        await appendDigitalSigningEvent(tx, {
+          requestId: request.id,
+          version: oldVersion + 1,
+          kind: request.kind,
+          role: "CREATOR",
+          actorId: user.id,
+          signatureData: form.get("signatureData"),
+          signaturePin: form.get("signaturePin"),
+          commandKey: `SUBMIT_DOCUMENT:${attemptId}:CREATOR`,
+        });
         await update({ state: "SUBMITTED", steps: json(chain), currentStep: 0, currentAttemptId: attemptId, currentStepArrivedAt: arrivedAt, payload: json(body) });
         await recordApprovalEvent(tx, { requestId: request.id, module: request.module, attemptId, submittedVersion: oldVersion + 1, mutationVersion: oldVersion + 1, stepIndex: 0, role: chain[0].role, actorId: user.id, action: "SUBMIT_DOCUMENT", recipients: [chain[0].assigneeId] });
         break;
@@ -250,7 +261,21 @@ export async function executeWorkflow(actor: Actor, form: FormData, upload: Proj
         const action = text(form, "decision") as Decision;
         const corrections = correctionItems(form, action);
         const result = decide({ ...request, steps: steps! }, user.id, action, text(form, "reason"));
+        const signingRole = steps?.[request.currentStep]?.role as DigitalSigningRole | undefined;
         if (action === "APPROVE" && steps?.[request.currentStep]?.role === "ACCOUNTANT" && text(form, "reviewConfirmed") !== "yes") throw new Error("Kế toán cần xác nhận đã kiểm tra thông tin, chứng từ và phiên bản trước khi chuyển CEO.");
+        if (action === "APPROVE" && requiresDigitalSignature(request.kind)) {
+          if (!submittedVersion || !signingRole || !["MANAGER", "ACCOUNTANT", "CEO"].includes(signingRole)) throw new Error("Không xác định được vai trò hoặc phiên bản ký số hiện tại.");
+          await appendDigitalSigningEvent(tx, {
+            requestId: request.id,
+            version: submittedVersion,
+            kind: request.kind,
+            role: signingRole,
+            actorId: user.id,
+            signatureData: form.get("signatureData"),
+            signaturePin: form.get("signaturePin"),
+            commandKey: `DECIDE_DOCUMENT:${request.currentAttemptId}:${submittedVersion}:${signingRole}:APPROVE`,
+          });
+        }
         const nextStep = action === "APPROVE" && result.state === "SUBMITTED" ? result.currentStep : request.currentStep;
         const nextAssignee = action === "APPROVE" && result.state === "SUBMITTED" ? steps?.[nextStep]?.assigneeId : undefined;
         await update({ ...result, currentStepArrivedAt: action === "APPROVE" && result.state === "SUBMITTED" ? new Date() : result.state === "SUBMITTED" ? request.currentStepArrivedAt : null });
@@ -264,6 +289,9 @@ export async function executeWorkflow(actor: Actor, form: FormData, upload: Proj
         }
         await tx.workflowDecision.create({ data: { requestId: request.id, version: oldVersion + 1, step: request.currentStep, actorId: user.id, action, reason: text(form, "reason") } });
         await recordApprovalEvent(tx, { requestId: request.id, module: request.module, attemptId: request.currentAttemptId, submittedVersion, mutationVersion: oldVersion + 1, stepIndex: request.currentStep, role: steps?.[request.currentStep]?.role ?? "CREATOR", actorId: user.id, action, reason: text(form, "reason"), details: corrections.length ? json({ correctionItems: corrections }) : undefined, recipients: nextAssignee ? [nextAssignee] : [] });
+        if (action === "APPROVE" && result.state === "APPROVED" && requiresDigitalSignature(request.kind)) {
+          await finalizeDigitalApprovedSnapshot(tx, { requestId: request.id, version: submittedVersion! });
+        }
         break;
       }
       case "TRANSFER_DOCUMENT": {

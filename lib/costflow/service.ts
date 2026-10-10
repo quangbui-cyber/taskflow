@@ -32,6 +32,7 @@ import { approvedActualSettlementRoute, calculateSelectedAdvanceSettlement, type
 import { deriveCustomerAccounting, validateLiquidationAmounts } from "./customerAccounting";
 import { projectQuotation } from "./quotationProjection";
 import { createCustomerAcceptanceSnapshot, parseCustomerAcceptanceProjection, type CustomerAcceptanceActualInput } from "./customerAcceptanceProjection";
+import { appendDigitalSigningEvent, finalizeDigitalApprovedSnapshot, requiresDigitalSignature, type DigitalSigningRole } from "@/lib/workflow/signing";
 
 type Actor = { id: string; role: string };
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -280,6 +281,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
       const attemptId = state === "SUBMITTED" ? randomUUID() : null;
       const saved = await tx.workflowRequest.create({ data: { projectId, module: "COSTFLOW", kind, title: requireValue(text(form, "title"), "tên hồ sơ"), creatorId: actor.id, cashAssigneeId: actor.id, parentId: parentId || null, steps: json(chain), payload: json(body), state, currentAttemptId: attemptId, currentStepArrivedAt: attemptId ? new Date() : null } });
       affectedRequestId = saved.id;
+      if (attemptId) await appendDigitalSigningEvent(tx, { requestId: saved.id, version: saved.version, kind: saved.kind, role: "CREATOR", actorId: actor.id, signatureData: form.get("signatureData"), signaturePin: form.get("signaturePin"), commandKey: `SUBMIT:${attemptId}:CREATOR` });
       if (attemptId) await recordApprovalEvent(tx, { requestId: saved.id, module: saved.module, attemptId, submittedVersion: saved.version, mutationVersion: saved.version, stepIndex: 0, role: chain[0]?.role ?? "MANAGER", actorId: actor.id, action: "SUBMIT", recipients: chain[0]?.assigneeId ? [chain[0].assigneeId] : [] });
       return saved;
     };
@@ -538,6 +540,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
           },
         });
         affectedRequestId = saved.id;
+        await appendDigitalSigningEvent(tx, { requestId: saved.id, version: saved.version, kind: saved.kind, role: "CREATOR", actorId: actor.id, signatureData: form.get("signatureData"), signaturePin: form.get("signaturePin"), commandKey: `SUBMIT:${attemptId}:CREATOR` });
         await recordApprovalEvent(tx, { requestId: saved.id, module: saved.module, attemptId, submittedVersion: saved.version, mutationVersion: saved.version, stepIndex: 0, role: chain[0]?.role ?? "MANAGER", actorId: actor.id, action: "SUBMIT", recipients: chain[0]?.assigneeId ? [chain[0].assigneeId] : [] });
         for (const [recipientKey, totalAmount] of Object.entries(projection.recipientTotals)) {
           const resolved = projection.lines.find(line => line.recipient.key === recipientKey)!.recipient;
@@ -606,6 +609,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         for (const line of projection.lines) {
           await tx.paymentRequestLine.create({ data: { projectId, requestId: request.id, stableKey: line.stableKey, position: line.position, description: line.description, amount: line.amount, icRevisionId: line.source.revisionId, icLineId: line.source.lineId, sourceSnapshot: json({ ...line.source, effective: true }), recipientKey: line.recipient.key, evidenceManifest: json(line.evidenceIds.map(id => evidenceById.get(id))) } });
         }
+        await appendDigitalSigningEvent(tx, { requestId: request.id, version: request.version + 1, kind: request.kind, role: "CREATOR", actorId: actor.id, signatureData: form.get("signatureData"), signaturePin: form.get("signaturePin"), commandKey: `SUBMIT:${attemptId}:CREATOR` });
         if ((await tx.workflowRequest.updateMany({ where: { id: request.id, version: request.version, state: "DRAFT" }, data: { title: nextTitle, state: "SUBMITTED", steps: json(chain), currentStep: 0, currentAttemptId: attemptId, currentStepArrivedAt: new Date(), payload: json({ normalizedPayment: true, milestone: projection.milestone, explanation: projection.explanation, amount: projection.totalAmount, recipientTotals: projection.recipientTotals, warnings: projection.warnings, vendorSnapshots, resubmission: { sourceRequestId: parent.id, sourceAttemptId: parent.currentAttemptId ?? "", response }, diff }), version: { increment: 1 } } })).count !== 1) throw new Error("Bản nháp đã thay đổi. Tải lại trước khi gửi.");
         await recordApprovalEvent(tx, { requestId: request.id, module: request.module, attemptId, submittedVersion: request.version + 1, mutationVersion: request.version + 1, stepIndex: 0, role: chain[0]?.role ?? "MANAGER", actorId: actor.id, action: "SUBMIT", details: json({ sourceRequestId: parent.id, diff }), recipients: chain[0]?.assigneeId ? [chain[0].assigneeId] : [] });
         affectedRequestId = request.id;
@@ -1175,6 +1179,20 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         const ceoRecipients = request.kind === "IC" && role === "CEO" && ["RETURN", "REJECT"].includes(action)
           ? [request.creatorId, steps.find(step => step.role === "MANAGER")?.assigneeId, steps.find(step => step.role === "ACCOUNTANT")?.assigneeId].filter((id): id is string => !!id)
           : [];
+        if (action === "APPROVE" && requiresDigitalSignature(request.kind)) {
+          const signingRole = role as DigitalSigningRole | undefined;
+          if (submittedVersion == null || !signingRole || !["MANAGER", "ACCOUNTANT", "CEO"].includes(signingRole)) throw new Error("Không xác định được vai trò hoặc phiên bản ký số hiện tại.");
+          await appendDigitalSigningEvent(tx, {
+            requestId: request.id,
+            version: submittedVersion,
+            kind: request.kind,
+            role: signingRole,
+            actorId: actor.id,
+            signatureData: form.get("signatureData"),
+            signaturePin: form.get("signaturePin"),
+            commandKey: `DECIDE:${request.currentAttemptId}:${submittedVersion}:${signingRole}:APPROVE`,
+          });
+        }
         if ((await tx.workflowRequest.updateMany({ where: { id: request.id, version: request.version }, data: { ...next, currentStepArrivedAt: next.state === "SUBMITTED" && action === "APPROVE" ? new Date() : next.state === "SUBMITTED" ? request.currentStepArrivedAt : null, version: { increment: 1 } } })).count !== 1) throw new Error("Dữ liệu đã thay đổi. Tải lại trang trước khi thao tác.");
         if (action === "WITHDRAW" && next.state === "WITHDRAWN") {
           const requestActuals = await tx.actualCostApplication.findMany({ where: { requestId: request.id }, select: { line: { select: { stableLineId: true } } } });
@@ -1184,6 +1202,9 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         await tx.workflowDecision.create({ data: { requestId: request.id, version: request.version + 1, step: request.currentStep, actorId: actor.id, action, reason: text(form, "reason") } });
         const decisionDetails = corrections.length || vendorChecks.length ? json({ ...(corrections.length ? { correctionItems: corrections } : {}), ...(vendorChecks.length ? { vendorChecks } : {}) }) : undefined;
         await recordApprovalEvent(tx, { requestId: request.id, module: request.module, attemptId: request.currentAttemptId, submittedVersion, mutationVersion: request.version + 1, stepIndex: request.currentStep, role: role ?? "CREATOR", actorId: actor.id, action, reason: text(form, "reason"), details: decisionDetails, recipients: ceoRecipients.length ? ceoRecipients : nextAssignee ? [nextAssignee] : [] });
+        if (action === "APPROVE" && next.state === "APPROVED" && requiresDigitalSignature(request.kind)) {
+          await finalizeDigitalApprovedSnapshot(tx, { requestId: request.id, version: submittedVersion! });
+        }
         if (normalizedPayload.normalizedPayment === true && action === "RETURN") {
           const existingDraft = await tx.workflowRequest.findFirst({ where: { projectId, module: "COSTFLOW", parentId: request.id, state: "DRAFT" }, select: { id: true } });
           if (existingDraft) throw new Error("Bản sửa liên kết đã tồn tại. Tải lại trang.");

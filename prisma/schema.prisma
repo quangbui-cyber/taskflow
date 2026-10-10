@@ -530,8 +530,8 @@ model WorkflowApprovedSnapshot {
 
 model WorkflowSigningEvent {
   id                   String                   @id @default(cuid())
-  snapshotId           String
-  snapshot             WorkflowApprovedSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  snapshotId           String?
+  snapshot             WorkflowApprovedSnapshot? @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
   requestId            String
   request              WorkflowRequest          @relation(fields: [requestId], references: [id], onDelete: Restrict)
   version              Int
@@ -548,7 +548,8 @@ model WorkflowSigningEvent {
   signerIpSource       String                   @default("UNAVAILABLE")
   signedAt             DateTime                 @default(now())
 
-  @@unique([snapshotId, role])
+  @@unique([requestId, version, role])
+  @@index([snapshotId, role])
   @@index([requestId, version, signedAt])
   @@index([actorId, signedAt])
   @@index([eventHash])
