@@ -19,6 +19,7 @@ test("confirm service is serializable, CAS-protected, idempotent and append-only
   assert.match(service, /excelIntakeReceipts/);
   assert.match(service, /idempotencyKey/);
   assert.match(service, /fingerprint/);
+  assert.match(service, /operationFingerprint/);
   assert.match(service, /quotationDrafts\s*=\s*\[\.\.\./);
   assert.doesNotMatch(service, /finalizePairedQuotation|submit|approve|costFlowCash|revenue|settlement/i);
 });

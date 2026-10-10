@@ -6,7 +6,7 @@ import { EXCEL_INTAKE_SCHEMA_VERSION } from "./excelIntake";
 import type { ExcelIntakePreview } from "./excelIntakeParser";
 import { emptyFinance, type FinanceData, type PairedRow } from "./types";
 import { hydrateLinePricingData, normalizePairedRows } from "./pairedDraft";
-import { calculateLineCost } from "./money";
+import { calculateLineCost, compare, decimal } from "./money";
 
 type Actor = { id: string; role: string };
 export type ConfirmExcelIntakeCommand = { projectId: string; expectedVersion: number; idempotencyKey: string; fingerprint: string; preview: ExcelIntakePreview; corrections?: Record<string, string> };
@@ -62,8 +62,13 @@ function buildRows(command: ConfirmExcelIntakeCommand): PairedRow[] {
   const normalized = normalizePairedRows(rows);
   for (const row of normalized) {
     if (row.rowType === "GROUP") continue;
-    if (row.sell.quantity && row.sell.days && row.sell.unitPrice && row.sell.vatPercent) calculateLineCost(row.sell);
-    if (row.buy.quantity && row.buy.days && row.buy.unitPrice && row.buy.vatPercent) calculateLineCost(row.buy);
+    for (const side of [row.sell, row.buy]) {
+      if (side.quantity && compare(decimal(side.quantity), decimal("0")) <= 0) throw new Error("Số lượng phải lớn hơn 0.");
+      if (side.days && compare(decimal(side.days), decimal("0")) <= 0) throw new Error("Số ngày phải lớn hơn 0.");
+      if (side.vatPercent && compare(decimal(side.vatPercent), decimal("100")) > 0) throw new Error("VAT phải từ 0 đến 100.");
+      if (side.unitPrice === "0" && !side.notes.trim()) throw new Error("Dòng FOC có đơn giá 0 phải kèm ghi chú.");
+      if (side.quantity && side.days && side.unitPrice && side.vatPercent) calculateLineCost(side);
+    }
   }
   return normalized;
 }
@@ -74,6 +79,8 @@ export async function confirmExcelIntake(actor: Actor, command: ConfirmExcelInta
   if (command.preview.schemaVersion !== EXCEL_INTAKE_SCHEMA_VERSION || command.preview.errors.length) throw new Error("Xem trước còn lỗi cần sửa.");
   const calculatedFingerprint = previewFingerprint(command.preview);
   if (calculatedFingerprint !== command.fingerprint || calculatedFingerprint !== command.preview.fingerprint) throw new Error("Xem trước đã thay đổi. Hãy kiểm tra lại trước khi tạo nháp.");
+  const corrections = Object.fromEntries(Object.entries(command.corrections ?? {}).sort(([left], [right]) => left.localeCompare(right)));
+  const operationFingerprint = createHash("sha256").update(JSON.stringify({ preview: calculatedFingerprint, corrections })).digest("hex");
 
   return prisma.$transaction(async tx => {
     const [project, currentActor] = await Promise.all([
@@ -86,14 +93,14 @@ export async function confirmExcelIntake(actor: Actor, command: ConfirmExcelInta
     const data = hydrateLinePricingData(workspace.data as unknown as FinanceData);
     const prior = data.excelIntakeReceipts?.find(receipt => receipt.idempotencyKey === command.idempotencyKey);
     if (prior) {
-      if (prior.fingerprint !== calculatedFingerprint || prior.actorId !== actor.id) throw new Error("Mã chống ghi trùng đã được dùng với dữ liệu khác.");
+      if (prior.fingerprint !== operationFingerprint || prior.actorId !== actor.id) throw new Error("Mã chống ghi trùng đã được dùng với dữ liệu khác.");
       return { draftId: prior.draftId, version: workspace.version, idempotent: true };
     }
     if (workspace.version !== command.expectedVersion) throw new Error("Dữ liệu đã thay đổi. Tải lại trước khi tạo nháp.");
     const rows = buildRows(command);
     const draftId = randomUUID();
     data.quotationDrafts = [...(data.quotationDrafts ?? []), { linePricingSchemaVersion: 2, id: draftId, version: 1, createdBy: actor.id, workspaceMode: "paired", title: command.preview.metadata.projectName || "Báo giá nhập Excel", clientId: "", customer: command.preview.metadata.customer, notes: `Nguồn ${command.preview.source.sheet} ${command.preview.source.range}`.trim(), rows, globalEvidenceIds: [] }];
-    data.excelIntakeReceipts = [...(data.excelIntakeReceipts ?? []).slice(-99), { idempotencyKey: command.idempotencyKey, fingerprint: calculatedFingerprint, draftId, actorId: actor.id, createdAt: new Date().toISOString() }];
+    data.excelIntakeReceipts = [...(data.excelIntakeReceipts ?? []).slice(-99), { idempotencyKey: command.idempotencyKey, fingerprint: operationFingerprint, draftId, actorId: actor.id, createdAt: new Date().toISOString() }];
     const updated = await tx.costFlowWorkspace.updateMany({ where: { projectId: command.projectId, version: command.expectedVersion }, data: { data: json(data), version: { increment: 1 } } });
     if (updated.count !== 1) throw new Error("Có thao tác đồng thời. Tải lại rồi thử lại.");
     await tx.costFlowHistory.create({ data: { projectId: command.projectId, version: command.expectedVersion + 1, actorId: actor.id, action: "CONFIRM_EXCEL_INTAKE", snapshot: json(data) } });

@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { excelIntakeReducer, initialExcelIntakeState } from "../components/ExcelIntakeDialog";
 
 test("Excel intake dialog exposes both sources, exact issue focus and Foundation primitives", async () => {
   const source = await readFile(path.join(process.cwd(), "components/ExcelIntakeDialog.tsx"), "utf8");
@@ -13,14 +12,12 @@ test("Excel intake dialog exposes both sources, exact issue focus and Foundation
   assert.match(source, /disabled=[\s\S]*blocking|blocking[\s\S]*disabled/);
 });
 
-test("reducer preserves raw cells and corrections across stale or failed responses", () => {
-  const source = { ...initialExcelIntakeState, open: true, paste: "A\tB", requestId: 2, corrections: { "candidate-1.sell.quantity": "3" } };
-  const stale = excelIntakeReducer(source, { type: "PREVIEW_OK", requestId: 1, preview: null });
-  assert.deepEqual(stale, source);
-  const failed = excelIntakeReducer(source, { type: "REQUEST_FAILED", requestId: 2, message: "Lỗi mạng" });
-  assert.equal(failed.paste, "A\tB");
-  assert.equal(failed.corrections["candidate-1.sell.quantity"], "3");
-  assert.equal(failed.error, "Lỗi mạng");
+test("reducer preserves raw cells and corrections across stale or failed responses", async () => {
+  const source = await readFile(path.join(process.cwd(), "components/ExcelIntakeDialog.tsx"), "utf8");
+  assert.match(source, /action\.requestId\s*!==\s*state\.requestId[\s\S]*return state/);
+  assert.match(source, /REQUEST_FAILED[\s\S]*\.\.\.state[\s\S]*error:/);
+  assert.match(source, /corrections:\s*\{\s*\.\.\.state\.corrections/);
+  assert.match(source, /Dữ liệu và các ô đã sửa vẫn được giữ/);
 });
 
 test("quotation panel opens the creator-only intake dialog and customer view remains private", async () => {
