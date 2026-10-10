@@ -30,6 +30,7 @@ export function PaymentRequestEditor({ finance, onCreated, draft }:
   const [title, setTitle] = useState(draft?.title ?? "");
   const [milestone, setMilestone] = useState(draft?.milestone ?? "");
   const [explanation, setExplanation] = useState(typeof draftRequest?.payload.explanation === "string" ? draftRequest.payload.explanation : "");
+  const [expectedSettlementDate, setExpectedSettlementDate] = useState(draftRequest?.payload.expectedSettlementDate ?? "");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [signPadOpen, setSignPadOpen] = useState(false);
   const [signatureData, setSignatureData] = useState<string | null>(null);
@@ -86,6 +87,7 @@ export function PaymentRequestEditor({ finance, onCreated, draft }:
         <Input name="milestone" label="Mốc hồ sơ chung" value={milestone} onChange={event => setMilestone(event.target.value)} required placeholder="Ví dụ: Đợt chuẩn bị và đặt cọc" />
       </div>
       <Textarea name="explanation" label="Giải trình chung" value={explanation} onChange={event => setExplanation(event.target.value)} hint="Bắt buộc khi tổng một nguồn vượt số tham chiếu IC; không tự tạo revision IC." />
+      <Input name="expectedSettlementDate" type="date" label="Hạn hoàn ứng dự kiến" value={expectedSettlementDate} onChange={event => setExpectedSettlementDate(event.target.value)} required hint="Quá hạn sẽ hiển thị cảnh báo vàng; không tự động chặn hồ sơ tạm ứng mới có giải trình." />
       <div className="tf-payment-line-editor space-y-3">
         <div className="tf-payment-line-table" aria-label="Bảng nhập các khoản đề nghị trên desktop">
           <Table caption="Các khoản trong đề nghị tạm ứng">

@@ -752,6 +752,7 @@ model WorkflowTemplate {
   ceoId            String
   signerNames      String
   instructions     String
+  requiresExecutionTracking Boolean @default(false)
   fileId           String?
   ownerConfirmedAt DateTime?
   publishedAt      DateTime?

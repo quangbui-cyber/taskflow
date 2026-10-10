@@ -15,7 +15,7 @@ export type DocumentPayload = {
   mainFileId: string;
   supportingFiles?: Record<string,string>;
   submittedFiles?: {schemaVersion:1;mainFileId:string;supportingFiles:Record<string,string>;referenceFileIds:string[]};
-  templateSnapshot?: { name: string; version: number; instructions: string; signerNames: string; fileId: string; ownerId: string; accountantId: string; ceoId: string; requirements?: Requirements; familyId?:string; category?:string; purpose?:string; changeNote?:string };
+  templateSnapshot?: { name: string; version: number; instructions: string; signerNames: string; fileId: string; ownerId: string; accountantId: string; ceoId: string; requirements?: Requirements; familyId?:string; category?:string; purpose?:string; changeNote?:string; requiresExecutionTracking?: boolean };
   responsibleManagerId?: string;
   resubmission?: { sourceRequestId: string; sourceAttemptId: string; response: string };
   cancellation?: { status: "PENDING" | "CONFIRMED" | "REJECTED"; requestedById: string; requestedAt: string; reason: string; decidedById?: string; decidedAt?: string; decisionReason?: string };
