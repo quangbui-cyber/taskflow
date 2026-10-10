@@ -106,3 +106,18 @@ test("customer accounting UI labels AR, AC, margin and cash axes separately at m
   assert.match(css, /grid-template-columns: minmax\(0,1fr\)/);
   assert.match(css, /@media \(pointer: coarse\)/);
 });
+
+test("actual cost control center exposes the complete IC-AC worksheet and four capability lenses", () => {
+  const center = source("components/costflow/actual-cost/ActualCostControlCenter.tsx");
+  const worksheet = source("components/costflow/actual-cost/IcAcReconciliationWorksheet.tsx");
+  const roleViews = source("components/costflow/actual-cost/ActualCostRoleViews.tsx");
+  const css = source("app/modules.css");
+  for (const label of ["Theo loại chi phí / dòng IC", "Của tôi", "Theo NCC", "Bất thường & kiểm toán"]) assert.match(center, new RegExp(label));
+  for (const label of ["SL", "Ngày", "ĐVT", "Đơn giá", "NET / VAT / GROSS", "Chênh lệch", "Duyệt · chứng từ · tiền", "\\[Phát sinh ngoài IC\\]"]) assert.match(worksheet, new RegExp(label));
+  for (const label of ["Tạm ứng đã nhận", "Tự chi", "Đã hoàn/chi thêm", "Công ty còn phải trả", "Đã đề nghị", "Đã chi", "Còn chờ chi"]) assert.match(roleViews, new RegExp(label));
+  assert.match(worksheet, /group\.occurrences\.map/);
+  assert.doesNotMatch(worksheet, /Tổng số lượng/);
+  assert.match(css, /\.tf-ac-control-table/);
+  assert.match(css, /\.tf-ac-control-mobile/);
+  assert.match(css, /min-height: 44px/);
+});

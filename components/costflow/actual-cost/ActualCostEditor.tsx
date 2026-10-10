@@ -8,7 +8,7 @@ import { Input, Select } from "@/components/ui/Field";
 import { Alert, Badge, Panel } from "@/components/ui/Presentation";
 import { displayMoney } from "@/lib/costflow/money";
 import ActualCostDecisionBar from "./ActualCostDecisionBar";
-import ActualCostTable from "./ActualCostTable";
+import ActualCostControlCenter from "./ActualCostControlCenter";
 import ActualCostEvidenceVault from "./ActualCostEvidenceVault";
 
 const FUNDING_OPTIONS = [
@@ -101,7 +101,7 @@ export default function ActualCostEditor({ finance, currentUserId }: { finance: 
         </form>
       ) : <Alert tone="warning" title="Chưa có IC hiệu lực">Không thể tạo AC liên kết IC cho đến khi có đúng một baseline hiệu lực.</Alert>}
 
-      {finance.actualCosts && <ActualCostTable finance={finance} />}
+      {finance.actualCosts?.controlCenter && <ActualCostControlCenter center={finance.actualCosts.controlCenter} />}
 
       {actualCosts.length > 0 && <div className="space-y-3 border-t border-[var(--border)] pt-4">
         {actualCosts.map(line => <div id={`actual-cost-detail-${line.id}`} key={`${line.source}:${line.id}`} className="scroll-mt-24 space-y-3 rounded-xl border border-[var(--border)] p-3">

@@ -141,6 +141,30 @@
 .tf-ac-card dl div { display: flex; justify-content: space-between; gap: 12px; }
 .tf-ac-card dt { color: var(--text-secondary); font-size: 12px; }
 .tf-ac-card dd { text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.tf-ac-control-center { min-width: 0; overflow: hidden; }
+.tf-ac-lens-tabs { display: flex; gap: 4px; padding: 4px; overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface-soft); }
+.tf-ac-lens-tabs button { flex: 0 0 auto; min-height: 40px; padding: 8px 12px; border-radius: 6px; color: var(--text-secondary); font-size: 12px; font-weight: 650; }
+.tf-ac-lens-tabs button[aria-selected="true"] { background: var(--surface); color: var(--foreground); box-shadow: var(--shadow-sm); }
+.tf-ac-axis-note { padding: 10px 12px; border-left: 3px solid var(--info); background: var(--surface-soft); color: var(--text-secondary); font-size: 12px; }
+.tf-ac-control-table { min-width: 1500px; }
+.tf-ac-control-table thead th { position: sticky; top: 0; z-index: 3; background: var(--surface-soft); }
+.tf-ac-control-table th:first-child { position: sticky; left: 0; z-index: 2; min-width: 260px; background: var(--surface); text-align: left; }
+.tf-ac-control-table thead th:first-child { z-index: 4; background: var(--surface-soft); }
+.tf-ac-control-group { border-top: 2px solid var(--border-strong); }
+.tf-ac-control-group th button { min-height: 36px; text-align: left; font-weight: 700; }
+.tf-ac-control-occurrence span { display: block; color: var(--text-secondary); font-size: 11px; font-weight: 500; }
+.tf-ac-money-stack { display: grid; gap: 2px; min-width: 150px; text-align: right; font-size: 11px; font-variant-numeric: tabular-nums; }
+.tf-ac-control-mobile { display: none; }
+.tf-ac-unbudgeted { padding: 12px; border: 1px solid var(--warning); border-radius: var(--radius-control); background: var(--warning-soft); }
+.tf-ac-unbudgeted h4 { font-weight: 700; }
+.tf-ac-unbudgeted p { margin-top: 4px; color: var(--text-secondary); font-size: 12px; }
+.tf-ac-role-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(280px,1fr)); gap: 12px; }
+.tf-ac-stat-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.tf-ac-stat-grid div { padding: 10px; border-radius: 8px; background: var(--surface-soft); }
+.tf-ac-stat-grid dt { color: var(--text-secondary); font-size: 11px; }
+.tf-ac-stat-grid dd { margin-top: 4px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tf-ac-milestones { display: grid; gap: 6px; }
+.tf-ac-milestones li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 12px; }
 .tf-customer-accounting-grid { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 1px; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--border); }
 .tf-customer-accounting-grid .tf-summary-item { min-width: 0; padding: 16px; background: var(--surface); }
 
@@ -209,6 +233,13 @@
 
 @media (pointer: coarse) {
   .tf-ac-card input[type="checkbox"], .tf-ac-view-selector button { min-width: 44px; min-height: 44px; }
+  .tf-ac-lens-tabs button { min-width: 44px; min-height: 44px; }
+  .tf-ac-control-desktop { display: none; }
+  .tf-ac-control-mobile { display: grid; gap: 12px; }
+  .tf-ac-control-mobile details { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); }
+  .tf-ac-control-mobile summary { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: 10px; padding: 12px; cursor: pointer; font-weight: 700; }
+  .tf-ac-control-mobile summary span:first-child { min-width: 0; overflow-wrap: anywhere; }
+  .tf-ac-stat-grid { grid-template-columns: minmax(0,1fr); }
 }
 
 /* Quotation editor: compact spreadsheet with a clear section header. */

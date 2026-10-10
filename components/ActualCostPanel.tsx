@@ -24,6 +24,7 @@ import type { Expense } from "@/lib/costflow/types";
 import ExpenseUploadModal from "@/components/ExpenseUploadModal";
 import ExpenseDetailDrawer from "@/components/ExpenseDetailDrawer";
 import ActualCostEditor from "@/components/costflow/actual-cost/ActualCostEditor";
+import ActualCostControlCenter from "@/components/costflow/actual-cost/ActualCostControlCenter";
 
 type Props = {
   finance: Finance;
@@ -223,6 +224,11 @@ export default function ActualCostPanel({ finance, user, canCreate, onSelectTab 
     setPreselectedRecipientKey(rKey);
     setUploadModalOpen(true);
   };
+
+  const controlCenter = finance.actualCosts?.controlCenter;
+  if (controlCenter && !controlCenter.capabilities.account && !controlCenter.capabilities.audit) {
+    return <ActualCostControlCenter center={controlCenter} />;
+  }
 
   return (
     <div className="space-y-6">
