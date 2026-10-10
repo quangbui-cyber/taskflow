@@ -134,7 +134,7 @@ export async function parseRoundTripWorkbook(bytes: Uint8Array): Promise<RoundTr
   const schemaVersion = Number(metadata.get("roundTripSchemaVersion"));
   const draftVersion = Number(metadata.get("draftVersion"));
   if (schemaVersion !== EXCEL_ROUND_TRIP_SCHEMA_VERSION || !Number.isSafeInteger(draftVersion)) throw new Error("Metadata round-trip không hợp lệ.");
-  const stableBySource = new Map<number, { itemId: string; parentItemId: string | null; order: number; level: number; rowType: "GROUP" | "ITEM" }>();
+  const stableById = new Map<string, { itemId: string; parentItemId: string | null; order: number; level: number; rowType: "GROUP" | "ITEM" }>();
   for (let rowNumber = 2; rowNumber <= stable.rowCount; rowNumber++) {
     const row = stable.getRow(rowNumber);
     const itemId = cellText(row.getCell(1));
@@ -142,19 +142,28 @@ export async function parseRoundTripWorkbook(bytes: Uint8Array): Promise<RoundTr
     const sourceRow = Number(cellText(row.getCell(6)));
     const rowType = cellText(row.getCell(5));
     if (!Number.isSafeInteger(sourceRow) || (rowType !== "GROUP" && rowType !== "ITEM")) throw new Error("Metadata dòng round-trip không hợp lệ.");
-    stableBySource.set(sourceRow, { itemId, parentItemId: cellText(row.getCell(2)) || null, order: Number(cellText(row.getCell(3))), level: Number(cellText(row.getCell(4))), rowType });
+    stableById.set(itemId, { itemId, parentItemId: cellText(row.getCell(2)) || null, order: Number(cellText(row.getCell(3))), level: Number(cellText(row.getCell(4))), rowType });
   }
   const rows: RoundTripImportRow[] = [];
+  const parentAtLevel = new Map<number, string>();
   for (let sourceRow = 7; sourceRow <= 206; sourceRow++) {
     const row = visible.getRow(sourceRow);
     const content = [3, 4, 5, 6, 7, 8, 14, 15, 16, 17, 18, 24, 25].map(column => cellText(row.getCell(column)));
     if (!content.some(Boolean)) continue;
-    const stableEntry = stableBySource.get(sourceRow);
-    const input = blankPairedRow(stableEntry?.itemId ?? `preview-new-${sourceRow}`, stableEntry?.parentItemId ?? null, stableEntry?.rowType ?? (cellText(row.getCell(1)) === "1" ? "GROUP" : "ITEM"));
+    const itemId = cellText(row.getCell(26));
+    const stableEntry = itemId ? stableById.get(itemId) : undefined;
+    if (itemId && !stableEntry) throw new Error("Stable ID trong dòng không thuộc metadata round-trip.");
+    if (stableEntry && (cellText(row.getCell(27)) !== (stableEntry.parentItemId ?? "") || Number(cellText(row.getCell(28))) !== stableEntry.order)) throw new Error("Metadata stable ID/parent/order đã bị sửa không hợp lệ.");
+    const level = Number(cellText(row.getCell(1)) || 1);
+    const previewId = stableEntry?.itemId ?? `preview-new-${sourceRow}`;
+    const parentItemId = level === 1 ? null : parentAtLevel.get(level - 1) ?? null;
+    const input = blankPairedRow(previewId, parentItemId, stableEntry?.rowType ?? (level === 1 ? "GROUP" : "ITEM"));
     input.name = cellText(row.getCell(3)); input.description = cellText(row.getCell(4));
     input.sell = { ...input.sell, unit: cellText(row.getCell(5)), quantity: cellText(row.getCell(6)), days: cellText(row.getCell(7)), unitPrice: cellText(row.getCell(8)), basis: (cellText(row.getCell(9)) || "NET") as "NET" | "GROSS", vatPercent: cellText(row.getCell(10)), notes: cellText(row.getCell(14)) };
     input.buy = { ...input.buy, unit: cellText(row.getCell(15)), quantity: cellText(row.getCell(16)), days: cellText(row.getCell(17)), unitPrice: cellText(row.getCell(18)), basis: (cellText(row.getCell(19)) || "NET") as "NET" | "GROSS", vatPercent: cellText(row.getCell(20)), vendorId: cellText(row.getCell(24)), notes: cellText(row.getCell(25)) };
-    rows.push({ itemId: stableEntry?.itemId ?? null, parentItemId: stableEntry?.parentItemId ?? null, order: stableEntry?.order ?? rows.length, level: stableEntry?.level ?? Number(cellText(row.getCell(1)) || 1), row: input, source: { sheet: visible.name, row: sourceRow, cell: `C${sourceRow}` } });
+    rows.push({ itemId: stableEntry?.itemId ?? null, parentItemId, order: rows.length, level, row: input, source: { sheet: visible.name, row: sourceRow, cell: `C${sourceRow}` } });
+    parentAtLevel.set(level, previewId);
+    for (const nestedLevel of [level + 1, level + 2, level + 3]) parentAtLevel.delete(nestedLevel);
   }
   return { schemaVersion, projectId: metadata.get("projectId") ?? "", draftId: metadata.get("draftId") ?? "", draftVersion, fingerprint: metadata.get("draftFingerprint") ?? "", rows };
 }

@@ -159,8 +159,12 @@ export async function createExcelRoundTripWorkbook(projection: RoundTripProjecti
     values.forEach((value, column) => {
       if (value !== undefined) sheet.getCell(rowNumber, column + 1).value = value as ExcelJS.CellValue;
     });
+    sheet.getCell(rowNumber, 26).value = entry.itemId;
+    sheet.getCell(rowNumber, 27).value = entry.parentItemId ?? "";
+    sheet.getCell(rowNumber, 28).value = entry.order;
     addPreviewFormulas(sheet, rowNumber);
   });
+  for (const column of [26, 27, 28]) sheet.getColumn(column).hidden = true;
   sheet.getCell("C2").value = options.projectName ?? "";
   sheet.getCell("C3").value = projection.customer;
 
