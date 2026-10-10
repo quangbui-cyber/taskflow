@@ -90,7 +90,7 @@ test("profile actions derive ownership from requireUser and never accept a targe
 
 test("general session projection does not disclose signature assets or PIN hash", async () => {
   const auth = await readFile(new URL("../lib/auth.ts", import.meta.url), "utf8");
-  const projection = auth.match(/select:\s*\{[^}]+\}/s)?.[0] ?? "";
+  const projection = auth.match(/select:\s*\{[\s\S]*?\}/)?.[0] ?? "";
   assert.doesNotMatch(projection, /signature/i);
   assert.doesNotMatch(projection, /passwordHash/);
 });

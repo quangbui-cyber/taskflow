@@ -3,13 +3,16 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
 import { ProfileInfoForm, ProfilePasswordForm } from "@/components/ProfileForms";
+import { ProfileSignatureForm } from "@/components/ProfileSignatureForm";
+import { readOwnSignatureAsset } from "@/lib/workflow/signatureAssets";
 
 const PROFILE_BLUE_DARK = "#1d4ed8";
 const PROFILE_BLUE_SOFT = "#eff6ff";
 
 export default async function ProfilePage() {
   const user = await requireUser();
-  const sidebarProjects = await prisma.project.findMany({
+  const [sidebarProjects, signatureAsset, signatureSecurity] = await Promise.all([
+    prisma.project.findMany({
     where: { members: { some: { userId: user.id } } },
     select: {
       id: true,
@@ -22,7 +25,13 @@ export default async function ProfilePage() {
       account: { select: { team: { select: { id: true, name: true } } } },
     },
     orderBy: { createdAt: "desc" },
-  });
+    }),
+    readOwnSignatureAsset(user.id),
+    prisma.user.findUniqueOrThrow({
+      where: { id: user.id },
+      select: { signaturePinHash: true },
+    }),
+  ]);
 
   return (
     <div className="tf-shell">
@@ -59,6 +68,10 @@ export default async function ProfilePage() {
             userId={user.id}
             name={user.name}
             avatarUrl={user.avatarUrl ?? null}
+          />
+          <ProfileSignatureForm
+            initialSignatureData={signatureAsset?.dataUrl ?? null}
+            initialHasPin={Boolean(signatureSecurity.signaturePinHash)}
           />
           <ProfilePasswordForm />
         </div>

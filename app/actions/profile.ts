@@ -13,8 +13,69 @@ import {
 import { passwordLengthError } from "@/lib/password";
 import { normalizeProfileName } from "@/lib/profile";
 import { createSession } from "@/lib/session";
+import {
+  assertSixDigitSignaturePin,
+  deleteOwnSignatureAsset,
+  replaceOwnSignatureAsset,
+} from "@/lib/workflow/signatureAssets";
 
 export type ProfileState = { error?: string; success?: string };
+
+export async function saveOwnSignature(formData: FormData): Promise<ProfileState> {
+  const user = await requireUser();
+  try {
+    await replaceOwnSignatureAsset(user.id, formData.get("signatureData"));
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Ảnh chữ ký không hợp lệ.",
+    };
+  }
+  revalidatePath("/profile");
+  return { success: "Đã lưu chữ ký mẫu cá nhân." };
+}
+
+export async function deleteOwnSignature(): Promise<ProfileState> {
+  const user = await requireUser();
+  await deleteOwnSignatureAsset(user.id);
+  revalidatePath("/profile");
+  return { success: "Đã xóa chữ ký mẫu cá nhân." };
+}
+
+export async function updateSignaturePin(formData: FormData): Promise<ProfileState> {
+  const user = await requireUser();
+  const currentPassword = String(formData.get("currentPassword") ?? "");
+  const confirmPin = String(formData.get("confirmPin") ?? "");
+  let newPin: string;
+  try {
+    newPin = assertSixDigitSignaturePin(formData.get("newPin"));
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Mã PIN không hợp lệ." };
+  }
+  if (newPin !== confirmPin) return { error: "Mã PIN xác nhận không khớp." };
+
+  const account = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { passwordHash: true, signaturePinHash: true },
+  });
+  if (!account) return { error: "Không tìm thấy tài khoản." };
+  if (
+    account.signaturePinHash &&
+    !(await bcrypt.compare(currentPassword, account.passwordHash))
+  ) {
+    return { error: "Mật khẩu tài khoản hiện tại không đúng." };
+  }
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { signaturePinHash: await bcrypt.hash(newPin, 10) },
+  });
+  revalidatePath("/profile");
+  return {
+    success: account.signaturePinHash
+      ? "Đã cập nhật mã PIN chữ ký."
+      : "Đã thiết lập mã PIN chữ ký.",
+  };
+}
 
 /** Người dùng tự đổi tên hiển thị và ảnh đại diện của chính mình. */
 export async function updateOwnProfile(
