@@ -27,6 +27,7 @@ import { derivePaymentProgress } from "./paymentCash";
 import { projectPaymentLedger, type BeneficiaryVerification } from "./paymentReadModel";
 import { resolveProductionApprovedActualCost } from "./approvedActualCost";
 import { loadActualCosts } from "./actualCostReadModel";
+import { operationAssignmentIds } from "./actualCostControlCenter";
 import { approvedActualSettlementRoute, calculateSelectedAdvanceSettlement, type AdvanceSourceSelection } from "./paymentSettlement";
 import { deriveCustomerAccounting, validateLiquidationAmounts } from "./customerAccounting";
 import { projectQuotation } from "./quotationProjection";
@@ -48,15 +49,18 @@ function calendarDate(value: string, label: string) {
 export async function loadFinance(projectId: string, actor: Actor) {
   const activeActor = await prisma.user.findFirst({where:{id:actor.id,isActive:true},select:{role:true}});
   if (!activeActor) return null;
-  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true, name: true, ownerId: true, client: { select: { id: true, name: true } }, members: { select: { userId: true } } } });
+  const [project, workspace] = await Promise.all([
+    prisma.project.findUnique({ where: { id: projectId }, select: { id: true, name: true, ownerId: true, client: { select: { id: true, name: true } }, members: { select: { userId: true } } } }),
+    prisma.costFlowWorkspace.findUnique({ where: { projectId } }),
+  ]);
   if (!project) return null;
+  const savedData = workspace?.data ? hydrateLinePricingData(workspace.data as unknown as FinanceData) : undefined;
   const ddGrant = await prisma.workflowRoleGrant.findFirst({ where: { userId: actor.id, role: "AC_DD", revokedAt: null }, select: { id: true } });
-  const fullAccess = activeActor.role === "ADMIN" || !!ddGrant || project.members.some(m => m.userId === actor.id);
+  const fullAccess = activeActor.role === "ADMIN" || !!ddGrant || savedData?.config.accountantId === actor.id || project.members.some(m => m.userId === actor.id);
   const requests = await prisma.workflowRequest.findMany({ where: { projectId, module: "COSTFLOW" }, include: { decisions: { orderBy: { createdAt: "asc" } }, approvalEvents: { orderBy: { createdAt: "asc" } } }, orderBy: { createdAt: "desc" } });
   const readerIds = fullAccess ? [] : (await prisma.workflowRequestReader.findMany({ where: { userId: actor.id, request: { projectId, module: "COSTFLOW" } }, select: { requestId: true } })).map(row => row.requestId);
   const visible = fullAccess ? requests : requests.filter(r => readerIds.includes(r.id) || r.creatorId === actor.id || r.cashAssigneeId === actor.id || (r.steps as ApprovalStep[]).some(s => s.assigneeId === actor.id));
   if (!fullAccess && !visible.length) return null;
-  const workspace = await prisma.costFlowWorkspace.findUnique({ where: { projectId } });
   const cash = await prisma.costFlowCash.findMany({ where: { projectId, ...(!fullAccess ? { requestId: { in: visible.map(r => r.id) } } : {}) }, include: { normalizedAllocations: { select: { requestLineId: true, amount: true, direction: true } } }, orderBy: { createdAt: "desc" } });
   const normalizedPaymentRequests = await prisma.workflowRequest.findMany({
     where: { id: { in: visible.map(request => request.id) }, paymentLines: { some: {} } },
@@ -72,7 +76,6 @@ export async function loadFinance(projectId: string, actor: Actor) {
       paymentDiscussions: { orderBy: { createdAt: "asc" }, select: { id: true, lineId: true, authorId: true, body: true, createdAt: true, author: { select: { name: true } } } },
     },
   });
-  const savedData = workspace?.data ? hydrateLinePricingData(workspace.data as unknown as FinanceData) : undefined;
   const supplements = (savedData?.evidenceSupplements ?? []).filter(s => fullAccess || visible.some(r => r.id === s.requestId));
   const linkedIds = requestEvidenceIds(visible, supplements);
   const evidence = await prisma.costFlowEvidence.findMany({ where: { projectId, ...(!fullAccess ? { OR: [{ requestId: { in: visible.map(r => r.id) } }, { id: { in: linkedIds } }] } : {}) }, select: { id: true, name: true, kind: true, requestId: true, sha256: true, mimeType: true } });
@@ -143,7 +146,7 @@ export async function loadFinance(projectId: string, actor: Actor) {
     cash: cash.map(item => ({ id: item.id, projectId: item.projectId, requestId: item.requestId, recipientKey: item.recipientKey, direction: item.direction, amount: item.amount, evidenceId: item.evidenceId, normalizedAllocations: item.normalizedAllocations })),
     financialCloseState: savedData?.closed ? "CLOSED" : "OPEN",
   });
-  const actualCosts = fullAccess ? await loadActualCosts(projectId, actor) : null;
+  const actualCosts = fullAccess ? await loadActualCosts(projectId, actor, paymentLedger) : null;
   const [customerLiquidations, customerCashIns] = fullAccess ? await Promise.all([
     prisma.customerLiquidation.findMany({ where: { projectId }, include: { evidence: { select: { id: true, name: true, sha256: true } } }, orderBy: { version: "asc" } }),
     prisma.customerCashIn.findMany({ where: { projectId }, include: { evidence: { select: { id: true, name: true, sha256: true } } }, orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }] }),
@@ -656,7 +659,14 @@ export async function executeFinance(projectId: string, expectedVersion: number,
       }
       case "CONFIGURE": {
         if (!isAdmin) throw new Error("Chỉ Admin được cấu hình phân công.");
-        data.config = { accountantId: await activeUser(text(form, "accountantId")), ceoId: await activeUser(text(form, "ceoId")), managerId: await activeUser(text(form, "managerId")) };
+        const requestedOperationIds = form.getAll("operationUserIds").map(String);
+        const activeProjectMembers = await tx.projectMember.findMany({
+          where: { projectId, user: { isActive: true } },
+          select: { userId: true },
+        });
+        const operationUserIds = operationAssignmentIds(requestedOperationIds, activeProjectMembers.map(item => item.userId));
+        if (operationUserIds.length !== new Set(requestedOperationIds.filter(Boolean)).size) throw new Error("Operations phải là tài khoản đang hoạt động và được phân công vào Project.");
+        data.config = { accountantId: await activeUser(text(form, "accountantId")), ceoId: await activeUser(text(form, "ceoId")), managerId: await activeUser(text(form, "managerId")), operationUserIds };
         break;
       }
       case "ADD_BRIEF": {

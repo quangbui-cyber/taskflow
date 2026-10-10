@@ -2,7 +2,9 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { actualCostEvidenceWarnings, actualCostVariance, calculateActualCost, normalizeLegacyActualCosts } from "./actualCost";
-import { calculateLineCost, totals, type CalculatedCost } from "./money";
+import { calculateLineCost, type CalculatedCost } from "./money";
+import { buildActualCostControlCenter, resolveActualCostCapabilities, type ControlCenterPayment } from "./actualCostControlCenter";
+import type { PaymentLedgerRow } from "./paymentReadModel";
 import type { FinanceData } from "./types";
 
 type Actor = { id: string; role: string };
@@ -32,6 +34,7 @@ export type ActualCostReadLine = {
   icLineId: string | null;
   createdById: string | null;
   lockedByApplications: boolean;
+  applications: { requestId: string; amount: string; state: string; title: string }[];
   decisionReason: string;
   acknowledgedWarningCodes: string[];
   missingEvidenceWarnings: string[];
@@ -54,16 +57,16 @@ function object(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
-export async function loadActualCosts(projectId: string, actor: Actor) {
+export async function loadActualCosts(projectId: string, actor: Actor, paymentLedger: PaymentLedgerRow[] = []) {
   const activeActor = await prisma.user.findFirst({ where: { id: actor.id, isActive: true }, select: { id: true, role: true } });
   if (!activeActor) return null;
   const [project, ddGrant, normalized, workspace] = await Promise.all([
-    prisma.project.findUnique({ where: { id: projectId }, select: { id: true, members: { select: { userId: true } } } }),
+    prisma.project.findUnique({ where: { id: projectId }, select: { id: true, members: { select: { userId: true, user: { select: { name: true, isActive: true } } } } } }),
     prisma.workflowRoleGrant.findFirst({ where: { userId: activeActor.id, role: "AC_DD", revokedAt: null }, select: { id: true } }),
     prisma.actualCostLine.findMany({
       where: { projectId },
       include: {
-        applications: { where: { state: "ACTIVE", request: { state: { notIn: ["WITHDRAWN", "REJECTED", "CANCELLED"] } } }, select: { id: true } },
+        applications: { where: { state: "ACTIVE", request: { state: { notIn: ["WITHDRAWN", "REJECTED", "CANCELLED"] } } }, select: { requestId: true, amount: true, request: { select: { state: true, title: true } } } },
         versions: {
           orderBy: { version: "desc" },
           take: 1,
@@ -78,8 +81,17 @@ export async function loadActualCosts(projectId: string, actor: Actor) {
     prisma.costFlowWorkspace.findUnique({ where: { projectId }, select: { data: true } }),
   ]);
   if (!project) return null;
-  const fullAccess = activeActor.role === "ADMIN" || !!ddGrant || project.members.some(member => member.userId === activeActor.id);
-  if (!fullAccess) return null;
+  const data = workspace?.data as unknown as FinanceData | undefined;
+  const activeMemberIds = project.members.filter(member => member.user.isActive).map(member => member.userId);
+  const capabilities = resolveActualCostCapabilities({
+    actorId: activeActor.id,
+    actorRole: activeActor.role,
+    isProjectMember: activeMemberIds.includes(activeActor.id),
+    isDd: !!ddGrant,
+    accountantId: data?.config.accountantId ?? "",
+    operationUserIds: (data?.config.operationUserIds ?? []).filter(id => activeMemberIds.includes(id)),
+  });
+  if (!capabilities.lenses.length) return null;
   const creatorIds = [...new Set(normalized.flatMap(line => line.versions.flatMap(version => version.evidenceLinks.map(link => link.evidence.createdBy))))];
   const creatorNames = new Map((await prisma.user.findMany({ where: { id: { in: creatorIds } }, select: { id: true, name: true } })).map(user => [user.id, user.name]));
 
@@ -114,6 +126,7 @@ export async function loadActualCosts(projectId: string, actor: Actor) {
       icLineId: line.icLineId,
       createdById: line.createdById,
       lockedByApplications: line.applications.length > 0,
+      applications: line.applications.map(application => ({ requestId: application.requestId, amount: application.amount, state: application.request.state, title: application.request.title })),
       decisionReason: decision?.reason ?? "",
       acknowledgedWarningCodes: Array.isArray(decision?.warningCodes) ? decision.warningCodes.filter((value): value is string => typeof value === "string") : [],
       missingEvidenceWarnings: actualCostEvidenceWarnings(version.evidenceLinks.map(link => link.kind)),
@@ -131,7 +144,6 @@ export async function loadActualCosts(projectId: string, actor: Actor) {
     };
   }));
   const normalizedKeys = new Set(normalized.flatMap(line => [line.id, line.stableLineId]));
-  const data = workspace?.data as unknown as FinanceData | undefined;
   const legacyCostById = new Map((data?.expenses ?? []).map(expense => [expense.id, expense.cost]));
   const legacyLines: ActualCostReadLine[] = normalizeLegacyActualCosts(data?.expenses ?? [])
     .filter(line => !normalizedKeys.has(line.id))
@@ -153,6 +165,7 @@ export async function loadActualCosts(projectId: string, actor: Actor) {
       revisionId: line.revisionId,
       createdById: null,
       lockedByApplications: false,
+      applications: [],
       decisionReason: "",
       acknowledgedWarningCodes: [],
       missingEvidenceWarnings: [],
@@ -185,8 +198,59 @@ export async function loadActualCosts(projectId: string, actor: Actor) {
     const comparison = actualCostVariance(group.ic?.cost ?? zero, group.lines.flatMap(line => line.cost ? [line.cost] : []));
     return { key, sourceKind: group.sourceKind, description: group.description, unit: group.unit, ic: group.ic, actualLineIds: group.lines.map(line => line.id), actual: comparison.actual, variance: comparison.variance, status: comparison.status };
   });
-  const zero: CalculatedCost = { rawNet: "0/1", rawVat: "0/1", rawGross: "0/1", net: "0", vat: "0", gross: "0" };
-  const icTotal = comparisons.length ? totals(comparisons.flatMap(item => item.ic ? [item.ic.cost] : [])) : zero;
-  const summary = actualCostVariance(icTotal, normalizedLines.flatMap(line => line.cost ? [line.cost] : []));
-  return { lines: [...normalizedLines, ...legacyLines], comparisons, summary, canDecide: !!ddGrant };
+  const allLines = [...normalizedLines, ...legacyLines];
+  const recipientNames = Object.fromEntries([
+    ...project.members.map(member => [`USER:${member.userId}`, member.user.name] as const),
+    ...(data?.beneficiaries ?? []).map(vendor => [`VENDOR:${vendor.id}`, vendor.name] as const),
+  ]);
+  const payments: ControlCenterPayment[] = paymentLedger
+    .filter(item => item.projectId === projectId)
+    .map(item => ({
+      requestId: item.requestId,
+      kind: item.kind,
+      title: item.title,
+      recipientKey: item.recipientKey,
+      recipientLabel: item.recipientLabel,
+      approvalState: item.approvalState,
+      approvedAmount: item.approvedAmount,
+      grossStandardOut: item.grossStandardOut,
+      grossAdditionalOut: item.grossAdditionalOut,
+      grossRefundedIn: item.grossRefundedIn,
+      netCash: item.netCash,
+      remainingStandardOut: item.remainingStandardOut,
+      cashProgress: item.cashProgress,
+    }));
+  const controlCenter = buildActualCostControlCenter({
+    actorId: activeActor.id,
+    capabilities,
+    occurrences: allLines.map(line => ({
+      id: line.id,
+      stableLineId: line.stableLineId,
+      sourceKind: line.sourceKind,
+      description: line.description,
+      recipientKey: line.recipientKey,
+      fundingSource: line.fundingSource,
+      quantity: line.quantity,
+      days: line.days,
+      unitPrice: line.unitPrice,
+      unit: line.unit,
+      cost: line.cost,
+      reviewState: line.reviewState,
+      missingEvidenceWarnings: line.missingEvidenceWarnings,
+      evidenceKinds: line.evidence.map(item => item.kind),
+      lockedByApplications: line.lockedByApplications,
+      applicationRequestIds: line.applications.map(item => item.requestId),
+    })),
+    comparisons,
+    payments,
+    milestones: (data?.vendorPaymentMilestones ?? []).map(item => ({ id: item.id, vendorId: item.vendorId, title: item.title, amount: item.amount, dueDate: item.dueDate, linkedRequestId: item.linkedRequestId })),
+    recipientNames,
+  });
+  const lines = allLines.filter(line => capabilities.account || capabilities.audit
+    || (capabilities.vendorOperations && line.recipientKey.startsWith("VENDOR:"))
+    || line.recipientKey === `USER:${activeActor.id}`)
+    .map(line => capabilities.vendorOperations && !capabilities.account && !capabilities.audit ? { ...line, evidence: [], decisionReason: "", acknowledgedWarningCodes: [] } : line);
+  const scopedComparisons = controlCenter.worksheet.groups.map(({ occurrences: _occurrences, ...comparison }) => comparison);
+  const summary = actualCostVariance(controlCenter.worksheet.totals.ic, lines.flatMap(line => line.cost ? [line.cost] : []));
+  return { lines, comparisons: scopedComparisons, summary, canDecide: capabilities.canDecide, controlCenter };
 }

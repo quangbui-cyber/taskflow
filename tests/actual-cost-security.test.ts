@@ -58,3 +58,16 @@ test("actual cost bulk decision validates the entire current-version set before 
   assert.match(service, /selection\.reviewToken !==/);
   assert.ok(service.indexOf("const validated = input.selections.map") < service.indexOf("for (const item of validated)"));
 });
+
+test("control center derives role scope and Project Operations assignment on the server", () => {
+  const projection = source("lib/costflow/actualCostControlCenter.ts");
+  const readModel = source("lib/costflow/actualCostReadModel.ts");
+  const service = source("lib/costflow/service.ts");
+  for (const fact of ["isProjectMember", "isDd", "accountantId", "operationUserIds", "vendorOperations", "canDecide"]) assert.match(projection, new RegExp(fact));
+  assert.match(readModel, /activeMemberIds/);
+  assert.match(readModel, /line\.recipientKey === `USER:\$\{activeActor\.id\}`/);
+  assert.match(readModel, /evidence: \[\], decisionReason: ""/);
+  assert.match(service, /projectMember\.findMany/);
+  assert.match(service, /operationAssignmentIds/);
+  assert.doesNotMatch(source("app/actions/costflow.ts"), /actorRole|vendorOperations|auditTotals/);
+});
