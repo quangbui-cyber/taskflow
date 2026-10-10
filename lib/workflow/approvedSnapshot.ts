@@ -3,19 +3,19 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 const ROLE_ORDER = new Map([["CREATOR", 0], ["MANAGER", 1], ["ACCOUNTANT", 2], ["CEO", 3]]);
 
 export type ApprovedProjectionInput = {
-  request: { id: string; version: number; module: string; kind: string; creatorId: string; title: string; approvedAt: string };
+  request: { id: string; version: number; module: string; kind: string; creatorId: string; creatorName?: string; title: string; approvedAt: string };
   template: { familyId: string; version: number; name: string };
   document: { purpose: string; content: string; counterparty: string; beneficiary: string; bankAccount: string; bankName: string; dueDate: string };
   finance: { source: string; snapshotId: string; amount: string; lines: readonly { id: string; description: string; amount: string }[] };
   files: readonly { id: string; kind: string; name: string; sha256: string }[];
   decisions: readonly { step: number; role: string; actorId: string; action: string; decidedAt: string }[];
-  signatures: readonly { role: string; actorId: string; signedAt: string; imageSha256: string; eventHash: string }[];
+  signatures: readonly { role: string; actorId: string; actorName?: string; signedAt: string; imageSha256: string; eventHash: string }[];
 };
 
 export function buildApprovedProjection(input: ApprovedProjectionInput) {
   return {
     schemaVersion: 1 as const,
-    request: { ...input.request },
+    request: { ...input.request, creatorName: input.request.creatorName ?? "" },
     template: { ...input.template },
     document: { ...input.document },
     finance: {
@@ -26,7 +26,7 @@ export function buildApprovedProjection(input: ApprovedProjectionInput) {
     },
     files: [...input.files].map((file) => ({ ...file })).sort((a, b) => a.id.localeCompare(b.id)),
     decisions: [...input.decisions].map((decision) => ({ ...decision })).sort((a, b) => a.step - b.step || a.role.localeCompare(b.role)),
-    signatures: [...input.signatures].map((signature) => ({ ...signature })).sort((a, b) =>
+    signatures: [...input.signatures].map((signature) => ({ ...signature, actorName: signature.actorName ?? "" })).sort((a, b) =>
       (ROLE_ORDER.get(a.role) ?? 99) - (ROLE_ORDER.get(b.role) ?? 99) || a.role.localeCompare(b.role)),
   };
 }

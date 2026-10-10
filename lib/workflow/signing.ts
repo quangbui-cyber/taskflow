@@ -204,6 +204,10 @@ export async function finalizeDigitalApprovedSnapshot(
     throw new Error("Chuỗi chữ ký số chưa đủ Người lập, Quản lý, Kế toán và CEO.");
   }
   const payload = request.payload && typeof request.payload === "object" ? request.payload as Record<string, unknown> : {};
+  const signerNames = new Map((await tx.user.findMany({
+    where: { id: { in: [...new Set([request.creatorId, ...signatures.map(item => item.actorId)])] } },
+    select: { id: true, name: true },
+  })).map(person => [person.id, person.name]));
   const projection = buildApprovedProjection({
     request: {
       id: request.id,
@@ -211,6 +215,7 @@ export async function finalizeDigitalApprovedSnapshot(
       module: request.module,
       kind: request.kind,
       creatorId: request.creatorId,
+      creatorName: signerNames.get(request.creatorId) ?? "",
       title: request.title,
       approvedAt: new Date().toISOString(),
     },
@@ -245,6 +250,7 @@ export async function finalizeDigitalApprovedSnapshot(
     signatures: signatures.map(item => ({
       role: item.role,
       actorId: item.actorId,
+      actorName: signerNames.get(item.actorId) ?? "",
       signedAt: item.signedAt.toISOString(),
       imageSha256: item.signatureImageSha256,
       eventHash: item.eventHash,

@@ -522,10 +522,37 @@ model WorkflowApprovedSnapshot {
   createdAt        DateTime                   @default(now())
   signingEvents    WorkflowSigningEvent[]
   lifecycles       WorkflowSigningLifecycle[]
+  publicCapability WorkflowPublicVerificationCapability?
 
   @@unique([requestId, version])
   @@index([projectionSha256])
   @@index([attestationKeyId])
+}
+
+model WorkflowPublicVerificationCapability {
+  id                  String                   @id @default(cuid())
+  snapshotId          String                   @unique
+  snapshot            WorkflowApprovedSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  publicNonce         String                   @unique
+  tokenDigest         String                   @unique
+  attestationKeyId    String
+  issuedAt            DateTime                 @default(now())
+  revokedAt           DateTime?
+  replacedAt          DateTime?
+  replacedBySnapshotId String?
+
+  @@index([revokedAt, replacedAt])
+  @@index([attestationKeyId])
+}
+
+model WorkflowPublicVerificationRateLimit {
+  key             String   @id
+  attempts        Int      @default(0)
+  windowStartedAt DateTime @default(now())
+  blockedUntil    DateTime?
+  updatedAt       DateTime @updatedAt
+
+  @@index([updatedAt])
 }
 
 model WorkflowSigningEvent {
