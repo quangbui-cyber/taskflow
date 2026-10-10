@@ -7,7 +7,11 @@ import {
   computeApprovedProjectionSha256,
   verifyApprovedProjectionAttestation,
 } from "../lib/workflow/approvedSnapshot";
-import { resolveSignerIp } from "../lib/workflow/signing";
+import {
+  assertSigningModeState,
+  computeSigningEventHash,
+  resolveSignerIp,
+} from "../lib/workflow/signing";
 
 const baseInput = {
   request: {
@@ -129,6 +133,18 @@ test("schema persists one signing mode, distinct evidence states and idempotency
   assert.match(schema, /signerIpNormalized\s+String\?/);
   assert.match(schema, /signerIpSource\s+String/);
   assert.doesNotMatch(schema, /rawForwarded|rawIpHeader/);
+});
+
+test("digital and physical evidence states cannot form a hybrid lifecycle", () => {
+  assert.doesNotThrow(() => assertSigningModeState("DIGITAL", "CHO_KY"));
+  assert.doesNotThrow(() => assertSigningModeState("PHYSICAL", "RETURNED"));
+  assert.throws(() => assertSigningModeState("DIGITAL", "PHYSICAL_CONFIRMED"), /chế độ ký/);
+  assert.throws(() => assertSigningModeState("PHYSICAL", "DIGITAL_CONFIRMED"), /chế độ ký/);
+  const event = {
+    snapshotSha256: "a".repeat(64), role: "MANAGER", actorId: "manager",
+    imageSha256: "b".repeat(64), signedAt: "2026-10-10T08:10:00.000Z", previousEventHash: null,
+  };
+  assert.notEqual(computeSigningEventHash(event), computeSigningEventHash({ ...event, imageSha256: "c".repeat(64) }));
 });
 
 test("Phase 9 installs no automatic purge or invented signing-retention duration", async () => {
