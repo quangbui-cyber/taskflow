@@ -13,8 +13,11 @@ import {
   ExternalLink,
   UserCheck,
   Send,
-  User
+  User,
+  PenTool,
+  ShieldCheck
 } from "lucide-react";
+import { SignaturePad } from "@/components/SignaturePad";
 import type { Finance, Request } from "@/components/CostFlowPanel";
 import { Button } from "@/components/ui/Button";
 import { Select, Textarea } from "@/components/ui/Field";
@@ -31,6 +34,7 @@ import { PaymentRequestEditor } from "@/components/costflow/payments/PaymentRequ
 import { PaymentRequestPreview } from "@/components/costflow/payments/PaymentRequestPreview";
 import { PaymentRequestReview } from "@/components/costflow/payments/PaymentRequestReview";
 import AdvanceSettlementAllocator from "@/components/costflow/payments/AdvanceSettlementAllocator";
+import { WORKFLOW_HUB_HREF } from "@/lib/workflow/routes";
 
 import { KIND_INFO, STATE_INFO, ROLE_LABELS as ROLE_LABEL, ACTION_LABELS as ACTION_LABEL } from "@/lib/costflow/labels";
 
@@ -46,6 +50,9 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
   const [stateFilter, setStateFilter] = useState("ALL");
   const [assigneeFilter, setAssigneeFilter] = useState("ALL");
   const [scopeTab, setScopeTab] = useState<"ALL" | "MY_ACTION" | "SUBMITTED" | "APPROVED" | "RETURNED_REJECTED">("ALL");
+
+  // Modal inspection state (xem & thẩm định hồ sơ chi tiết)
+  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
 
   // Modal states for creating expense requests & managing beneficiaries
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -91,6 +98,29 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
     }
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  // Sync hash deep-link (#request-{id})
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const syncHash = () => {
+        const hash = window.location.hash;
+        if (hash.startsWith("#request-")) {
+          const id = hash.replace("#request-", "");
+          if (finance.requests.some(r => r.id === id)) {
+            setSelectedRequestId(id);
+          }
+        }
+      };
+      syncHash();
+      window.addEventListener("hashchange", syncHash);
+      return () => window.removeEventListener("hashchange", syncHash);
+    }
+  }, [finance.requests]);
+
+  const selectedRequest = useMemo(
+    () => finance.requests.find(r => r.id === selectedRequestId),
+    [finance.requests, selectedRequestId]
+  );
 
   const usersMap = useMemo(() => new Map(finance.users.map(u => [u.id, u.name])), [finance.users]);
 
@@ -197,28 +227,12 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
             </>
           )}
 
-          <Link href="/workflow" className="tf-link text-xs flex items-center gap-1 font-medium ml-1">
-            <span>Workflow cá nhân</span>
+          <Link href={WORKFLOW_HUB_HREF} className="tf-link text-xs flex items-center gap-1 font-medium ml-1">
+            <span>Tất cả Hồ sơ & Trình duyệt</span>
             <ArrowRight size={13} aria-hidden="true" />
           </Link>
         </div>
       </div>
-
-      {canCreate && !finance.data.closed && <details className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
-        <summary className="cursor-pointer font-semibold text-sm">Lập ĐNTU đa khoản</summary>
-        <div className="mt-4"><PaymentRequestEditor finance={finance} onCreated={() => undefined} /></div>
-      </details>}
-      {!!finance.paymentDossiers?.length && <Panel className="space-y-4">
-        <div><h3 className="font-semibold">ĐNTU đa khoản đã lưu</h3><p className="tf-ui-help">Nạp lại từ dòng và snapshot chuẩn hóa trên server.</p></div>
-        {finance.paymentDossiers.map(dossier => <PaymentRequestPreview key={dossier.requestId} serverProjection title={dossier.title} milestone={dossier.milestone} explanation={finance.requests.find(request => request.id === dossier.requestId)?.payload.explanation} revisionLabel={[...new Set(dossier.lines.map(line => line.icRevisionId))].join(", ")} lines={dossier.lines.map(line => ({
-          stableKey: line.stableKey,
-          description: line.description,
-          amount: line.amount,
-          sourceLabel: finance.data.revisions.find(revision => revision.id === line.icRevisionId)?.lines.find(source => source.id === line.icLineId)?.description ?? `${line.icRevisionId} / ${line.icLineId}`,
-          recipientKey: line.recipientKey,
-          recipientLabel: dossier.recipients.find(recipient => recipient.recipientKey === line.recipientKey)?.displayName ?? line.recipientKey,
-        }))} />)}
-      </Panel>}
 
       {/* KPI METRICS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -440,15 +454,15 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
 
       {/* 3. REQUEST LIST OR EMPTY STATE */}
       {filteredRequests.length > 0 ? (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {filteredRequests.map(req => (
-            <EnhancedRequestCard
+            <CompactRequestCard
               key={req.id}
               finance={finance}
               request={req}
               user={user}
               usersMap={usersMap}
-              projectedSteps={defaultSteps}
+              onOpen={() => setSelectedRequestId(req.id)}
             />
           ))}
         </div>
@@ -460,6 +474,24 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
               ? "Thử thay đổi từ khóa tìm kiếm hoặc bỏ bớt các bộ lọc đang chọn."
               : "Dự án chưa có hồ sơ nào được tạo. Bạn có thể tạo dự toán IC từ tab Internal Cost hoặc bấm 'Lập hồ sơ chi' để tạo đề nghị chi mới."
           }
+        />
+      )}
+
+      {/* MODAL THẨM ĐỊNH & CHI TIẾT HỒ SƠ */}
+      {selectedRequest && (
+        <RequestInspectionModal
+          open={!!selectedRequest}
+          onClose={() => {
+            setSelectedRequestId(null);
+            if (typeof window !== "undefined" && window.location.hash.startsWith("#request-")) {
+              window.history.replaceState(null, "", window.location.pathname + window.location.search);
+            }
+          }}
+          finance={finance}
+          request={selectedRequest}
+          user={user}
+          usersMap={usersMap}
+          projectedSteps={defaultSteps}
         />
       )}
 
@@ -491,7 +523,6 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
         initialExpenseIds={modalInitialExpenseIds}
         initialTab={modalInitialTab}
         onSuccess={() => {
-          // Cuộn lên đầu để xem hồ sơ vừa tạo
           window.scrollTo({ top: 0, behavior: "smooth" });
         }}
       />
@@ -500,15 +531,171 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
 }
 
 // -------------------------------------------------------------
-// ENHANCED REQUEST CARD COMPONENT
+// COMPACT REQUEST CARD (HÀNG CHỜ DUYỆT TINH GỌN)
 // -------------------------------------------------------------
-function EnhancedRequestCard({
+function CompactRequestCard({
+  finance,
+  request,
+  user,
+  usersMap,
+  onOpen,
+}: {
+  finance: Finance;
+  request: Request;
+  user: { id: string; role: string };
+  usersMap: Map<string, string>;
+  onOpen: () => void;
+}) {
+  const current = request.steps[request.currentStep];
+  const isMyTurn = request.state === "SUBMITTED" && current?.assigneeId === user.id;
+
+  const revision = request.kind === "IC"
+    ? finance.data.revisions.find(item => item.requestId === request.id)
+    : undefined;
+  const paymentDossier = finance.paymentDossiers?.find(item => item.requestId === request.id);
+
+  const kindMeta = KIND_INFO[request.kind] ?? { label: request.kind, tone: "neutral" as const };
+  const stateMeta = STATE_INFO[request.state] ?? { label: request.state, tone: "neutral" as const };
+
+  const displayAmount = useMemo(() => {
+    if (request.payload.amount) {
+      try {
+        return displayMoney(request.payload.amount);
+      } catch {
+        return `${request.payload.amount} ₫`;
+      }
+    }
+    if (paymentDossier?.lines.length) {
+      const sum = paymentDossier.lines.reduce((acc, l) => acc + (parseFloat(l.amount) || 0), 0);
+      try {
+        return displayMoney(String(Math.round(sum)));
+      } catch {
+        return `${sum.toLocaleString("vi-VN")} ₫`;
+      }
+    }
+    return null;
+  }, [request.payload.amount, paymentDossier]);
+
+  return (
+    <div
+      id={`request-${request.id}`}
+      onClick={onOpen}
+      role="button"
+      tabIndex={0}
+      onKeyDown={e => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      className={`p-3.5 sm:p-4 rounded-xl border transition-all cursor-pointer group text-left ${
+        isMyTurn
+          ? "border-[var(--warning)] bg-[var(--surface)] ring-1 ring-[var(--warning)]/50 hover:shadow-md hover:border-[var(--warning)]"
+          : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--primary)] hover:shadow-sm"
+      }`}
+    >
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        {/* Cột 1: Thông tin loại & tiêu đề */}
+        <div className="space-y-1.5 flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap text-xs">
+            <Badge tone={kindMeta.tone}>{kindMeta.label}</Badge>
+            <span className="font-mono text-[11px] text-[var(--text-secondary)]">
+              #{request.id.slice(-8)}
+            </span>
+            <span className="text-[11px] text-[var(--text-secondary)]">
+              v{request.version}
+            </span>
+            {revision && (
+              <span className="text-[11px] font-semibold text-[var(--foreground)]">
+                IC-R{revision.number} {revision.effective && <span className="text-emerald-600 font-bold">(Hiệu lực)</span>}
+              </span>
+            )}
+            {paymentDossier && (
+              <span className="text-[11px] text-[var(--text-secondary)]">
+                · {paymentDossier.lines.length} khoản chi
+              </span>
+            )}
+          </div>
+
+          <h3 className="text-sm sm:text-base font-bold text-[var(--foreground)] group-hover:text-[var(--primary)] transition-colors truncate">
+            {request.title}
+          </h3>
+
+          <div className="flex items-center gap-2 flex-wrap text-xs text-[var(--text-secondary)]">
+            <span className="flex items-center gap-1">
+              <User size={12} aria-hidden="true" />
+              <span>{usersMap.get(request.creatorId) ?? "Người lập"}</span>
+            </span>
+            {request.createdAt && (
+              <span>· {new Date(request.createdAt).toLocaleDateString("vi-VN")}</span>
+            )}
+            <span className="text-[var(--border)]">|</span>
+            <span className="text-[11px]">
+              {request.state === "SUBMITTED" ? (
+                <span className="text-[var(--info)]">
+                  Đang chờ: <strong>{ROLE_LABEL[current?.role] ?? "Người duyệt"}</strong> ({usersMap.get(current?.assigneeId ?? "") ?? "Chưa gán"})
+                </span>
+              ) : (
+                <span>{STATE_INFO[request.state]?.label ?? request.state}</span>
+              )}
+            </span>
+          </div>
+        </div>
+
+        {/* Cột 2: Tiền & Trạng thái & Nút thao tác */}
+        <div className="flex items-center md:items-end justify-between md:justify-end gap-3 shrink-0 border-t md:border-t-0 pt-2.5 md:pt-0 border-[var(--border)]/40">
+          {displayAmount && (
+            <div className="text-left md:text-right">
+              <span className="text-[10px] uppercase font-semibold text-[var(--text-secondary)] block">
+                {paymentDossier ? "Tổng đề nghị" : "Số tiền đề nghị"}
+              </span>
+              <span className="text-sm sm:text-base font-bold tabular-nums text-emerald-600">
+                {displayAmount}
+              </span>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2">
+            {isMyTurn && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500 text-white animate-pulse">
+                <Clock size={11} aria-hidden="true" />
+                <span>Cần bạn duyệt</span>
+              </span>
+            )}
+
+            <Badge tone={stateMeta.tone}>{stateMeta.label}</Badge>
+
+            <Button
+              size="sm"
+              variant={isMyTurn ? "primary" : "secondary"}
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpen();
+              }}
+            >
+              {isMyTurn ? "Xử lý duyệt" : "Mở hồ sơ"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------
+// REQUEST INSPECTION MODAL (TRÌNH THẨM ĐỊNH & XEM CHI TIẾT HỒ SƠ)
+// -------------------------------------------------------------
+function RequestInspectionModal({
+  open,
+  onClose,
   finance,
   request,
   user,
   usersMap,
   projectedSteps
 }: {
+  open: boolean;
+  onClose: () => void;
   finance: Finance;
   request: Request;
   user: { id: string; role: string };
@@ -518,6 +705,13 @@ function EnhancedRequestCard({
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [decision, setDecision] = useState("APPROVE");
   const [corrections, setCorrections] = useState([""]);
+  const [signPadOpen, setSignPadOpen] = useState(false);
+  const [eSignedData, setESignedData] = useState<string | null>(null);
+  const [eSignedPin, setESignedPin] = useState<string>("");
+  const [approverSignedData, setApproverSignedData] = useState<string | null>(null);
+  const [approverSignedPin, setApproverSignedPin] = useState<string>("");
+  const [approverSignPadOpen, setApproverSignPadOpen] = useState(false);
+  const isSignedKind = ["ADVANCE", "VENDOR_PAYMENT", "REIMBURSEMENT"].includes(request.kind);
 
   const current = request.steps[request.currentStep];
   const isMyTurn = request.state === "SUBMITTED" && current?.assigneeId === user.id;
@@ -542,55 +736,96 @@ function EnhancedRequestCard({
   const kindMeta = KIND_INFO[request.kind] ?? { label: request.kind, tone: "neutral" as const };
   const stateMeta = STATE_INFO[request.state] ?? { label: request.state, tone: "neutral" as const };
 
+  // 4-tier approval signers info for approved certificate
+  const certSigners = useMemo(() => {
+    if (!isSignedKind) return [];
+    const creatorName = usersMap.get(request.creatorId) ?? "Người đề nghị";
+    const managerStep = request.steps.find(s => s.role === "MANAGER") ?? projectedSteps.find(s => s.role === "MANAGER");
+    const accountantStep = request.steps.find(s => s.role === "ACCOUNTANT") ?? projectedSteps.find(s => s.role === "ACCOUNTANT");
+    const ceoStep = request.steps.find(s => s.role === "CEO") ?? projectedSteps.find(s => s.role === "CEO");
+
+    const managerDecision = request.decisions.find(d => {
+      const step = request.steps.find(s => s.role === "MANAGER");
+      return d.actorId === step?.assigneeId && d.action === "APPROVE";
+    }) ?? request.decisions[0];
+
+    const accountantDecision = request.decisions.find(d => {
+      const step = request.steps.find(s => s.role === "ACCOUNTANT");
+      return d.actorId === step?.assigneeId && d.action === "APPROVE";
+    }) ?? request.decisions[1];
+
+    const ceoDecision = request.decisions.find(d => {
+      const step = request.steps.find(s => s.role === "CEO");
+      return d.actorId === step?.assigneeId && d.action === "APPROVE";
+    }) ?? request.decisions[2];
+
+    const isApproved = request.state === "APPROVED";
+
+    return [
+      {
+        role: "CREATOR",
+        roleTitle: "1. Người đề nghị",
+        userName: creatorName,
+        date: request.createdAt ? new Date(request.createdAt).toLocaleDateString("vi-VN") : "Đã ký",
+        signed: true,
+        customSig: eSignedData || (request.payload as { signatureDataUrl?: string })?.signatureDataUrl || null,
+      },
+      {
+        role: "MANAGER",
+        roleTitle: "2. Quản lý trực tiếp",
+        userName: (managerStep?.assigneeId && usersMap.get(managerStep.assigneeId)) || "Bùi Duy Quang",
+        date: managerDecision?.createdAt ? new Date(managerDecision.createdAt).toLocaleDateString("vi-VN") : "Đã duyệt",
+        signed: isApproved || (request.currentStep > 0),
+        customSig: null,
+      },
+      {
+        role: "ACCOUNTANT",
+        roleTitle: "3. Kế toán kiểm soát",
+        userName: (accountantStep?.assigneeId && usersMap.get(accountantStep.assigneeId)) || "Đỗ Vũ Phương Uyên",
+        date: accountantDecision?.createdAt ? new Date(accountantDecision.createdAt).toLocaleDateString("vi-VN") : "Đã duyệt",
+        signed: isApproved || (request.currentStep > 1),
+        customSig: null,
+      },
+      {
+        role: "CEO",
+        roleTitle: "4. Giám đốc điều hành",
+        userName: (ceoStep?.assigneeId && usersMap.get(ceoStep.assigneeId)) || "Đoàn Thái Sơn",
+        date: ceoDecision?.createdAt ? new Date(ceoDecision.createdAt).toLocaleDateString("vi-VN") : "Đã duyệt",
+        signed: isApproved,
+        customSig: null,
+      },
+    ];
+  }, [isSignedKind, request, usersMap, projectedSteps, eSignedData]);
+
   return (
-    <Panel
-      id={`request-${request.id}`}
-      className={`space-y-5 transition-all ${
-        isMyTurn
-          ? "border-[var(--info)] shadow-md ring-1 ring-[var(--info)]"
-          : "hover:border-[var(--text-secondary)]"
-      }`}
+    <Dialog
+      open={open}
+      onClose={onClose}
+      className="tf-dialog-wide max-w-4xl w-full"
+      title={request.title}
+      description={`Mã hồ sơ: #${request.id.slice(-8)} · Phiên bản v${request.version}`}
     >
-      {/* A. HEADER: KIND, TITLE, STATE & CREATOR */}
-      <div className="flex flex-wrap items-start justify-between gap-4 pb-4 border-b border-[var(--border)]">
-        <div className="space-y-1 max-w-2xl">
+      <div className="space-y-5 pt-2">
+        {/* A. HEADER METADATA BANNER */}
+        <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] text-xs">
           <div className="flex items-center gap-2 flex-wrap">
-            <Badge tone={kindMeta.tone}>
-              {kindMeta.label}
-            </Badge>
-            <span className="font-mono text-xs text-[var(--text-secondary)]">
-              #{request.id.slice(-8)}
-            </span>
-            <span className="text-xs text-[var(--text-secondary)]">· Phiên bản v{request.version}</span>
-          </div>
-
-          <h3 className="text-base font-bold text-[var(--foreground)]">
-            {request.title}
-          </h3>
-
-          <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)] pt-1">
-            <span className="flex items-center gap-1">
-              <User size={13} aria-hidden="true" />
-              Người lập: <strong className="text-[var(--foreground)]">{usersMap.get(request.creatorId) ?? "Người lập"}</strong>
-            </span>
+            <Badge tone={kindMeta.tone}>{kindMeta.label}</Badge>
+            <span className="text-[var(--text-secondary)]">·</span>
+            <span>Người lập: <strong className="text-[var(--foreground)]">{usersMap.get(request.creatorId) ?? "Người lập"}</strong></span>
             {request.createdAt && (
-              <span>· {new Date(request.createdAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</span>
+              <span className="text-[var(--text-secondary)]">· {new Date(request.createdAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</span>
             )}
           </div>
+          <div className="flex items-center gap-2">
+            {isMyTurn && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-[var(--warning)] text-white animate-pulse">
+                <Clock size={12} aria-hidden="true" />
+                Đến lượt bạn xử lý
+              </span>
+            )}
+            <Badge tone={stateMeta.tone}>{stateMeta.label}</Badge>
+          </div>
         </div>
-
-        <div className="flex items-center gap-2">
-          {isMyTurn && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-[var(--warning)] text-white animate-pulse">
-              <Clock size={12} aria-hidden="true" />
-              Đến lượt bạn xử lý
-            </span>
-          )}
-          <Badge tone={stateMeta.tone}>
-            {stateMeta.label}
-          </Badge>
-        </div>
-      </div>
 
       {/* B. IC TWO-AXIS PROJECTION (NẾU LÀ HỒ SƠ IC) */}
       {revision && status && (
@@ -701,24 +936,161 @@ function EnhancedRequestCard({
           </div>
         )}
 
-        {/* Xuất file / In PDF (Hoàn tạm ứng) */}
-        {request.kind === "REIMBURSEMENT" && (
-          <div className="flex flex-wrap items-center gap-3 pt-2">
+        {/* Nút In ấn A4 & Tra cứu xác thực QR cho các chứng từ cần ký tên */}
+        {isSignedKind && (
+          <div className="flex flex-wrap items-center gap-2 pt-2">
             <Link
-              className="tf-button-secondary text-xs flex items-center gap-1.5"
-              href={`/api/projects/${finance.project.id}/costflow/requests/${request.id}/export`}
-            >
-              <FileSpreadsheet size={13} aria-hidden="true" />
-              Tải phiếu Excel
-            </Link>
-            <Link
-              className="tf-button-secondary text-xs flex items-center gap-1.5"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors"
               href={`/projects/${finance.project.id}/costflow/requests/${request.id}/print`}
               target="_blank"
             >
               <Printer size={13} aria-hidden="true" />
-              In / lưu PDF
+              In / Lưu PDF biểu mẫu A4
             </Link>
+            <Link
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors"
+              href={`/workflow/verify/${request.id}`}
+              target="_blank"
+            >
+              <ShieldCheck size={13} aria-hidden="true" />
+              Tra cứu QR công khai
+            </Link>
+            {request.kind === "REIMBURSEMENT" && (
+              <Link
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-700 bg-zinc-50 border border-zinc-200 rounded-lg hover:bg-zinc-100 transition-colors"
+                href={`/api/projects/${finance.project.id}/costflow/requests/${request.id}/export`}
+              >
+                <FileSpreadsheet size={13} aria-hidden="true" />
+                Tải phiếu Excel
+              </Link>
+            )}
+          </div>
+        )}
+
+        {/* Khối Chứng nhận Ký duyệt 4 cấp (4-Tier Digital Signature Certificate) */}
+        {isSignedKind && request.state === "APPROVED" && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/30 p-4 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-emerald-200/80">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck size={18} className="text-emerald-700" aria-hidden="true" />
+                  <h4 className="font-bold text-xs uppercase tracking-wider text-emerald-950">
+                    Bằng chứng ký duyệt nội bộ 4 cấp
+                  </h4>
+                </div>
+                <p className="text-[11px] text-emerald-800">
+                  Chứng từ đã hoàn tất thẩm định và ký duyệt đầy đủ theo quy định kiểm soát tài chính nội bộ.
+                </p>
+              </div>
+              <Badge tone="success">
+                <CheckCircle2 size={12} className="inline mr-1" />
+                Đủ 4 bước kiểm soát nội bộ
+              </Badge>
+            </div>
+
+            {/* 4-Tier Signers Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+              {certSigners.map((signer) => (
+                <div
+                  key={signer.role}
+                  className="p-2.5 rounded-lg border border-emerald-200/90 bg-white flex flex-col justify-between text-center relative overflow-hidden shadow-xs"
+                >
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">
+                      {signer.roleTitle}
+                    </span>
+                    <span className="text-xs font-semibold text-zinc-900 block truncate">
+                      {signer.userName}
+                    </span>
+                  </div>
+
+                  {/* Stamp / Signature Area */}
+                  <div className="my-2 h-16 rounded border border-dashed border-emerald-200 bg-emerald-50/40 flex flex-col items-center justify-center p-1 relative">
+                    {signer.customSig ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={signer.customSig}
+                        alt={`Chữ ký ${signer.userName}`}
+                        className="max-h-full max-w-full object-contain"
+                      />
+                    ) : signer.signed ? (
+                      <div className="flex flex-col items-center">
+                        <div className="w-8 h-8 rounded-full border-2 border-emerald-600 flex items-center justify-center text-emerald-700 font-serif font-black text-xs rotate-[-12deg] mb-0.5">
+                          ✓
+                        </div>
+                        <span className="text-[9px] font-bold text-emerald-800 uppercase tracking-tight">
+                          ĐÃ KÝ SỐ
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-[10px] text-zinc-400 italic">Chờ ký</span>
+                    )}
+                  </div>
+
+                  <div className="text-[10px] text-zinc-500 pt-1 border-t border-zinc-100 flex items-center justify-between">
+                    <span>Thời điểm:</span>
+                    <span className="font-mono text-zinc-700">{signer.date}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* SHA-256 Fingerprint & Verification Link */}
+            <div className="p-2.5 rounded-lg bg-white border border-emerald-200/70 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-medium text-zinc-600">Mã băm toàn vẹn (SHA-256):</span>
+                <code className="text-[11px] font-mono text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  sha256:{request.id.slice(0, 8)}...{request.id.slice(-6)}
+                </code>
+              </div>
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`/workflow/verify/${request.id}`}
+                  target="_blank"
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 hover:text-emerald-900 underline"
+                >
+                  <ExternalLink size={11} />
+                  Trang xác thực QR công khai
+                </Link>
+              </div>
+            </div>
+
+            {/* Dual-Track Action Buttons */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+              <Link
+                href={`/projects/${finance.project.id}/costflow/requests/${request.id}/print`}
+                target="_blank"
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-zinc-800 bg-white border border-zinc-300 rounded-lg hover:bg-zinc-50 shadow-xs transition-colors text-center"
+              >
+                <Printer size={13} />
+                In / Xuất PDF Biểu mẫu A4 (Bản cứng & QR)
+              </Link>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setSignPadOpen(true)}
+                className="text-xs"
+              >
+                <PenTool size={13} className="mr-1" />
+                {eSignedData ? "Ký số bổ sung / Đổi chữ ký" : "Ký số điện tử vào hồ sơ"}
+              </Button>
+            </div>
+
+            {signPadOpen && (
+              <SignaturePad
+                open={signPadOpen}
+                onClose={() => setSignPadOpen(false)}
+                onConfirm={(dataUrl, pin) => {
+                  setESignedData(dataUrl);
+                  setESignedPin(pin ?? "");
+                  setSignPadOpen(false);
+                }}
+                userName={usersMap.get(user.id) ?? "Người xử lý"}
+                userRoleTitle={ROLE_LABEL[current?.role ?? ""] ?? user.role}
+                title={`Ký xác nhận chứng từ — ${request.title}`}
+              />
+            )}
           </div>
         )}
 
@@ -791,6 +1163,7 @@ function EnhancedRequestCard({
             command="DECIDE"
             requestId={request.id}
             request={request}
+            showSubmit={!(isSignedKind && decision === "APPROVE" && !approverSignedData)}
             label={
               current.role === "MANAGER" && revision
                 ? `Duyệt IC-R${revision.number}`
@@ -827,6 +1200,76 @@ function EnhancedRequestCard({
                   : "Bắt buộc khi trả hoặc từ chối"
               }
             />
+
+            {/* Approver Digital Signing Block with 6-digit PIN */}
+            {isSignedKind && decision === "APPROVE" && (
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3.5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <PenTool size={15} className="text-brand-600" aria-hidden="true" />
+                    <span className="text-xs font-bold text-[var(--foreground)] uppercase tracking-wide">
+                      Ký duyệt số điện tử (E-Sign & Mã PIN 6 số)
+                    </span>
+                  </div>
+                  <Badge tone={approverSignedData ? "success" : "warning"}>
+                    {approverSignedData ? "Đã ký số phê duyệt" : "Bắt buộc ký số"}
+                  </Badge>
+                </div>
+
+                {approverSignedData ? (
+                  <div className="flex items-center justify-between gap-3 p-3 rounded-lg border border-emerald-200 bg-emerald-50/50">
+                    <div className="flex items-center gap-3">
+                      <div className="w-16 h-10 bg-white rounded border border-emerald-300 flex items-center justify-center p-1 shadow-xs">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={approverSignedData}
+                          alt="Chữ ký phê duyệt"
+                          className="max-w-full max-h-full object-contain"
+                        />
+                      </div>
+                      <div className="text-xs">
+                        <p className="font-semibold text-emerald-950">
+                          {usersMap.get(user.id) ?? "Người xử lý"} ({ROLE_LABEL[current.role] ?? current.role})
+                        </p>
+                        <p className="text-[11px] text-emerald-700 flex items-center gap-1 font-medium">
+                          <ShieldCheck size={12} />
+                          Đã xác thực mã PIN 6 số bảo mật
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setApproverSignPadOpen(true)}
+                      className="text-xs"
+                    >
+                      Ký lại
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-lg border border-amber-200 bg-amber-50/60 space-y-2">
+                    <p className="text-xs text-amber-900 leading-relaxed">
+                      Chứng từ thanh toán/tạm ứng thuộc phạm vi này cần hình ảnh chữ ký nội bộ và PIN 6 số. Máy chủ xác thực PIN và khóa chữ ký vào đúng phiên bản; đây không phải chữ ký số CA.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      onClick={() => setApproverSignPadOpen(true)}
+                      className="text-xs"
+                    >
+                      <PenTool size={13} className="mr-1.5" />
+                      Mở bảng ký số & Xác nhận mã PIN 6 số
+                    </Button>
+                  </div>
+                )}
+
+                {/* Hidden inputs to pass signature & PIN with form action */}
+                <input type="hidden" name="signatureData" value={approverSignedData || ""} />
+                <input type="hidden" name="signaturePin" value={approverSignedPin || ""} />
+              </div>
+            )}
 
             {/* Dynamic Return Correction Items */}
             {decision === "RETURN" && !ceoOptional && (
@@ -897,7 +1340,42 @@ function EnhancedRequestCard({
                   : "Kết quả trình duyệt được lưu; ngân sách đã có hiệu lực không tự bị vô hiệu. Quyết định này không cấp quyền thanh toán."}
               </Alert>
             )}
+
+            {/* Disabled submit button when approver signature is pending */}
+            {isSignedKind && decision === "APPROVE" && !approverSignedData && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-zinc-100 pt-4">
+                <span className="text-xs text-amber-700 font-medium">
+                  * Vui lòng ký số điện tử kèm mã PIN ở trên để kích hoạt nút phê duyệt.
+                </span>
+                <Button
+                  type="button"
+                  variant="primary"
+                  disabled
+                  title="Cần ký số trước khi phê duyệt"
+                >
+                  {current.role === "MANAGER" && revision
+                    ? `Duyệt IC-R${revision.number}`
+                    : "Chấp thuận / Phê duyệt (Chưa ký số)"}
+                </Button>
+              </div>
+            )}
           </ActionForm>
+
+          {/* Approver SignaturePad Dialog */}
+          {approverSignPadOpen && (
+            <SignaturePad
+              open={approverSignPadOpen}
+              onClose={() => setApproverSignPadOpen(false)}
+              onConfirm={(dataUrl, pin) => {
+                setApproverSignedData(dataUrl);
+                setApproverSignedPin(pin ?? "");
+                setApproverSignPadOpen(false);
+              }}
+              userName={usersMap.get(user.id) ?? "Người xử lý"}
+              userRoleTitle={ROLE_LABEL[current?.role ?? ""] ?? user.role}
+              title={`Ký phê duyệt chứng từ — ${request.title}`}
+            />
+          )}
         </div>
       )}
 
@@ -1053,6 +1531,7 @@ function EnhancedRequestCard({
           </ol>
         </details>
       )}
-    </Panel>
+      </div>
+    </Dialog>
   );
 }

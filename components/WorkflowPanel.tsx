@@ -7,12 +7,14 @@ import { workflowAction, type WorkflowActionState } from "@/app/actions/workflow
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Textarea } from "@/components/ui/Field";
 import { Alert, Badge, EmptyState, Panel, Table } from "@/components/ui/Presentation";
-import { ChevronRight, FileCheck2, FilePlus2, Plus } from "lucide-react";
+import { ChevronRight, FileCheck2, FilePlus2, Plus, PenTool, Printer, ShieldCheck } from "lucide-react";
 import { ModuleTabs } from "@/components/ui/ModuleUI";
 import { TEMPLATE_KINDS, type DocumentPayload } from "@/lib/workflow/documents";
 import { FIELD_LABELS, effectiveRequirements, evaluateDocumentCompleteness, type Requirements, type RequiredField } from "@/lib/workflow/requirements";
 import type { ApprovalStep } from "@/lib/workflow/approval";
+import { WORKFLOW_HUB_HREF, workflowDocumentHref, workflowPrintHref, workflowRequestHref as requestHref, workflowVerifyHref } from "@/lib/workflow/routes";
 import WorkflowDecisionDialog from "@/components/WorkflowDecisionDialog";
+import { SignaturePad } from "@/components/SignaturePad";
 
 type Person = { id: string; name: string };
 type Template = { requirements: Requirements | null; familyId: string; category: string; purpose: string; changeNote: string; id: string; kind: string; name: string; version: number; parentId: string | null; ownerId: string; accountantId: string; ceoId: string; signerNames: string; instructions: string; fileId: string | null; ownerConfirmedAt: string | null; publishedAt: string | null; revision: number };
@@ -25,13 +27,12 @@ const STATES: Record<string, string> = { DRAFT: "Nháp", SUBMITTED: "Chờ duy�
 const ROLES: Record<string, string> = { MANAGER: "Quản lý", ACCOUNTANT: "Kế toán", CEO: "CEO" };
 const ACTIONS: Record<string, string> = { APPROVE: "Duyệt", RETURN: "Trả hồ sơ", REJECT: "Từ chối", WITHDRAW: "Rút hồ sơ", TRANSFER: "Chuyển giao", SAVE_DOCUMENT: "Lưu nháp", SUBMIT_DOCUMENT: "Gửi duyệt", DECIDE_DOCUMENT: "Quyết định", TRANSFER_DOCUMENT: "Chuyển giao", ADD_REFERENCE: "Bổ sung tham khảo", UPLOAD_SIGNED: "Tải bản ký", CONFIRM_SIGNED: "Xác nhận đủ bản ký" };
 const fileHref = (id: string) => `/api/workflow/files/${id}`;
-const requestHref = (r: { id: string; module: string; projectId: string | null }) => r.module === "COSTFLOW" ? `/projects/${r.projectId}/costflow#request-${r.id}` : `/workflow/${r.id}`;
 
 function Form({ command, version = 0, requestId, request, templateId, children, label, redirectAfterSave = false }: { command: string; version?: number; requestId?: string; request?: Pick<Summary,"module"|"currentAttemptId"|"currentStep"|"submittedVersion">; templateId?: string; children?: ReactNode; label: string; redirectAfterSave?: boolean }) {
   const router = useRouter();
   const [state, action, pending] = useActionState(async (previous: WorkflowActionState, form: FormData) => {
     const result = await workflowAction(previous, form);
-    if (result.success) { if (redirectAfterSave && result.requestId) router.push(`/workflow/${result.requestId}`); router.refresh(); }
+    if (result.success) { if (redirectAfterSave && result.requestId) router.push(workflowDocumentHref(result.requestId)); router.refresh(); }
     return result;
   }, {});
   return <form action={action} className="space-y-4"><input type="hidden" name="command" value={command} /><input type="hidden" name="version" value={version} />{requestId && <input type="hidden" name="requestId" value={requestId} />}{request && <><input type="hidden" name="module" value={request.module} /><input type="hidden" name="attemptId" value={request.currentAttemptId ?? ""} /><input type="hidden" name="stepIndex" value={request.currentStep} /><input type="hidden" name="submittedVersion" value={request.submittedVersion ?? ""} /></>}{templateId && <input type="hidden" name="templateId" value={templateId} />}{children}{state.error && <Alert tone="danger" title={state.error} />}{state.success && <Alert tone="success" title={state.success} />}<div className="flex justify-end border-t border-zinc-100 pt-4"><Button type="submit" loading={pending} loadingLabel="Đang lưu…">{label}</Button></div></form>;
@@ -47,6 +48,37 @@ function DecisionFields({ role }: { role: string }) {
 function UploadField({ label = "Tài liệu chính", required = false, id }: { label?: string; required?: boolean; id?: string }) {
   const [chosen,setChosen] = useState(false);
   return <Input id={id} onChange={e=>setChosen(!!e.target.files?.length)} type="file" name="document" label={label} required={required} accept=".pdf,.docx,.xlsx,.jpg,.jpeg,.png" hint={chosen ? "Đã chọn, chưa lưu · tối đa 4 MiB" : "PDF/DOCX/XLSX/JPG/PNG, tối đa 4 MiB. Chỉ lưu sau khi thao tác thành công."} />;
+}
+function SubmitDocumentForm({ request }: { request: Document }) {
+  const router = useRouter();
+  const [state, action, pending] = useActionState(async (previous: WorkflowActionState, form: FormData) => {
+    const result = await workflowAction(previous, form);
+    if (result.success) router.refresh();
+    return result;
+  }, {});
+  const requiresSignature = ["PROPOSAL", "PROPOSAL_ADVANCE", "PROPOSAL_ADVANCE_SETTLEMENT", "SERVICE_CONTRACT"].includes(request.kind);
+  const [signatureOpen, setSignatureOpen] = useState(false);
+  const [signatureData, setSignatureData] = useState("");
+  const [signaturePin, setSignaturePin] = useState("");
+  return <>
+    <form action={action} className="space-y-4">
+      <input type="hidden" name="command" value="SUBMIT_DOCUMENT" />
+      <input type="hidden" name="requestId" value={request.id} />
+      <input type="hidden" name="version" value={request.version} />
+      <input type="hidden" name="signatureData" value={signatureData} />
+      <input type="hidden" name="signaturePin" value={signaturePin} />
+      <p className="tf-ui-help">Cần đủ thông tin và tài liệu theo checklist của mẫu, cùng người duyệt được phân công. Nháp dùng mẫu cũ vẫn lưu được; cần tạo nháp riêng theo mẫu hiện tại để gửi.</p>
+      {requiresSignature && <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+        <p className="text-sm font-medium">Chữ ký nội bộ của người lập</p>
+        <p className="tf-ui-help">Chữ ký PNG và PIN chỉ được gửi khi bạn xác nhận; máy chủ kiểm tra lại trước khi ghi sự kiện.</p>
+        <Button type="button" variant="secondary" onClick={() => setSignatureOpen(true)}>{signatureData ? "Ký lại" : "Ký và xác nhận PIN"}</Button>
+      </div>}
+      {state.error && <Alert tone="danger" title={state.error} />}
+      {state.success && <Alert tone="success" title={state.success} />}
+      <div className="flex justify-end border-t border-zinc-100 pt-4"><Button type="submit" loading={pending} loadingLabel="Đang gửi…" disabled={requiresSignature && !signatureData}>Gửi duyệt</Button></div>
+    </form>
+    {signatureOpen && <SignaturePad open={signatureOpen} onClose={() => setSignatureOpen(false)} onConfirm={(dataUrl, pin) => { setSignatureData(dataUrl); setSignaturePin(pin); setSignatureOpen(false); }} userName="Người lập hồ sơ" userRoleTitle="Người lập" title={`Ký gửi — ${request.title}`} />}
+  </>;
 }
 function TemplateEditor({ template, users, parent }: { template?: Template; users: Person[]; parent?: Template }) {
   const source = template ?? parent;
@@ -102,26 +134,159 @@ export function WorkflowDocumentPanel({ detail, templates, projects, user, submi
   const r = detail.request; const body = r.payload; const current = r.steps[r.currentStep]; const owner = r.creatorId === user.id;
   const name = (id: string) => detail.users.find(p => p.id === id)?.name ?? "Người xử lý";
   const [blankOpen,setBlankOpen] = useState(false);
+  const [signPadOpen, setSignPadOpen] = useState(false);
+  const [eSignedData, setESignedData] = useState<string | null>(null);
   const latestTemplate = templates.find(t=>t.familyId === r.template?.familyId);
   const outdated = r.state === "DRAFT" && latestTemplate && latestTemplate.id !== r.templateId;
-  const selector = submission && <Select label="Lần gửi" value={submission.selection} onChange={e=>window.location.assign(e.target.value === "current" ? `/workflow/${submission.currentRequestId}` : `/workflow/${submission.currentRequestId}?attempt=${encodeURIComponent(e.target.value)}`)}><option value="current">Bản hiện tại</option>{submission.attempts.map(a=><option key={a.id} value={a.id}>Lần gửi {a.number} · {new Date(a.createdAt).toLocaleString("vi-VN")}</option>)}</Select>;
-  if (submission?.historical) return <div className="tf-module-page space-y-5"><h1 className="tf-module-title">{r.title}</h1>{selector}<Alert tone="warning" title="Đang xem bản đã gửi"><p>Nội dung và tài liệu được giữ theo lần gửi này. Chỉ đọc.</p><Link className="tf-link" href={`/workflow/${submission.currentRequestId}`}>Về bản hiện tại</Link></Alert>{submission.legacyMissingManifest && <Alert tone="warning" title="Bản cũ chưa có danh sách tài liệu đóng băng">Không xác minh được bộ tệp của lần gửi. Không thay bằng file hiện tại.</Alert>}<Panel><h2 className="font-semibold">Nội dung đã gửi</h2><p className="whitespace-pre-wrap my-3">{body.content}</p><p>{body.counterparty}</p>{body.amount && <p>Giá trị: {body.amount} VND</p>}<p className="my-3">Mẫu {body.templateSnapshot?.name} · v{body.templateSnapshot?.version}</p><p className="whitespace-pre-wrap">{body.templateSnapshot?.instructions}</p></Panel><DocumentFiles document={r} historical /></div>;
+  const selector = submission && <Select label="Lần gửi" value={submission.selection} onChange={e=>window.location.assign(e.target.value === "current" ? workflowDocumentHref(submission.currentRequestId) : `${workflowDocumentHref(submission.currentRequestId)}?attempt=${encodeURIComponent(e.target.value)}`)}><option value="current">Bản hiện tại</option>{submission.attempts.map(a=><option key={a.id} value={a.id}>Lần gửi {a.number} · {new Date(a.createdAt).toLocaleString("vi-VN")}</option>)}</Select>;
+  if (submission?.historical) return <div className="tf-module-page space-y-5"><h1 className="tf-module-title">{r.title}</h1>{selector}<Alert tone="warning" title="Đang xem bản đã gửi"><p>Nội dung và tài liệu được giữ theo lần gửi này. Chỉ đọc.</p><Link className="tf-link" href={workflowDocumentHref(submission.currentRequestId)}>Về bản hiện tại</Link></Alert>{submission.legacyMissingManifest && <Alert tone="warning" title="Bản cũ chưa có danh sách tài liệu đóng băng">Không xác minh được bộ tệp của lần gửi. Không thay bằng file hiện tại.</Alert>}<Panel><h2 className="font-semibold">Nội dung đã gửi</h2><p className="whitespace-pre-wrap my-3">{body.content}</p><p>{body.counterparty}</p>{body.amount && <p>Giá trị: {body.amount} VND</p>}<p className="my-3">Mẫu {body.templateSnapshot?.name} · v{body.templateSnapshot?.version}</p><p className="whitespace-pre-wrap">{body.templateSnapshot?.instructions}</p></Panel><DocumentFiles document={r} historical /></div>;
   const selfRoles = r.steps.filter(s => s.assigneeId === user.id).length + Number(owner);
-  return <div><header className="tf-module-header"><div className="tf-module-breadcrumb"><Link href="/workflow">Hồ sơ Workflow</Link><ChevronRight size={12} aria-hidden="true" /><span>Chi tiết</span></div><div className="tf-module-heading"><div className="tf-module-identity"><span className="tf-module-mark"><FileCheck2 size={24} aria-hidden="true" /></span><div><h1 className="tf-module-title">{r.title}</h1><p className="tf-module-description">{r.project?.name ?? "Nội bộ độc lập"} · {TEMPLATE_KINDS[r.kind as keyof typeof TEMPLATE_KINDS]}</p></div></div><Badge tone={r.state === "APPROVED" ? "success" : "neutral"}>{STATES[r.state]}</Badge></div></header><div className="tf-module-page space-y-5"><div className="tf-module-toolbar"><p className="tf-list-meta">Phiên bản {r.version} · Mẫu {body.templateSnapshot?.name ?? r.template?.name} v{body.templateSnapshot?.version ?? r.template?.version}</p><div className="flex flex-wrap gap-2"><Badge tone={body.signature?.state === "CONFIRMED" ? "success" : "neutral"}>{body.signature?.state === "CONFIRMED" ? "Đã xác nhận đủ bản ký" : body.signature ? "Bản ký chờ Quản lý xác nhận" : "Chưa ký"}</Badge><Badge>Chưa xác nhận thực hiện hoàn tất</Badge></div></div>
+  return <div><header className="tf-module-header"><div className="tf-module-breadcrumb"><Link href={WORKFLOW_HUB_HREF}>Hồ sơ & Trình duyệt</Link><ChevronRight size={12} aria-hidden="true" /><span>Chi tiết</span></div><div className="tf-module-heading"><div className="tf-module-identity"><span className="tf-module-mark"><FileCheck2 size={24} aria-hidden="true" /></span><div><h1 className="tf-module-title">{r.title}</h1><p className="tf-module-description">{r.project?.name ?? "Nội bộ độc lập"} · {TEMPLATE_KINDS[r.kind as keyof typeof TEMPLATE_KINDS]}</p></div></div><Badge tone={r.state === "APPROVED" ? "success" : "neutral"}>{STATES[r.state]}</Badge></div></header><div className="tf-module-page space-y-5"><div className="tf-module-toolbar"><p className="tf-list-meta">Phiên bản {r.version} · Mẫu {body.templateSnapshot?.name ?? r.template?.name} v{body.templateSnapshot?.version ?? r.template?.version}</p><div className="flex flex-wrap gap-2"><Badge tone={body.signature?.state === "CONFIRMED" ? "success" : "neutral"}>{body.signature?.state === "CONFIRMED" ? "Đã xác nhận đủ bản ký" : body.signature ? "Bản ký chờ Quản lý xác nhận" : "Chưa ký"}</Badge><Badge>Chưa xác nhận thực hiện hoàn tất</Badge></div></div>
     {selector}
     {r.pendingReplacementRequestId && <Alert title="Đang có bản thay thế chờ duyệt">Bản này vẫn là bản hiện hành cho tới khi bản thay thế hoàn tất toàn bộ vòng duyệt.</Alert>}
-    {r.replacedByRequestId && <Alert tone="warning" title="Đã được thay thế"><Link className="tf-link" href={`/workflow/${r.replacedByRequestId}`}>Mở bản thay thế đã duyệt</Link></Alert>}
+    {r.replacedByRequestId && <Alert tone="warning" title="Đã được thay thế"><Link className="tf-link" href={workflowDocumentHref(r.replacedByRequestId)}>Mở bản thay thế đã duyệt</Link></Alert>}
     {outdated && <Alert tone="warning" title="Mẫu này đã có phiên bản mới"><p>Nháp đang dùng v{r.template?.version}; mẫu hiện tại v{latestTemplate.version}.</p><p className="my-2">{latestTemplate.changeNote || "Chưa có ghi chú thay đổi"}</p>{latestTemplate.fileId && <Link className="tf-link" href={fileHref(latestTemplate.fileId)}>Tải mẫu mới</Link>}<p className="my-3">Bạn cần điền lại thông tin và tải lại tệp. Nháp cũ được giữ nguyên.</p>{owner && <Button onClick={()=>setBlankOpen(true)}>Tạo nháp theo mẫu mới</Button>}</Alert>}
     {blankOpen && outdated && <Panel><h2 className="font-semibold mb-3">Nháp mới · v{latestTemplate.version}</h2><DocumentEditor key={latestTemplate.id} initialTemplateId={latestTemplate.id} templates={templates} projects={projects}/><Button variant="ghost" onClick={()=>setBlankOpen(false)}>Đóng form nháp mới</Button></Panel>}
-    {selfRoles > 1 && <Alert tone="warning" title="Bạn tham gia nhiều vai trò">Mỗi bước cần quyết định riêng, hệ thống không tự bỏ bước.</Alert>}{r.parentId && <Link className="tf-link" href={`/workflow/${r.parentId}`}>Xem hồ sơ nguồn của bản trình lại</Link>}
-    {!blankOpen && (r.state === "DRAFT" && owner ? <Panel><h2 className="mb-3 font-semibold">Sửa nháp</h2><DocumentEditor document={r} templates={templates} projects={projects} /><div className="my-5 space-y-4">{effectiveRequirements(r.template?.requirements).requiredDocuments.map(slot=><section key={slot.key} id={`wf-${r.id}-${slot.key}`} tabIndex={-1}><h3 className="font-semibold">{slot.label} · Bắt buộc khi gửi</h3>{body.supportingFiles?.[slot.key] && <Link className="tf-link" href={fileHref(body.supportingFiles[slot.key])}>Tài liệu đã lưu</Link>}<Form command="ADD_SUPPORTING_DOCUMENT" requestId={r.id} version={r.version} label="Lưu tài liệu bắt buộc"><input type="hidden" name="supportingSlot" value={slot.key}/><UploadField label={slot.label} required /></Form></section>)}</div><div className="mt-5 border-t pt-4"><Form command="SUBMIT_DOCUMENT" requestId={r.id} version={r.version} label="Gửi duyệt"><p className="tf-ui-help">Cần đủ thông tin và tài liệu theo checklist của mẫu, cùng người duyệt được phân công. Nháp dùng mẫu cũ vẫn lưu được; cần tạo nháp riêng theo mẫu hiện tại để gửi.</p></Form></div></Panel> : <Panel><h2 className="mb-3 font-semibold">Nội dung đã trình</h2><p className="whitespace-pre-wrap">{body.content}</p>{body.counterparty && <p className="mt-3">Đối tác: {body.counterparty}</p>}{body.amount && <p>Giá trị: {body.amount} VND</p>}<p className="tf-ui-help mt-3 whitespace-pre-wrap">{body.templateSnapshot?.instructions}</p>{body.mainFileId && <Link className="tf-link mt-3 inline-block" href={fileHref(body.mainFileId)}>Tải tài liệu chính đúng bản</Link>}{detail.linked && <p className="mt-3"><Link className="tf-link" href={requestHref(detail.linked)}>Hồ sơ liên quan: {detail.linked.title}</Link></p>}</Panel>)}
-    {r.state === "SUBMITTED" && <Panel><h2 className="mb-3 font-semibold">Đang chờ {ROLES[current?.role]} · {name(current?.assigneeId)}</h2>{current?.assigneeId === user.id && <Form command="DECIDE_DOCUMENT" requestId={r.id} request={r} version={r.version} label="Lưu quyết định"><DecisionFields role={current.role} /></Form>}{owner && <details className="mt-4"><summary className="cursor-pointer">Rút hồ sơ đang trình</summary><div className="mt-3"><Form command="DECIDE_DOCUMENT" requestId={r.id} request={r} version={r.version} label="Rút hồ sơ"><input type="hidden" name="decision" value="WITHDRAW" /><Textarea name="reason" label="Lý do rút" required /></Form></div></details>}</Panel>}
+    {selfRoles > 1 && <Alert tone="warning" title="Bạn tham gia nhiều vai trò">Mỗi bước cần quyết định riêng, hệ thống không tự bỏ bước.</Alert>}{r.parentId && <Link className="tf-link" href={workflowDocumentHref(r.parentId)}>Xem hồ sơ nguồn của bản trình lại</Link>}
+    {!blankOpen && (r.state === "DRAFT" && owner ? <Panel><h2 className="mb-3 font-semibold">Sửa nháp</h2><DocumentEditor document={r} templates={templates} projects={projects} /><div className="my-5 space-y-4">{effectiveRequirements(r.template?.requirements).requiredDocuments.map(slot=><section key={slot.key} id={`wf-${r.id}-${slot.key}`} tabIndex={-1}><h3 className="font-semibold">{slot.label} · Bắt buộc khi gửi</h3>{body.supportingFiles?.[slot.key] && <Link className="tf-link" href={fileHref(body.supportingFiles[slot.key])}>Tài liệu đã lưu</Link>}<Form command="ADD_SUPPORTING_DOCUMENT" requestId={r.id} version={r.version} label="Lưu tài liệu bắt buộc"><input type="hidden" name="supportingSlot" value={slot.key}/><UploadField label={slot.label} required /></Form></section>)}</div><div className="mt-5 border-t pt-4"><SubmitDocumentForm request={r} /></div></Panel> : <Panel><h2 className="mb-3 font-semibold">Nội dung đã trình</h2><p className="whitespace-pre-wrap">{body.content}</p>{body.counterparty && <p className="mt-3">Đối tác: {body.counterparty}</p>}{body.amount && <p>Giá trị: {body.amount} VND</p>}<p className="tf-ui-help mt-3 whitespace-pre-wrap">{body.templateSnapshot?.instructions}</p>{body.mainFileId && <Link className="tf-link mt-3 inline-block" href={fileHref(body.mainFileId)}>Tải tài liệu chính đúng bản</Link>}{detail.linked && <p className="mt-3"><Link className="tf-link" href={requestHref(detail.linked)}>Hồ sơ liên quan: {detail.linked.title}</Link></p>}</Panel>)}
+    {r.state === "SUBMITTED" && <Panel><h2 className="mb-3 font-semibold">Đang chờ {ROLES[current?.role]} · {name(current?.assigneeId)}</h2>{current?.assigneeId === user.id && <WorkflowDecisionDialog request={r} />}{owner && <details className="mt-4"><summary className="cursor-pointer">Rút hồ sơ đang trình</summary><div className="mt-3"><Form command="DECIDE_DOCUMENT" requestId={r.id} request={r} version={r.version} label="Rút hồ sơ"><input type="hidden" name="decision" value="WITHDRAW" /><Textarea name="reason" label="Lý do rút" required /></Form></div></details>}</Panel>}
     {owner && ["RETURNED", "APPROVED", "WITHDRAWN", "REJECTED"].includes(r.state) && <Panel><details><summary className="cursor-pointer font-semibold">Tạo bản mới để sửa / trình lại</summary><div className="mt-4"><DocumentEditor parent={r} templates={templates} projects={projects} /></div></details></Panel>}
     <DocumentFiles document={r} />{owner && <Panel><details><summary className="cursor-pointer">Bổ sung tài liệu tham khảo</summary><div className="mt-3"><Form command="ADD_REFERENCE" requestId={r.id} version={r.version} label="Lưu file tham khảo"><UploadField label="File tham khảo" required /></Form></div></details></Panel>}
     {r.state === "APPROVED" && body.cancellation?.status === "PENDING" && <Alert tone="warning" title="Đang chờ Quản lý quyết định yêu cầu hủy">Ký và bắt đầu thực hiện đang được giữ. Lý do: {body.cancellation.reason}</Alert>}
     {r.state === "APPROVED" && owner && !body.signature && !body.execution?.startedAt && body.cancellation?.status !== "PENDING" && <Panel><details><summary className="cursor-pointer font-semibold">Yêu cầu hủy hồ sơ đã duyệt</summary><div className="mt-3"><Form command="REQUEST_DOCUMENT_CANCEL" requestId={r.id} request={r} version={r.version} label="Gửi yêu cầu hủy"><Textarea name="reason" label="Lý do yêu cầu hủy" required /></Form></div></details></Panel>}
     {r.state === "APPROVED" && body.cancellation?.status === "PENDING" && body.responsibleManagerId === user.id && <Panel><h2 className="mb-3 font-semibold">Quyết định yêu cầu hủy</h2><Form command="DECIDE_DOCUMENT_CANCEL" requestId={r.id} request={r} version={r.version} label="Lưu quyết định hủy"><Select name="cancelDecision" label="Kết quả"><option value="CONFIRM">Xác nhận hủy</option><option value="REJECT">Không chấp nhận hủy</option></Select><Textarea name="reason" label="Lý do quyết định" required /></Form></Panel>}
-    {r.state === "APPROVED" && <Panel><h2 className="mb-3 font-semibold">Ký giấy</h2><p className="mb-3 text-sm">Người/bên ký theo mẫu: {body.templateSnapshot?.signerNames}</p><Link className="tf-link" href={`/workflow/${r.id}/print`}>In / lưu PDF trang thông tin hồ sơ</Link><p className="tf-ui-help mt-2">Tài liệu chính do công ty soạn tải ở trên để ký. Trang thông tin không thay nội dung văn bản.</p>{owner && <details className="mt-4"><summary className="cursor-pointer">Tải bản đã ký</summary><div className="mt-3"><Form command="UPLOAD_SIGNED" requestId={r.id} version={r.version} label="Lưu bản ký, chờ xác nhận"><UploadField label="Bản scan / ảnh bộ hồ sơ đã ký" required /><Input label="Người giữ bản gốc" name="keeper" required /><Input label="Nơi lưu bản gốc" name="location" required /></Form></div></details>}{body.signature && <p className="mt-3 text-sm">Bản gốc: {body.signature.keeper} · {body.signature.location}</p>}{body.signature?.state === "PENDING" && body.responsibleManagerId === user.id && <div className="mt-4"><Form command="CONFIRM_SIGNED" requestId={r.id} version={r.version} label="Xác nhận đủ bản ký"><label className="flex items-start gap-2 text-sm"><input name="signatureConfirmed" type="checkbox" value="yes" required />Đã kiểm tra đủ chữ ký theo mẫu và thông tin lưu bản gốc.</label></Form></div>}</Panel>}
+    {r.state === "APPROVED" && (
+      <Panel>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-zinc-100">
+          <div>
+            <h2 className="font-semibold text-zinc-900 text-base">Ký hồ sơ & Bản lưu trữ văn bản</h2>
+            <p className="text-xs text-zinc-500 mt-0.5">
+              Người/bên ký theo mẫu: <span className="font-medium text-zinc-700">{body.templateSnapshot?.signerNames || "Chưa quy định"}</span>
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href={workflowPrintHref(r.id)}
+              target="_blank"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors"
+            >
+              <Printer size={13} aria-hidden="true" />
+              In / Lưu PDF biểu mẫu A4
+            </Link>
+            <Link
+              href={workflowVerifyHref(r.id)}
+              target="_blank"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors"
+            >
+              <ShieldCheck size={13} aria-hidden="true" />
+              Tra cứu QR công khai
+            </Link>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Track 1: Ký số nội bộ */}
+          <div className="p-4 rounded-xl border border-zinc-200 bg-zinc-50/50 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Hình thức 1</span>
+                <Badge tone={eSignedData ? "success" : "neutral"}>
+                  {eSignedData ? "Đã ký số (Xem trước)" : "Chưa ký số"}
+                </Badge>
+              </div>
+              <h3 className="font-semibold text-zinc-900 text-sm mb-1">Ký duyệt điện tử (E-Sign)</h3>
+              <p className="text-xs text-zinc-600 mb-3 leading-relaxed">
+                Ký tay trực tiếp trên màn hình cảm ứng, tái sử dụng chữ ký mẫu hồ sơ hoặc tải ảnh chữ ký đã lọc nền trong suốt.
+              </p>
+              {eSignedData && (
+                <div className="mb-3 p-2 bg-white rounded-lg border border-emerald-200 flex items-center gap-3">
+                  <div className="w-16 h-10 bg-zinc-50 rounded border border-zinc-200 flex items-center justify-center p-1 overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={eSignedData} alt="Chữ ký đã chọn" className="max-w-full max-h-full object-contain" />
+                  </div>
+                  <div className="text-xs">
+                    <p className="font-medium text-emerald-800">Chữ ký điện tử sẵn sàng</p>
+                    <p className="text-zinc-500 text-[11px]">{name(user.id)} · Đã gắn vào phiên UI</p>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="pt-2">
+              <Button
+                variant={eSignedData ? "ghost" : "primary"}
+                className="w-full text-xs py-2"
+                onClick={() => setSignPadOpen(true)}
+              >
+                <PenTool size={13} className="mr-1.5" />
+                {eSignedData ? "Đổi chữ ký điện tử khác" : "Ký duyệt điện tử ngay"}
+              </Button>
+            </div>
+          </div>
+
+          {/* Track 2: Ký giấy vật lý & Bản lưu trữ */}
+          <div className="p-4 rounded-xl border border-zinc-200 bg-zinc-50/50 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Hình thức 2</span>
+                <Badge tone={body.signature?.state === "CONFIRMED" ? "success" : body.signature ? "warning" : "neutral"}>
+                  {body.signature?.state === "CONFIRMED" ? "Đã đủ bản ký" : body.signature ? "Chờ quản lý xác nhận" : "Chưa tải bản scan"}
+                </Badge>
+              </div>
+              <h3 className="font-semibold text-zinc-900 text-sm mb-1">Ký giấy vật lý & Lưu trữ</h3>
+              <p className="text-xs text-zinc-600 mb-3 leading-relaxed">
+                In biểu mẫu A4 ra giấy, thu thập chữ ký sống, số hóa bản scan và lưu trữ hồ sơ gốc tại phòng hành chính.
+              </p>
+              {body.signature && (
+                <div className="mb-3 p-2.5 bg-white rounded-lg border border-zinc-200 text-xs space-y-1">
+                  <p><span className="text-zinc-500">Người giữ bản gốc:</span> <strong className="text-zinc-800">{body.signature.keeper}</strong></p>
+                  <p><span className="text-zinc-500">Nơi lưu bản gốc:</span> <strong className="text-zinc-800">{body.signature.location}</strong></p>
+                </div>
+              )}
+            </div>
+            <div>
+              {owner && (
+                <details className="text-xs">
+                  <summary className="cursor-pointer font-medium text-indigo-600 hover:text-indigo-700 py-1">
+                    {body.signature ? "Cập nhật lại bản scan & nơi lưu" : "+ Tải bản scan hồ sơ đã ký"}
+                  </summary>
+                  <div className="mt-3 p-3 bg-white rounded-lg border border-zinc-200">
+                    <Form command="UPLOAD_SIGNED" requestId={r.id} version={r.version} label="Lưu bản ký, chờ xác nhận">
+                      <UploadField label="Bản scan / ảnh bộ hồ sơ đã ký" required />
+                      <Input label="Người giữ bản gốc" name="keeper" required />
+                      <Input label="Nơi lưu bản gốc" name="location" required />
+                    </Form>
+                  </div>
+                </details>
+              )}
+              {body.signature?.state === "PENDING" && body.responsibleManagerId === user.id && (
+                <div className="mt-3 pt-3 border-t border-zinc-200">
+                  <Form command="CONFIRM_SIGNED" requestId={r.id} version={r.version} label="Xác nhận đủ bản ký">
+                    <label className="flex items-start gap-2 text-xs text-zinc-700">
+                      <input name="signatureConfirmed" type="checkbox" value="yes" required className="mt-0.5" />
+                      Đã kiểm tra đủ chữ ký theo mẫu và thông tin lưu bản gốc.
+                    </label>
+                  </Form>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {signPadOpen && (
+          <SignaturePad
+            open={signPadOpen}
+            onClose={() => setSignPadOpen(false)}
+            onConfirm={(dataUrl) => {
+              setESignedData(dataUrl);
+              setSignPadOpen(false);
+            }}
+            userName={name(user.id)}
+            userRoleTitle={user.role}
+            title={`Ký xác nhận hồ sơ — ${r.title}`}
+          />
+        )}
+      </Panel>
+    )}
     {detail.canTransfer && r.currentAttemptId && <Panel><details><summary className="cursor-pointer font-semibold">Chuyển giao xử lý</summary><div className="mt-3"><Form command="TRANSFER_DOCUMENT" requestId={r.id} request={r} version={r.version} label="Chuyển giao"><Select name="target" label="Phần việc"><option value="STEP">Bước duyệt đang chờ</option><option value="SIGNATURE">Quản lý xác nhận bản ký</option></Select><PersonField users={detail.users} label="Người nhận" name="assigneeId" /><Textarea label="Lý do chuyển giao" name="reason" required /></Form></div></details></Panel>}
     <Panel><h2 className="mb-3 font-semibold">Lịch sử quyết định</h2>{r.decisions.map(d => <p className="my-2 text-sm" key={d.id}>{name(d.actorId)} · {ACTIONS[d.action] ?? d.action} · {new Date(d.createdAt).toLocaleString("vi-VN")}{d.reason && ` · ${d.reason}`}</p>)}<details className="mt-3"><summary className="cursor-pointer">Lịch sử phiên bản ({r.history.length})</summary>{r.history.map(h => <p className="my-2 text-sm" key={h.id}>v{h.version} · {ACTIONS[h.action] ?? h.action} · {name(h.actorId)} · {new Date(h.createdAt).toLocaleString("vi-VN")}</p>)}</details></Panel>
   </div></div>;

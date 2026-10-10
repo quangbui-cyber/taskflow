@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Copy, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Copy, Plus, Trash2, CheckCircle2, PenTool, ShieldCheck } from "lucide-react";
 import ActionForm from "@/components/CostFlowActionForm";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Input, Select, Textarea } from "@/components/ui/Field";
 import { Dialog } from "@/components/ui/Dialog";
 import { Alert, Panel, Table } from "@/components/ui/Presentation";
+import { SignaturePad } from "@/components/SignaturePad";
 import type { Finance } from "@/components/CostFlowPanel";
 import { PaymentRequestPreview, type PaymentPreviewLine } from "./PaymentRequestPreview";
 
@@ -30,6 +31,9 @@ export function PaymentRequestEditor({ finance, onCreated, draft }:
   const [milestone, setMilestone] = useState(draft?.milestone ?? "");
   const [explanation, setExplanation] = useState(typeof draftRequest?.payload.explanation === "string" ? draftRequest.payload.explanation : "");
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [signPadOpen, setSignPadOpen] = useState(false);
+  const [signatureData, setSignatureData] = useState<string | null>(null);
+  const [signaturePin, setSignaturePin] = useState<string | null>(null);
   const [lines, setLines] = useState<EditableLine[]>(() => draft?.lines.length ? draft.lines.map(line => ({ stableKey: line.stableKey, description: line.description, amount: line.amount, lineId: line.icLineId, recipientKey: line.recipientKey })) : [newLine()]);
   const recipients = useMemo(() => [
     ...finance.project.members.map(member => ({ key: `USER:${member.userId}`, label: `${finance.users.find(user => user.id === member.userId)?.name ?? "Nhân viên"} (nội bộ)` })),
@@ -71,10 +75,12 @@ export function PaymentRequestEditor({ finance, onCreated, draft }:
       <h3 className="font-bold text-base text-[var(--foreground)]">{draft ? "Sửa và gửi lại ĐNTU" : "Đề nghị tạm ứng đa khoản"}</h3>
       <p className="tf-ui-help">Một hồ sơ có thể gồm nhiều NCC/nhân viên. Từng khoản giữ nguồn IC riêng; tổng hiển thị chỉ là xem trước và được server tính lại. Bản đã gửi trước đó không bị sửa.</p>
     </div>
-    <ActionForm finance={finance} command={draft ? "RESUBMIT_PAYMENT_DOSSIER" : "CREATE_PAYMENT_DOSSIER"} requestId={draft?.requestId} label={draft ? "Gửi lại toàn bộ ĐNTU" : "Gửi duyệt ĐNTU đa khoản"} onSuccess={onCreated}>
+    <ActionForm finance={finance} command={draft ? "RESUBMIT_PAYMENT_DOSSIER" : "CREATE_PAYMENT_DOSSIER"} requestId={draft?.requestId} label={draft ? "Gửi lại toàn bộ ĐNTU" : "Gửi duyệt ĐNTU đa khoản"} showSubmit={false} onSuccess={onCreated}>
       <input type="hidden" name="kind" value="ADVANCE" />
       <input type="hidden" name="lines" value={JSON.stringify(submittedLines)} />
       <input type="hidden" name="clientTotal" value={clientTotal} />
+      <input type="hidden" name="signatureData" value={signatureData ?? ""} />
+      <input type="hidden" name="signaturePin" value={signaturePin ?? ""} />
       <div className="grid gap-3 md:grid-cols-2">
         <Input name="title" label="Tên hồ sơ" value={title} onChange={event => setTitle(event.target.value)} required placeholder="Ví dụ: Tạm ứng chuẩn bị sự kiện" />
         <Input name="milestone" label="Mốc hồ sơ chung" value={milestone} onChange={event => setMilestone(event.target.value)} required placeholder="Ví dụ: Đợt chuẩn bị và đặt cọc" />
@@ -129,10 +135,85 @@ export function PaymentRequestEditor({ finance, onCreated, draft }:
           <Button variant="secondary" size="sm" onClick={() => setLines(current => [...current, newLine()])}><Plus size={15} className="mr-1" aria-hidden="true" />Thêm khoản</Button>
           <Button variant="secondary" size="sm" onClick={() => setPreviewOpen(true)}>Xem trước snapshot gửi duyệt</Button>
         </div>
+
+        {/* Khối Ký số người lập bắt buộc theo WF-04 */}
+        <div className="pt-2">
+          {signatureData ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/70">
+              <div className="flex items-center gap-3">
+                <div className="w-16 h-10 bg-white rounded border border-emerald-200 p-0.5 flex items-center justify-center overflow-hidden shadow-inner">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={signatureData} alt="Chữ ký người lập" className="max-w-full max-h-full object-contain" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-emerald-800 flex items-center gap-1.5">
+                    <CheckCircle2 size={14} className="text-emerald-600" aria-hidden="true" />
+                    Đã ký số người đề nghị (E-Sign sẵn sàng)
+                  </p>
+                  <p className="text-[11px] text-zinc-500">Mã PIN xác thực: •••••• · Khóa toàn vẹn phiên gửi</p>
+                </div>
+              </div>
+              <Button variant="ghost" size="sm" type="button" onClick={() => setSignPadOpen(true)}>
+                <PenTool size={13} className="mr-1" aria-hidden="true" />
+                Ký lại
+              </Button>
+            </div>
+          ) : (
+            <div className="p-3.5 rounded-xl border border-amber-200 bg-amber-50/70 flex flex-wrap items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <p className="text-xs font-semibold text-amber-900 flex items-center gap-1.5">
+                  <ShieldCheck size={14} className="text-amber-600" aria-hidden="true" />
+                  Yêu cầu ký số người lập hồ sơ (WF-04 & ERPNext OSS)
+                </p>
+                <p className="text-[11px] text-amber-700">
+                  Toàn bộ chứng từ chi bắt buộc ký số và nhập mã PIN 6 số trước khi gửi duyệt.
+                </p>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                type="button"
+                onClick={() => {
+                  if (!title.trim() || !milestone.trim() || !lines.length || !lines[0].description) {
+                    alert("Vui lòng nhập Tên hồ sơ, Mốc chung và ít nhất 1 khoản chi trước khi ký số.");
+                    return;
+                  }
+                  setSignPadOpen(true);
+                }}
+              >
+                <PenTool size={13} className="mr-1" aria-hidden="true" />
+                Ký số người lập
+              </Button>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between border-t border-zinc-100 pt-4 gap-3">
+          <div className="text-xs text-zinc-500">
+            Tổng đề nghị: <strong className="text-zinc-900 font-mono text-sm">{new Intl.NumberFormat("vi-VN").format(Number(clientTotal || 0))} ₫</strong>
+          </div>
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={!signatureData}
+          >
+            {draft ? "Gửi lại toàn bộ ĐNTU" : "Gửi duyệt ĐNTU đa khoản"}
+          </Button>
+        </div>
       </div>
     </ActionForm>
     <Dialog open={previewOpen} onClose={() => setPreviewOpen(false)} title="Xem trước hồ sơ gửi duyệt" description="Đây là projection từ dữ liệu đang nhập; server sẽ chuẩn hóa và tính lại trước khi lưu snapshot bất biến.">
       <PaymentRequestPreview title={title} milestone={milestone} explanation={explanation} revisionLabel={`IC-R${revision.number}`} lines={previewLines} />
     </Dialog>
+    <SignaturePad
+      open={signPadOpen}
+      onClose={() => setSignPadOpen(false)}
+      onConfirm={(dataUrl, pin) => {
+        setSignatureData(dataUrl);
+        setSignaturePin(pin ?? "");
+        setSignPadOpen(false);
+      }}
+      title="Ký số người đề nghị — Đề nghị tạm ứng đa khoản"
+    />
   </Panel>;
 }
