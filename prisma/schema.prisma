@@ -44,6 +44,7 @@ model User {
   workflowSignatureAsset             WorkflowSignatureAsset?        @relation("WorkflowSignatureAssetOwner")
   workflowSignatureAssetAudits       WorkflowSignatureAssetAudit[]  @relation("WorkflowSignatureAssetAuditOwner")
   workflowSignatureAssetActions      WorkflowSignatureAssetAudit[]  @relation("WorkflowSignatureAssetAuditActor")
+  workflowSigningEvents              WorkflowSigningEvent[]         @relation("WorkflowSigningEventActor")
   paymentDiscussions                 PaymentLineDiscussion[]
   actualCostLinesCreated             ActualCostLine[]               @relation("ActualCostLineCreator")
   actualCostVersionsCreated          ActualCostVersion[]            @relation("ActualCostVersionCreator")
@@ -453,6 +454,10 @@ model WorkflowRequest {
   paymentDiscussions          PaymentLineDiscussion[]
   advanceApplications         AdvanceApplication[]       @relation("AdvanceApplicationRequest")
   actualCostApplications      ActualCostApplication[]    @relation("ActualCostApplicationRequest")
+  approvedSnapshots           WorkflowApprovedSnapshot[]
+  signingLifecycle            WorkflowSigningLifecycle?
+  signingCommands             WorkflowSigningCommand[]
+  workflowSigningEvents       WorkflowSigningEvent[]
 
   @@index([projectId, module, createdAt])
   @@index([creatorId, state])
@@ -501,6 +506,81 @@ model WorkflowSignatureAssetAudit {
 
   @@index([ownerId, createdAt])
   @@index([actorId, createdAt])
+}
+
+model WorkflowApprovedSnapshot {
+  id               String                     @id @default(cuid())
+  requestId        String
+  request          WorkflowRequest            @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  version          Int
+  mode             String
+  evidenceState    String
+  projection       Json
+  projectionSha256 String
+  attestationKeyId String
+  attestation      String
+  createdAt        DateTime                   @default(now())
+  signingEvents    WorkflowSigningEvent[]
+  lifecycles       WorkflowSigningLifecycle[]
+
+  @@unique([requestId, version])
+  @@index([projectionSha256])
+  @@index([attestationKeyId])
+}
+
+model WorkflowSigningEvent {
+  id                   String                   @id @default(cuid())
+  snapshotId           String
+  snapshot             WorkflowApprovedSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  requestId            String
+  request              WorkflowRequest          @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  version              Int
+  role                 String
+  actorId              String
+  actor                User                     @relation("WorkflowSigningEventActor", fields: [actorId], references: [id], onDelete: Restrict)
+  signaturePngData     Bytes
+  signatureImageSha256 String
+  legalCommitment      Boolean                  @default(true)
+  previousEventHash    String?
+  eventHash            String
+  pinVerified          Boolean                  @default(true)
+  signerIpNormalized   String?
+  signerIpSource       String                   @default("UNAVAILABLE")
+  signedAt             DateTime                 @default(now())
+
+  @@unique([snapshotId, role])
+  @@index([requestId, version, signedAt])
+  @@index([actorId, signedAt])
+  @@index([eventHash])
+}
+
+model WorkflowSigningLifecycle {
+  id              String                    @id @default(cuid())
+  requestId       String                    @unique
+  request         WorkflowRequest           @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  snapshotId      String?
+  snapshot        WorkflowApprovedSnapshot? @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  mode            String
+  evidenceState   String
+  expectedVersion Int
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  @@index([snapshotId])
+  @@index([mode, evidenceState])
+}
+
+model WorkflowSigningCommand {
+  id          String          @id @default(cuid())
+  requestId   String
+  request     WorkflowRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  commandKey  String
+  fingerprint String
+  result      Json?
+  createdAt   DateTime        @default(now())
+
+  @@unique([requestId, commandKey])
+  @@index([requestId, fingerprint])
 }
 
 model WorkflowApprovalEvent {
