@@ -1,5 +1,258 @@
+import ExcelJS from "exceljs";
 import { moneyInWords } from "./money";
 import type { RequestPayload } from "./types";
+
+export const SETTLEMENT_EXPORT_FAMILIES = [
+  "QUOTATION",
+  "CUSTOMER_ACCEPTANCE",
+  "DNTU",
+  "DNTT",
+  "DNHTU",
+  "PROJECT_SETTLEMENT",
+] as const;
+
+export type SettlementExportFamily = typeof SETTLEMENT_EXPORT_FAMILIES[number];
+export type SettlementExportSource = {
+  dossierId: string;
+  dossierVersionId: string;
+  dossierVersion: number;
+  documentVersionId: string;
+  documentVersion: number;
+  state: string;
+  supersedesId?: string | null;
+  replacedById?: string | null;
+  replacementReason?: string | null;
+};
+export type SettlementExportProjection = {
+  projectId: string;
+  projectName?: string;
+  family: SettlementExportFamily;
+  source: SettlementExportSource;
+  title?: string;
+  approvedAt?: string;
+  totals: {
+    rawNet: string;
+    rawVat: string;
+    rawGross: string;
+    net: string;
+    vat: string;
+    gross: string;
+  };
+  recipients: Array<{
+    recipientKey: string;
+    recipientType: string;
+    displayName: string;
+    actualGross: string;
+    advanceGross: string;
+    refundDue: string;
+    additionalDue: string;
+  }>;
+  items: Array<{
+    stableLineId: string;
+    description: string;
+    recipientKey: string;
+    rawNet: string;
+    rawVat: string;
+    rawGross: string;
+    net: string;
+    vat: string;
+    gross: string;
+  }>;
+  obligations: Array<{ recipientKey: string; direction: string; amountDue: string }>;
+  evidence: Array<{ id: string; kind: string; sha256: string }>;
+  signingSnapshot: {
+    id: string;
+    state: string;
+    projectionSha256: string;
+    events: Array<{ role: string; actorId: string; eventHash: string; signedAt: string }>;
+  };
+};
+
+type NormalizedSettlementExportProjection = SettlementExportProjection & {
+  approvedGross: string;
+  moneyInWords: string;
+};
+
+const INTEGER_VND = /^-?(?:0|[1-9]\d*)$/;
+
+function requiredText(value: string, label: string) {
+  const text = String(value ?? "").trim();
+  if (!text) throw new Error(`Thiếu ${label} của phiên bản xuất.`);
+  return text;
+}
+
+function integerVnd(value: string, label: string) {
+  const text = requiredText(value, label);
+  if (!INTEGER_VND.test(text) || !Number.isSafeInteger(Number(text))) {
+    throw new Error(`${label} phải là số nguyên VND an toàn.`);
+  }
+  return text;
+}
+
+export function normalizeSettlementExportProjection(input: SettlementExportProjection): NormalizedSettlementExportProjection {
+  if (!SETTLEMENT_EXPORT_FAMILIES.includes(input.family)) throw new Error("Loại chứng từ xuất không hợp lệ.");
+  requiredText(input.projectId, "Project");
+  requiredText(input.source.dossierVersionId, "dossier version ID");
+  requiredText(input.source.documentVersionId, "document version ID");
+  if (!Number.isSafeInteger(input.source.dossierVersion) || input.source.dossierVersion < 1) throw new Error("Phiên bản dossier không hợp lệ.");
+  if (!Number.isSafeInteger(input.source.documentVersion) || input.source.documentVersion < 1) throw new Error("Phiên bản tài liệu không hợp lệ.");
+  if (input.source.state !== "APPROVED") throw new Error("Chỉ xuất từ phiên bản đã duyệt và bất biến.");
+  const net = integerVnd(input.totals.net, "Net");
+  const vat = integerVnd(input.totals.vat, "VAT");
+  const gross = integerVnd(input.totals.gross, "Gross");
+  if (BigInt(net) + BigInt(vat) !== BigInt(gross)) throw new Error("Bản chiếu xuất phải giữ Net + VAT = Gross.");
+  for (const row of input.recipients) {
+    integerVnd(row.actualGross, "AC người nhận");
+    integerVnd(row.advanceGross, "tạm ứng người nhận");
+    integerVnd(row.refundDue, "hoàn lại");
+    integerVnd(row.additionalDue, "chi thêm");
+  }
+  for (const row of input.items) {
+    const rowNet = integerVnd(row.net, "Net dòng AC");
+    const rowVat = integerVnd(row.vat, "VAT dòng AC");
+    const rowGross = integerVnd(row.gross, "Gross dòng AC");
+    if (BigInt(rowNet) + BigInt(rowVat) !== BigInt(rowGross)) throw new Error("Dòng AC phải giữ Net + VAT = Gross.");
+  }
+  return { ...input, totals: { ...input.totals, net, vat, gross }, approvedGross: gross, moneyInWords: moneyInWords(gross) };
+}
+
+function titleFor(family: SettlementExportFamily) {
+  return {
+    QUOTATION: "BÁO GIÁ",
+    CUSTOMER_ACCEPTANCE: "NGHIỆM THU KHÁCH HÀNG",
+    DNTU: "PHIẾU ĐỀ NGHỊ TẠM ỨNG",
+    DNTT: "PHIẾU ĐỀ NGHỊ THANH TOÁN",
+    DNHTU: "PHIẾU ĐỀ NGHỊ HOÀN TẠM ỨNG",
+    PROJECT_SETTLEMENT: "QUYẾT TOÁN DỰ ÁN",
+  }[family];
+}
+
+function setText(cell: ExcelJS.Cell, value: unknown) {
+  cell.value = String(value ?? "");
+}
+
+function setMoney(cell: ExcelJS.Cell, value: string) {
+  cell.value = Number(integerVnd(value, "giá trị XLSX"));
+  cell.numFmt = "#,##0;[Red]-#,##0";
+}
+
+function addSourceMetadata(sheet: ExcelJS.Worksheet, projection: NormalizedSettlementExportProjection) {
+  sheet.addRow(["Project", projection.projectName ?? projection.projectId]);
+  sheet.addRow(["Dossier version", `${projection.source.dossierVersionId} / v${projection.source.dossierVersion}`]);
+  sheet.addRow(["Document version", `${projection.source.documentVersionId} / v${projection.source.documentVersion}`]);
+  sheet.addRow(["Replacement", projection.source.replacedById ? `Đã được thay bởi ${projection.source.replacedById}` : projection.source.supersedesId ? `Thay thế ${projection.source.supersedesId}` : "Bản gốc"]);
+  sheet.addRow(["Signing snapshot", `${projection.signingSnapshot.id} / ${projection.signingSnapshot.state}`]);
+}
+
+function addSignatureSlots(sheet: ExcelJS.Worksheet, projection: NormalizedSettlementExportProjection) {
+  sheet.addRow([]);
+  const row = sheet.addRow(["NGƯỜI LẬP", "QUẢN LÝ", "KẾ TOÁN", "GIÁM ĐỐC"]);
+  row.font = { bold: true };
+  const events = new Map(projection.signingSnapshot.events.map(event => [event.role, event]));
+  sheet.addRow(["CREATOR", "MANAGER", "ACCOUNTANT", "CEO"].map(role => events.get(role)?.eventHash ?? "Chưa ký"));
+}
+
+function addSingleFamilySheet(workbook: ExcelJS.Workbook, projection: NormalizedSettlementExportProjection) {
+  const sheet = workbook.addWorksheet(titleFor(projection.family).slice(0, 31));
+  const heading = sheet.addRow([titleFor(projection.family)]);
+  heading.font = { bold: true, size: 16 };
+  addSourceMetadata(sheet, projection);
+  sheet.addRow(["STT", "Nội dung", "Người nhận", "Net", "VAT", "Gross"]);
+  projection.items.forEach((item, index) => {
+    const row = sheet.addRow([]);
+    row.getCell(1).value = index + 1;
+    setText(row.getCell(2), item.description);
+    setText(row.getCell(3), item.recipientKey);
+    setMoney(row.getCell(4), item.net);
+    setMoney(row.getCell(5), item.vat);
+    setMoney(row.getCell(6), item.gross);
+  });
+  const total = sheet.addRow(["TỔNG", "", "", Number(projection.totals.net), Number(projection.totals.vat), Number(projection.totals.gross)]);
+  total.font = { bold: true };
+  sheet.addRow(["Bằng chữ", projection.moneyInWords]);
+  addSignatureSlots(sheet, projection);
+  return sheet;
+}
+
+function addSettlementSheets(workbook: ExcelJS.Workbook, projection: NormalizedSettlementExportProjection) {
+  const reconciliation = workbook.addWorksheet("Đối soát");
+  reconciliation.addRow([titleFor(projection.family)]).font = { bold: true, size: 16 };
+  addSourceMetadata(reconciliation, projection);
+  reconciliation.addRow(["Người nhận", "AC", "Tạm ứng", "Hoàn", "Chi thêm", "Chênh lệch"]);
+  const start = reconciliation.rowCount + 1;
+  projection.recipients.forEach(recipient => {
+    const row = reconciliation.addRow([]);
+    setText(row.getCell(1), recipient.displayName || recipient.recipientKey);
+    setMoney(row.getCell(2), recipient.actualGross);
+    setMoney(row.getCell(3), recipient.advanceGross);
+    setMoney(row.getCell(4), recipient.refundDue);
+    setMoney(row.getCell(5), recipient.additionalDue);
+    row.getCell(6).value = { formula: `E${row.number}-D${row.number}`, result: Number(recipient.additionalDue) - Number(recipient.refundDue) };
+  });
+  const end = reconciliation.rowCount;
+  const total = reconciliation.addRow(["TỔNG"]);
+  for (let column = 2; column <= 6; column += 1) {
+    const letter = reconciliation.getColumn(column).letter;
+    const result = column === 2 ? projection.recipients.reduce((sum, row) => sum + Number(row.actualGross), 0)
+      : column === 3 ? projection.recipients.reduce((sum, row) => sum + Number(row.advanceGross), 0)
+        : column === 4 ? projection.recipients.reduce((sum, row) => sum + Number(row.refundDue), 0)
+          : column === 5 ? projection.recipients.reduce((sum, row) => sum + Number(row.additionalDue), 0)
+            : projection.recipients.reduce((sum, row) => sum + Number(row.additionalDue) - Number(row.refundDue), 0);
+    total.getCell(column).value = { formula: `SUM(${letter}${start}:${letter}${end})`, result };
+    total.getCell(column).numFmt = "#,##0;[Red]-#,##0";
+  }
+  total.font = { bold: true };
+  reconciliation.addRow(["Bằng chữ", projection.moneyInWords]);
+  addSignatureSlots(reconciliation, projection);
+
+  const detail = workbook.addWorksheet("Chi tiết AC");
+  detail.addRow(["Mã dòng", "Nội dung", "Người nhận", "Net", "VAT", "Gross", "Kiểm tra"]);
+  const detailStart = 2;
+  projection.items.forEach(item => {
+    const row = detail.addRow([]);
+    setText(row.getCell(1), item.stableLineId);
+    setText(row.getCell(2), item.description);
+    setText(row.getCell(3), item.recipientKey);
+    setMoney(row.getCell(4), item.net);
+    setMoney(row.getCell(5), item.vat);
+    setMoney(row.getCell(6), item.gross);
+    row.getCell(7).value = { formula: `F${row.number}-E${row.number}`, result: Number(item.net) };
+  });
+  const detailEnd = detail.rowCount;
+  const detailTotal = detail.addRow(["TỔNG", "", ""]);
+  for (let column = 4; column <= 6; column += 1) {
+    const letter = detail.getColumn(column).letter;
+    const result = column === 4 ? Number(projection.totals.net) : column === 5 ? Number(projection.totals.vat) : Number(projection.totals.gross);
+    detailTotal.getCell(column).value = { formula: `SUM(${letter}${detailStart}:${letter}${detailEnd})`, result };
+    detailTotal.getCell(column).numFmt = "#,##0;[Red]-#,##0";
+  }
+  detailTotal.font = { bold: true };
+}
+
+export async function buildSettlementExportWorkbook(input: SettlementExportProjection) {
+  const projection = normalizeSettlementExportProjection(input);
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Creative Station TaskFlow";
+  workbook.created = new Date(projection.approvedAt ?? "2000-01-01T00:00:00.000Z");
+  workbook.modified = workbook.created;
+  if (projection.family === "PROJECT_SETTLEMENT") addSettlementSheets(workbook, projection);
+  else addSingleFamilySheet(workbook, projection);
+  for (const sheet of workbook.worksheets) {
+    sheet.views = [{ state: "frozen", ySplit: 1 }];
+    sheet.columns.forEach(column => { column.width = 20; });
+    sheet.eachRow(row => row.eachCell(cell => { cell.alignment = { vertical: "middle", wrapText: true }; }));
+  }
+  const bytes = Buffer.from(await workbook.xlsx.writeBuffer());
+  return {
+    family: projection.family,
+    sourceVersionId: projection.source.dossierVersionId,
+    documentVersionId: projection.source.documentVersionId,
+    approvedGross: projection.approvedGross,
+    moneyInWords: projection.moneyInWords,
+    fileName: `${projection.family.toLowerCase()}-v${projection.source.dossierVersion}.xlsx`,
+    bytes,
+  };
+}
 
 function xml(value: string) { return value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
 function crc32(bytes: Buffer) {

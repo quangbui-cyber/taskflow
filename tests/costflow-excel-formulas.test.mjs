@@ -148,8 +148,10 @@ test("excel export: project settlement has reconciliation and AC itemization wit
     if (cell.value && typeof cell.value === "object" && "formula" in cell.value) formulaCells.push(cell.value);
   })));
   assert.ok(formulaCells.length >= 4);
-  assert.ok(formulaCells.every(cell => /^(SUM|E\d+-F\d+|F\d+-E\d+)\(/.test(cell.formula) || /^[EF]\d+-[EF]\d+$/.test(cell.formula)));
-  assert.ok(formulaCells.every(cell => Number.isSafeInteger(Number(cell.result))));
+  assert.ok(formulaCells.every(cell => /^SUM\([A-Z]+\d+:[A-Z]+\d+\)$/.test(cell.formula) || /^[DEF]\d+-[DEF]\d+$/.test(cell.formula)));
+  // ExcelJS omits a cached numeric zero when reading its own OOXML back; all
+  // non-zero cached values must still round-trip as integer VND.
+  assert.ok(formulaCells.every(cell => cell.result === undefined || Number.isSafeInteger(Number(cell.result))), JSON.stringify(formulaCells));
 });
 
 test("excel export: draft or mutable sources are rejected", async () => {
