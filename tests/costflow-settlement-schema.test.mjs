@@ -29,6 +29,12 @@ function migrationNames() {
     .sort();
 }
 
+function modelBlock(name) {
+  const match = schema.match(new RegExp(`model ${name} \\{[\\s\\S]*?\\n\\}`));
+  assert.ok(match, `missing model ${name}`);
+  return match[0];
+}
+
 test("Phase 10 migration sorts strictly after all existing migrations", () => {
   const names = migrationNames();
   assert.equal(names.at(-1), migrationName);
@@ -41,8 +47,8 @@ test("schema keeps settlement lock separate from producer lifecycle state", () =
   assert.match(schema, /model SettlementLock\s*\{[\s\S]*?actualCostApplicationId\s+String\?[\s\S]*?advanceApplicationId\s+String\?/);
   assert.match(schema, /actualCostApplication\s+ActualCostApplication\?[\s\S]*?onDelete: Restrict/);
   assert.match(schema, /advanceApplication\s+AdvanceApplication\?[\s\S]*?onDelete: Restrict/);
-  assert.doesNotMatch(schema, /model ActualCostApplication\s*\{[\s\S]*?@default\("SETTLED"\)/);
-  assert.doesNotMatch(schema, /model AdvanceApplication\s*\{[\s\S]*?status\s+String/);
+  assert.doesNotMatch(modelBlock("ActualCostApplication"), /@default\("SETTLED"\)/);
+  assert.doesNotMatch(modelBlock("AdvanceApplication"), /\bstatus\s+String/);
 });
 
 test("migration enforces provenance, idempotency, replacement, and append-only audit constraints", () => {

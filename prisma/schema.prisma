@@ -53,6 +53,13 @@ model User {
   customerCashInsCreated             CustomerCashIn[]               @relation("CustomerCashInCreator")
   customerAcceptanceSnapshotsCreated CustomerAcceptanceSnapshot[]   @relation("CustomerAcceptanceSnapshotCreator")
   customerAcceptanceExportsCreated   CustomerAcceptanceExport[]     @relation("CustomerAcceptanceExportCreator")
+  settlementDossiersCreated          ProjectSettlementDossier[]     @relation("SettlementDossierCreator")
+  settlementVersionsCreated          ProjectSettlementVersion[]     @relation("SettlementVersionCreator")
+  settlementReplacementsActed        ProjectSettlementVersion[]     @relation("SettlementReplacementActor")
+  settlementEvidenceAdded            SettlementEvidence[]           @relation("SettlementEvidenceActor")
+  financialCloseRequestsCreated      FinancialCloseRequest[]        @relation("FinancialCloseRequester")
+  financialCloseEventsActed          FinancialCloseEvent[]          @relation("FinancialCloseEventActor")
+  settlementExportsCreated           SettlementExportAudit[]        @relation("SettlementExportActor")
   organizedMeetings                  Meeting[]                      @relation("MeetingOrganizer")
   meetingInvites                     MeetingAttendee[]
   kpiPlanChanges                     KpiPlanChange[]
@@ -89,34 +96,34 @@ enum ProjectCategory {
 }
 
 model Project {
-  id                          String                       @id @default(cuid())
+  id                          String                          @id @default(cuid())
   name                        String
   description                 String?
-  category                    ProjectCategory              @default(CLIENT)
-  purchaseOrderNumber         String?                      @unique
-  color                       String                       @default("#6366f1")
-  status                      String                       @default("BIDDING") // "BIDDING" | "ON_PROCESS" | "PENDING" | "DONE" | "CANCEL" | "FAIL"
-  type                        String                       @default("OTHER") // "TEAMBUILDING" | "MICE" | "ACTIVATION" | "EVENT" | "PUR" | "OTHER"
+  category                    ProjectCategory                 @default(CLIENT)
+  purchaseOrderNumber         String?                         @unique
+  color                       String                          @default("#6366f1")
+  status                      String                          @default("BIDDING") // "BIDDING" | "ON_PROCESS" | "PENDING" | "DONE" | "CANCEL" | "FAIL"
+  type                        String                          @default("OTHER") // "TEAMBUILDING" | "MICE" | "ACTIVATION" | "EVENT" | "PUR" | "OTHER"
   executionStartAt            DateTime? // ngày bắt đầu thực hiện (chạy event)
   executionEndAt              DateTime? // ngày kết thúc — null nếu chỉ 1 ngày
-  revenue                     Float                        @default(0) // doanh thu dự kiến/thực tế (VND)
+  revenue                     Float                           @default(0) // doanh thu dự kiến/thực tế (VND)
   googleChatWebhookUrl        String?
   ownerId                     String
-  owner                       User                         @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  owner                       User                            @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   clientId                    String?
-  client                      Client?                      @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  client                      Client?                         @relation(fields: [clientId], references: [id], onDelete: SetNull)
   accountId                   String?
-  account                     Account?                     @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  account                     Account?                        @relation(fields: [accountId], references: [id], onDelete: SetNull)
   responsibleTeamId           String?
-  responsibleTeam             SalesTeam?                   @relation(fields: [responsibleTeamId], references: [id], onDelete: SetNull)
+  responsibleTeam             SalesTeam?                      @relation(fields: [responsibleTeamId], references: [id], onDelete: SetNull)
   responsibleGroupId          String?
-  responsibleGroup            MemberGroup?                 @relation(fields: [responsibleGroupId], references: [id], onDelete: SetNull)
+  responsibleGroup            MemberGroup?                    @relation(fields: [responsibleGroupId], references: [id], onDelete: SetNull)
   members                     ProjectMember[]
   tasks                       Task[]
   files                       ProjectFile[]
   onProcessAt                 DateTime? // thời điểm đầu tiên chuyển sang ON_PROCESS - dùng ghi nhận doanh thu
   completedAt                 DateTime? // thời điểm chuyển sang DONE
-  createdAt                   DateTime                     @default(now())
+  createdAt                   DateTime                        @default(now())
   costFlow                    CostFlowWorkspace?
   workflowRequests            WorkflowRequest[]
   costFlowCash                CostFlowCash[]
@@ -135,6 +142,14 @@ model Project {
   customerLiquidations        CustomerLiquidation[]
   customerCashIns             CustomerCashIn[]
   customerAcceptanceSnapshots CustomerAcceptanceSnapshot[]
+  settlementDossier           ProjectSettlementDossier?
+  settlementVersions          ProjectSettlementVersion[]
+  settlementObligations       SettlementRecipientObligation[]
+  settlementCashAllocations   SettlementCashAllocation[]
+  settlementLocks             SettlementLock[]
+  settlementEvidence          SettlementEvidence[]
+  financialCloseRequests      FinancialCloseRequest[]
+  settlementExports           SettlementExportAudit[]
 
   @@index([status, onProcessAt])
   @@index([status, completedAt])
@@ -416,21 +431,21 @@ model LoginRateLimit {
 
 // Shared Workflow foundation; finance consumes this rather than owning approval states.
 model WorkflowRequest {
-  id                          String                     @id @default(cuid())
+  id                          String                              @id @default(cuid())
   projectId                   String?
-  project                     Project?                   @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  project                     Project?                            @relation(fields: [projectId], references: [id], onDelete: Restrict)
   templateId                  String?
-  template                    WorkflowTemplate?          @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  template                    WorkflowTemplate?                   @relation(fields: [templateId], references: [id], onDelete: Restrict)
   module                      String
   kind                        String
   title                       String
   creatorId                   String
   cashAssigneeId              String
   parentId                    String?
-  state                       String                     @default("DRAFT")
+  state                       String                              @default("DRAFT")
   steps                       Json
-  currentStep                 Int                        @default(0)
-  version                     Int                        @default(0)
+  currentStep                 Int                                 @default(0)
+  version                     Int                                 @default(0)
   currentAttemptId            String?
   currentStepArrivedAt        DateTime?
   replacesRequestId           String?
@@ -438,8 +453,8 @@ model WorkflowRequest {
   pendingReplacementRequestId String?
   supersededAt                DateTime?
   payload                     Json
-  createdAt                   DateTime                   @default(now())
-  updatedAt                   DateTime                   @updatedAt
+  createdAt                   DateTime                            @default(now())
+  updatedAt                   DateTime                            @updatedAt
   decisions                   WorkflowDecision[]
   cash                        CostFlowCash[]
   evidence                    CostFlowEvidence[]
@@ -452,14 +467,15 @@ model WorkflowRequest {
   paymentRecipients           PaymentRecipientSnapshot[]
   cashAllocations             CostFlowCashAllocation[]
   paymentDiscussions          PaymentLineDiscussion[]
-  advanceApplications         AdvanceApplication[]       @relation("AdvanceApplicationRequest")
-  actualCostApplications      ActualCostApplication[]    @relation("ActualCostApplicationRequest")
+  advanceApplications         AdvanceApplication[]                @relation("AdvanceApplicationRequest")
+  actualCostApplications      ActualCostApplication[]             @relation("ActualCostApplicationRequest")
+  settlementVersions          ProjectSettlementVersion[]
   approvedSnapshots           WorkflowApprovedSnapshot[]
   signingLifecycle            WorkflowSigningLifecycle?
   signingCommands             WorkflowSigningCommand[]
   workflowSigningEvents       WorkflowSigningEvent[]
   physicalScanBatches         WorkflowPhysicalScanBatch[]
-  physicalSigningTransitions WorkflowPhysicalSigningTransition[]
+  physicalSigningTransitions  WorkflowPhysicalSigningTransition[]
 
   @@index([projectId, module, createdAt])
   @@index([creatorId, state])
@@ -511,20 +527,21 @@ model WorkflowSignatureAssetAudit {
 }
 
 model WorkflowApprovedSnapshot {
-  id               String                     @id @default(cuid())
-  requestId        String
-  request          WorkflowRequest            @relation(fields: [requestId], references: [id], onDelete: Restrict)
-  version          Int
-  mode             String
-  evidenceState    String
-  projection       Json
-  projectionSha256 String
-  attestationKeyId String
-  attestation      String
-  createdAt        DateTime                   @default(now())
-  signingEvents    WorkflowSigningEvent[]
-  lifecycles       WorkflowSigningLifecycle[]
-  publicCapability WorkflowPublicVerificationCapability?
+  id                String                                @id @default(cuid())
+  requestId         String
+  request           WorkflowRequest                       @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  version           Int
+  mode              String
+  evidenceState     String
+  projection        Json
+  projectionSha256  String
+  attestationKeyId  String
+  attestation       String
+  createdAt         DateTime                              @default(now())
+  signingEvents     WorkflowSigningEvent[]
+  lifecycles        WorkflowSigningLifecycle[]
+  publicCapability  WorkflowPublicVerificationCapability?
+  settlementExports SettlementExportAudit[]
 
   @@unique([requestId, version])
   @@index([projectionSha256])
@@ -532,15 +549,15 @@ model WorkflowApprovedSnapshot {
 }
 
 model WorkflowPublicVerificationCapability {
-  id                  String                   @id @default(cuid())
-  snapshotId          String                   @unique
-  snapshot            WorkflowApprovedSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
-  publicNonce         String                   @unique
-  tokenDigest         String                   @unique
-  attestationKeyId    String
-  issuedAt            DateTime                 @default(now())
-  revokedAt           DateTime?
-  replacedAt          DateTime?
+  id                   String                   @id @default(cuid())
+  snapshotId           String                   @unique
+  snapshot             WorkflowApprovedSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  publicNonce          String                   @unique
+  tokenDigest          String                   @unique
+  attestationKeyId     String
+  issuedAt             DateTime                 @default(now())
+  revokedAt            DateTime?
+  replacedAt           DateTime?
   replacedBySnapshotId String?
 
   @@index([revokedAt, replacedAt])
@@ -548,34 +565,34 @@ model WorkflowPublicVerificationCapability {
 }
 
 model WorkflowPublicVerificationRateLimit {
-  key             String   @id
-  attempts        Int      @default(0)
-  windowStartedAt DateTime @default(now())
+  key             String    @id
+  attempts        Int       @default(0)
+  windowStartedAt DateTime  @default(now())
   blockedUntil    DateTime?
-  updatedAt       DateTime @updatedAt
+  updatedAt       DateTime  @updatedAt
 
   @@index([updatedAt])
 }
 
 model WorkflowSigningEvent {
-  id                   String                   @id @default(cuid())
+  id                   String                    @id @default(cuid())
   snapshotId           String?
   snapshot             WorkflowApprovedSnapshot? @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
   requestId            String
-  request              WorkflowRequest          @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  request              WorkflowRequest           @relation(fields: [requestId], references: [id], onDelete: Restrict)
   version              Int
   role                 String
   actorId              String
-  actor                User                     @relation("WorkflowSigningEventActor", fields: [actorId], references: [id], onDelete: Restrict)
+  actor                User                      @relation("WorkflowSigningEventActor", fields: [actorId], references: [id], onDelete: Restrict)
   signaturePngData     Bytes
   signatureImageSha256 String
-  legalCommitment      Boolean                  @default(true)
+  legalCommitment      Boolean                   @default(true)
   previousEventHash    String?
   eventHash            String
-  pinVerified          Boolean                  @default(true)
+  pinVerified          Boolean                   @default(true)
   signerIpNormalized   String?
-  signerIpSource       String                   @default("UNAVAILABLE")
-  signedAt             DateTime                 @default(now())
+  signerIpSource       String                    @default("UNAVAILABLE")
+  signedAt             DateTime                  @default(now())
 
   @@unique([requestId, version, role])
   @@index([snapshotId, role])
@@ -601,11 +618,11 @@ model WorkflowSigningLifecycle {
 }
 
 model WorkflowPhysicalScanBatch {
-  id                 String                    @id @default(cuid())
+  id                 String                              @id @default(cuid())
   requestId          String
-  request            WorkflowRequest           @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  request            WorkflowRequest                     @relation(fields: [requestId], references: [id], onDelete: Restrict)
   version            Int
-  status             String                    @default("PENDING")
+  status             String                              @default("PENDING")
   keeperDeclared     String
   locationDeclared   String
   keeperNormalized   String?
@@ -615,7 +632,7 @@ model WorkflowPhysicalScanBatch {
   confirmedById      String?
   confirmedAt        DateTime?
   supersededAt       DateTime?
-  createdAt          DateTime                  @default(now())
+  createdAt          DateTime                            @default(now())
   files              WorkflowPhysicalScanFile[]
   transitions        WorkflowPhysicalSigningTransition[]
 
@@ -737,31 +754,31 @@ model WorkflowNotificationDelivery {
 }
 
 model WorkflowTemplate {
-  id               String            @id @default(cuid())
-  familyId         String
-  category         String            @default("")
-  purpose          String            @default("")
-  changeNote       String            @default("")
-  requirements     Json?
-  kind             String
-  name             String
-  version          Int
-  parentId         String?
-  ownerId          String
-  accountantId     String
-  ceoId            String
-  signerNames      String
-  instructions     String
-  requiresExecutionTracking Boolean @default(false)
-  fileId           String?
-  ownerConfirmedAt DateTime?
-  publishedAt      DateTime?
-  revision         Int               @default(0)
-  createdBy        String
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  requests         WorkflowRequest[]
-  files            WorkflowFile[]
+  id                        String            @id @default(cuid())
+  familyId                  String
+  category                  String            @default("")
+  purpose                   String            @default("")
+  changeNote                String            @default("")
+  requirements              Json?
+  kind                      String
+  name                      String
+  version                   Int
+  parentId                  String?
+  ownerId                   String
+  accountantId              String
+  ceoId                     String
+  signerNames               String
+  instructions              String
+  requiresExecutionTracking Boolean           @default(false)
+  fileId                    String?
+  ownerConfirmedAt          DateTime?
+  publishedAt               DateTime?
+  revision                  Int               @default(0)
+  createdBy                 String
+  createdAt                 DateTime          @default(now())
+  updatedAt                 DateTime          @updatedAt
+  requests                  WorkflowRequest[]
+  files                     WorkflowFile[]
 
   @@unique([familyId, version])
   @@index([ownerId, publishedAt])
@@ -860,27 +877,29 @@ model QuotationTemplateProposal {
 }
 
 model CostFlowCash {
-  id                    String                   @id @default(cuid())
+  id                    String                     @id @default(cuid())
   projectId             String
-  project               Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  project               Project                    @relation(fields: [projectId], references: [id], onDelete: Restrict)
   requestId             String
-  request               WorkflowRequest          @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  request               WorkflowRequest            @relation(fields: [requestId], references: [id], onDelete: Restrict)
   recipientKey          String
   direction             String
-  channel               String                   @default("LEGACY")
+  channel               String                     @default("LEGACY")
   amount                String // actual source decimal, never IEEE Float or auto-rounded receipt
   reference             String
-  idempotencyKey        String                   @default(uuid())
-  commandFingerprint    String                   @default("LEGACY")
+  idempotencyKey        String                     @default(uuid())
+  commandFingerprint    String                     @default("LEGACY")
   allocations           Json
   evidenceId            String
   occurredAt            DateTime
   confirmedBy           String
-  createdAt             DateTime                 @default(now())
+  createdAt             DateTime                   @default(now())
   normalizedAllocations CostFlowCashAllocation[]
+  settlementAllocations SettlementCashAllocation[]
 
   @@unique([projectId, idempotencyKey])
   @@unique([projectId, reference])
+  @@unique([id, projectId, recipientKey])
   @@index([projectId, recipientKey])
   @@index([projectId, requestId, recipientKey, direction])
 }
@@ -933,21 +952,23 @@ model PaymentRecipientSnapshot {
 }
 
 model CostFlowCashAllocation {
-  id            String             @id @default(cuid())
-  projectId     String
-  project       Project            @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  cashId        String
-  cash          CostFlowCash       @relation(fields: [cashId], references: [id], onDelete: Restrict)
-  requestId     String
-  request       WorkflowRequest    @relation(fields: [requestId], references: [id], onDelete: Restrict)
-  requestLineId String
-  requestLine   PaymentRequestLine @relation(fields: [requestLineId], references: [id], onDelete: Restrict)
-  recipientKey  String
-  direction     String
-  amount        String
-  createdAt     DateTime           @default(now())
+  id              String             @id @default(cuid())
+  projectId       String
+  project         Project            @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  cashId          String
+  cash            CostFlowCash       @relation(fields: [cashId], references: [id], onDelete: Restrict)
+  requestId       String
+  request         WorkflowRequest    @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  requestLineId   String
+  requestLine     PaymentRequestLine @relation(fields: [requestLineId], references: [id], onDelete: Restrict)
+  recipientKey    String
+  direction       String
+  amount          String
+  createdAt       DateTime           @default(now())
+  settlementLocks SettlementLock[]
 
   @@unique([cashId, requestLineId])
+  @@unique([id, projectId, recipientKey])
   @@index([projectId, requestId, recipientKey, direction])
   @@index([requestLineId, direction])
 }
@@ -982,8 +1003,10 @@ model AdvanceApplication {
   amount           String
   createdBy        String
   createdAt        DateTime           @default(now())
+  settlementLocks  SettlementLock[]
 
   @@unique([advanceLineId, expenseId])
+  @@unique([id, projectId, recipientKey])
   @@index([projectId, recipientKey])
   @@index([advanceRequestId, createdAt])
   @@index([expenseId])
@@ -1007,6 +1030,7 @@ model CostFlowEvidence {
   actualCostLinks      ActualCostEvidenceLink[]
   customerLiquidations CustomerLiquidation[]
   customerCashIns      CustomerCashIn[]
+  settlementEvidence   SettlementEvidence[]
 
   @@index([projectId, requestId])
 }
@@ -1112,25 +1136,27 @@ model ActualCostEvidenceLink {
 }
 
 model ActualCostApplication {
-  id           String             @id @default(cuid())
-  projectId    String
-  project      Project            @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  lineId       String
-  line         ActualCostLine     @relation(fields: [lineId], references: [id], onDelete: Restrict)
-  versionId    String
-  version      ActualCostVersion  @relation(fields: [versionId], references: [id], onDelete: Restrict)
-  approvalId   String
-  approval     ActualCostApproval @relation(fields: [approvalId], references: [id], onDelete: Restrict)
-  requestId    String
-  request      WorkflowRequest    @relation("ActualCostApplicationRequest", fields: [requestId], references: [id], onDelete: Restrict)
-  recipientKey String
-  amount       String
-  state        String             @default("ACTIVE")
-  createdById  String
-  createdAt    DateTime           @default(now())
-  releasedAt   DateTime?
+  id              String             @id @default(cuid())
+  projectId       String
+  project         Project            @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  lineId          String
+  line            ActualCostLine     @relation(fields: [lineId], references: [id], onDelete: Restrict)
+  versionId       String
+  version         ActualCostVersion  @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  approvalId      String
+  approval        ActualCostApproval @relation(fields: [approvalId], references: [id], onDelete: Restrict)
+  requestId       String
+  request         WorkflowRequest    @relation("ActualCostApplicationRequest", fields: [requestId], references: [id], onDelete: Restrict)
+  recipientKey    String
+  amount          String
+  state           String             @default("ACTIVE")
+  createdById     String
+  createdAt       DateTime           @default(now())
+  releasedAt      DateTime?
+  settlementLocks SettlementLock[]
 
   @@unique([versionId, requestId])
+  @@unique([id, projectId, recipientKey])
   @@index([projectId, recipientKey, state])
   @@index([requestId, state])
 }
@@ -1210,6 +1236,194 @@ model CustomerAcceptanceExport {
 
   @@unique([snapshotId, format])
   @@index([createdAt])
+}
+
+// Phase 10 uses append-only relations for settlement and financial close.
+// Producer approval, cash, signing, task, and lifecycle states remain unchanged.
+model ProjectSettlementDossier {
+  id            String                     @id @default(cuid())
+  projectId     String                     @unique
+  project       Project                    @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  createdById   String
+  createdBy     User                       @relation("SettlementDossierCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt     DateTime                   @default(now())
+  versions      ProjectSettlementVersion[]
+  closeRequests FinancialCloseRequest[]
+
+  @@unique([id, projectId])
+  @@index([createdById, createdAt])
+}
+
+model ProjectSettlementVersion {
+  id                 String                          @id @default(cuid())
+  projectId          String
+  project            Project                         @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  dossierId          String
+  dossier            ProjectSettlementDossier        @relation(fields: [dossierId, projectId], references: [id, projectId], onDelete: Restrict)
+  requestId          String
+  request            WorkflowRequest                 @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  version            Int
+  attemptId          String
+  canonicalHash      String
+  createdById        String
+  createdBy          User                            @relation("SettlementVersionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  supersedesId       String?                         @unique
+  supersedes         ProjectSettlementVersion?       @relation("SettlementVersionReplacement", fields: [supersedesId], references: [id], onDelete: Restrict)
+  replacedBy         ProjectSettlementVersion?       @relation("SettlementVersionReplacement")
+  replacementReason  String?
+  replacementActorId String?
+  replacementActor   User?                           @relation("SettlementReplacementActor", fields: [replacementActorId], references: [id], onDelete: Restrict)
+  replacedAt         DateTime?
+  createdAt          DateTime                        @default(now())
+  obligations        SettlementRecipientObligation[]
+  locks              SettlementLock[]
+  evidence           SettlementEvidence[]
+  exports            SettlementExportAudit[]
+
+  @@unique([dossierId, version])
+  @@unique([projectId, attemptId])
+  @@unique([id, projectId])
+  @@index([projectId, createdAt])
+  @@index([requestId])
+  @@index([replacementActorId, replacedAt])
+}
+
+model SettlementRecipientObligation {
+  id               String                     @id @default(cuid())
+  projectId        String
+  project          Project                    @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  dossierVersionId String
+  dossierVersion   ProjectSettlementVersion   @relation(fields: [dossierVersionId, projectId], references: [id, projectId], onDelete: Restrict)
+  recipientKey     String
+  recipientType    String
+  direction        String
+  approvedAcGross  String
+  disbursedAdvance String
+  amountDue        String
+  createdAt        DateTime                   @default(now())
+  cashAllocations  SettlementCashAllocation[]
+  locks            SettlementLock[]
+
+  @@unique([dossierVersionId, recipientKey])
+  @@unique([id, projectId, recipientKey])
+  @@index([projectId, recipientKey])
+}
+
+model SettlementCashAllocation {
+  id                 String                        @id @default(cuid())
+  projectId          String
+  project            Project                       @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  obligationId       String
+  recipientKey       String
+  obligation         SettlementRecipientObligation @relation(fields: [obligationId, projectId, recipientKey], references: [id, projectId, recipientKey], onDelete: Restrict)
+  cashId             String
+  cash               CostFlowCash                  @relation(fields: [cashId, projectId, recipientKey], references: [id, projectId, recipientKey], onDelete: Restrict)
+  amount             String
+  idempotencyKey     String
+  commandFingerprint String
+  createdAt          DateTime                      @default(now())
+
+  @@unique([projectId, idempotencyKey])
+  @@unique([cashId, obligationId])
+  @@index([projectId, obligationId, recipientKey])
+}
+
+model SettlementLock {
+  id                      String                        @id @default(cuid())
+  projectId               String
+  project                 Project                       @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  dossierVersionId        String
+  dossierVersion          ProjectSettlementVersion      @relation(fields: [dossierVersionId, projectId], references: [id, projectId], onDelete: Restrict)
+  obligationId            String
+  recipientKey            String
+  obligation              SettlementRecipientObligation @relation(fields: [obligationId, projectId, recipientKey], references: [id, projectId, recipientKey], onDelete: Restrict)
+  actualCostApplicationId String?                       @unique
+  actualCostApplication   ActualCostApplication?        @relation(fields: [actualCostApplicationId, projectId, recipientKey], references: [id, projectId, recipientKey], onDelete: Restrict)
+  advanceApplicationId    String?                       @unique
+  advanceApplication      AdvanceApplication?           @relation(fields: [advanceApplicationId, projectId, recipientKey], references: [id, projectId, recipientKey], onDelete: Restrict)
+  sourceCashAllocationId  String?
+  sourceCashAllocation    CostFlowCashAllocation?       @relation(fields: [sourceCashAllocationId, projectId, recipientKey], references: [id, projectId, recipientKey], onDelete: Restrict)
+  lockedAt                DateTime                      @default(now())
+
+  @@unique([dossierVersionId, actualCostApplicationId])
+  @@unique([dossierVersionId, advanceApplicationId])
+  @@index([projectId, obligationId, recipientKey])
+  @@index([sourceCashAllocationId])
+}
+
+model SettlementEvidence {
+  id               String                   @id @default(cuid())
+  projectId        String
+  project          Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  dossierVersionId String
+  dossierVersion   ProjectSettlementVersion @relation(fields: [dossierVersionId, projectId], references: [id, projectId], onDelete: Restrict)
+  evidenceId       String
+  evidence         CostFlowEvidence         @relation(fields: [evidenceId], references: [id], onDelete: Restrict)
+  kind             String
+  sha256           String
+  addedById        String
+  addedBy          User                     @relation("SettlementEvidenceActor", fields: [addedById], references: [id], onDelete: Restrict)
+  createdAt        DateTime                 @default(now())
+
+  @@unique([dossierVersionId, evidenceId, kind])
+  @@index([projectId, dossierVersionId])
+  @@index([addedById, createdAt])
+}
+
+model FinancialCloseRequest {
+  id            String                   @id @default(cuid())
+  projectId     String
+  project       Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  dossierId     String
+  dossier       ProjectSettlementDossier @relation(fields: [dossierId, projectId], references: [id, projectId], onDelete: Restrict)
+  attemptId     String
+  action        String
+  reason        String
+  requestedById String
+  requestedBy   User                     @relation("FinancialCloseRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  createdAt     DateTime                 @default(now())
+  events        FinancialCloseEvent[]
+
+  @@unique([projectId, attemptId])
+  @@index([projectId, action, createdAt])
+  @@index([requestedById, createdAt])
+}
+
+model FinancialCloseEvent {
+  id             String                @id @default(cuid())
+  closeRequestId String
+  closeRequest   FinancialCloseRequest @relation(fields: [closeRequestId], references: [id], onDelete: Restrict)
+  decision       String
+  reason         String
+  actorId        String
+  actor          User                  @relation("FinancialCloseEventActor", fields: [actorId], references: [id], onDelete: Restrict)
+  eventHash      String                @unique
+  createdAt      DateTime              @default(now())
+
+  @@index([closeRequestId, createdAt])
+  @@index([actorId, createdAt])
+}
+
+model SettlementExportAudit {
+  id                 String                   @id @default(cuid())
+  projectId          String
+  project            Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  dossierVersionId   String
+  dossierVersion     ProjectSettlementVersion @relation(fields: [dossierVersionId, projectId], references: [id, projectId], onDelete: Restrict)
+  family             String
+  format             String
+  canonicalHash      String
+  approvedSnapshotId String
+  approvedSnapshot   WorkflowApprovedSnapshot @relation(fields: [approvedSnapshotId], references: [id], onDelete: Restrict)
+  idempotencyKey     String
+  createdById        String
+  createdBy          User                     @relation("SettlementExportActor", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt          DateTime                 @default(now())
+
+  @@unique([projectId, idempotencyKey])
+  @@index([dossierVersionId, family, format])
+  @@index([approvedSnapshotId])
+  @@index([createdById, createdAt])
 }
 
 model CostFlowHistory {
