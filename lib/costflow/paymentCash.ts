@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { ProjectUpload } from "@/lib/projectFiles";
 import { authorizeSettlementCash } from "./paymentSettlement";
+import { executeSettlementCash } from "./settlementCash";
 
 type Actor = { id: string; role: string };
 type AllocationInput = { requestLineId: string; amount: string };
@@ -139,6 +140,9 @@ async function executeOnce(projectId: string, expectedVersion: number, actor: Ac
 }
 
 export async function executePaymentCash(projectId: string, expectedVersion: number, actor: Actor, form: FormData, upload: ProjectUpload | null) {
+  if (text(form, "settlementObligationId")) {
+    return executeSettlementCash(projectId, actor, form, upload);
+  }
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try { return await executeOnce(projectId, expectedVersion, actor, form, upload); }
     catch (error) {

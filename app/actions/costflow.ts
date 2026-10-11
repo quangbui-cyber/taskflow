@@ -124,7 +124,7 @@ export async function costFlowAction(_previous: CostFlowActionState, form: FormD
   if (!Number.isSafeInteger(version) || version < 0) return { error: "Phiên bản hồ sơ không hợp lệ." };
   try {
     const upload = await readProjectUpload(form.get("proof"));
-    const result = String(form.get("command") ?? "") === "CASH"
+    const result = ["CASH", "SETTLEMENT_CASH"].includes(String(form.get("command") ?? ""))
       ? await executePaymentCash(projectId, version, actor, form, upload)
       : await executeFinance(projectId, version, actor, form, upload);
     await dispatchWorkflowNotifications(result.requestId).catch(() => undefined);

@@ -1,5 +1,11 @@
 import { projectPaymentDossiers, type LegacyPaymentRecord } from "./paymentCompatibility";
-import { derivePaymentProgress, type PaymentProgress } from "./paymentCash";
+import {
+  settlementObligationProgress,
+  type SettlementCashAllocationSource,
+  type SettlementObligationCashSource,
+} from "./settlementCash";
+
+export type PaymentProgress = "CHUA_CHI" | "DANG_CHI_MOT_PHAN" | "DA_CHI_DU";
 
 export type BeneficiaryVerification = "VERIFIED" | "UNVERIFIED" | "NOT_APPLICABLE" | "UNKNOWN";
 export type FinancialCloseState = "OPEN" | "CLOSED";
@@ -41,7 +47,7 @@ export type PaymentLedgerRow = {
   recipientKey: string;
   recipientLabel: string;
   recipientType: string;
-  provenance: "normalized" | "legacy";
+  provenance: "normalized" | "legacy" | "settlement";
   needsReview: boolean;
   approvalState: string;
   beneficiaryVerification: BeneficiaryVerification;
@@ -53,10 +59,15 @@ export type PaymentLedgerRow = {
   remainingStandardOut: string | null;
   cashProgress: PaymentProgress | "UNKNOWN";
   approvedAcSourceStatus: "UNAVAILABLE";
-  additionalOutBalance: null;
-  refundInBalance: null;
+  additionalOutBalance: string | null;
+  refundInBalance: string | null;
   financialCloseState: FinancialCloseState;
   evidenceLinks: { id: string; label: string }[];
+  dossierId?: string;
+  dossierVersionId?: string;
+  obligationId?: string;
+  bankName?: string | null;
+  accountLast4?: string | null;
 };
 
 type Input = {
@@ -64,6 +75,10 @@ type Input = {
   legacy: (LegacyPaymentRecord & { title?: string; state?: string })[];
   cash: PaymentLedgerCashRecord[];
   financialCloseState: FinancialCloseState;
+  settlement?: {
+    obligations: SettlementObligationCashSource[];
+    allocations: SettlementCashAllocationSource[];
+  };
 };
 
 function exactNonNegative(value: string) {
@@ -73,6 +88,10 @@ function exactNonNegative(value: string) {
 
 function sum(values: string[]) {
   return values.reduce((total, value) => total + exactNonNegative(value), BigInt(0));
+}
+
+function derivePaymentProgress(approvedAmount: string, paidOutAmount: string) {
+  return settlementObligationProgress(approvedAmount, paidOutAmount);
 }
 
 export function projectPaymentLedger(input: Input): PaymentLedgerRow[] {
@@ -90,7 +109,7 @@ export function projectPaymentLedger(input: Input): PaymentLedgerRow[] {
   const normalizedById = new Map(input.normalized.map(record => [record.requestId, record]));
   const legacyById = new Map(input.legacy.map(record => [record.id, record]));
 
-  return compatibility.flatMap(projected => {
+  const ordinaryRows = compatibility.flatMap(projected => {
     const normalized = normalizedById.get(projected.requestId);
     if (!normalized) {
       const legacy = legacyById.get(projected.requestId);
@@ -154,7 +173,7 @@ export function projectPaymentLedger(input: Input): PaymentLedgerRow[] {
         grossRefundedIn: refundedIn.toString(),
         netCash: (standardOut + additionalOut - refundedIn).toString(),
         remainingStandardOut: progress.remainingAmount,
-        cashProgress: progress.progress,
+        cashProgress: progress.cashProgress,
         approvedAcSourceStatus: "UNAVAILABLE" as const,
         additionalOutBalance: null,
         refundInBalance: null,
@@ -162,5 +181,92 @@ export function projectPaymentLedger(input: Input): PaymentLedgerRow[] {
         evidenceLinks: evidenceIds.map(id => ({ id, label: "Chứng từ giao dịch" })),
       };
     });
+  });
+  const settlementRows = projectSettlementPendingDisbursements(input.settlement ?? { obligations: [], allocations: [] });
+  return [...ordinaryRows, ...settlementRows.map(row => ({
+    projectId: row.projectId,
+    requestId: row.requestId,
+    kind: "SETTLEMENT_ADDITIONAL_OUT",
+    title: "Giải ngân bổ sung theo hồ sơ quyết toán",
+    milestone: null,
+    recipientKey: row.recipientKey,
+    recipientLabel: row.recipientLabel,
+    recipientType: row.recipientType,
+    provenance: "settlement" as const,
+    needsReview: false,
+    approvalState: "APPROVED",
+    beneficiaryVerification: row.recipientType === "VENDOR" ? "VERIFIED" as const : "NOT_APPLICABLE" as const,
+    approvedAmount: row.approvedAmount,
+    grossStandardOut: null,
+    grossAdditionalOut: row.cumulativePaid,
+    grossRefundedIn: "0",
+    netCash: row.cumulativePaid,
+    remainingStandardOut: row.remainingAmount,
+    cashProgress: row.cashProgress,
+    approvedAcSourceStatus: "UNAVAILABLE" as const,
+    additionalOutBalance: row.remainingAmount,
+    refundInBalance: null,
+    financialCloseState: input.financialCloseState,
+    evidenceLinks: [],
+    dossierId: row.dossierId,
+    dossierVersionId: row.dossierVersionId,
+    obligationId: row.obligationId,
+    bankName: row.bankName,
+    accountLast4: row.accountLast4,
+  }))];
+}
+
+export type SettlementPendingDisbursementRow = {
+  projectId: string;
+  requestId: string;
+  dossierId: string;
+  dossierVersionId: string;
+  obligationId: string;
+  recipientKey: string;
+  recipientType: string;
+  recipientLabel: string;
+  bankName: string | null;
+  accountLast4: string | null;
+  direction: "OUT";
+  approvedAmount: string;
+  cumulativePaid: string;
+  remainingAmount: string;
+  cashProgress: PaymentProgress;
+  sourceKind: "SETTLEMENT";
+};
+
+export function projectSettlementPendingDisbursements(input: {
+  obligations: SettlementObligationCashSource[];
+  allocations: SettlementCashAllocationSource[];
+}): SettlementPendingDisbursementRow[] {
+  return input.obligations.flatMap(obligation => {
+    if (obligation.sourceKind !== "SETTLEMENT" || !obligation.locked || obligation.direction !== "OUT") return [];
+    const cumulative = input.allocations
+      .filter(allocation => allocation.projectId === obligation.projectId
+        && allocation.dossierVersionId === obligation.dossierVersionId
+        && allocation.obligationId === obligation.obligationId
+        && allocation.recipientKey === obligation.recipientKey
+        && allocation.direction === obligation.direction)
+      .reduce((total, allocation) => total + BigInt(allocation.amount), BigInt(0));
+    const progress = settlementObligationProgress(obligation.amountDue, cumulative.toString());
+    if (progress.remainingAmount === "0") return [];
+    return [{
+      projectId: obligation.projectId,
+      requestId: obligation.requestId,
+      dossierId: obligation.dossierId,
+      dossierVersionId: obligation.dossierVersionId,
+      obligationId: obligation.obligationId,
+      recipientKey: obligation.recipientKey,
+      recipientType: obligation.recipientType,
+      recipientLabel: obligation.recipientName,
+      bankName: obligation.bankName,
+      accountLast4: obligation.accountLast4,
+      direction: "OUT" as const,
+      approvedAmount: progress.approvedAmount,
+      cumulativePaid: progress.cumulativePaid,
+      remainingAmount: progress.remainingAmount,
+      cashProgress: progress.cashProgress,
+      sourceKind: "SETTLEMENT" as const,
+    }];
   });
 }

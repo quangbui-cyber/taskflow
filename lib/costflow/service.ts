@@ -125,6 +125,29 @@ export async function loadFinance(projectId: string, actor: Actor) {
       diff: parent ? diffPaymentDossiers(paymentSnapshot(parent), paymentSnapshot(request)) : null,
     };
   });
+  const settlementQueueVersion = fullAccess ? await prisma.projectSettlementVersion.findFirst({
+    where: { projectId, request: { state: "APPROVED" }, locks: { some: {} } },
+    orderBy: { version: "desc" },
+    include: {
+      dossier: { select: { id: true } },
+      request: { select: { id: true } },
+      obligations: {
+        include: {
+          locks: { select: { id: true } },
+          cashAllocations: { include: { cash: { select: { direction: true, evidenceId: true } } } },
+        },
+      },
+    },
+  }) : null;
+  const settlementRecipientSnapshots = settlementQueueVersion ? await prisma.paymentRecipientSnapshot.findMany({
+    where: { projectId, recipientKey: { in: settlementQueueVersion.obligations.map(item => item.recipientKey) } },
+    orderBy: { createdAt: "desc" },
+    select: { recipientKey: true, displayName: true, bankName: true, accountLast4: true },
+  }) : [];
+  const settlementRecipientByKey = new Map<string, typeof settlementRecipientSnapshots[number]>();
+  for (const recipient of settlementRecipientSnapshots) {
+    if (!settlementRecipientByKey.has(recipient.recipientKey)) settlementRecipientByKey.set(recipient.recipientKey, recipient);
+  }
   const paymentLedger = projectPaymentLedger({
     normalized: normalizedPaymentRequests.map(request => ({
       requestId: request.id,
@@ -146,6 +169,41 @@ export async function loadFinance(projectId: string, actor: Actor) {
     legacy: visible.map(request => ({ id: request.id, projectId: request.projectId, kind: request.kind, title: request.title, state: request.state, payload: request.payload })),
     cash: cash.map(item => ({ id: item.id, projectId: item.projectId, requestId: item.requestId, recipientKey: item.recipientKey, direction: item.direction, amount: item.amount, evidenceId: item.evidenceId, normalizedAllocations: item.normalizedAllocations })),
     financialCloseState: savedData?.closed ? "CLOSED" : "OPEN",
+    settlement: settlementQueueVersion ? {
+      obligations: settlementQueueVersion.obligations.map(obligation => {
+        const snapshot = settlementRecipientByKey.get(obligation.recipientKey);
+        const vendor = obligation.recipientKey.startsWith("VENDOR:") ? savedData?.beneficiaries.find(item => `VENDOR:${item.id}` === obligation.recipientKey) : undefined;
+        const employee = obligation.recipientKey.startsWith("USER:") ? users.find(item => item.id === obligation.recipientKey.slice(5)) : undefined;
+        return {
+          projectId,
+          dossierId: settlementQueueVersion.dossier.id,
+          dossierVersionId: settlementQueueVersion.id,
+          requestId: settlementQueueVersion.request.id,
+          obligationId: obligation.id,
+          recipientKey: obligation.recipientKey,
+          recipientType: obligation.recipientType,
+          recipientName: snapshot?.displayName ?? vendor?.name ?? employee?.name ?? obligation.recipientKey,
+          bankName: snapshot?.bankName ?? vendor?.bank ?? null,
+          accountLast4: snapshot?.accountLast4 ?? (vendor?.account ? vendor.account.replace(/\D/g, "").slice(-4) || null : null),
+          direction: obligation.direction === "IN" ? "IN" as const : "OUT" as const,
+          amountDue: obligation.amountDue,
+          locked: obligation.locks.length > 0,
+          sourceKind: "SETTLEMENT" as const,
+        };
+      }),
+      allocations: settlementQueueVersion.obligations.flatMap(obligation => obligation.cashAllocations.map(allocation => ({
+        projectId,
+        dossierVersionId: settlementQueueVersion.id,
+        obligationId: obligation.id,
+        recipientKey: obligation.recipientKey,
+        direction: allocation.cash.direction === "IN" ? "IN" as const : "OUT" as const,
+        amount: allocation.amount,
+        cashId: allocation.cashId,
+        idempotencyKey: allocation.idempotencyKey,
+        commandFingerprint: allocation.commandFingerprint,
+        evidenceId: allocation.cash.evidenceId,
+      }))),
+    } : undefined,
   });
   const actualCosts = fullAccess ? await loadActualCosts(projectId, actor, paymentLedger) : null;
   const [customerLiquidations, customerCashIns] = fullAccess ? await Promise.all([
