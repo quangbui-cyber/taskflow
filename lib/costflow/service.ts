@@ -3,7 +3,7 @@ import { randomUUID, createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { calculateCost, calculateLineCost, compare, decimal, round, sum } from "./money";
-import { closeProjectRequest, decideFinancialClose, twoWayCloseBlockers, type FinancialCloseRequestRecord, type TwoWayCloseInput } from "./reconciliation";
+import { closeProjectRequest, decideFinancialClose, planReopenedDossierDelta, twoWayCloseBlockers, type FinancialCloseRequestRecord, type ReopenedDossierSource, type TwoWayCloseInput } from "./reconciliation";
 import { emptyFinance, type FinanceData, type IcLine, type QuotationLine, type RequestPayload } from "./types";
 import { decide, validateSteps, type ApprovalStep, type Decision } from "@/lib/workflow/approval";
 import type { ProjectUpload } from "@/lib/projectFiles";
@@ -48,7 +48,7 @@ function calendarDate(value: string, label: string) {
   return result;
 }
 
-const FINANCIAL_CLOSE_COMMANDS = new Set(["REQUEST_CLOSE_PROJECT", "REQUEST_REOPEN_PROJECT", "DECIDE_FINANCIAL_CLOSE"]);
+const FINANCIAL_CLOSE_COMMANDS = new Set(["REQUEST_CLOSE_PROJECT", "REQUEST_REOPEN_PROJECT", "DECIDE_FINANCIAL_CLOSE", "CREATE_REOPENED_SETTLEMENT_VERSION"]);
 
 export async function assertCostFlowMutationAllowed(projectId: string, command: string) {
   const workspace = await prisma.costFlowWorkspace.findUnique({ where: { projectId }, select: { data: true } });
@@ -631,6 +631,75 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         if (decision === "APPROVE") data.closed = next.financialCloseState === "CLOSED";
         savedCloseRequestId = stored.id;
         financialCloseState = data.closed ? "CLOSED" : "OPEN";
+        break;
+      }
+      case "CREATE_REOPENED_SETTLEMENT_VERSION": {
+        if (data.closed) throw new Error("Tài chính phải được Quản lý duyệt mở lại trước khi ghi nhận nguồn mới.");
+        if (actor.id !== project.ownerId || currentActor.role !== "ACCOUNT") throw new Error("Chỉ Account/Project Owner được lập phiên bản quyết toán sau mở lại.");
+        const approvedReopen = await tx.financialCloseRequest.findFirst({
+          where: { projectId, action: "REOPEN", events: { some: { decision: "APPROVE", actorId: data.config.managerId } } },
+          orderBy: { createdAt: "desc" },
+          include: { events: { where: { decision: "APPROVE" }, orderBy: { createdAt: "desc" }, take: 1 } },
+        });
+        if (!approvedReopen) throw new Error("Chưa có quyết định REOPEN được Quản lý phê duyệt.");
+        const dossier = await tx.projectSettlementDossier.findUnique({
+          where: { projectId },
+          include: { versions: { orderBy: { version: "desc" }, include: { request: { select: { state: true } } } } },
+        });
+        const latestVersion = dossier?.versions[0];
+        if (!dossier || !latestVersion || latestVersion.request.state !== "APPROVED") throw new Error("Phiên bản quyết toán nền phải được duyệt bất biến trước khi thêm nguồn mới.");
+        const priorLocks = await tx.settlementLock.findMany({
+          where: { projectId, dossierVersion: { dossierId: dossier.id } },
+          include: { actualCostApplication: { include: { line: { select: { stableLineId: true } }, version: { select: { id: true } }, approval: { select: { id: true } } } } },
+        });
+        const lockedStableLines = new Set(priorLocks.flatMap(lock => lock.actualCostApplication ? [lock.actualCostApplication.line.stableLineId] : []));
+        const lockedVersionIds = new Set(priorLocks.flatMap(lock => lock.actualCostApplication ? [lock.actualCostApplication.version.id] : []));
+        const lines = await tx.actualCostLine.findMany({
+          where: { projectId },
+          include: { versions: { orderBy: { version: "desc" }, take: 1, include: { approvals: true, evidenceLinks: { include: { evidence: true } } } } },
+          orderBy: { stableLineId: "asc" },
+        });
+        const approved = lines.flatMap(line => {
+          const version = line.versions[0];
+          const approval = version?.approvals[0];
+          return version && approval && version.version === line.currentVersion && version.state === "APPROVED" && approval.action === "APPROVED"
+            ? [{ line, version, approval }]
+            : [];
+        });
+        const changedLockedSource = approved.find(item => lockedStableLines.has(item.line.stableLineId) && !lockedVersionIds.has(item.version.id));
+        if (changedLockedSource) throw new Error("Chưa có thẩm quyền adjustment cho dòng AC đã chi/đã khóa; không được đổi amount, recipient hoặc provenance.");
+        const delta = approved.filter(item => !lockedVersionIds.has(item.version.id) && !lockedStableLines.has(item.line.stableLineId));
+        const candidates: ReopenedDossierSource[] = delta.map(item => ({ identity: `AC:${item.version.id}`, recipientKey: item.line.recipientKey, amount: item.version.amount, provenance: item.approval.id, approvalState: "DD_APPROVED" }));
+        const priorSources = priorLocks.flatMap(lock => lock.actualCostApplication ? [{ identity: `AC:${lock.actualCostApplication.version.id}`, recipientKey: lock.recipientKey, amount: lock.actualCostApplication.amount, provenance: lock.actualCostApplication.approval.id }] : []);
+        const plan = planReopenedDossierDelta({
+          prior: { stableDossierId: dossier.id, versions: dossier.versions.map(version => ({ id: version.id, sources: version.id === latestVersion.id ? priorSources : [] })) },
+          requestedDossierId: dossier.id,
+          financialCloseState: "OPEN",
+          reopenDecision: { decision: "APPROVE", actorId: approvedReopen.events[0].actorId },
+          candidates,
+        });
+        const stepsForDelta = await ordinarySteps();
+        const deltaRequest = await tx.workflowRequest.create({ data: { projectId, module: "COSTFLOW", kind: "SETTLEMENT", title: `Hồ sơ quyết toán bổ sung v${latestVersion.version + 1}`, creatorId: actor.id, cashAssigneeId: actor.id, state: "DRAFT", steps: json(stepsForDelta), payload: json({}) } });
+        const applications = [] as Array<{ id: string; recipientKey: string; versionId: string; approvalId: string }>;
+        for (const item of delta) {
+          const application = await tx.actualCostApplication.create({ data: { projectId, lineId: item.line.id, versionId: item.version.id, approvalId: item.approval.id, requestId: deltaRequest.id, recipientKey: item.line.recipientKey, amount: item.version.amount, createdById: actor.id }, select: { id: true, recipientKey: true, versionId: true, approvalId: true } });
+          applications.push(application);
+        }
+        const sourceManifest = { actualCosts: applications.map(application => ({ projectId, recipientKey: application.recipientKey, applicationId: application.id, versionId: application.versionId, approvalId: application.approvalId })), advanceAllocations: [] };
+        const projectionHash = createHash("sha256").update(JSON.stringify({ baselineVersionIds: plan.delta.baselineVersionIds, sourceManifest })).digest("hex");
+        const createdVersion = await tx.projectSettlementVersion.create({ data: { projectId, dossierId: dossier.id, requestId: deltaRequest.id, version: latestVersion.version + 1, attemptId: randomUUID(), canonicalHash: projectionHash, createdById: actor.id, supersedesId: latestVersion.id, replacementReason: text(form, "reason") || "Nguồn AC mới sau khi mở lại", replacementActorId: actor.id, replacedAt: new Date() } });
+        const totalsByRecipient = new Map<string, bigint>();
+        for (const item of delta) totalsByRecipient.set(item.line.recipientKey, (totalsByRecipient.get(item.line.recipientKey) ?? BigInt(0)) + BigInt(item.version.amount));
+        for (const [recipientKey, amount] of totalsByRecipient) await tx.settlementRecipientObligation.create({ data: { projectId, dossierVersionId: createdVersion.id, recipientKey, recipientType: recipientKey.startsWith("VENDOR:") ? "VENDOR" : "EMPLOYEE", direction: "ADDITIONAL", approvedAcGross: amount.toString(), disbursedAdvance: "0", amountDue: amount.toString() } });
+        const seenEvidence = new Set<string>();
+        for (const item of delta) for (const link of item.version.evidenceLinks) {
+          const evidenceKey = `${link.evidenceId}:${link.kind}`;
+          if (seenEvidence.has(evidenceKey)) continue;
+          seenEvidence.add(evidenceKey);
+          await tx.settlementEvidence.create({ data: { projectId, dossierVersionId: createdVersion.id, evidenceId: link.evidenceId, kind: link.kind, sha256: link.evidence.sha256, addedById: actor.id } });
+        }
+        await tx.workflowRequest.update({ where: { id: deltaRequest.id }, data: { payload: json({ settlement: { dossierId: dossier.id, dossierVersionId: createdVersion.id, sourceManifest, projectionHash, submitBlockers: [], baselineVersionIds: plan.delta.baselineVersionIds } }) } });
+        affectedRequestId = deltaRequest.id;
         break;
       }
       case "SAVE_CUSTOMER_ACCEPTANCE": {

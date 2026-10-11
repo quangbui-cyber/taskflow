@@ -34,6 +34,39 @@ export type TwoWayCloseInput = {
   };
 };
 
+export type ReopenedDossierSource = { identity: string; recipientKey: string; amount: string; provenance: string; approvalState: string };
+export type ReopenedDossierPrior = {
+  stableDossierId: string;
+  versions: Array<{ id: string; sources: Array<{ identity: string; recipientKey: string; amount: string; provenance: string }>; [key: string]: unknown }>;
+};
+
+export function planReopenedDossierDelta(input: {
+  prior: ReopenedDossierPrior;
+  requestedDossierId: string;
+  financialCloseState: FinancialCloseState;
+  reopenDecision: { decision: string; actorId: string } | null;
+  candidates: ReopenedDossierSource[];
+  changesPaidOrLockedValues?: boolean;
+}) {
+  if (input.requestedDossierId !== input.prior.stableDossierId) throw new Error("Project chỉ được có một hồ sơ dossier ổn định.");
+  if (input.financialCloseState !== "OPEN" || input.reopenDecision?.decision !== "APPROVE") throw new Error("Cần quyết định REOPEN đã được Quản lý phê duyệt.");
+  if (input.changesPaidOrLockedValues) throw new Error("Chưa có thẩm quyền adjustment cho giá trị đã chi hoặc đã khóa.");
+  if (!input.candidates.length) throw new Error("Không có nguồn AC mới được DD duyệt sau khi mở lại.");
+  const priorIdentities = new Set(input.prior.versions.flatMap(version => version.sources.map(source => source.identity)));
+  const seen = new Set<string>();
+  for (const source of input.candidates) {
+    if (source.approvalState !== "DD_APPROVED") throw new Error("Nguồn AC mới chưa được DD duyệt.");
+    if (!source.identity || !source.recipientKey || !source.provenance || !/^\d+$/.test(source.amount)) throw new Error("Nguồn AC mới thiếu định danh, người nhận, số tiền hoặc provenance.");
+    if (priorIdentities.has(source.identity) || seen.has(source.identity)) throw new Error("Nguồn AC trùng/replay hoặc đã có trong phiên bản trước.");
+    seen.add(source.identity);
+  }
+  return {
+    stableDossierId: input.prior.stableDossierId,
+    priorVersions: input.prior.versions,
+    delta: { baselineVersionIds: input.prior.versions.map(version => version.id), sources: input.candidates.map(source => ({ ...source })) },
+  };
+}
+
 export function twoWayCloseBlockers(input: TwoWayCloseInput) {
   const blockers: string[] = [];
   if (!input.dossier || input.dossier.state !== "APPROVED") {

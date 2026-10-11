@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { planReopenedDossierDelta } from "../lib/costflow/service.ts";
+import { planReopenedDossierDelta } from "../lib/costflow/reconciliation.ts";
 
 const prior = {
   stableDossierId: "dossier-1",
