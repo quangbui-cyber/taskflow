@@ -44,6 +44,7 @@ test("payment-read-model: normalized rows win, recipients remain separate and ax
   assert.equal(vendor.additionalOutBalance, null);
   assert.equal(vendor.refundInBalance, null);
   assert.equal("bankName" in vendor, false);
+  assert.equal("accountLast4" in vendor, false);
   assert.equal("accountNumber" in vendor, false);
   assert.deepEqual(vendor.evidenceLinks, [{ id: "proof-a", label: "Chứng từ giao dịch" }]);
 
@@ -77,4 +78,53 @@ test("payment-read-model: project, request, recipient and flow boundaries preven
   assert.equal(b.grossStandardOut, "7000000");
   assert.equal(a.financialCloseState, "CLOSED");
   assert.equal(a.cashProgress, "DANG_CHI_MOT_PHAN");
+});
+
+test("payment-read-model: settlement rows preserve cash provenance without exposing beneficiary bank data", () => {
+  const rows = projectPaymentLedger({
+    normalized: [],
+    legacy: [],
+    cash: [],
+    financialCloseState: "OPEN",
+    settlement: {
+      obligations: [{
+        projectId: "project-a",
+        dossierId: "dossier-a",
+        dossierVersionId: "version-a",
+        requestId: "request-settlement",
+        obligationId: "obligation-a",
+        recipientKey: "VENDOR:a",
+        recipientType: "VENDOR",
+        recipientName: "Vendor A",
+        bankName: "Sensitive Bank",
+        accountLast4: "9876",
+        direction: "OUT",
+        amountDue: "12000000",
+        locked: true,
+        sourceKind: "SETTLEMENT",
+      }],
+      allocations: [],
+    },
+  });
+
+  assert.equal(rows.length, 1);
+  assert.deepEqual({
+    provenance: rows[0].provenance,
+    dossierId: rows[0].dossierId,
+    dossierVersionId: rows[0].dossierVersionId,
+    obligationId: rows[0].obligationId,
+    recipientKey: rows[0].recipientKey,
+    remaining: rows[0].remainingStandardOut,
+  }, {
+    provenance: "settlement",
+    dossierId: "dossier-a",
+    dossierVersionId: "version-a",
+    obligationId: "obligation-a",
+    recipientKey: "VENDOR:a",
+    remaining: "12000000",
+  });
+  const serialized = JSON.stringify(rows[0]);
+  assert.equal("bankName" in rows[0], false);
+  assert.equal("accountLast4" in rows[0], false);
+  assert.doesNotMatch(serialized, /Sensitive Bank|9876|bankName|accountLast4/);
 });

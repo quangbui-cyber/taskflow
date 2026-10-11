@@ -66,8 +66,6 @@ export type PaymentLedgerRow = {
   dossierId?: string;
   dossierVersionId?: string;
   obligationId?: string;
-  bankName?: string | null;
-  accountLast4?: string | null;
 };
 
 type Input = {
@@ -211,8 +209,6 @@ export function projectPaymentLedger(input: Input): PaymentLedgerRow[] {
     dossierId: row.dossierId,
     dossierVersionId: row.dossierVersionId,
     obligationId: row.obligationId,
-    bankName: row.bankName,
-    accountLast4: row.accountLast4,
   }))];
 }
 
@@ -225,8 +221,6 @@ export type SettlementPendingDisbursementRow = {
   recipientKey: string;
   recipientType: string;
   recipientLabel: string;
-  bankName: string | null;
-  accountLast4: string | null;
   direction: "OUT";
   approvedAmount: string;
   cumulativePaid: string;
@@ -259,8 +253,6 @@ export function projectSettlementPendingDisbursements(input: {
       recipientKey: obligation.recipientKey,
       recipientType: obligation.recipientType,
       recipientLabel: obligation.recipientName,
-      bankName: obligation.bankName,
-      accountLast4: obligation.accountLast4,
       direction: "OUT" as const,
       approvedAmount: progress.approvedAmount,
       cumulativePaid: progress.cumulativePaid,

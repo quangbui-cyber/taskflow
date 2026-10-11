@@ -58,6 +58,7 @@ test("payment security: Server Action takes actor from session and never browser
 test("payment security: broad ledger omits bank account and raw evidence bytes", () => {
   const readModel = source("lib/costflow/paymentReadModel.ts");
   assert.doesNotMatch(readModel, /accountNumber|account\s*:/);
+  assert.doesNotMatch(readModel, /accountLast4/);
   assert.doesNotMatch(readModel, /evidenceBytes|\bdata\s*:/);
   assert.doesNotMatch(readModel, /bankName/);
 });

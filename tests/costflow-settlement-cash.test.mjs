@@ -71,8 +71,6 @@ test("settlement cash: positive additional due joins the existing queue with exa
     recipientKey,
     recipientType: "EMPLOYEE",
     recipientLabel: "Nguyen Van A",
-    bankName: "VCB",
-    accountLast4: "1234",
     direction: "OUT",
     approvedAmount: "12000000",
     cumulativePaid: "0",
@@ -80,6 +78,8 @@ test("settlement cash: positive additional due joins the existing queue with exa
     cashProgress: "CHUA_CHI",
     sourceKind: "SETTLEMENT",
   }]);
+  assert.equal("bankName" in rows[0], false);
+  assert.equal("accountLast4" in rows[0], false);
 });
 
 test("settlement cash: persisted REFUND and ADDITIONAL obligations map to real cash directions", () => {
