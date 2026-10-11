@@ -136,6 +136,12 @@ function setMoney(cell: ExcelJS.Cell, value: string) {
   cell.numFmt = "#,##0;[Red]-#,##0";
 }
 
+function cachedFormula(formula: string, result: number) {
+  // ExcelJS drops a numeric 0 during OOXML round-trip; the string form keeps an
+  // explicit cached value while remaining lossless for integer VND.
+  return { formula, result: result === 0 ? "0" : result };
+}
+
 function addSourceMetadata(sheet: ExcelJS.Worksheet, projection: NormalizedSettlementExportProjection) {
   sheet.addRow(["Project", projection.projectName ?? projection.projectId]);
   sheet.addRow(["Dossier version", `${projection.source.dossierVersionId} / v${projection.source.dossierVersion}`]);
@@ -154,15 +160,22 @@ function addSignatureSlots(sheet: ExcelJS.Worksheet, projection: NormalizedSettl
 
 function addSingleFamilySheet(workbook: ExcelJS.Workbook, projection: NormalizedSettlementExportProjection) {
   const sheet = workbook.addWorksheet(titleFor(projection.family).slice(0, 31));
+  const customerSafe = projection.family === "QUOTATION" || projection.family === "CUSTOMER_ACCEPTANCE";
   const heading = sheet.addRow([titleFor(projection.family)]);
   heading.font = { bold: true, size: 16 };
-  addSourceMetadata(sheet, projection);
+  if (customerSafe) {
+    sheet.addRow(["Project", projection.projectName ?? ""]);
+    sheet.addRow(["Phiên bản", `v${projection.source.documentVersion}`]);
+    sheet.addRow(["Ngày duyệt", projection.approvedAt ?? ""]);
+  } else {
+    addSourceMetadata(sheet, projection);
+  }
   sheet.addRow(["STT", "Nội dung", "Người nhận", "Net", "VAT", "Gross"]);
   projection.items.forEach((item, index) => {
     const row = sheet.addRow([]);
     row.getCell(1).value = index + 1;
     setText(row.getCell(2), item.description);
-    setText(row.getCell(3), item.recipientKey);
+    setText(row.getCell(3), customerSafe ? "" : item.recipientKey);
     setMoney(row.getCell(4), item.net);
     setMoney(row.getCell(5), item.vat);
     setMoney(row.getCell(6), item.gross);
@@ -170,7 +183,7 @@ function addSingleFamilySheet(workbook: ExcelJS.Workbook, projection: Normalized
   const total = sheet.addRow(["TỔNG", "", "", Number(projection.totals.net), Number(projection.totals.vat), Number(projection.totals.gross)]);
   total.font = { bold: true };
   sheet.addRow(["Bằng chữ", projection.moneyInWords]);
-  addSignatureSlots(sheet, projection);
+  if (!customerSafe) addSignatureSlots(sheet, projection);
   return sheet;
 }
 
@@ -187,7 +200,7 @@ function addSettlementSheets(workbook: ExcelJS.Workbook, projection: NormalizedS
     setMoney(row.getCell(3), recipient.advanceGross);
     setMoney(row.getCell(4), recipient.refundDue);
     setMoney(row.getCell(5), recipient.additionalDue);
-    row.getCell(6).value = { formula: `E${row.number}-D${row.number}`, result: Number(recipient.additionalDue) - Number(recipient.refundDue) };
+    row.getCell(6).value = cachedFormula(`E${row.number}-D${row.number}`, Number(recipient.additionalDue) - Number(recipient.refundDue));
   });
   const end = reconciliation.rowCount;
   const total = reconciliation.addRow(["TỔNG"]);
@@ -198,7 +211,7 @@ function addSettlementSheets(workbook: ExcelJS.Workbook, projection: NormalizedS
         : column === 4 ? projection.recipients.reduce((sum, row) => sum + Number(row.refundDue), 0)
           : column === 5 ? projection.recipients.reduce((sum, row) => sum + Number(row.additionalDue), 0)
             : projection.recipients.reduce((sum, row) => sum + Number(row.additionalDue) - Number(row.refundDue), 0);
-    total.getCell(column).value = { formula: `SUM(${letter}${start}:${letter}${end})`, result };
+    total.getCell(column).value = cachedFormula(`SUM(${letter}${start}:${letter}${end})`, result);
     total.getCell(column).numFmt = "#,##0;[Red]-#,##0";
   }
   total.font = { bold: true };
@@ -216,14 +229,14 @@ function addSettlementSheets(workbook: ExcelJS.Workbook, projection: NormalizedS
     setMoney(row.getCell(4), item.net);
     setMoney(row.getCell(5), item.vat);
     setMoney(row.getCell(6), item.gross);
-    row.getCell(7).value = { formula: `F${row.number}-E${row.number}`, result: Number(item.net) };
+    row.getCell(7).value = cachedFormula(`F${row.number}-E${row.number}`, Number(item.net));
   });
   const detailEnd = detail.rowCount;
   const detailTotal = detail.addRow(["TỔNG", "", ""]);
   for (let column = 4; column <= 6; column += 1) {
     const letter = detail.getColumn(column).letter;
     const result = column === 4 ? Number(projection.totals.net) : column === 5 ? Number(projection.totals.vat) : Number(projection.totals.gross);
-    detailTotal.getCell(column).value = { formula: `SUM(${letter}${detailStart}:${letter}${detailEnd})`, result };
+    detailTotal.getCell(column).value = cachedFormula(`SUM(${letter}${detailStart}:${letter}${detailEnd})`, result);
     detailTotal.getCell(column).numFmt = "#,##0;[Red]-#,##0";
   }
   detailTotal.font = { bold: true };
