@@ -99,13 +99,13 @@ export default function SettlementPanel({ finance: baseFinance, user, canCreate 
       </dl>
     </Panel>
 
-    {!dossier && <Panel className="space-y-4"><EmptyState title="Chưa có hồ sơ quyết toán tổng hợp" description="Account/Project Owner tạo hồ sơ một lần; máy chủ tự nạp AC đã DD duyệt và tạm ứng đã giải ngân." />{canCreate && <ActionForm finance={finance} command="CREATE_SETTLEMENT_DOSSIER" label="Tạo hồ sơ quyết toán tổng hợp"><input type="hidden" name="settlementVersion" value="0" /><Input name="title" label="Tên hồ sơ" defaultValue="Hồ sơ quyết toán tổng hợp" required /></ActionForm>}</Panel>}
+    {!dossier && <Panel className="space-y-4"><EmptyState title="Chưa có hồ sơ quyết toán tổng hợp" description="Account/Project Owner tạo hồ sơ một lần; máy chủ tự nạp AC đã DD duyệt và tạm ứng đã giải ngân." />{canCreate && <div className="[&_button]:min-h-11"><ActionForm finance={finance} command="CREATE_SETTLEMENT_DOSSIER" label="Tạo hồ sơ quyết toán tổng hợp"><input type="hidden" name="settlementVersion" value="0" /><Input name="title" label="Tên hồ sơ" defaultValue="Hồ sơ quyết toán tổng hợp" required /></ActionForm></div>}</Panel>}
 
     {current && <>
       <Panel className="space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-bold">Hồ sơ quyết toán tổng hợp · v{current.version}</h3><p className="text-xs text-[var(--text-secondary)]">Request {current.request.id} · canonical hash {current.canonicalHash.slice(0, 12)}…</p></div><Badge tone={current.request.state === "APPROVED" ? "success" : current.request.state === "RETURNED" ? "danger" : "warning"}>{current.request.state}</Badge></div>
         <ProjectSettlementTable projectId={finance.project.id} version={current} warnings={warningLines} paymentRows={settlementRows} recipientName={recipientName} />
-        {canEditDossier && <div className="grid gap-4 lg:grid-cols-2">
+        {canEditDossier && <div className="grid gap-4 [&_button]:min-h-11 lg:grid-cols-2">
           <SettlementEvidenceUploader finance={finance} requestId={current.request.id} settlementVersion={current.request.version} obligations={current.obligations} evidence={current.evidence} canEdit recipientName={recipientName} />
           <ActionForm finance={finance} command={current.request.state === "RETURNED" ? "RESUBMIT_SETTLEMENT_DOSSIER" : "SUBMIT_SETTLEMENT_DOSSIER"} requestId={current.request.id} label={current.request.state === "RETURNED" ? "Gửi lại từ Quản lý" : "Gửi duyệt Manager → Accountant → CEO"}>
             <input type="hidden" name="settlementVersion" value={current.request.version} />
@@ -128,13 +128,13 @@ export default function SettlementPanel({ finance: baseFinance, user, canCreate 
     <Panel className="space-y-3"><div className="flex items-center gap-2"><History size={18} aria-hidden="true" /><h3 className="font-bold">Nhật ký CostFlow ({finance.history.length})</h3></div>{finance.history.length ? <ol className="max-h-80 divide-y divide-[var(--border)] overflow-y-auto">{finance.history.map(item => <li key={item.id} className="flex flex-wrap justify-between gap-2 py-2 text-xs"><span><strong>v{item.version}</strong> · {item.action} · {users.get(item.actorId) ?? "Người xử lý"}</span><time>{new Date(item.createdAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</time></li>)}</ol> : <p className="text-xs text-[var(--text-secondary)]">Chưa có sự kiện.</p>}</Panel>
 
     <Dialog open={!!selectedObligation} onClose={() => setCashObligationId(null)} title={selectedObligation?.direction === "REFUND" ? "Ghi nhận thu hoàn tạm ứng" : "Xác nhận chi bổ sung"} description="Giao dịch tiền là sự kiện riêng, bắt buộc chứng từ và idempotency key; duyệt hồ sơ không tự ghi tiền.">
-      {selectedObligation && <ActionForm finance={finance} command="SETTLEMENT_CASH" requestId={current?.request.id} label="Ghi nhận giao dịch thực tế" onSuccess={() => setCashObligationId(null)}>
+      {selectedObligation && <div className="[&_button]:min-h-11"><ActionForm finance={finance} command="SETTLEMENT_CASH" requestId={current?.request.id} label="Ghi nhận giao dịch thực tế" onSuccess={() => setCashObligationId(null)}>
         <input type="hidden" name="settlementObligationId" value={selectedObligation.id} /><input type="hidden" name="recipientKey" value={selectedObligation.recipientKey} /><input type="hidden" name="direction" value={selectedObligation.direction === "REFUND" ? "IN" : "OUT"} />
         <Alert tone="warning" title="Không vượt số dư server">Còn phải thực hiện: {displayMoney(selectedRemaining)} · người thụ hưởng {recipientName(selectedObligation.recipientKey)}.</Alert>
         <Input name="amount" label="Số tiền VND" inputMode="numeric" pattern="[1-9][0-9]*" defaultValue={selectedRemaining} required />
         <Select name="channel" label="Hình thức giao dịch" required><option value="BANK_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option><option value="OTHER">Khác</option></Select>
         <Input name="reference" label="Mã giao dịch / chứng từ" required /><Input name="occurredAt" label="Thời điểm giao dịch" type="datetime-local" required /><Input name="idempotencyKey" label="Mã chống ghi trùng" hint="Dùng mã duy nhất từ chứng từ ngân hàng/phiếu quỹ." required /><Input className="min-h-11" name="proof" label="UNC / phiếu thu chi / biên lai" type="file" accept=".pdf,.jpg,.jpeg,.png" required />
-      </ActionForm>}
+      </ActionForm></div>}
     </Dialog>
   </div>;
 }

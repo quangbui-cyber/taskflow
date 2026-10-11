@@ -33,11 +33,11 @@ export default function SettlementEvidenceUploader({ finance, requestId, settlem
         <p className="mt-1 break-all font-mono text-xs text-[var(--text-secondary)]">sha256 · {item.sha256}</p>
       </li>;
     })}</ul> : <EmptyState title="Chưa có chứng từ liên kết" description="Hồ sơ phải đủ liên kết IC/AC, chứng từ chi phí và bằng chứng tiền đã chi trước khi trình." />}
-    {canEdit && <ActionForm finance={finance} command="ADD_SETTLEMENT_EVIDENCE" requestId={requestId} label="Tải chứng từ bổ sung">
+    {canEdit && <div className="[&_button]:min-h-11"><ActionForm finance={finance} command="ADD_SETTLEMENT_EVIDENCE" requestId={requestId} label="Tải chứng từ bổ sung">
       <input type="hidden" name="settlementVersion" value={settlementVersion} />
       <Select name="recipientKey" label="Người nhận / NCC" required><option value="">Chọn đối tượng</option>{obligations.map(item => <option key={item.id} value={item.recipientKey}>{recipientName(item.recipientKey)}</option>)}</Select>
       <Select name="evidenceKind" label="Loại chứng từ bổ sung" required><option value="">Chọn loại</option>{EVIDENCE_KINDS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select>
       <Input className="min-h-11" type="file" name="proof" label="Tệp PDF/XLSX/JPG/PNG" accept=".pdf,.xlsx,.jpg,.jpeg,.png" required />
-    </ActionForm>}
+    </ActionForm></div>}
   </div>;
 }

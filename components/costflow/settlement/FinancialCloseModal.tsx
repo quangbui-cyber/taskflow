@@ -31,7 +31,7 @@ export default function FinancialCloseModal({ finance, blockers, hasDossier, can
         Mở lại bảo toàn 100% hồ sơ, dòng đã quyết toán, khóa, tiền, file xuất, chữ ký và mã băm cũ. Project luôn dùng một hồ sơ quyết toán ổn định; nguồn AC mới được DD duyệt chỉ tạo version/attempt bất biến mới. Thay đổi giá trị đã chi hoặc đã khóa vẫn bị chặn cho đến khi có quyết định nghiệp vụ riêng.
       </Alert>}
       {!reopening && <Alert tone="success" title="Đã thỏa mãn đầy đủ điều kiện đóng tài chính">Cả đối soát nội bộ và doanh thu khách hàng đã đạt điều kiện kỹ thuật tại lần tải trang này.</Alert>}
-      <div className="mt-4">
+      <div className="mt-4 [&_button]:min-h-11">
         <ActionForm finance={finance} command={command} label={reopening ? "Xác nhận gửi Quản lý duyệt mở lại" : "Xác nhận gửi Quản lý duyệt đóng"} onSuccess={() => setOpen(false)}>
           <Textarea name="reason" label={reopening ? "Lý do cần mở lại tài chính" : "Lý do / Giải trình đề nghị đóng tài chính"} required />
         </ActionForm>
