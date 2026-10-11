@@ -3,7 +3,7 @@ import { randomUUID, createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { calculateCost, calculateLineCost, compare, decimal, round, sum } from "./money";
-import { closeBlockers } from "./reconciliation";
+import { closeProjectRequest, decideFinancialClose, twoWayCloseBlockers, type FinancialCloseRequestRecord, type TwoWayCloseInput } from "./reconciliation";
 import { emptyFinance, type FinanceData, type IcLine, type QuotationLine, type RequestPayload } from "./types";
 import { decide, validateSteps, type ApprovalStep, type Decision } from "@/lib/workflow/approval";
 import type { ProjectUpload } from "@/lib/projectFiles";
@@ -46,6 +46,65 @@ function calendarDate(value: string, label: string) {
   const result = new Date(`${value}T00:00:00.000Z`);
   if (!Number.isFinite(result.getTime()) || result.toISOString().slice(0, 10) !== value) throw new Error(`${label} không hợp lệ.`);
   return result;
+}
+
+const FINANCIAL_CLOSE_COMMANDS = new Set(["REQUEST_CLOSE_PROJECT", "REQUEST_REOPEN_PROJECT", "DECIDE_FINANCIAL_CLOSE"]);
+
+export async function assertCostFlowMutationAllowed(projectId: string, command: string) {
+  const workspace = await prisma.costFlowWorkspace.findUnique({ where: { projectId }, select: { data: true } });
+  const data = workspace?.data && typeof workspace.data === "object" && !Array.isArray(workspace.data) ? workspace.data as Record<string, unknown> : null;
+  if (data?.closed === true && command !== "REQUEST_REOPEN_PROJECT" && command !== "DECIDE_FINANCIAL_CLOSE") {
+    throw new Error("Tài chính đã đóng. CostFlow chỉ được đọc cho đến khi Quản lý duyệt mở lại.");
+  }
+}
+
+async function currentTwoWayCloseInput(tx: Prisma.TransactionClient, projectId: string): Promise<TwoWayCloseInput> {
+  const dossier = await tx.projectSettlementDossier.findUnique({
+    where: { projectId },
+    include: {
+      versions: {
+        orderBy: { version: "desc" },
+        include: {
+          request: { select: { state: true } },
+          obligations: { include: { cashAllocations: { include: { cash: { select: { evidenceId: true } } } } } },
+          locks: { select: { id: true } },
+        },
+      },
+    },
+  });
+  const approvedVersion = dossier?.versions.find(version => version.request.state === "APPROVED") ?? null;
+  const [approvedActualCount, advanceCount, liquidation, customerCash] = await Promise.all([
+    tx.actualCostApplication.count({ where: { projectId, state: "ACTIVE", approval: { action: "APPROVED" } } }),
+    tx.advanceApplication.count({ where: { projectId } }),
+    tx.customerLiquidation.findFirst({ where: { projectId }, orderBy: { version: "desc" }, include: { evidence: { select: { id: true } } } }),
+    tx.customerCashIn.findMany({ where: { projectId }, select: { amount: true } }),
+  ]);
+  const lockCount = dossier?.versions.reduce((total, version) => total + version.locks.length, 0) ?? 0;
+  const collected = customerCash.reduce((total, row) => total + BigInt(row.amount), BigInt(0));
+  const target = liquidation ? BigInt(liquidation.grossAmount) : BigInt(0);
+  return {
+    dossier: approvedVersion && dossier ? { id: dossier.id, versionId: approvedVersion.id, state: "APPROVED", sourceCount: approvedActualCount + advanceCount, lockCount } : null,
+    obligations: (approvedVersion?.obligations ?? []).map(obligation => ({
+      recipientKey: obligation.recipientKey,
+      amountDue: obligation.amountDue,
+      allocatedAmount: obligation.cashAllocations.reduce((total, allocation) => total + BigInt(allocation.amount), BigInt(0)).toString(),
+      everyCashHasEvidence: obligation.cashAllocations.every(allocation => Boolean(allocation.cash.evidenceId)),
+    })),
+    customerAccounting: {
+      currentLiquidation: liquidation ? { id: liquidation.id, documentNumber: liquidation.documentNumber, signedAt: liquidation.signedAt.toISOString(), evidence: liquidation.evidence } : null,
+      receivable: { outstandingGross: (target - collected).toString() },
+    },
+  };
+}
+
+function requestedCloseMetadata(reason: string) {
+  try {
+    const parsed = JSON.parse(reason) as Record<string, unknown>;
+    if (typeof parsed.requesterRole === "string" && Number.isSafeInteger(parsed.expectedVersion)) return { requesterRole: parsed.requesterRole, expectedVersion: Number(parsed.expectedVersion) };
+  } catch {
+    // Old or externally-created events fail closed below.
+  }
+  throw new Error("Yêu cầu đóng/mở thiếu metadata phiên bản bất biến.");
 }
 
 export async function loadFinance(projectId: string, actor: Actor) {
@@ -283,6 +342,8 @@ export async function executeFinance(projectId: string, expectedVersion: number,
     let savedBeneficiaryId: string | undefined;
     let savedCustomerAcceptanceId: string | undefined;
     let savedCustomerAcceptanceVersion: number | undefined;
+    let savedCloseRequestId: string | undefined;
+    let financialCloseState: "OPEN" | "CLOSED" | undefined;
     let savedScopes: string[] | undefined;
     let customerCashFingerprint: string | undefined;
     let customerCashIdempotencyKey: string | undefined;
@@ -320,8 +381,8 @@ export async function executeFinance(projectId: string, expectedVersion: number,
     if (workspace.version !== expectedVersion) throw new Error("Dữ liệu đã thay đổi. Tải lại trang trước khi thao tác.");
     const steps = request?.steps as ApprovalStep[] | undefined;
     const canReadRequest = !!request && (member || isAdmin || request.creatorId === actor.id || request.cashAssigneeId === actor.id || !!steps?.some(s => s.assigneeId === actor.id));
-    if (!member && !isAdmin && (!canReadRequest || !["DECIDE", "CASH", "TRANSFER", "IC_MANAGER_EXPLANATION", "ADD_PAYMENT_LINE_DISCUSSION"].includes(command))) throw new Error("Bạn chỉ được xử lý hồ sơ được phân công.");
-    if (data.closed && command !== "CONFIGURE" && !(command === "CREATE_REQUEST" && text(form, "kind") === "REOPEN") && !(["DECIDE", "TRANSFER"].includes(command) && request?.kind === "REOPEN")) throw new Error("Tài chính đã đóng. Cần yêu cầu Quản lý mở lại.");
+    if (!member && !isAdmin && (!canReadRequest || !["DECIDE", "CASH", "TRANSFER", "IC_MANAGER_EXPLANATION", "ADD_PAYMENT_LINE_DISCUSSION"].includes(command)) && !FINANCIAL_CLOSE_COMMANDS.has(command)) throw new Error("Bạn chỉ được xử lý hồ sơ được phân công.");
+    if (data.closed && command !== "CONFIGURE" && command !== "REQUEST_REOPEN_PROJECT" && command !== "DECIDE_FINANCIAL_CLOSE" && !(command === "CREATE_REQUEST" && text(form, "kind") === "REOPEN") && !(["DECIDE", "TRANSFER"].includes(command) && request?.kind === "REOPEN")) throw new Error("Tài chính đã đóng. Cần yêu cầu Quản lý mở lại.");
     const needCreator = () => { if (!canCreate) throw new Error("Chỉ Account/người lập được phân công mới được lập hoặc sửa hồ sơ tài chính."); };
     const activeUser = async (id: string) => {
       if (!id || !await tx.user.findFirst({ where: { id, isActive: true }, select: { id: true } })) throw new Error("Thiếu người xử lý đang hoạt động.");
@@ -374,10 +435,6 @@ export async function executeFinance(projectId: string, expectedVersion: number,
       const revision = data.revisions.find(r => r.id === id && r.effective);
       if (!revision) throw new Error("Cần IC đang có hiệu lực.");
       return revision;
-    };
-    const assertClose = () => {
-      const blockers = closeBlockers(data, cash);
-      if (blockers.length) throw new Error(blockers.join(" "));
     };
     const resolvePaymentDraft = async () => {
       const parsedLines = JSON.parse(text(form, "lines") || "[]") as Array<{
@@ -532,6 +589,50 @@ export async function executeFinance(projectId: string, expectedVersion: number,
     };
 
     switch (command) {
+      case "REQUEST_CLOSE_PROJECT":
+      case "REQUEST_REOPEN_PROJECT": {
+        const kind = command === "REQUEST_CLOSE_PROJECT" ? "CLOSE" as const : "REOPEN" as const;
+        const dossier = await tx.projectSettlementDossier.findUnique({ where: { projectId }, select: { id: true } });
+        if (!dossier) throw new Error("Project chưa có hồ sơ quyết toán tổng hợp.");
+        const closeRequest = closeProjectRequest({
+          projectId,
+          dossierId: dossier.id,
+          kind,
+          reason: text(form, "reason"),
+          requester: { id: actor.id, role: currentActor.role, isProjectMember: member, isProjectOwner: project.ownerId === actor.id },
+          expectedVersion,
+          financialCloseState: data.closed ? "CLOSED" : "OPEN",
+        });
+        if (kind === "CLOSE") {
+          const blockers = twoWayCloseBlockers(await currentTwoWayCloseInput(tx, projectId));
+          if (blockers.length) throw new Error(blockers.join(" "));
+        }
+        const attemptId = randomUUID();
+        const created = await tx.financialCloseRequest.create({ data: { projectId, dossierId: dossier.id, attemptId, action: kind, reason: closeRequest.reason, requestedById: actor.id } });
+        const requestMetadata = JSON.stringify({ requesterRole: closeRequest.requesterRole, expectedVersion: closeRequest.expectedVersion });
+        await tx.financialCloseEvent.create({ data: { closeRequestId: created.id, decision: "REQUESTED", reason: requestMetadata, actorId: actor.id, eventHash: createHash("sha256").update(JSON.stringify({ closeRequestId: created.id, decision: "REQUESTED", actorId: actor.id, reason: closeRequest.reason, requestMetadata })).digest("hex") } });
+        savedCloseRequestId = created.id;
+        break;
+      }
+      case "DECIDE_FINANCIAL_CLOSE": {
+        const closeRequestId = requireValue(text(form, "closeRequestId"), "yêu cầu đóng/mở tài chính");
+        const stored = await tx.financialCloseRequest.findFirst({ where: { id: closeRequestId, projectId }, include: { events: { orderBy: { createdAt: "asc" } } } });
+        if (!stored) throw new Error("Không tìm thấy yêu cầu đóng/mở trong Project.");
+        const requested = stored.events.find(event => event.decision === "REQUESTED");
+        if (!requested) throw new Error("Yêu cầu đóng/mở thiếu sự kiện khởi tạo bất biến.");
+        const metadata = requestedCloseMetadata(requested.reason);
+        const record: FinancialCloseRequestRecord = { projectId, dossierId: stored.dossierId, kind: stored.action as "CLOSE" | "REOPEN", reason: stored.reason, requesterId: stored.requestedById, requesterRole: metadata.requesterRole, expectedVersion: metadata.expectedVersion, events: stored.events.map(event => ({ decision: event.decision as "REQUESTED" | "APPROVE" | "RETURN" | "REJECT", actorId: event.actorId, reason: event.reason, expectedVersion: metadata.expectedVersion, createdAt: event.createdAt.toISOString() })) };
+        const decision = text(form, "decision");
+        if (decision !== "APPROVE" && decision !== "RETURN" && decision !== "REJECT") throw new Error("Quyết định đóng/mở không hợp lệ.");
+        const blockers = stored.action === "CLOSE" ? twoWayCloseBlockers(await currentTwoWayCloseInput(tx, projectId)) : [];
+        const next = decideFinancialClose(record, { actorId: actor.id, assignedManagerId: data.config.managerId, decision, reason: text(form, "reason"), currentVersion: expectedVersion, currentCloseState: data.closed ? "CLOSED" : "OPEN", blockers });
+        const eventReason = text(form, "reason");
+        await tx.financialCloseEvent.create({ data: { closeRequestId: stored.id, decision, reason: eventReason, actorId: actor.id, eventHash: createHash("sha256").update(JSON.stringify({ closeRequestId: stored.id, decision, actorId: actor.id, reason: eventReason, expectedVersion })).digest("hex") } });
+        if (decision === "APPROVE") data.closed = next.financialCloseState === "CLOSED";
+        savedCloseRequestId = stored.id;
+        financialCloseState = data.closed ? "CLOSED" : "OPEN";
+        break;
+      }
       case "SAVE_CUSTOMER_ACCEPTANCE": {
         needCreator();
         const rawActualRows = JSON.parse(text(form, "actualRows") || "[]") as unknown;
@@ -1115,12 +1216,10 @@ export async function executeFinance(projectId: string, expectedVersion: number,
       }
       case "CREATE_REQUEST": {
         const kind = text(form, "kind");
-        if (["CLOSE", "REOPEN"].includes(kind)) { if (!member && !isAdmin) throw new Error("Cần là nhân sự của project để yêu cầu đóng/mở tài chính."); }
-        else needCreator();
-        if (["CLOSE", "REOPEN", "CANCEL"].includes(kind)) {
+        if (["CLOSE", "REOPEN"].includes(kind)) throw new Error("Đóng/mở tài chính phải dùng yêu cầu bất biến REQUEST_CLOSE_PROJECT/REQUEST_REOPEN_PROJECT.");
+        needCreator();
+        if (kind === "CANCEL") {
           requireValue(text(form, "explanation"), "lý do");
-          if (kind === "CLOSE") assertClose();
-          if (kind === "REOPEN" && !data.closed) throw new Error("Tài chính chưa đóng.");
           const target = kind === "CANCEL" ? requests.find(r => r.id === text(form, "targetRequestId")) : null;
           const targetRevision = target ? data.revisions.find(revision => revision.requestId === target.id) : undefined;
           const cancellableIc = !!targetRevision?.effective && ["SUBMITTED", "APPROVED", "RETURNED", "REJECTED"].includes(target?.state ?? "");
@@ -1223,8 +1322,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
           if (!beneficiary || beneficiary.version !== payload.beneficiaryVersion) throw new Error("Thông tin người nhận đã đổi. Trả hồ sơ để lập lại và xác minh bản mới.");
           beneficiary.verifiedVersion = beneficiary.version;
         }
-        if (action === "APPROVE" && request.kind === "CLOSE") { assertClose(); data.closed = true; }
-        if (action === "APPROVE" && request.kind === "REOPEN") data.closed = false;
+        if (["CLOSE", "REOPEN"].includes(request.kind)) throw new Error("Yêu cầu đóng/mở cũ không được đổi trạng thái tài chính; hãy lập yêu cầu bất biến mới.");
         if (action === "APPROVE" && request.kind === "AC_REVISION" && next.state === "APPROVED") {
           const change = payload?.expenseRevision;
           const previous = data.expenses.find(e => e.id === change?.proposed.id);
@@ -1363,7 +1461,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
     const updated = await tx.costFlowWorkspace.updateMany({ where: { projectId, version: expectedVersion }, data: { version: { increment: 1 }, data: json(data) } });
     if (updated.count !== 1) throw new Error("Dữ liệu đã thay đổi. Tải lại để tránh ghi trùng.");
     await tx.costFlowHistory.create({ data: { projectId, version: expectedVersion + 1, actorId: actor.id, action: command, snapshot: json(data) } });
-    return { success: savedCustomerAcceptanceId ? `Đã lưu snapshot nghiệm thu khách hàng v${savedCustomerAcceptanceVersion}.` : savedScopes ? `Đã lưu ${savedScopes.join(" và ")}.` : "Đã lưu hồ sơ và lịch sử.", requestId: affectedRequestId, revisionId: savedRevisionId, quotationId: savedQuotationId, draftId: savedDraftId, beneficiaryId: savedBeneficiaryId, customerAcceptanceId: savedCustomerAcceptanceId, customerAcceptanceVersion: savedCustomerAcceptanceVersion, savedScopes, version: expectedVersion + 1 };
+    return { success: savedCloseRequestId ? financialCloseState ? `Đã lưu quyết định; tài chính hiện ${financialCloseState === "CLOSED" ? "đóng" : "mở"}.` : "Đã gửi yêu cầu đóng/mở tài chính." : savedCustomerAcceptanceId ? `Đã lưu snapshot nghiệm thu khách hàng v${savedCustomerAcceptanceVersion}.` : savedScopes ? `Đã lưu ${savedScopes.join(" và ")}.` : "Đã lưu hồ sơ và lịch sử.", requestId: affectedRequestId, closeRequestId: savedCloseRequestId, financialCloseState, revisionId: savedRevisionId, quotationId: savedQuotationId, draftId: savedDraftId, beneficiaryId: savedBeneficiaryId, customerAcceptanceId: savedCustomerAcceptanceId, customerAcceptanceVersion: savedCustomerAcceptanceVersion, savedScopes, version: expectedVersion + 1 };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15000 });
 }
 

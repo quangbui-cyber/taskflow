@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   closeProjectRequest,
   decideFinancialClose,
@@ -74,4 +75,16 @@ test("financial close stays independent from dossier approval, signatures, and T
   assert.notEqual(axes.dossierApproval, axes.financialCloseState);
   assert.notEqual(axes.signing, axes.financialCloseState);
   assert.notEqual(axes.task, axes.financialCloseState);
+});
+
+test("financial close integration re-evaluates server blockers in the transaction and closes only CostFlow", () => {
+  const service = readFileSync(new URL("../lib/costflow/service.ts", import.meta.url), "utf8");
+  const actions = readFileSync(new URL("../app/actions/costflow.ts", import.meta.url), "utf8");
+  assert.match(service, /prisma\.\$transaction\([\s\S]*DECIDE_FINANCIAL_CLOSE[\s\S]*currentTwoWayCloseInput\(tx, projectId\)[\s\S]*decideFinancialClose/);
+  assert.match(service, /financialCloseEvent\.create/);
+  assert.match(service, /data\.closed\s*=\s*next\.financialCloseState/);
+  assert.doesNotMatch(service, /request\.kind === "CLOSE"\)\s*\{\s*assertClose\(\);\s*data\.closed = true/);
+  assert.match(actions, /assertCostFlowMutationAllowed\(projectId, action\)/);
+  assert.match(actions, /assertCostFlowMutationAllowed\(projectId, command\)/);
+  assert.doesNotMatch(actions, /Task|Kanban/);
 });

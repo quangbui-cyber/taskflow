@@ -5,14 +5,14 @@ import { Prisma } from "@prisma/client";
 import { requireUser } from "@/lib/auth";
 import { readProjectUpload } from "@/lib/projectFiles";
 import { IcEvidenceError } from "@/lib/costflow/icEvidence";
-import { executeFinance } from "@/lib/costflow/service";
+import { assertCostFlowMutationAllowed, executeFinance } from "@/lib/costflow/service";
 import { executePaymentCash } from "@/lib/costflow/paymentCash";
 import { publicPaymentErrorMessage } from "@/lib/costflow/paymentPolicy";
 import { dispatchWorkflowNotifications } from "@/lib/workflow/notifications";
 import { executeActualCostBulkDecision, executeActualCostCommand, type ActualCostBulkSelection, type ActualCostCommand } from "@/lib/costflow/actualCostService";
 import { executeSettlementCommand, isSettlementCommand } from "@/lib/costflow/settlementService";
 
-export type CostFlowActionState = { error?: string; success?: string; requestId?: string; revisionId?: string; quotationId?: string; draftId?: string; beneficiaryId?: string; cashId?: string; customerAcceptanceId?: string; customerAcceptanceVersion?: number; settlementVersion?: number; idempotent?: boolean; savedScopes?: string[]; version?: number; lineErrors?: { lineId: string; message: string }[] };
+export type CostFlowActionState = { error?: string; success?: string; requestId?: string; closeRequestId?: string; financialCloseState?: "OPEN" | "CLOSED"; revisionId?: string; quotationId?: string; draftId?: string; beneficiaryId?: string; cashId?: string; customerAcceptanceId?: string; customerAcceptanceVersion?: number; settlementVersion?: number; idempotent?: boolean; savedScopes?: string[]; version?: number; lineErrors?: { lineId: string; message: string }[] };
 
 export type ActualCostActionState = { error?: string; success?: string; lineId?: string; version?: number };
 
@@ -22,6 +22,7 @@ export async function actualCostAction(_previous: ActualCostActionState, form: F
   const action = String(form.get("actualCostCommand") ?? "").trim();
   if (!projectId) return { error: "Thiếu Project." };
   try {
+    await assertCostFlowMutationAllowed(projectId, action);
     if (action === "BULK_DECIDE") {
       const decision = String(form.get("decision") ?? "");
       if (decision !== "APPROVED" && decision !== "RETURNED") return { error: "Quyết định AC không hợp lệ." };
@@ -104,6 +105,11 @@ export async function costFlowAction(_previous: CostFlowActionState, form: FormD
   const projectId = String(form.get("projectId") ?? "").trim();
   const command = String(form.get("command") ?? "").trim();
   if (!projectId) return { error: "Thiếu Project." };
+  try {
+    await assertCostFlowMutationAllowed(projectId, command);
+  } catch (error) {
+    return { error: publicPaymentErrorMessage(error) };
+  }
   if (isSettlementCommand(command)) {
     try {
       const upload = await readProjectUpload(form.get("proof"));
