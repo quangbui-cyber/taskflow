@@ -28,7 +28,7 @@ test("settled lock: CEO approval appends exact-source locks without mutating oth
     taskState: "IN_PROGRESS",
     financialCloseState: "OPEN",
   };
-  let lifecycle = createSettlementLifecycle({ projectId, dossierId: "dossier", versionId: "version", requestId: "request", creatorId: "owner", projectOwnerId: "owner", expectedVersion: 0, steps, sourceManifest });
+  let lifecycle = createSettlementLifecycle({ projectId, dossierId: "dossier", versionId: "version", requestId: "request", creatorId: "owner", projectOwnerId: "owner", expectedVersion: 0, steps, sourceManifest, axisSnapshot: before });
   lifecycle = submitSettlementLifecycle(lifecycle, { actorId: "owner", expectedVersion: 0, blockers: [] });
   lifecycle = decideSettlementLifecycle(lifecycle, { actorId: "manager", expectedVersion: 1, action: "APPROVE", reason: "" });
   lifecycle = decideSettlementLifecycle(lifecycle, { actorId: "accountant", expectedVersion: 2, action: "APPROVE", reason: "" });

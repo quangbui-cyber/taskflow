@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   assertSettlementReplacementAllowed,
+  assertSettlementEvidenceProject,
   createSettlementLifecycle,
   decideSettlementLifecycle,
   prepareSettlementEvidence,
@@ -120,6 +121,12 @@ test("settlement dossier: PDF/XLSX/JPG/PNG evidence is content-checked, hashed a
     () => prepareSettlementEvidence({ projectId, dossierVersionId: "version-1", actorId: ownerId, name: "fake.pdf", mimeType: "application/pdf", data: new Uint8Array([0x50, 0x4b, 0x03, 0x04]) }),
     /nội dung|magic|định dạng/i,
   );
+  assert.throws(() => assertSettlementEvidenceProject({
+    dossierProjectId: projectId,
+    evidenceProjectId: "foreign-project",
+    dossierVersionId: "version-1",
+    evidenceVersionId: "version-1",
+  }), /project|phiên bản/i);
 });
 
 test("settlement dossier: Manager cancellation is append-only and replacement preserves old lineage", () => {

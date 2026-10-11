@@ -10,8 +10,9 @@ import { executePaymentCash } from "@/lib/costflow/paymentCash";
 import { publicPaymentErrorMessage } from "@/lib/costflow/paymentPolicy";
 import { dispatchWorkflowNotifications } from "@/lib/workflow/notifications";
 import { executeActualCostBulkDecision, executeActualCostCommand, type ActualCostBulkSelection, type ActualCostCommand } from "@/lib/costflow/actualCostService";
+import { executeSettlementCommand, isSettlementCommand } from "@/lib/costflow/settlementService";
 
-export type CostFlowActionState = { error?: string; success?: string; requestId?: string; revisionId?: string; quotationId?: string; draftId?: string; beneficiaryId?: string; cashId?: string; customerAcceptanceId?: string; customerAcceptanceVersion?: number; idempotent?: boolean; savedScopes?: string[]; version?: number; lineErrors?: { lineId: string; message: string }[] };
+export type CostFlowActionState = { error?: string; success?: string; requestId?: string; revisionId?: string; quotationId?: string; draftId?: string; beneficiaryId?: string; cashId?: string; customerAcceptanceId?: string; customerAcceptanceVersion?: number; settlementVersion?: number; idempotent?: boolean; savedScopes?: string[]; version?: number; lineErrors?: { lineId: string; message: string }[] };
 
 export type ActualCostActionState = { error?: string; success?: string; lineId?: string; version?: number };
 
@@ -100,9 +101,27 @@ export async function actualCostAction(_previous: ActualCostActionState, form: F
 
 export async function costFlowAction(_previous: CostFlowActionState, form: FormData): Promise<CostFlowActionState> {
   const actor = await requireUser();
-  const projectId = String(form.get("projectId") ?? "");
+  const projectId = String(form.get("projectId") ?? "").trim();
+  const command = String(form.get("command") ?? "").trim();
+  if (!projectId) return { error: "Thiếu Project." };
+  if (isSettlementCommand(command)) {
+    try {
+      const upload = await readProjectUpload(form.get("proof"));
+      const result = await executeSettlementCommand(actor, form, upload);
+      await dispatchWorkflowNotifications(result.requestId).catch(() => undefined);
+      revalidatePath(`/projects/${projectId}/costflow`);
+      revalidatePath("/workflow");
+      return result;
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === "P2002") return { error: "Nguồn, phiên bản hoặc khóa quyết toán đã được sử dụng." };
+        if (error.code === "P2034") return { error: "Có thao tác quyết toán đồng thời. Tải lại rồi thử lại." };
+      }
+      return { error: publicPaymentErrorMessage(error) };
+    }
+  }
   const version = Number(form.get("version"));
-  if (!projectId || !Number.isSafeInteger(version) || version < 0) return { error: "Phiên bản hồ sơ không hợp lệ." };
+  if (!Number.isSafeInteger(version) || version < 0) return { error: "Phiên bản hồ sơ không hợp lệ." };
   try {
     const upload = await readProjectUpload(form.get("proof"));
     const result = String(form.get("command") ?? "") === "CASH"

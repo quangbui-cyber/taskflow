@@ -180,7 +180,21 @@ export async function loadFinance(projectId: string, actor: Actor) {
     const projection = parseCustomerAcceptanceProjection(snapshot.projection);
     return projection ? [{ id: snapshot.id, version: snapshot.version, quotationId: snapshot.quotationId, projection, createdAt: snapshot.createdAt.toISOString() }] : [];
   }) : [];
-  return { project: { ...project, members: fullAccess ? project.members : [], client: fullAccess ? project.client : null }, clients, fullAccess, canManageCustomerAccounting, version: workspace?.version ?? 0, data: fullAccess && savedData ? savedData : { ...emptyFinance(), closed: savedData?.closed ?? false }, requests: visible.map(({ signingLifecycle, ...request }) => ({ ...request, signingMode: signingLifecycle?.mode ?? null, signingEvidenceState: signingLifecycle?.evidenceState ?? null })), cash, users, files, evidence, supplements, history, paymentDossiers, paymentLedger, actualCosts, customerAccounting, customerAcceptanceSnapshots };
+  const settlementDossier = fullAccess ? await prisma.projectSettlementDossier.findUnique({
+    where: { projectId },
+    include: {
+      versions: {
+        orderBy: { version: "desc" },
+        include: {
+          request: { select: { id: true, state: true, version: true, currentStep: true, currentAttemptId: true, steps: true } },
+          obligations: { orderBy: { recipientKey: "asc" } },
+          evidence: { select: { id: true, evidenceId: true, kind: true, sha256: true, addedById: true, createdAt: true } },
+          locks: { select: { id: true, actualCostApplicationId: true, advanceApplicationId: true, sourceCashAllocationId: true, lockedAt: true } },
+        },
+      },
+    },
+  }) : null;
+  return { project: { ...project, members: fullAccess ? project.members : [], client: fullAccess ? project.client : null }, clients, fullAccess, canManageCustomerAccounting, version: workspace?.version ?? 0, data: fullAccess && savedData ? savedData : { ...emptyFinance(), closed: savedData?.closed ?? false }, requests: visible.map(({ signingLifecycle, ...request }) => ({ ...request, signingMode: signingLifecycle?.mode ?? null, signingEvidenceState: signingLifecycle?.evidenceState ?? null })), cash, users, files, evidence, supplements, history, paymentDossiers, paymentLedger, actualCosts, customerAccounting, customerAcceptanceSnapshots, settlementDossier };
 }
 
 export async function executeFinance(projectId: string, expectedVersion: number, actor: Actor, form: FormData, upload: ProjectUpload | null) {
