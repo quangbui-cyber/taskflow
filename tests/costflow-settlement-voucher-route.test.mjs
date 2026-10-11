@@ -113,24 +113,25 @@ test("SET-06 rounding: unrounded originals are summed before the aggregate is ro
 
 test("SET-06 VAT balance: rounded gross is authoritative and component difference goes to VAT", () => {
   assert.deepEqual(balanceSettlementComponents({
-    rawNet: "250/27",
-    rawVat: "20/27",
-    rawGross: "10",
+    rawNet: "503/5",
+    rawVat: "3/5",
+    rawGross: "506/5",
   }), {
-    rawNet: "250/27",
-    rawVat: "20/27",
-    rawGross: "10/1",
-    net: "9",
-    vat: "1",
-    gross: "10",
+    rawNet: "503/5",
+    rawVat: "3/5",
+    rawGross: "506/5",
+    net: "101",
+    vat: "0",
+    gross: "101",
   });
+  assert.equal(roundSettlementVnd("3/5"), "1");
 
   const result = buildProjectSettlementDraft({
     projectId,
     actualCostLines: [approvedActual("USER:vat", {
-      rawNet: "250/27",
-      rawVat: "20/27",
-      rawGross: "10",
+      rawNet: "503/5",
+      rawVat: "3/5",
+      rawGross: "506/5",
     })],
     advanceAllocations: [],
   });

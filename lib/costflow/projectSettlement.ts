@@ -29,7 +29,8 @@ export type SettlementApprovalTuple = {
   approvalAttemptId: string;
 };
 
-export type SettlementActualCostInput = Partial<ApprovedActualCostLine> & {
+export type SettlementActualCostInput = Partial<Pick<ApprovedActualCostLine,
+  "lineId" | "fundingSource" | "approvedAmount">> & {
   projectId: string;
   recipientKey: string;
   recipientType: "EMPLOYEE" | "VENDOR";
@@ -192,22 +193,47 @@ function actualComponents(line: SettlementActualCostInput) {
   return { net, vat, gross };
 }
 
-function roundedActual(rows: Pick<RecipientAccumulator, "actualNet" | "actualVat" | "actualGross">) {
-  const rawNet = sum(rows.actualNet);
-  const rawVat = sum(rows.actualVat);
-  const rawGross = sum(rows.actualGross);
+export function roundSettlementVnd(value: string) {
+  return round(exact(value));
+}
+
+export function aggregateSettlementVnd(values: string[]) {
+  const raw = sum(values.map(value => exact(value)));
+  return { raw: source(raw), rounded: round(raw) };
+}
+
+export function balanceSettlementComponents(input: {
+  rawNet: string;
+  rawVat: string;
+  rawGross: string;
+}) {
+  const rawNet = exact(input.rawNet);
+  const rawVat = exact(input.rawVat);
+  const rawGross = exact(input.rawGross);
+  if (compare(add(rawNet, rawVat), rawGross) !== 0) {
+    throw new Error("Nguồn tiền phải giữ đúng đẳng thức raw Net + VAT = Gross.");
+  }
   const net = BigInt(round(rawNet));
   const gross = BigInt(round(rawGross));
-  // Gross is authoritative. Any one-dong component difference is absorbed by VAT.
-  const vat = gross - net;
   return {
     rawNet: source(rawNet),
     rawVat: source(rawVat),
     rawGross: source(rawGross),
     net: net.toString(),
-    vat: vat.toString(),
+    vat: (gross - net).toString(),
     gross: gross.toString(),
   };
+}
+
+function roundedActual(rows: Pick<RecipientAccumulator, "actualNet" | "actualVat" | "actualGross">) {
+  const rawNet = sum(rows.actualNet);
+  const rawVat = sum(rows.actualVat);
+  const rawGross = sum(rows.actualGross);
+  return balanceSettlementComponents({
+    rawNet: source(rawNet),
+    rawVat: source(rawVat),
+    rawGross: source(rawGross),
+  });
 }
 
 export function projectSettlementLifecycleCashEffects(action:
