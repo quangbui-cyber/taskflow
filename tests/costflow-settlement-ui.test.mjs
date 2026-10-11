@@ -105,7 +105,7 @@ test("close and reopen dialogs are explicit, blocker-aware and preserve B02 hist
     "đã chi hoặc đã khóa",
   ]) assert.match(modal, new RegExp(fact, "i"));
   assert.match(modal, /disabled=/);
-  assert.match(dialog, /role="dialog"/);
+  assert.match(dialog, /<dialog/);
   assert.match(dialog, /aria-labelledby/);
-  assert.match(dialog, /event\.key === "Escape"/);
+  assert.match(dialog, /onCancel/);
 });

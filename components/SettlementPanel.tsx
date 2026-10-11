@@ -1,572 +1,140 @@
 "use client";
 
-import Link from "next/link";
-import { useState, useMemo } from "react";
-import {
-  Lock,
-  Building2,
-  User,
-  History,
-  XCircle,
-  ShieldCheck,
-  Clock,
-  ArrowDownLeft,
-  ShieldAlert,
-  FileText,
-  Coins,
-} from "lucide-react";
-import type { Finance, Request } from "@/components/CostFlowPanel";
-import type { RequestPayload } from "@/lib/costflow/types";
-import { Button } from "@/components/ui/Button";
-import { Input, Select, Textarea } from "@/components/ui/Field";
-import { Alert, Badge, EmptyState, Panel, Table } from "@/components/ui/Presentation";
-import { Dialog } from "@/components/ui/Dialog";
+import { useMemo, useState } from "react";
+import { FileClock, History, Landmark, ShieldCheck } from "lucide-react";
+import type { Finance } from "@/components/CostFlowPanel";
 import ActionForm from "@/components/CostFlowActionForm";
-import CashConfirmationEditor from "@/components/costflow/payments/CashConfirmationEditor";
 import PaymentLedgerTable from "@/components/costflow/payments/PaymentLedgerTable";
-import { reconcile, isExpenseApproved } from "@/lib/costflow/reconciliation";
+import SettlementProgressCards from "@/components/costflow/settlement/SettlementProgressCards";
+import ProjectSettlementTable, { type SettlementVersionView } from "@/components/costflow/settlement/ProjectSettlementTable";
+import SettlementExportActions from "@/components/costflow/settlement/SettlementExportActions";
+import FinancialCloseModal from "@/components/costflow/settlement/FinancialCloseModal";
+import SettlementEvidenceUploader from "@/components/costflow/settlement/SettlementEvidenceUploader";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input, Select, Textarea } from "@/components/ui/Field";
+import { Alert, Badge, EmptyState, Panel } from "@/components/ui/Presentation";
 import { displayMoney } from "@/lib/costflow/money";
+import { recipientDisplayName } from "@/lib/costflow/labels";
 
-import { ACTION_LABELS as ACTION_LABEL, recipientDisplayName } from "@/lib/costflow/labels";
+type SettlementDossierView = {
+  id: string;
+  createdById: string;
+  createdAt: string | Date;
+  versions: SettlementVersionView[];
+};
 
-type Props = {
+type SettlementFinance = Finance & { settlementDossier?: SettlementDossierView | null };
+
+function sum(values: string[]) {
+  return values.reduce((total, value) => total + BigInt(/^\d+$/.test(value) ? value : "0"), BigInt(0)).toString();
+}
+
+function percent(collected: string, target: string) {
+  const denominator = BigInt(/^\d+$/.test(target) ? target : "0");
+  if (denominator === BigInt(0)) return 0;
+  const numerator = BigInt(/^-?\d+$/.test(collected) ? collected : "0");
+  const ratio = numerator * BigInt(100) / denominator;
+  return Number(ratio > BigInt(100) ? BigInt(100) : ratio < BigInt(0) ? BigInt(0) : ratio);
+}
+
+export default function SettlementPanel({ finance: baseFinance, user, canCreate }: {
   finance: Finance;
   user: { id: string; role: string };
   canCreate: boolean;
-};
+}) {
+  const finance = baseFinance as SettlementFinance;
+  const dossier = finance.settlementDossier ?? null;
+  const current = dossier?.versions[0] ?? null;
+  const [cashObligationId, setCashObligationId] = useState<string | null>(null);
+  const users = useMemo(() => new Map(finance.users.map(person => [person.id, person.name])), [finance.users]);
+  const recipientName = (key: string) => recipientDisplayName(key, users, finance.data.beneficiaries);
+  const settlementRows = (finance.paymentLedger ?? []).filter(row => row.provenance === "settlement" && (!current || row.dossierVersionId === current.id));
+  const warningLines = (finance.actualCosts?.lines ?? []).filter(line => line.source === "normalized" && line.reviewState !== "approved").map(line => ({ stableLineId: line.stableLineId, description: line.description }));
+  const actualGross = current ? sum(current.obligations.map(item => item.approvedAcGross)) : "0";
+  const advanceGross = current ? sum(current.obligations.map(item => item.disbursedAdvance)) : "0";
+  const outstandingGross = current ? sum(current.obligations.map(item => {
+    const payment = settlementRows.find(row => row.obligationId === item.id);
+    return payment?.additionalOutBalance ?? payment?.refundInBalance ?? item.amountDue;
+  })) : "0";
+  const totalSources = Math.max(current?.obligations.length ?? 0, (current?.locks.length ?? 0) + warningLines.length);
+  const internalComplete = !!current && current.request.state === "APPROVED" && current.locks.length > 0 && warningLines.length === 0 && outstandingGross === "0";
+  const internalPercent = totalSources === 0 ? 0 : Math.round(((current?.locks.length ?? 0) / totalSources) * 100) * (outstandingGross === "0" ? 1 : 0.9);
+  const customer = finance.customerAccounting;
+  const liquidation = customer.currentLiquidation;
+  const targetGross = customer.receivable.targetGross;
+  const collectedGross = customer.receivable.collectedGross;
+  const customerComplete = !!liquidation?.evidence?.id && customer.receivable.outstandingGross === "0";
+  const closeBlockers = [
+    ...(!current || current.request.state !== "APPROVED" ? ["Hồ sơ quyết toán cuối cùng chưa được CEO phê duyệt."] : []),
+    ...(!current?.locks.length ? ["Nguồn AC/tạm ứng chưa có khóa SETTLED bất biến."] : []),
+    ...(warningLines.length ? ["Còn dòng AC chưa được DD duyệt."] : []),
+    ...(outstandingGross !== "0" ? ["Còn công nợ nội bộ hoặc Pending Disbursement chưa về 0."] : []),
+    ...(!liquidation?.documentNumber || !liquidation?.signedAt || !liquidation?.evidence?.id ? ["Chưa có Biên bản thanh lý khách hàng đã ký kèm chứng từ."] : []),
+    ...(customer.receivable.outstandingGross !== "0" ? ["Customer AR chưa về đúng 0."] : []),
+  ];
+  const selectedObligation = current?.obligations.find(item => item.id === cashObligationId) ?? null;
+  const selectedPayment = selectedObligation ? settlementRows.find(row => row.obligationId === selectedObligation.id) : undefined;
+  const selectedRemaining = selectedPayment?.additionalOutBalance ?? selectedPayment?.refundInBalance ?? selectedObligation?.amountDue ?? "0";
+  const canManageCash = ["ADMIN", "ACCOUNT"].includes(user.role) && !finance.data.closed;
+  const canEditDossier = canCreate && !!current && ["DRAFT", "RETURNED"].includes(current.request.state) && dossier?.createdById === user.id;
 
-export default function SettlementPanel({ finance, user, canCreate }: Props) {
-  // Modal states for Cash confirmation & Direct cash entries
-  const [cashModalOpen, setCashModalOpen] = useState(false);
-  const [selectedDisbursementReq, setSelectedDisbursementReq] = useState<Request | null>(null);
-  const [cashDirection, setCashDirection] = useState<"OUT" | "IN">("OUT");
+  return <div className="space-y-6">
+    <header className="flex flex-wrap items-start justify-between gap-4">
+      <div><div className="flex flex-wrap items-center gap-2"><h2 className="text-xl font-bold tracking-tight">Quyết toán & đóng tài chính</h2><Badge tone={finance.data.closed ? "neutral" : "success"}>{finance.data.closed ? "Tài chính đã đóng" : "Tài chính đang mở"}</Badge></div><p className="mt-1 text-sm text-[var(--text-secondary)]">Một hồ sơ tổng hợp toàn Project; nguồn, phiên bản, người xử lý và kết quả luôn truy được.</p></div>
+      {dossier && <Badge tone="info">Dossier ổn định · {dossier.id}</Badge>}
+    </header>
 
-  const usersMap = useMemo(() => new Map(finance.users.map(u => [u.id, u.name])), [finance.users]);
+    <SettlementProgressCards internal={{ percent: internalPercent, complete: internalComplete, settledSources: current?.locks.length ?? 0, totalSources, actualGross, advanceGross, outstandingGross }} customer={{ percent: percent(collectedGross, targetGross), complete: customerComplete, liquidationSigned: !!liquidation?.evidence?.id, liquidationGross: targetGross, collectedGross, outstandingGross: customer.receivable.outstandingGross }} />
 
-  const recipientName = (key: string) =>
-    recipientDisplayName(key, usersMap, finance.data.beneficiaries);
+    <Panel className="space-y-3">
+      <div className="flex items-center gap-2"><ShieldCheck size={18} aria-hidden="true" /><h3 className="font-bold">Các trục trạng thái độc lập</h3></div>
+      <dl className="grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-6">
+        <div><dt className="text-xs text-[var(--text-secondary)]">Trạng thái duyệt</dt><dd className="font-semibold">{current?.request.state ?? "Chưa có hồ sơ"}</dd></div>
+        <div><dt className="text-xs text-[var(--text-secondary)]">Khóa quyết toán</dt><dd className="font-semibold">{current?.locks.length ? `${current.locks.length} khóa SETTLED` : "Chưa khóa"}</dd></div>
+        <div><dt className="text-xs text-[var(--text-secondary)]">Tiến độ tiền</dt><dd className="font-semibold">{outstandingGross === "0" ? "Đã cân đối" : `Còn ${displayMoney(outstandingGross)}`}</dd></div>
+        <div><dt className="text-xs text-[var(--text-secondary)]">Trạng thái ký</dt><dd className="font-semibold">{current?.request.state === "APPROVED" ? "Xem riêng trên bản xuất" : "Chưa đến bước ký"}</dd></div>
+        <div><dt className="text-xs text-[var(--text-secondary)]">Công việc TaskFlow</dt><dd className="font-semibold">Không suy diễn từ Task DONE</dd></div>
+        <div><dt className="text-xs text-[var(--text-secondary)]">Đóng tài chính</dt><dd className="font-semibold">{finance.data.closed ? "CLOSED" : "OPEN"}</dd></div>
+      </dl>
+    </Panel>
 
-  // Cash statistics & Pending disbursements
-  const cashStats = useMemo(() => {
-    let outTotal = 0;
-    let inTotal = 0;
-    finance.cash.forEach(c => {
-      const amt = parseFloat(c.amount) || 0;
-      if (c.direction === "IN") inTotal += amt;
-      else outTotal += amt;
-    });
+    {!dossier && <Panel className="space-y-4"><EmptyState title="Chưa có hồ sơ quyết toán tổng hợp" description="Account/Project Owner tạo hồ sơ một lần; máy chủ tự nạp AC đã DD duyệt và tạm ứng đã giải ngân." />{canCreate && <ActionForm finance={finance} command="CREATE_SETTLEMENT_DOSSIER" label="Tạo hồ sơ quyết toán tổng hợp"><input type="hidden" name="settlementVersion" value="0" /><Input name="title" label="Tên hồ sơ" defaultValue="Hồ sơ quyết toán tổng hợp" required /></ActionForm>}</Panel>}
 
-    const pendingDisbursements = finance.requests.filter(
-      r => r.state === "APPROVED" &&
-           ["ADVANCE", "VENDOR_PAYMENT", "REIMBURSEMENT"].includes(r.kind) &&
-           (finance.paymentDossiers?.find(dossier => dossier.requestId === r.id)?.recipients.some(recipient => recipient.progress !== "DA_CHI_DU") ?? !finance.cash.some(c => c.requestId === r.id))
-    );
-
-    return {
-      outTotal,
-      inTotal,
-      netTotal: outTotal - inTotal,
-      pendingCount: pendingDisbursements.length,
-      pendingDisbursements
-    };
-  }, [finance.cash, finance.paymentDossiers, finance.requests]);
-
-  // Multi-party reconciliation ledger
-  const ledger = useMemo(() => {
-    return reconcile(finance.data, finance.cash);
-  }, [finance.data, finance.cash]);
-
-  // Reconciliation summary
-  const summary = useMemo(() => {
-    let totalGross = 0;
-    let totalPaid = 0;
-    let totalRefunded = 0;
-    let balancedCount = 0;
-    let pendingCount = 0;
-
-    ledger.forEach(row => {
-      totalGross += parseFloat(row.actualGross) || 0;
-      totalPaid += parseFloat(row.paid) || 0;
-      totalRefunded += parseFloat(row.refunded) || 0;
-      if (!row.payable && !row.receivable) balancedCount++;
-      else pendingCount++;
-    });
-
-    const isAllBalanced = ledger.length > 0 && pendingCount === 0;
-
-    return {
-      totalGross,
-      totalPaid,
-      totalRefunded,
-      balancedCount,
-      pendingCount,
-      isAllBalanced
-    };
-  }, [ledger]);
-
-  // Approved requests with no cash transactions (can be cancelled)
-  const cancellableRequests = useMemo(() => {
-    return finance.requests.filter(
-      r => r.state === "APPROVED" && !finance.cash.some(c => c.requestId === r.id)
-    );
-  }, [finance.requests, finance.cash]);
-
-  const canManageCash = ["ADMIN", "ACCOUNT"].includes(user.role);
-
-  const handleOpenDisbursementModal = (req: Request) => {
-    setSelectedDisbursementReq(req);
-    setCashDirection("OUT");
-    setCashModalOpen(true);
-  };
-
-  const handleOpenDirectCashModal = (dir: "OUT" | "IN") => {
-    setSelectedDisbursementReq(null);
-    setCashDirection(dir);
-    setCashModalOpen(true);
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* 1. TOP HEADER & METRICS */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold tracking-tight text-[var(--foreground)]">
-              Tiền & Quyết toán
-            </h2>
-            <Badge tone={finance.data.closed ? "neutral" : "success"}>
-              {finance.data.closed ? "Tài chính đã đóng" : "Tài chính đang mở"}
-            </Badge>
-          </div>
-          <p className="text-sm text-[var(--text-secondary)] mt-0.5">
-            Theo dõi sổ quỹ thực tế, giải ngân hồ sơ duyệt và đối soát công nợ theo người nhận/NCC.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {canManageCash && !finance.data.closed && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => handleOpenDirectCashModal("IN")}
-            >
-              <ArrowDownLeft size={14} className="mr-1 text-[var(--success)]" aria-hidden="true" />
-              Ghi nhận thu hoàn quỹ
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* KPI METRICS (SUMMARY STRIP) */}
-      <div className="tf-summary-strip">
-        <div className="tf-summary-item">
-          <span className="tf-summary-label">Tổng chi phí AC (Gross)</span>
-          <span className="tf-summary-value">{displayMoney(Math.round(summary.totalGross).toString())}</span>
-          <span className="tf-summary-hint">Nghĩa vụ chi phí đã ghi nhận</span>
-        </div>
-        <div className="tf-summary-item">
-          <span className="tf-summary-label">Thực chi từ quỹ</span>
-          <span className="tf-summary-value text-rose-600 dark:text-rose-400">{displayMoney(Math.round(cashStats.outTotal).toString())}</span>
-          <span className="tf-summary-hint">{finance.cash.filter(c => c.direction === "OUT").length} giao dịch xuất tiền</span>
-        </div>
-        <div className="tf-summary-item">
-          <span className="tf-summary-label">Thu hoàn vào quỹ</span>
-          <span className="tf-summary-value text-[var(--success)]">{displayMoney(Math.round(cashStats.inTotal).toString())}</span>
-          <span className="tf-summary-hint">{finance.cash.filter(c => c.direction === "IN").length} giao dịch nhập quỹ</span>
-        </div>
-        <div className="tf-summary-item">
-          <span className="tf-summary-label">Chờ giải ngân</span>
-          <span className="tf-summary-value text-amber-600 dark:text-amber-400">{cashStats.pendingCount} hồ sơ</span>
-          <span className="tf-summary-hint">Đã duyệt 3 cấp, chưa xuất tiền</span>
-        </div>
-      </div>
-
-      {/* 2. SECTION: HỒ SƠ ĐÃ DUYỆT CHỜ GIẢI NGÂN (PENDING DISBURSEMENTS) */}
-      {cashStats.pendingDisbursements.length > 0 && (
-        <Panel className="space-y-4 border-[var(--warning)] bg-[var(--warning-soft)]/40">
-          <div className="flex items-center justify-between pb-2 border-b border-[var(--border)]/60">
-            <div className="flex items-center gap-2">
-              <Clock size={18} className="text-[var(--warning)]" aria-hidden="true" />
-              <h3 className="font-bold text-sm text-[var(--foreground)]">
-                Hồ sơ đã duyệt đang chờ giải ngân ({cashStats.pendingDisbursements.length})
-              </h3>
-            </div>
-            <span className="text-xs text-[var(--text-secondary)]">
-              Account được phân công xác nhận khi tiền đã chuyển thực tế
-            </span>
-          </div>
-
-          <div className="divide-y divide-[var(--border)]">
-            {cashStats.pendingDisbursements.map(req => {
-              const reqPayload = req.payload as RequestPayload;
-              const reqExpenseIds = reqPayload?.expenseIds;
-              const targetExpenses = finance.data.expenses.filter(e =>
-                reqExpenseIds?.length
-                  ? reqExpenseIds.includes(e.id)
-                  : (req.kind === "REIMBURSEMENT" && e.recipientKey === reqPayload?.recipientKey)
-              );
-              const isBlockedByPendingAc = targetExpenses.length > 0 && targetExpenses.some(e => !isExpenseApproved(e));
-
-              return (
-                <div key={req.id} className="py-3 flex flex-wrap items-center justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-semibold text-[var(--foreground)]">{req.title}</p>
-                      <Badge tone={isBlockedByPendingAc ? "warning" : "success"}>
-                        {isBlockedByPendingAc ? "Chờ duyệt AC (Chưa thể giải ngân)" : "Đã duyệt AC (Đủ điều kiện chi)"}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-[var(--text-secondary)]">
-                      Người đề nghị: <strong>{usersMap.get(req.creatorId) ?? "Người lập"}</strong> ·
-                      Người nhận: <strong>{recipientName(req.payload.recipientKey || "")}</strong> ·
-                      Số tiền: <strong className="text-[var(--foreground)]">{req.payload.amount ? displayMoney(req.payload.amount) : "Theo đối soát"}</strong>
-                    </p>
-                    {isBlockedByPendingAc && (
-                      <span className="text-xs text-amber-700 dark:text-amber-400 block font-medium">
-                        ⚠ Cần duyệt AC đầy đủ (hoặc duyệt ngoại lệ) cho các khoản chi trước khi Kế toán / Thủ quỹ chi tiền.
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {isBlockedByPendingAc ? (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        disabled
-                        className="text-xs opacity-60 cursor-not-allowed"
-                        title="Phiếu chưa có hiệu lực chi vì AC tương ứng chưa được phê duyệt đầy đủ"
-                      >
-                        <ShieldAlert size={13} className="mr-1 text-amber-600" />
-                        Chưa có hiệu lực chi
-                      </Button>
-                    ) : (
-                      canManageCash && req.cashAssigneeId === user.id && !finance.data.closed && (
-                        <Button
-                          size="sm"
-                          onClick={() => handleOpenDisbursementModal(req)}
-                        >
-                          <Coins size={14} className="mr-1" aria-hidden="true" />
-                          Xác nhận chi tiền (Giải ngân)
-                        </Button>
-                      )
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Panel>
-      )}
-
-      {/* 3. SECTION: SỔ QUỸ & LỊCH SỬ GIAO DỊCH TIỀN THỰC TẾ (CASHBOOK) */}
+    {current && <>
       <Panel className="space-y-4">
-        <div><h3 className="font-bold text-base text-[var(--foreground)]">Đối soát theo hồ sơ và người nhận</h3><p className="text-xs text-[var(--text-secondary)] mt-0.5">Các trục duyệt, xác minh NCC, tiền thật, AC và đóng tài chính được hiển thị riêng.</p></div>
-        <PaymentLedgerTable projectId={finance.project.id} rows={finance.paymentLedger ?? []} />
-      </Panel>
-
-      <Panel className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-bold text-base text-[var(--foreground)]">
-              Sổ quỹ giao dịch tiền thực tế (Cashbook)
-            </h3>
-            <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-              Ghi nhận đầy đủ chứng từ chuyển khoản, số phiếu thu/chi và người nhận tiền từ quỹ dự án.
-            </p>
-          </div>
-          <Badge tone="neutral">{finance.cash.length} giao dịch</Badge>
-        </div>
-
-        {finance.cash.length > 0 ? (
-          <Table caption="Danh sách các giao dịch tiền thực tế">
-            <thead>
-              <tr>
-                <th scope="col" className="w-32">Mã tham chiếu</th>
-                <th scope="col">Người nhận / Thụ hưởng</th>
-                <th scope="col" className="w-28 text-center">Luồng tiền</th>
-                <th scope="col" className="w-40 text-right">Số tiền thực tế</th>
-                <th scope="col" className="w-32 text-center">Chứng từ đính kèm</th>
-              </tr>
-            </thead>
-            <tbody>
-              {finance.cash.map(c => {
-                const isRefund = c.direction === "IN";
-                return (
-                  <tr key={c.id}>
-                    <td className="font-mono text-xs font-semibold text-[var(--foreground)]">
-                      {c.reference}
-                    </td>
-                    <td>
-                      <span className="font-medium text-sm text-[var(--foreground)]">
-                        {recipientName(c.recipientKey)}
-                      </span>
-                    </td>
-                    <td className="text-center">
-                      <Badge tone={isRefund ? "success" : "danger"}>
-                        {isRefund ? "Thu hoàn" : "Chi tiền"}
-                      </Badge>
-                    </td>
-                    <td className="text-right tabular-nums font-mono font-bold text-sm">
-                      <span className={isRefund ? "text-[var(--success)]" : "text-rose-600 dark:text-rose-400"}>
-                        {isRefund ? "+" : "-"}{displayMoney(c.amount)}
-                      </span>
-                    </td>
-                    <td className="text-center">
-                      {c.evidenceId ? (
-                        <Link
-                          className="tf-link text-xs inline-flex items-center gap-1"
-                          href={`/api/projects/${finance.project.id}/costflow/evidence/${c.evidenceId}`}
-                          target="_blank"
-                        >
-                          <FileText size={12} aria-hidden="true" />
-                          <span>Xem chứng từ</span>
-                        </Link>
-                      ) : (
-                        <span className="text-xs text-[var(--text-secondary)]">—</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </Table>
-        ) : (
-          <EmptyState
-            title="Chưa có giao dịch tiền nào"
-            description="Các giao dịch tiền sẽ được ghi nhận sau khi Kế toán/Thủ quỹ xác nhận đã chi hoặc thu hoàn cho hồ sơ đã duyệt."
-          />
-        )}
-      </Panel>
-
-      {/* 4. SECTION: BẢNG ĐỐI SOÁT ĐA CHIỀU (RECONCILIATION LEDGER) */}
-      <Panel className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-bold text-base text-[var(--foreground)]">
-              Bảng đối soát đa chiều (Reconciliation Ledger)
-            </h3>
-            <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-              Cân đối độc lập từng tài khoản nội bộ và NCC; đối chiếu giữa nghĩa vụ chi phí AC và dòng tiền thực tế.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-[var(--text-secondary)]">
-              Tiến độ: <strong>{summary.balancedCount}/{ledger.length}</strong> đối tượng
-            </span>
-            <Badge tone={summary.isAllBalanced ? "success" : "warning"}>
-              {summary.isAllBalanced ? "Đã đối soát hoàn tất" : "Đang xử lý cân đối"}
-            </Badge>
-          </div>
-        </div>
-
-        {ledger.length > 0 ? (
-          <Table caption="Đối soát riêng từng người nhận / NCC">
-            <thead>
-              <tr>
-                <th scope="col">Người nhận / Nhà cung cấp</th>
-                <th scope="col" className="text-right">Chi phí gồm VAT</th>
-                <th scope="col" className="text-right">Đã thực chi</th>
-                <th scope="col" className="text-right">Đã thu hoàn</th>
-                <th scope="col" className="text-right">Số dư công nợ</th>
-                <th scope="col" className="text-center w-36">Tình trạng đối soát</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ledger.map(row => {
-                const isInternal = row.recipientKey.startsWith("USER:");
-                const isBalanced = !row.payable && !row.receivable;
-
-                return (
-                  <tr key={row.recipientKey}>
-                    <td>
-                      <div className="flex items-center gap-2">
-                        <div className="p-1 rounded bg-[var(--surface-soft)] text-[var(--text-secondary)]">
-                          {isInternal ? <User size={13} aria-hidden="true" /> : <Building2 size={13} aria-hidden="true" />}
-                        </div>
-                        <div>
-                          <strong className="text-sm text-[var(--foreground)] block">
-                            {recipientName(row.recipientKey)}
-                          </strong>
-                          <span className="text-[11px] text-[var(--text-secondary)]">
-                            {isInternal ? "Nhân viên phụ trách" : "Nhà cung cấp đối tác"}
-                          </span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="text-right tabular-nums font-mono text-sm">
-                      {displayMoney(row.actualGross)}
-                    </td>
-                    <td className="text-right tabular-nums font-mono text-sm text-rose-600 dark:text-rose-400">
-                      {displayMoney(row.paid)}
-                    </td>
-                    <td className="text-right tabular-nums font-mono text-sm text-emerald-600 dark:text-emerald-400">
-                      {displayMoney(row.refunded)}
-                    </td>
-                    <td className="text-right tabular-nums font-mono font-bold text-sm">
-                      {displayMoney(row.balance)}
-                    </td>
-                    <td className="text-center">
-                      <Badge tone={isBalanced ? "success" : row.payable ? "warning" : "info"}>
-                        {isBalanced ? "Đã khớp 100%" : row.payable ? "Còn phải trả" : "Cần thu hoàn"}
-                      </Badge>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </Table>
-        ) : (
-          <EmptyState
-            title="Chưa có dữ liệu đối soát"
-            description="Bảng đối soát sẽ tự động tổng hợp khi có phát sinh Actual Cost hoặc giao dịch tiền thực tế."
-          />
-        )}
-      </Panel>
-
-      {/* 5. SECTION: QUY TRÌNH ĐÓNG / MỞ TÀI CHÍNH DỰ ÁN */}
-      {finance.fullAccess && (
-        <Panel className="space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
-            <div className="flex items-center gap-2">
-              {finance.data.closed ? (
-                <Lock size={18} className="text-zinc-600 dark:text-zinc-400" aria-hidden="true" />
-              ) : (
-                <ShieldCheck size={18} className="text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-              )}
-              <h3 className="font-bold text-base text-[var(--foreground)]">
-                {finance.data.closed ? "Yêu cầu mở lại tài chính dự án" : "Yêu cầu đóng tài chính dự án"}
-              </h3>
-            </div>
-            <Badge tone={finance.data.closed ? "neutral" : "success"}>
-              {finance.data.closed ? "Đã đóng" : "Đang mở"}
-            </Badge>
-          </div>
-
-          {!finance.data.closed && !summary.isAllBalanced && (
-            <Alert tone="warning" title="Lưu ý trước khi đóng tài chính">
-              Dự án hiện vẫn còn {summary.pendingCount} đối tượng chưa hoàn tất cân đối số dư công nợ. Hãy kiểm tra kỹ trước khi trình Quản lý đóng tài chính.
-            </Alert>
-          )}
-
-          <ActionForm
-            finance={finance}
-            command="CREATE_REQUEST"
-            label={finance.data.closed ? "Gửi yêu cầu mở lại tài chính" : "Gửi yêu cầu đóng tài chính"}
-          >
-            <input type="hidden" name="kind" value={finance.data.closed ? "REOPEN" : "CLOSE"} />
-            <Input
-              name="title"
-              label="Tên yêu cầu"
-              defaultValue={finance.data.closed ? "Mở lại tài chính dự án" : "Đóng tài chính dự án"}
-              required
-            />
-            <Textarea
-              name="explanation"
-              label="Lý do / Giải trình"
-              placeholder={
-                finance.data.closed
-                  ? "Nêu lý do cần mở lại (phát sinh chi phí bổ sung, điều chỉnh chứng từ...)"
-                  : "Xác nhận đối soát hoàn tất, đủ chứng từ và đề nghị khóa sổ dự án..."
-              }
-              required
-            />
+        <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-bold">Hồ sơ quyết toán tổng hợp · v{current.version}</h3><p className="text-xs text-[var(--text-secondary)]">Request {current.request.id} · canonical hash {current.canonicalHash.slice(0, 12)}…</p></div><Badge tone={current.request.state === "APPROVED" ? "success" : current.request.state === "RETURNED" ? "danger" : "warning"}>{current.request.state}</Badge></div>
+        <ProjectSettlementTable projectId={finance.project.id} version={current} warnings={warningLines} paymentRows={settlementRows} recipientName={recipientName} />
+        {canEditDossier && <div className="grid gap-4 lg:grid-cols-2">
+          <SettlementEvidenceUploader finance={finance} requestId={current.request.id} settlementVersion={current.request.version} obligations={current.obligations} evidence={current.evidence} canEdit recipientName={recipientName} />
+          <ActionForm finance={finance} command={current.request.state === "RETURNED" ? "RESUBMIT_SETTLEMENT_DOSSIER" : "SUBMIT_SETTLEMENT_DOSSIER"} requestId={current.request.id} label={current.request.state === "RETURNED" ? "Gửi lại từ Quản lý" : "Gửi duyệt Manager → Accountant → CEO"}>
+            <input type="hidden" name="settlementVersion" value={current.request.version} />
+            {current.request.state === "RETURNED" && <Textarea name="reason" label="Phản hồi sửa hồ sơ" required />}
+            <Alert tone="info" title="Máy chủ sẽ tính lại toàn bộ">AC chưa duyệt và ba mục chứng từ cố định là các blocker tách biệt; giao diện không có quyền bỏ qua.</Alert>
           </ActionForm>
-        </Panel>
-      )}
-
-      {/* 6. SECTION: YÊU CẦU HỦY HỒ SƠ ĐÃ DUYỆT, CHƯA CHI */}
-      {canCreate && !finance.data.closed && cancellableRequests.length > 0 && (
-        <details className="rounded-xl border border-[var(--border)] p-4 bg-[var(--surface)]">
-          <summary className="font-semibold text-sm cursor-pointer text-[var(--foreground)] flex items-center justify-between">
-            <span className="flex items-center gap-2">
-              <XCircle size={16} className="text-rose-500" aria-hidden="true" />
-              <span>Yêu cầu hủy hồ sơ đã duyệt, chưa chi ({cancellableRequests.length})</span>
-            </span>
-            <span className="text-xs text-[var(--text-secondary)] font-normal">Hủy an toàn các hồ sơ chưa giải ngân tiền</span>
-          </summary>
-          <div className="mt-4 pt-3 border-t border-[var(--border)]/60">
-            <ActionForm finance={finance} command="CREATE_REQUEST" label="Gửi yêu cầu hủy">
-              <input type="hidden" name="kind" value="CANCEL" />
-              <Input name="title" label="Tên yêu cầu hủy" placeholder="Ví dụ: Hủy đề nghị tạm ứng số..." required />
-              <Select name="targetRequestId" label="Chọn hồ sơ cần hủy" required>
-                <option value="">Chọn hồ sơ trong danh sách đã duyệt</option>
-                {cancellableRequests.map(r => (
-                  <option key={r.id} value={r.id}>
-                    {r.title} ({r.payload.amount ? displayMoney(r.payload.amount) : "Chưa ghi số"})
-                  </option>
-                ))}
-              </Select>
-              <Textarea name="explanation" label="Lý do hủy hồ sơ" placeholder="Nêu rõ lý do không thực hiện chi tiền..." required />
-            </ActionForm>
-          </div>
-        </details>
-      )}
-
-      {/* 7. SECTION: SỔ NHẬT KÝ KIỂM TOÁN (AUDIT HISTORY TIMELINE) */}
-      <Panel className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <History size={18} className="text-[var(--text-secondary)]" aria-hidden="true" />
-            <h3 className="font-bold text-base text-[var(--foreground)]">
-              Nhật ký kiểm toán tài chính ({finance.history.length})
-            </h3>
-          </div>
-          <span className="text-xs text-[var(--text-secondary)]">Bảo toàn 100% lịch sử các phiên bản</span>
-        </div>
-
-        {finance.history.length > 0 ? (
-          <div className="divide-y divide-[var(--border)] max-h-96 overflow-y-auto pr-1">
-            {finance.history.map(h => (
-              <div key={h.id} className="py-2.5 flex items-center justify-between text-xs gap-3">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-[var(--surface-soft)] border border-[var(--border)]">
-                    v{h.version}
-                  </span>
-                  <span className="font-semibold text-[var(--foreground)]">
-                    {ACTION_LABEL[h.action] ?? h.action}
-                  </span>
-                  <span className="text-[var(--text-secondary)]">bởi</span>
-                  <span className="font-medium text-[var(--foreground)]">
-                    {usersMap.get(h.actorId) ?? "Người xử lý"}
-                  </span>
-                </div>
-                <span className="text-[11px] text-[var(--text-secondary)] shrink-0">
-                  {new Date(h.createdAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}
-                </span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-xs text-[var(--text-secondary)] italic">
-            Chưa có lịch sử thay đổi phiên bản.
-          </p>
-        )}
+        </div>}
+        {!canEditDossier && <SettlementEvidenceUploader finance={finance} requestId={current.request.id} settlementVersion={current.request.version} obligations={current.obligations} evidence={current.evidence} canEdit={false} recipientName={recipientName} />}
+        {canManageCash && current.request.state === "APPROVED" && current.obligations.some(item => item.amountDue !== "0") && <div className="flex flex-wrap gap-2">{current.obligations.filter(item => item.amountDue !== "0").map(item => <Button key={item.id} variant="secondary" className="min-h-11" disabled={settlementRows.find(row => row.obligationId === item.id)?.cashProgress === "DA_CHI_DU"} onClick={() => setCashObligationId(item.id)}>{item.direction === "REFUND" ? "Ghi nhận thu hoàn" : "Xác nhận chi thêm"} · {recipientName(item.recipientKey)}</Button>)}</div>}
       </Panel>
+      <SettlementExportActions projectId={finance.project.id} versionId={current.id} version={current.version} state={current.request.state} />
+    </>}
 
-      {/* DIALOG XÁC NHẬN TIỀN THỰC TẾ (CASH MODAL) */}
-      <Dialog
-        open={cashModalOpen}
-        onClose={() => setCashModalOpen(false)}
-        title={
-          selectedDisbursementReq
-            ? `Xác nhận giải ngân: ${selectedDisbursementReq.title}`
-            : cashDirection === "IN"
-            ? "Ghi nhận tiền thu hoàn vào quỹ"
-            : "Ghi nhận chi tiền thực tế"
-        }
-        description={
-          selectedDisbursementReq
-            ? "Ghi nhận tiền đã chuyển khoản thực tế cho hồ sơ đã duyệt 3 cấp. Dữ liệu sẽ cập nhật vào Sổ quỹ và Bảng đối soát công nợ."
-            : "Ghi nhận trực tiếp khoản thu/chi thực tế từ quỹ dự án."
-        }
-      >
-        {selectedDisbursementReq ? (() => {
-          const dossier = finance.paymentDossiers?.find(item => item.requestId === selectedDisbursementReq.id);
-          if (!dossier) return <Alert tone="danger" title="Hồ sơ chưa có dữ liệu dòng thanh toán chuẩn hóa." />;
-          return <div className="space-y-4">{dossier.recipients.map(recipient => <CashConfirmationEditor key={recipient.recipientKey} finance={finance} request={selectedDisbursementReq} dossier={dossier} recipient={recipient} userId={user.id} onSuccess={() => setCashModalOpen(false)} />)}</div>;
-        })() : <Alert tone="warning" title="Thu hoàn sau AC chưa khả dụng cho đến khi Phase 8 cung cấp AC đã duyệt." />}
-      </Dialog>
-    </div>
-  );
+    <Panel className="space-y-4"><div className="flex items-center gap-2"><Landmark size={18} aria-hidden="true" /><div><h3 className="font-bold">Pending Disbursement và sổ tiền</h3><p className="text-xs text-[var(--text-secondary)]">Tái sử dụng cùng read model Phase 7; người thụ hưởng, provenance, đã chi lũy kế và số dư không bị tách thành một ledger khác.</p></div></div><PaymentLedgerTable projectId={finance.project.id} rows={finance.paymentLedger ?? []} /></Panel>
+
+    <FinancialCloseModal finance={finance} blockers={closeBlockers} hasDossier={!!dossier} canRequest={finance.fullAccess && (finance.project.ownerId === user.id || finance.project.members.some(member => member.userId === user.id))} />
+
+    {dossier && <Panel className="space-y-4"><div className="flex items-center gap-2"><FileClock size={18} aria-hidden="true" /><div><h3 className="font-bold">Lịch sử version / attempt của cùng dossier</h3><p className="text-xs text-[var(--text-secondary)]">Mở lại hoặc thay thế tạo nguồn mới có liên kết; prior bytes, hash, cash, khóa và chữ ký giữ nguyên.</p></div></div><ol className="space-y-2">{dossier.versions.map(version => <li key={version.id} className="rounded-lg border border-[var(--border)] p-3 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><strong>v{version.version} · {version.request.state}</strong><Badge tone={version.id === current?.id ? "info" : "neutral"}>{version.id === current?.id ? "Hiện hành" : "Bất biến"}</Badge></div><p className="mt-1 text-xs text-[var(--text-secondary)]">{version.supersedesId ? `Kế tiếp ${version.supersedesId}` : "Phiên bản đầu"} · {version.replacementReason || "Không có lý do thay thế"}</p><p className="mt-1 break-all font-mono text-xs">{version.canonicalHash}</p></li>)}</ol></Panel>}
+
+    <Panel className="space-y-3"><div className="flex items-center gap-2"><History size={18} aria-hidden="true" /><h3 className="font-bold">Nhật ký CostFlow ({finance.history.length})</h3></div>{finance.history.length ? <ol className="max-h-80 divide-y divide-[var(--border)] overflow-y-auto">{finance.history.map(item => <li key={item.id} className="flex flex-wrap justify-between gap-2 py-2 text-xs"><span><strong>v{item.version}</strong> · {item.action} · {users.get(item.actorId) ?? "Người xử lý"}</span><time>{new Date(item.createdAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</time></li>)}</ol> : <p className="text-xs text-[var(--text-secondary)]">Chưa có sự kiện.</p>}</Panel>
+
+    <Dialog open={!!selectedObligation} onClose={() => setCashObligationId(null)} title={selectedObligation?.direction === "REFUND" ? "Ghi nhận thu hoàn tạm ứng" : "Xác nhận chi bổ sung"} description="Giao dịch tiền là sự kiện riêng, bắt buộc chứng từ và idempotency key; duyệt hồ sơ không tự ghi tiền.">
+      {selectedObligation && <ActionForm finance={finance} command="SETTLEMENT_CASH" requestId={current?.request.id} label="Ghi nhận giao dịch thực tế" onSuccess={() => setCashObligationId(null)}>
+        <input type="hidden" name="settlementObligationId" value={selectedObligation.id} /><input type="hidden" name="recipientKey" value={selectedObligation.recipientKey} /><input type="hidden" name="direction" value={selectedObligation.direction === "REFUND" ? "IN" : "OUT"} />
+        <Alert tone="warning" title="Không vượt số dư server">Còn phải thực hiện: {displayMoney(selectedRemaining)} · người thụ hưởng {recipientName(selectedObligation.recipientKey)}.</Alert>
+        <Input name="amount" label="Số tiền VND" inputMode="numeric" pattern="[1-9][0-9]*" defaultValue={selectedRemaining} required />
+        <Select name="channel" label="Hình thức giao dịch" required><option value="BANK_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option><option value="OTHER">Khác</option></Select>
+        <Input name="reference" label="Mã giao dịch / chứng từ" required /><Input name="occurredAt" label="Thời điểm giao dịch" type="datetime-local" required /><Input name="idempotencyKey" label="Mã chống ghi trùng" hint="Dùng mã duy nhất từ chứng từ ngân hàng/phiếu quỹ." required /><Input className="min-h-11" name="proof" label="UNC / phiếu thu chi / biên lai" type="file" accept=".pdf,.jpg,.jpeg,.png" required />
+      </ActionForm>}
+    </Dialog>
+  </div>;
 }
