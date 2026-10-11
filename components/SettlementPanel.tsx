@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { FileClock, History, Landmark, ShieldCheck } from "lucide-react";
 import type { Finance } from "@/components/CostFlowPanel";
 import ActionForm from "@/components/CostFlowActionForm";
@@ -79,7 +79,7 @@ export default function SettlementPanel({ finance: baseFinance, user, canCreate 
   const canManageCash = ["ADMIN", "ACCOUNT"].includes(user.role) && !finance.data.closed;
   const canEditDossier = canCreate && !!current && ["DRAFT", "RETURNED"].includes(current.request.state) && dossier?.createdById === user.id;
 
-  return <div className="space-y-6">
+  return <div className="space-y-6" style={{ "--control-height": "44px" } as CSSProperties}>
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div><div className="flex flex-wrap items-center gap-2"><h2 className="text-xl font-bold tracking-tight">Quyết toán & đóng tài chính</h2><Badge tone={finance.data.closed ? "neutral" : "success"}>{finance.data.closed ? "Tài chính đã đóng" : "Tài chính đang mở"}</Badge></div><p className="mt-1 text-sm text-[var(--text-secondary)]">Một hồ sơ tổng hợp toàn Project; nguồn, phiên bản, người xử lý và kết quả luôn truy được.</p></div>
       {dossier && <Badge tone="info">Dossier ổn định · {dossier.id}</Badge>}
