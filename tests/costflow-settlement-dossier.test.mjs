@@ -135,18 +135,32 @@ test("settlement dossier: Manager cancellation is append-only and replacement pr
   assert.equal(cancelled.events.at(-1).action, "CANCEL");
   assert.throws(() => cancelSettlementLifecycle(draft(), { actorId: "manager", expectedVersion: 0, reason: "Dừng", hasCash: true }), /tiền|cash/i);
 
-  assert.deepEqual(assertSettlementReplacementAllowed({
+  const replacement = assertSettlementReplacementAllowed({
     oldVersionId: "version-1",
     newVersionId: "version-2",
     actorId: ownerId,
     reason: "Bổ sung mô tả",
     changesPaidOrLockedValues: false,
-  }), {
+  });
+  assert.deepEqual({
+    supersedesId: replacement.supersedesId,
+    replacedById: replacement.replacedById,
+    replacementActorId: replacement.replacementActorId,
+    replacementReason: replacement.replacementReason,
+  }, {
     supersedesId: "version-1",
     replacedById: "version-2",
     replacementActorId: ownerId,
     replacementReason: "Bổ sung mô tả",
   });
+  assert.match(replacement.replacedAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.throws(() => assertSettlementReplacementAllowed({
+    oldVersionId: "version-1",
+    newVersionId: "version-1",
+    actorId: ownerId,
+    reason: "Không được tự thay chính mình",
+    changesPaidOrLockedValues: false,
+  }), /khác|distinct|phiên bản mới/i);
   assert.throws(() => assertSettlementReplacementAllowed({
     oldVersionId: "version-1",
     newVersionId: "version-2",
