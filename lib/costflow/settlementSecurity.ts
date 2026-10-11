@@ -1,5 +1,59 @@
 import { createHash } from "node:crypto";
-import type { SettlementExportProjection } from "./export";
+import {
+  SETTLEMENT_EXPORT_FAMILIES,
+  normalizeSettlementExportProjection,
+  type SettlementExportFamily,
+  type SettlementExportProjection,
+} from "./export";
+
+export const SETTLEMENT_PRINT_FAMILIES = SETTLEMENT_EXPORT_FAMILIES;
+
+const PRINT_SIGNATURE_ROLES = ["CREATOR", "MANAGER", "ACCOUNTANT", "CEO"] as const;
+const OPAQUE_CAPABILITY_TOKEN = /^[A-Za-z0-9_-]{43}$/;
+
+export type SettlementPrintSigningEvent = {
+  role: string;
+  actorId: string;
+  actorName: string;
+  signedAt: string;
+  imageSha256: string;
+  eventHash: string;
+  signatureDataUrl: string;
+  confirmed: boolean;
+};
+
+export type SettlementPrintSignatureSlot = {
+  role: typeof PRINT_SIGNATURE_ROLES[number];
+  state: "SIGNED" | "UNSIGNED";
+  actorName?: string;
+  signedAt?: string;
+  imageSha256?: string;
+  eventHash?: string;
+  signatureDataUrl?: string;
+};
+
+export type SettlementPrintDocument = {
+  family: SettlementExportFamily;
+  projectName: string;
+  title: string;
+  sourceVersionId: string;
+  sourceVersion: number;
+  documentVersion: number;
+  approvalState: "APPROVED";
+  signingState: "UNSIGNED" | "PARTIALLY_SIGNED" | "SIGNED_CONFIRMED";
+  replacementLabel: string;
+  approvedAt: string;
+  totals: SettlementExportProjection["totals"];
+  approvedGross: string;
+  moneyInWords: string;
+  recipients: SettlementExportProjection["recipients"];
+  items: SettlementExportProjection["items"];
+  signatureSlots: SettlementPrintSignatureSlot[];
+  canonicalHash: string;
+  signingSnapshotId: string;
+  signingSnapshotState: string;
+  verificationPath?: string;
+};
 
 type CanonicalValue = null | boolean | number | string | CanonicalValue[] | { [key: string]: CanonicalValue };
 
@@ -56,6 +110,107 @@ export function settlementProjectionHash(input: SettlementExportProjection) {
 
 export function settlementFileHash(bytes: Uint8Array) {
   return createHash("sha256").update(bytes).digest("hex");
+}
+
+export function assertOpaquePublicVerificationToken(value: string) {
+  const token = String(value ?? "").trim();
+  if (!OPAQUE_CAPABILITY_TOKEN.test(token)) {
+    throw new Error("Public verification capability token phải là opaque token 256-bit.");
+  }
+  return token;
+}
+
+function replacementLabel(source: SettlementExportProjection["source"]) {
+  if (source.replacedById) return "Phiên bản lịch sử — đã được thay thế";
+  if (source.supersedesId) return "Phiên bản thay thế";
+  return "Phiên bản gốc";
+}
+
+function confirmedSignatureSlots(
+  projection: SettlementExportProjection,
+  signingEvents: readonly SettlementPrintSigningEvent[],
+) {
+  const projectionEvents = new Map(projection.signingSnapshot.events.map(event => [event.role, event]));
+  const confirmed = new Map(signingEvents.filter(event => {
+    const expected = projectionEvents.get(event.role);
+    return event.confirmed && Boolean(expected) &&
+      expected?.actorId === event.actorId &&
+      expected.eventHash === event.eventHash &&
+      expected.signedAt === event.signedAt &&
+      /^[a-f0-9]{64}$/i.test(event.imageSha256) &&
+      event.signatureDataUrl.startsWith("data:image/png;base64,");
+  }).map(event => [event.role, event]));
+
+  return PRINT_SIGNATURE_ROLES.map(role => {
+    const event = confirmed.get(role);
+    if (!event) return { role, state: "UNSIGNED" as const };
+    return {
+      role,
+      state: "SIGNED" as const,
+      actorName: event.actorName,
+      signedAt: event.signedAt,
+      imageSha256: event.imageSha256,
+      eventHash: event.eventHash,
+      signatureDataUrl: event.signatureDataUrl,
+    };
+  });
+}
+
+function evidenceConfirmed(state: string) {
+  return state === "DIGITAL_CONFIRMED" || state === "PHYSICAL_CONFIRMED";
+}
+
+export function buildSettlementPrintDocument(input: {
+  projection: SettlementExportProjection;
+  signingEvents: readonly SettlementPrintSigningEvent[];
+  publicVerificationToken?: string;
+}): SettlementPrintDocument {
+  const normalized = normalizeSettlementExportProjection(input.projection);
+  const signatureSlots = confirmedSignatureSlots(normalized, input.signingEvents);
+  const signedCount = signatureSlots.filter(slot => slot.state === "SIGNED").length;
+  const confirmed = evidenceConfirmed(normalized.signingSnapshot.state);
+  const signingState = confirmed
+    ? "SIGNED_CONFIRMED"
+    : signedCount > 0
+      ? "PARTIALLY_SIGNED"
+      : "UNSIGNED";
+  const token = confirmed && input.publicVerificationToken
+    ? assertOpaquePublicVerificationToken(input.publicVerificationToken)
+    : undefined;
+
+  return {
+    family: normalized.family,
+    projectName: normalized.projectName ?? "",
+    title: normalized.title ?? normalized.family,
+    sourceVersionId: normalized.source.dossierVersionId,
+    sourceVersion: normalized.source.dossierVersion,
+    documentVersion: normalized.source.documentVersion,
+    approvalState: "APPROVED",
+    signingState,
+    replacementLabel: replacementLabel(normalized.source),
+    approvedAt: normalized.approvedAt ?? "",
+    totals: normalized.totals,
+    approvedGross: normalized.approvedGross,
+    moneyInWords: normalized.moneyInWords,
+    recipients: normalized.recipients,
+    items: normalized.items,
+    signatureSlots,
+    canonicalHash: settlementProjectionHash(normalized),
+    signingSnapshotId: normalized.signingSnapshot.id,
+    signingSnapshotState: normalized.signingSnapshot.state,
+    verificationPath: token ? `/workflow/verify/${encodeURIComponent(token)}` : undefined,
+  };
+}
+
+export function settlementPdfAuditIdentity(input: SettlementExportProjection) {
+  return {
+    family: input.family,
+    format: "PDF" as const,
+    dossierVersionId: input.source.dossierVersionId,
+    approvedSnapshotId: input.signingSnapshot.id,
+    canonicalHash: settlementProjectionHash(input),
+    signatureState: input.signingSnapshot.state,
+  };
 }
 
 export function validateSettlementExportAccess(input: {

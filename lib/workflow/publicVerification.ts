@@ -15,6 +15,7 @@ const ATTEMPT_LIMIT = 300;
 
 export type PublicVerificationDto = {
   valid: true;
+  validity: "VALID";
   dossierCode: string;
   templateName: string;
   approvedAt: string;
@@ -23,6 +24,8 @@ export type PublicVerificationDto = {
   signers: readonly { role: string; name: string; signedAt: string }[];
   digestShort: string;
   statement: "INTERNAL_ISSUER_ATTESTATION";
+  family?: string;
+  version?: number;
 };
 
 function attestationKey(keyId: string) {
@@ -150,9 +153,14 @@ function safeTokenEquals(left: string, right: string) {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-function publicDto(projection: WorkflowApprovedProjection, digest: string): PublicVerificationDto {
+function publicDto(
+  projection: WorkflowApprovedProjection,
+  digest: string,
+  settlement?: { family: string; dossierVersion: { version: number } },
+): PublicVerificationDto {
   return {
     valid: true,
+    validity: "VALID",
     dossierCode: `HS-${projection.request.id.slice(-8).toUpperCase()}`,
     templateName: projection.template.name,
     approvedAt: projection.request.approvedAt,
@@ -161,6 +169,8 @@ function publicDto(projection: WorkflowApprovedProjection, digest: string): Publ
     signers: projection.signatures.map(item => ({ role: item.role, name: item.actorName, signedAt: item.signedAt })),
     digestShort: digest.slice(0, 12),
     statement: "INTERNAL_ISSUER_ATTESTATION",
+    family: settlement?.family,
+    version: settlement?.dossierVersion.version,
   };
 }
 
@@ -172,7 +182,18 @@ export async function verifyPublicCapability(tokenInput: string): Promise<{ stat
     if (!await consumeAttempt(tokenDigest)) return { status: "INVALID" };
     const capability = await prisma.workflowPublicVerificationCapability.findUnique({
       where: { tokenDigest },
-      include: { snapshot: true },
+      include: {
+        snapshot: {
+          include: {
+            settlementExports: {
+              where: { format: "PDF" },
+              orderBy: { createdAt: "desc" },
+              take: 1,
+              select: { family: true, dossierVersion: { select: { version: true } } },
+            },
+          },
+        },
+      },
     });
     if (!capability || capability.revokedAt || capability.replacedAt) return { status: "INVALID" };
     const expected = derivePublicVerificationToken({
@@ -198,7 +219,10 @@ export async function verifyPublicCapability(tokenInput: string): Promise<{ stat
     } else {
       return { status: "INVALID" };
     }
-    return { status: "VALID", data: publicDto(projection, capability.snapshot.projectionSha256) };
+    return {
+      status: "VALID",
+      data: publicDto(projection, capability.snapshot.projectionSha256, capability.snapshot.settlementExports[0]),
+    };
   } catch {
     return { status: "INVALID" };
   }
