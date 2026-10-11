@@ -51,6 +51,13 @@ export type SettlementCashAllocationSource = {
   evidenceId: string;
 };
 
+export function settlementObligationDirection(value: string): SettlementCashDirection | null {
+  if (value === "IN" || value === "REFUND") return "IN";
+  if (value === "OUT" || value === "ADDITIONAL") return "OUT";
+  if (value === "BALANCED") return null;
+  throw new Error("Chiều nghĩa vụ quyết toán không hợp lệ.");
+}
+
 function required(value: string, label: string) {
   if (!value.trim()) throw new Error(`Thiếu ${label}.`);
   return value.trim();
@@ -239,6 +246,8 @@ async function executeSettlementCashOnce(projectId: string, actor: Actor, form: 
       return { success: "Giao dịch quyết toán đã được ghi nhận trước đó.", requestId: obligationRow.dossierVersion.requestId, cashId: existing.cashId, idempotent: true };
     }
     const priorRows = await tx.settlementCashAllocation.findMany({ where: { projectId, obligationId: obligationRow.id }, include: { cash: true } });
+    const obligationDirection = settlementObligationDirection(obligationRow.direction);
+    if (!obligationDirection) throw new Error("Nghĩa vụ đã cân bằng không phát sinh thu/chi tiền.");
     const obligation: SettlementObligationCashSource = {
       projectId,
       dossierId: obligationRow.dossierVersion.dossierId,
@@ -250,7 +259,7 @@ async function executeSettlementCashOnce(projectId: string, actor: Actor, form: 
       recipientName: obligationRow.recipientKey,
       bankName: null,
       accountLast4: null,
-      direction: obligationRow.direction as SettlementCashDirection,
+      direction: obligationDirection,
       amountDue: obligationRow.amountDue,
       locked: obligationRow.locks.length > 0,
       sourceKind: "SETTLEMENT",

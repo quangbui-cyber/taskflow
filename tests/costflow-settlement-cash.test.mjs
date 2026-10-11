@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   createSettlementCashHarness,
   settlementCashFingerprint,
+  settlementObligationDirection,
   validateSettlementCashCommand,
 } from "../lib/costflow/settlementCash.ts";
 import { projectSettlementPendingDisbursements } from "../lib/costflow/paymentReadModel.ts";
@@ -79,6 +80,13 @@ test("settlement cash: positive additional due joins the existing queue with exa
     cashProgress: "CHUA_CHI",
     sourceKind: "SETTLEMENT",
   }]);
+});
+
+test("settlement cash: persisted REFUND and ADDITIONAL obligations map to real cash directions", () => {
+  assert.equal(settlementObligationDirection("REFUND"), "IN");
+  assert.equal(settlementObligationDirection("ADDITIONAL"), "OUT");
+  assert.equal(settlementObligationDirection("BALANCED"), null);
+  assert.throws(() => settlementObligationDirection("CUSTOMER_AR"), /direction|chiều/i);
 });
 
 test("settlement cash: partial installments remain queued until exact zero", async () => {

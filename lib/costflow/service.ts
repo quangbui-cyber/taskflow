@@ -25,6 +25,7 @@ import type { PaymentDraftLineInput } from "./paymentTypes";
 import { diffPaymentDossiers, type PaymentDossierSnapshot, type PaymentDocumentSnapshot } from "./paymentDiff";
 import { derivePaymentProgress } from "./paymentCash";
 import { projectPaymentLedger, type BeneficiaryVerification } from "./paymentReadModel";
+import { settlementObligationDirection } from "./settlementCash";
 import { resolveProductionApprovedActualCost } from "./approvedActualCost";
 import { loadActualCosts } from "./actualCostReadModel";
 import { operationAssignmentIds } from "./actualCostControlCenter";
@@ -170,11 +171,13 @@ export async function loadFinance(projectId: string, actor: Actor) {
     cash: cash.map(item => ({ id: item.id, projectId: item.projectId, requestId: item.requestId, recipientKey: item.recipientKey, direction: item.direction, amount: item.amount, evidenceId: item.evidenceId, normalizedAllocations: item.normalizedAllocations })),
     financialCloseState: savedData?.closed ? "CLOSED" : "OPEN",
     settlement: settlementQueueVersion ? {
-      obligations: settlementQueueVersion.obligations.map(obligation => {
+      obligations: settlementQueueVersion.obligations.flatMap(obligation => {
+        const direction = settlementObligationDirection(obligation.direction);
+        if (!direction || obligation.amountDue === "0") return [];
         const snapshot = settlementRecipientByKey.get(obligation.recipientKey);
         const vendor = obligation.recipientKey.startsWith("VENDOR:") ? savedData?.beneficiaries.find(item => `VENDOR:${item.id}` === obligation.recipientKey) : undefined;
         const employee = obligation.recipientKey.startsWith("USER:") ? users.find(item => item.id === obligation.recipientKey.slice(5)) : undefined;
-        return {
+        return [{
           projectId,
           dossierId: settlementQueueVersion.dossier.id,
           dossierVersionId: settlementQueueVersion.id,
@@ -185,11 +188,11 @@ export async function loadFinance(projectId: string, actor: Actor) {
           recipientName: snapshot?.displayName ?? vendor?.name ?? employee?.name ?? obligation.recipientKey,
           bankName: snapshot?.bankName ?? vendor?.bank ?? null,
           accountLast4: snapshot?.accountLast4 ?? (vendor?.account ? vendor.account.replace(/\D/g, "").slice(-4) || null : null),
-          direction: obligation.direction === "IN" ? "IN" as const : "OUT" as const,
+          direction,
           amountDue: obligation.amountDue,
           locked: obligation.locks.length > 0,
           sourceKind: "SETTLEMENT" as const,
-        };
+        }];
       }),
       allocations: settlementQueueVersion.obligations.flatMap(obligation => obligation.cashAllocations.map(allocation => ({
         projectId,
