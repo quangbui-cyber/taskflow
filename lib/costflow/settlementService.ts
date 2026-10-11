@@ -328,11 +328,15 @@ export function assertSettlementReplacementAllowed(input: {
   if (input.changesPaidOrLockedValues) {
     throw new SettlementDomainError("Chưa có thẩm quyền Adjustment Settlement để đổi giá trị đã chi hoặc đã khóa.");
   }
+  if (input.oldVersionId === input.newVersionId) {
+    throw new SettlementDomainError("Phiên bản thay thế phải khác phiên bản cũ.");
+  }
   return {
     supersedesId: required(input.oldVersionId, "phiên bản bị thay"),
     replacedById: required(input.newVersionId, "phiên bản thay thế"),
     replacementActorId: required(input.actorId, "người thay thế"),
     replacementReason: required(input.reason, "lý do thay thế"),
+    replacedAt: new Date().toISOString(),
   };
 }
 
@@ -600,7 +604,7 @@ export async function executeSettlementCommand(actor: SettlementActor, form: For
     if (command === "REPLACE_SETTLEMENT_DOSSIER") {
       if (actor.id !== request.creatorId) throw new SettlementDomainError("Chỉ người lập được tạo phiên bản thay thế.");
       const lineage = assertSettlementReplacementAllowed({ oldVersionId: dossierVersion.id, newVersionId: randomUUID(), actorId: actor.id, reason: formText(form, "reason"), changesPaidOrLockedValues: formText(form, "changesPaidOrLockedValues") === "yes" });
-      const nextVersion = await tx.projectSettlementVersion.create({ data: { id: lineage.replacedById, projectId, dossierId: dossierVersion.dossierId, requestId: request.id, version: dossierVersion.version + 1, attemptId: randomUUID(), canonicalHash: dossierVersion.canonicalHash, createdById: actor.id, supersedesId: dossierVersion.id, replacementReason: lineage.replacementReason, replacementActorId: actor.id, replacedAt: new Date() } });
+      const nextVersion = await tx.projectSettlementVersion.create({ data: { id: lineage.replacedById, projectId, dossierId: dossierVersion.dossierId, requestId: request.id, version: dossierVersion.version + 1, attemptId: randomUUID(), canonicalHash: dossierVersion.canonicalHash, createdById: actor.id, supersedesId: dossierVersion.id, replacementReason: lineage.replacementReason, replacementActorId: actor.id, replacedAt: new Date(lineage.replacedAt) } });
       await copySettlementVersion(tx, dossierVersion.id, nextVersion.id, projectId, actor.id);
       const nextPayload = { ...payload, dossierVersionId: nextVersion.id };
       if ((await tx.workflowRequest.updateMany({ where: { id: request.id, version: expectedVersion }, data: { state: "DRAFT", currentStep: 0, currentAttemptId: null, payload: json({ settlement: nextPayload }), version: { increment: 1 } } })).count !== 1) throw new SettlementDomainError("Hồ sơ đã thay đổi khi tạo bản thay thế.");
