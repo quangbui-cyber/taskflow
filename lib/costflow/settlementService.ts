@@ -324,8 +324,10 @@ export function assertSettlementReplacementAllowed(input: {
   actorId: string;
   reason: string;
   changesPaidOrLockedValues: boolean;
+  hasCash?: boolean;
+  hasLocks?: boolean;
 }) {
-  if (input.changesPaidOrLockedValues) {
+  if (input.changesPaidOrLockedValues || input.hasCash || input.hasLocks) {
     throw new SettlementDomainError("Chưa có thẩm quyền Adjustment Settlement để đổi giá trị đã chi hoặc đã khóa.");
   }
   if (input.oldVersionId === input.newVersionId) {
@@ -603,7 +605,15 @@ export async function executeSettlementCommand(actor: SettlementActor, form: For
 
     if (command === "REPLACE_SETTLEMENT_DOSSIER") {
       if (actor.id !== request.creatorId) throw new SettlementDomainError("Chỉ người lập được tạo phiên bản thay thế.");
-      const lineage = assertSettlementReplacementAllowed({ oldVersionId: dossierVersion.id, newVersionId: randomUUID(), actorId: actor.id, reason: formText(form, "reason"), changesPaidOrLockedValues: formText(form, "changesPaidOrLockedValues") === "yes" });
+      const lineage = assertSettlementReplacementAllowed({
+        oldVersionId: dossierVersion.id,
+        newVersionId: randomUUID(),
+        actorId: actor.id,
+        reason: formText(form, "reason"),
+        changesPaidOrLockedValues: false,
+        hasCash: cashCount > 0,
+        hasLocks: lockCount > 0,
+      });
       const nextVersion = await tx.projectSettlementVersion.create({ data: { id: lineage.replacedById, projectId, dossierId: dossierVersion.dossierId, requestId: request.id, version: dossierVersion.version + 1, attemptId: randomUUID(), canonicalHash: dossierVersion.canonicalHash, createdById: actor.id, supersedesId: dossierVersion.id, replacementReason: lineage.replacementReason, replacementActorId: actor.id, replacedAt: new Date(lineage.replacedAt) } });
       await copySettlementVersion(tx, dossierVersion.id, nextVersion.id, projectId, actor.id);
       const nextPayload = { ...payload, dossierVersionId: nextVersion.id };
