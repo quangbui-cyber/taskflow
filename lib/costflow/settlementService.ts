@@ -969,6 +969,39 @@ export async function executeSettlementCommand(actor: SettlementActor, form: For
       }
       const nextAssignee = next.state === "SUBMITTED" ? steps[next.currentStep]?.assigneeId : undefined;
       await recordApprovalEvent(tx, { requestId: request.id, module: request.module, attemptId: request.currentAttemptId, submittedVersion: expectedVersion, mutationVersion: expectedVersion + 1, stepIndex: request.currentStep, role: steps[request.currentStep].role, actorId: actor.id, action, reason: formText(form, "reason"), recipients: nextAssignee ? [nextAssignee] : [request.creatorId] });
+      if (next.state === "APPROVED") {
+        if (!request.currentAttemptId) throw new SettlementDomainError("Phiên bản sửa quyết toán thiếu approval attempt identity.");
+        const correctionSource = await tx.settlementCorrectionAttempt.findFirstOrThrow({
+          where: { id: payload.correctionAttemptId, correctionVersionId: dossierVersion.id, projectId },
+          include: { correctionVersion: { include: { obligations: { orderBy: { id: "asc" } } } } },
+        });
+        const obligations = correctionSource.correctionVersion?.obligations ?? [];
+        if (!obligations.length) throw new SettlementDomainError("Phiên bản sửa quyết toán thiếu nghĩa vụ bất biến để seal.");
+        await tx.projectSettlementVersion.update({ where: { id: dossierVersion.id }, data: {
+          approvedAttemptId: request.currentAttemptId,
+          approvedSnapshotId: null,
+          approvedProjectionHash: dossierVersion.canonicalHash,
+        } });
+        await sealExportSourceProjection(tx, {
+          projectId,
+          dossierVersionId: dossierVersion.id,
+          family: "PROJECT_SETTLEMENT",
+          sourceKind: "PROJECT_SETTLEMENT",
+          sourceId: dossierVersion.id,
+          sourceVersion: dossierVersion.version,
+          approvalAttemptId: request.currentAttemptId,
+          approvedSnapshotId: null,
+          signingState: "UNSIGNED",
+          payload: {
+            correctionAttemptId: correctionSource.id,
+            baseVersionId: correctionSource.baseVersionId,
+            requestedFieldScopes: correctionSource.requestedFieldScopes,
+            requestedLockScopes: correctionSource.requestedLockScopes,
+            obligations,
+          },
+          lines: obligations.map(obligation => ({ id: obligation.id, rawNet: obligation.amountDue, rawVat: "0", rawGross: obligation.amountDue })),
+        });
+      }
       return { success: next.state === "APPROVED" ? "CEO đã duyệt phiên bản sửa; cash và signing vẫn là trục riêng." : action === "RETURN" ? "Đã trả phiên bản sửa để xử lý lại." : "Đã chuyển phiên bản sửa sang bước duyệt kế tiếp.", requestId: request.id, settlementVersion: expectedVersion + 1 };
     }
     if (payload.correctionAttemptId && command === "CANCEL_SETTLEMENT_DOSSIER") {
