@@ -192,7 +192,12 @@ export async function rejectSettlementCorrection(tx: Prisma.TransactionClient, i
 }) {
   const attempt = await tx.settlementCorrectionAttempt.findFirst({ where: { id: input.attemptId, projectId: input.projectId, terminalAt: null } });
   if (!attempt) throw new SettlementDomainError("Không tìm thấy vòng sửa đang mở.");
-  if (input.actorId !== attempt.requestedById && attempt.stage !== "REQUESTED") throw new SettlementDomainError("Không có quyền kết thúc vòng sửa này.");
+  const project = await tx.project.findUnique({ where: { id: input.projectId }, select: { owner: { select: { managerId: true } }, costFlow: { select: { data: true } } } });
+  const data = project?.costFlow?.data && typeof project.costFlow.data === "object" && !Array.isArray(project.costFlow.data) ? project.costFlow.data as Record<string, unknown> : {};
+  const config = data.config && typeof data.config === "object" && !Array.isArray(data.config) ? data.config as Record<string, unknown> : {};
+  const managerId = String(config.managerId ?? project?.owner.managerId ?? "");
+  const allowed = input.status === "REJECTED" ? input.actorId === managerId : input.actorId === attempt.requestedById || input.actorId === managerId;
+  if (!allowed) throw new SettlementDomainError("Không có quyền kết thúc vòng sửa này.");
   const status = input.status ?? "CANCELLED";
   return tx.settlementCorrectionAttempt.update({ where: { id: attempt.id }, data: { stage: status, status, terminalAt: new Date() } });
 }

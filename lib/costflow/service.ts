@@ -24,7 +24,7 @@ import { normalizePaymentDraft } from "./paymentPolicy";
 import type { PaymentDraftLineInput } from "./paymentTypes";
 import { diffPaymentDossiers, type PaymentDossierSnapshot, type PaymentDocumentSnapshot } from "./paymentDiff";
 import { derivePaymentProgress } from "./paymentCash";
-import { projectPaymentLedger, projectSettlementObligationProgress, type BeneficiaryVerification } from "./paymentReadModel";
+import { projectPaymentLedger, projectSettlementCorrectionProgress, projectSettlementObligationProgress, type BeneficiaryVerification } from "./paymentReadModel";
 import { settlementObligationDirection } from "./settlementCash";
 import { resolveProductionApprovedActualCost } from "./approvedActualCost";
 import { loadActualCosts } from "./actualCostReadModel";
@@ -362,7 +362,84 @@ export async function loadFinance(projectId: string, actor: Actor) {
       },
     },
   }) : null;
-  return { project: { ...project, members: fullAccess ? project.members : [], client: fullAccess ? project.client : null }, clients, fullAccess, canManageCustomerAccounting, canManageSettlementCash, settlementObligationProgress, version: workspace?.version ?? 0, data: fullAccess && savedData ? savedData : { ...emptyFinance(), closed: savedData?.closed ?? false }, requests: visible.map(({ signingLifecycle, ...request }) => ({ ...request, signingMode: signingLifecycle?.mode ?? null, signingEvidenceState: signingLifecycle?.evidenceState ?? null })), cash, users, files, evidence, supplements, history, paymentDossiers, paymentLedger, actualCosts, customerAccounting, customerAcceptanceSnapshots, settlementDossier };
+  const correction = fullAccess ? await prisma.settlementCorrectionAttempt.findFirst({
+    where: { projectId },
+    orderBy: { createdAt: "desc" },
+    include: {
+      baseVersion: { include: { obligations: { include: { cashAllocations: true } } } },
+      correctionVersion: { include: { request: { include: { signingLifecycle: true } }, obligations: { include: { cashAllocations: { include: { cash: true } } } } } },
+      obligationPairs: true,
+    },
+  }) : null;
+  const correctionProgress = correction?.correctionVersion ? projectSettlementCorrectionProgress({
+    obligations: correction.correctionVersion.obligations.flatMap(obligation => {
+      const direction = settlementObligationDirection(obligation.direction);
+      if (!direction || obligation.amountDue === "0") return [];
+      return [{
+        projectId,
+        dossierId: correction.dossierId,
+        dossierVersionId: correction.correctionVersion!.id,
+        requestId: correction.correctionVersion!.requestId,
+        obligationId: obligation.id,
+        recipientKey: obligation.recipientKey,
+        recipientType: obligation.recipientType,
+        recipientName: obligation.recipientKey,
+        bankName: null,
+        accountLast4: null,
+        direction,
+        amountDue: obligation.amountDue,
+        locked: true,
+        sourceKind: "SETTLEMENT" as const,
+      }];
+    }),
+    allocations: correction.correctionVersion.obligations.flatMap(obligation => obligation.cashAllocations.map(allocation => ({
+      projectId,
+      dossierVersionId: correction.correctionVersion!.id,
+      obligationId: obligation.id,
+      recipientKey: obligation.recipientKey,
+      direction: allocation.cash.direction as "IN" | "OUT",
+      amount: allocation.amount,
+      cashId: allocation.cashId,
+      idempotencyKey: allocation.idempotencyKey,
+      commandFingerprint: allocation.commandFingerprint,
+      evidenceId: allocation.cash.evidenceId,
+    }))),
+    pairs: correction.obligationPairs.map(pair => ({
+      projectId: pair.projectId,
+      correctionAttemptId: pair.correctionAttemptId,
+      recoveryObligationId: pair.recoveryObligationId,
+      correctedPaymentObligationId: pair.correctedPaymentObligationId,
+    })),
+  }) : [];
+  const settlementCorrection = correction ? {
+    id: correction.id,
+    baseVersionId: correction.baseVersionId,
+    baseVersionNumber: correction.baseVersion.version,
+    baseCanonicalHash: correction.baseVersion.canonicalHash,
+    capabilities: correctionScopesForRead(correction.requestedFieldScopes),
+    obligationIds: correctionObligationIdsForRead(correction.requestedLockScopes),
+    reason: correction.reason,
+    stage: correction.stage,
+    status: correction.status,
+    terminalAt: correction.terminalAt?.toISOString() ?? null,
+    managerDecision: correction.stage === "REQUESTED" ? "PENDING" : correction.status === "REJECTED" ? "REJECTED" : "APPROVED",
+    correctionVersionId: correction.correctionVersionId,
+    correctionRequestId: correction.correctionVersion?.requestId ?? null,
+    recoveryRemaining: correctionProgress.find(row => row.availability === "RECOVERY_IN" || row.direction === "IN")?.remainingAmount ?? "0",
+    correctedPaymentState: correctionProgress.find(row => row.direction === "OUT")?.availability ?? "NOT_CREATED",
+    approvalState: correction.correctionVersion?.request.state ?? "NOT_CREATED",
+    signingState: correction.correctionVersion?.request.signingLifecycle?.evidenceState ?? "NOT_CREATED",
+    baseObligations: correction.baseVersion.obligations.map(obligation => ({ id: obligation.id, recipientKey: obligation.recipientKey, amountDue: obligation.amountDue, paidAmount: obligation.cashAllocations.reduce((total, row) => total + BigInt(row.amount), BigInt(0)).toString() })),
+  } : null;
+  return { project: { ...project, members: fullAccess ? project.members : [], client: fullAccess ? project.client : null }, clients, fullAccess, canManageCustomerAccounting, canManageSettlementCash, settlementObligationProgress, version: workspace?.version ?? 0, data: fullAccess && savedData ? savedData : { ...emptyFinance(), closed: savedData?.closed ?? false }, requests: visible.map(({ signingLifecycle, ...request }) => ({ ...request, signingMode: signingLifecycle?.mode ?? null, signingEvidenceState: signingLifecycle?.evidenceState ?? null })), cash, users, files, evidence, supplements, history, paymentDossiers, paymentLedger, actualCosts, customerAccounting, customerAcceptanceSnapshots, settlementDossier, settlementCorrection };
+}
+
+function correctionScopesForRead(value: Prisma.JsonValue) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function correctionObligationIdsForRead(value: Prisma.JsonValue) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
 export async function executeFinance(projectId: string, expectedVersion: number, actor: Actor, form: FormData, upload: ProjectUpload | null) {

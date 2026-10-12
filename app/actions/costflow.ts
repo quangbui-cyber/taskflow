@@ -140,7 +140,7 @@ export async function costFlowAction(_previous: CostFlowActionState, form: FormD
   } catch (error) {
     if (error instanceof IcEvidenceError) return { error: publicPaymentErrorMessage(error), lineErrors: error.lineErrors.map(item => ({ ...item, message: publicPaymentErrorMessage(new Error(item.message)) })) };
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      if (error.code === "P2002") return { error: "Mã giao dịch hoặc phiên bản đã tồn tại. Không ghi tiền hai lần." };
+      if (error.code === "P2002") return { error: command === "REQUEST_REOPEN_PROJECT" ? "Project đang có một vòng sửa quyết toán chưa kết thúc." : "Mã giao dịch hoặc phiên bản đã tồn tại. Không ghi tiền hai lần." };
       if (error.code === "P2034") return { error: "Có thao tác đồng thời. Tải lại trang rồi thử lại." };
       return { error: "Chưa lưu được hồ sơ. Kiểm tra kết nối dữ liệu." };
     }

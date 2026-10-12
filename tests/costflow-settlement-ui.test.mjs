@@ -101,8 +101,17 @@ test("close and reopen dialogs are explicit, blocker-aware and preserve B02 hist
     "Gửi yêu cầu mở lại tài chính",
     "bảo toàn 100%",
     "một hồ sơ quyết toán",
-    "nguồn AC mới",
-    "đã chi hoặc đã khóa",
+    "Capability xin mở",
+    "ADD_NEW_AC",
+    "CORRECT_RECIPIENT",
+    "RECOVER_CASH",
+    "Vòng sửa quyết toán có phạm vi",
+    "Phiên bản / hash nền",
+    "Recovery còn lại",
+    "Corrected payment",
+    "Approval mới",
+    "Signing snapshot mới",
+    "Cash · khóa SETTLED · TaskFlow · đóng tài chính",
   ]) assert.match(modal, new RegExp(fact, "i"));
   assert.match(modal, /disabled=/);
   assert.match(dialog, /<dialog/);

@@ -26,7 +26,8 @@ async function withMigratedSchema(run) {
     const correction = await import(`../lib/costflow/settlementService.ts?schema=${schemaName}`);
     const cash = await import(`../lib/costflow/settlementCash.ts?schema=${schemaName}`);
     const readModel = await import(`../lib/costflow/paymentReadModel.ts?schema=${schemaName}`);
-    await run({ client, correction, cash, readModel });
+    const service = await import(`../lib/costflow/service.ts?schema=${schemaName}`);
+    await run({ client, correction, cash, readModel, service });
   } finally {
     await client?.$disconnect();
     await admin.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
@@ -146,7 +147,7 @@ function cashForm(versionId, obligation, amount, key) {
 
 const proof = label => ({ name: `${label}.pdf`, mimeType: "application/pdf", size: label.length, data: Buffer.from(label) });
 
-async function scopedCorrectionCase({ client, correction }) {
+async function scopedCorrectionCase({ client, correction, service }) {
     const fx = await fixture(client, "scope");
     const before = {
       cash: await client.costFlowCash.findMany({ where: { projectId: fx.project.id }, orderBy: { id: "asc" } }),
@@ -169,6 +170,17 @@ async function scopedCorrectionCase({ client, correction }) {
       /Manager|phân công/i,
     );
     await client.$transaction(tx => correction.approveSettlementCorrection(tx, { projectId: fx.project.id, attemptId: attempt.id, actorId: fx.actors.manager.id }));
+    await assert.rejects(
+      () => client.$transaction(tx => correction.requestSettlementCorrection(tx, requestInput)),
+      /vòng sửa|unique/i,
+    );
+    await assert.rejects(
+      () => client.$transaction(tx => correction.createSettlementCorrectionVersion(tx, {
+        projectId: fx.project.id, attemptId: attempt.id, actorId: fx.actors.owner.id,
+        obligationId: fx.original.id, correctedRecipientKey: `USER:${fx.actors.correct.id}`, correctedAmount: "999",
+      })),
+      /phạm vi|số tiền/i,
+    );
     const created = await client.$transaction(tx => correction.createSettlementCorrectionVersion(tx, {
       projectId: fx.project.id, attemptId: attempt.id, actorId: fx.actors.owner.id,
       obligationId: fx.original.id, correctedRecipientKey: `USER:${fx.actors.correct.id}`,
@@ -193,6 +205,29 @@ async function scopedCorrectionCase({ client, correction }) {
     assert.deepEqual(await client.settlementCashAllocation.findMany({ where: { projectId: fx.project.id, obligationId: fx.original.id }, orderBy: { id: "asc" } }), before.allocations);
     assert.deepEqual(await client.settlementLock.findMany({ where: { projectId: fx.project.id, dossierVersionId: fx.version.id }, orderBy: { id: "asc" } }), before.locks);
     assert.deepEqual(await client.workflowApprovedSnapshot.findMany({ where: { requestId: fx.request.id }, orderBy: { id: "asc" } }), before.snapshots);
+    for (const stage of ["VERSION_CREATED", "RECOVERY_PENDING", "PAYMENT_PENDING", "APPROVAL_PENDING", "SIGNING_PENDING"]) {
+      await client.settlementCorrectionAttempt.update({ where: { id: attempt.id }, data: { stage } });
+      await assert.rejects(() => client.$transaction(tx => correction.requestSettlementCorrection(tx, requestInput)), /vòng sửa|unique/i);
+    }
+    await client.settlementCorrectionAttempt.update({ where: { id: attempt.id }, data: { stage: "RECOVERY_PENDING" } });
+    const closeForm = new FormData();
+    closeForm.set("command", "REQUEST_CLOSE_PROJECT");
+    closeForm.set("reason", "Không được đóng khi correction còn mở");
+    await assert.rejects(
+      () => service.executeFinance(fx.project.id, 0, fx.actors.owner, closeForm, null),
+      /vòng sửa|chưa kết thúc/i,
+    );
+
+    const raceFx = await fixture(client, "reopen-race");
+    const raceInput = {
+      projectId: raceFx.project.id, dossierId: raceFx.dossier.id, baseVersionId: raceFx.version.id,
+      requestedById: raceFx.actors.owner.id, reason: "Concurrent reopen", capabilities: ["ADD_NEW_AC"], obligationIds: [],
+    };
+    const reopenRace = await Promise.allSettled([
+      client.$transaction(tx => correction.requestSettlementCorrection(tx, raceInput)),
+      client.$transaction(tx => correction.requestSettlementCorrection(tx, raceInput)),
+    ]);
+    assert.equal(reopenRace.filter(result => result.status === "fulfilled").length, 1);
 }
 
 async function recoveryCashCase({ client, correction, cash, readModel }) {
