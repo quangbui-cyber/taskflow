@@ -1437,8 +1437,8 @@ model SettlementExportAudit {
   id                 String                   @id @default(cuid())
   projectId          String
   project            Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  dossierVersionId   String
-  dossierVersion     ProjectSettlementVersion @relation(fields: [dossierVersionId, projectId], references: [id, projectId], onDelete: Restrict)
+  dossierVersionId   String?
+  dossierVersion     ProjectSettlementVersion? @relation(fields: [dossierVersionId], references: [id], onDelete: Restrict)
   family             String
   format             String
   canonicalHash      String
@@ -1535,8 +1535,8 @@ model SettlementExportSourceProjection {
   id                 String                   @id @default(cuid())
   projectId          String
   project            Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  dossierVersionId   String
-  dossierVersion     ProjectSettlementVersion @relation(fields: [dossierVersionId, projectId], references: [id, projectId], onDelete: Restrict)
+  dossierVersionId   String?
+  dossierVersion     ProjectSettlementVersion? @relation(fields: [dossierVersionId], references: [id], onDelete: Restrict)
   family             String
   sourceKind         String
   sourceId           String
@@ -1547,6 +1547,10 @@ model SettlementExportSourceProjection {
   roundingAdjustment Int
   vatLineAssignment  Json
   projectionHash     String
+  approvalAttemptId  String?
+  approvedSnapshotId String?
+  signingState       String?
+  canonicalPayload   Json?
   createdAt          DateTime                 @default(now())
   audits             SettlementExportAudit[]
 

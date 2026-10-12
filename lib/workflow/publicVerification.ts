@@ -156,7 +156,7 @@ function safeTokenEquals(left: string, right: string) {
 function publicDto(
   projection: WorkflowApprovedProjection,
   digest: string,
-  settlement?: { family: string; dossierVersion: { version: number } },
+  settlement?: { family: string; dossierVersion: { version: number } | null },
 ): PublicVerificationDto {
   return {
     valid: true,
@@ -170,7 +170,7 @@ function publicDto(
     digestShort: digest.slice(0, 12),
     statement: "INTERNAL_ISSUER_ATTESTATION",
     family: settlement?.family,
-    version: settlement?.dossierVersion.version,
+    version: settlement?.dossierVersion?.version,
   };
 }
 
