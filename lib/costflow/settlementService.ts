@@ -1,9 +1,10 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { ProjectUpload } from "@/lib/projectFiles";
 import { recordApprovalEvent } from "@/lib/workflow/approvalEvents";
 import { buildProjectSettlementDraft, type ProjectSettlementDraftInput, type SettlementEvidenceRef } from "./projectSettlement";
+import { add, compare, decimal, exact } from "./money";
 
 export type SettlementApprovalStep = {
   role: "MANAGER" | "ACCOUNTANT" | "CEO";
@@ -23,6 +24,7 @@ export type SettlementSourceManifest = {
     recipientKey: string;
     applicationId: string;
     cashAllocationId: string;
+    amount: string;
   }>;
 };
 
@@ -223,6 +225,9 @@ export function cancelSettlementLifecycle(
   input: { actorId: string; expectedVersion: number; reason: string; hasCash: boolean },
 ) {
   assertExpectedVersion(record, input.expectedVersion);
+  if (!(["DRAFT", "SUBMITTED", "RETURNED"] as const).includes(record.state as "DRAFT" | "SUBMITTED" | "RETURNED")) {
+    throw new SettlementDomainError(record.state === "CANCELLED" ? "Hồ sơ đã hủy; không thể ghi thêm sự kiện CANCEL." : "Trạng thái hồ sơ không cho phép hủy.");
+  }
   const manager = record.steps.find(step => step.role === "MANAGER")?.assigneeId;
   if (input.actorId !== manager) throw new SettlementDomainError("Chỉ Manager được phân công mới được hủy hồ sơ.");
   if (record.state === "APPROVED" || record.locks.length) throw new SettlementDomainError("Hồ sơ đã có khóa quyết toán nên không thể hủy.");
@@ -254,7 +259,7 @@ export function appendSettlementLocks(input: {
   for (const source of input.sourceManifest.advanceAllocations) {
     if (source.projectId !== input.projectId) throw new SettlementDomainError("Nguồn khóa tạm ứng không thuộc đúng Project.");
     const key = `ADVANCE:${required(source.applicationId, "AdvanceApplication")}`;
-    if (seen.has(key)) throw new SettlementDomainError("Nguồn tạm ứng bị trùng hoặc đã khóa.");
+    if (seen.has(key)) continue;
     seen.add(key);
     locks.push({ projectId: input.projectId, dossierVersionId: input.dossierVersionId, recipientKey: source.recipientKey, actualCostApplicationId: null, advanceApplicationId: source.applicationId, sourceCashAllocationId: required(source.cashAllocationId, "cash allocation") });
   }
@@ -370,7 +375,7 @@ function formText(form: FormData, key: string) {
 
 function canonicalHash(value: unknown) {
   const stable = (input: unknown): unknown => {
-    if (Array.isArray(input)) return input.map(stable);
+    if (Array.isArray(input)) return input.map(stable).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
     if (input && typeof input === "object") return Object.fromEntries(
       Object.entries(input as Record<string, unknown>)
         .sort(([left], [right]) => left.localeCompare(right))
@@ -379,6 +384,11 @@ function canonicalHash(value: unknown) {
     return input;
   };
   return createHash("sha256").update(JSON.stringify(stable(value))).digest("hex");
+}
+
+function hashesEqual(left: string | null | undefined, right: string) {
+  if (!left || !/^[a-f0-9]{64}$/.test(left) || !/^[a-f0-9]{64}$/.test(right)) return false;
+  return timingSafeEqual(Buffer.from(left, "hex"), Buffer.from(right, "hex"));
 }
 
 function storedPayload(value: Prisma.JsonValue): StoredSettlementPayload {
@@ -430,7 +440,7 @@ type ProjectionSources = {
   draftInput: ProjectSettlementDraftInput;
   manifest: SettlementSourceManifest;
   actualApplications: Array<{ id: string; recipientKey: string; versionId: string; approvalId: string }>;
-  advanceApplications: Array<{ id: string; recipientKey: string; cashAllocationId: string }>;
+  advanceApplications: Array<{ id: string; recipientKey: string; cashAllocationId: string; amount: string }>;
 };
 
 async function deriveSourcesForCreate(tx: Prisma.TransactionClient, projectId: string, requestId: string, actorId: string): Promise<ProjectionSources> {
@@ -485,11 +495,33 @@ async function deriveSourcesForCreate(tx: Prisma.TransactionClient, projectId: s
   const evidenceById = new Map(cashEvidence.map(item => [item.id, item]));
   const advanceAllocations: ProjectSettlementDraftInput["advanceAllocations"] = [];
   const advanceApplications: ProjectionSources["advanceApplications"] = [];
-  const seenAdvanceApplications = new Set<string>();
+  const allocatedByApplication = new Map<string, ReturnType<typeof exact>>();
+  const allocatedByCash = new Map<string, ReturnType<typeof exact>>();
   for (const allocation of allocations) {
-    const application = allocation.requestLine.advanceApplications.find(item => item.projectId === projectId && item.recipientKey === allocation.recipientKey);
-    if (!application || seenAdvanceApplications.has(application.id)) continue;
-    seenAdvanceApplications.add(application.id);
+    const matches = allocation.requestLine.advanceApplications.filter(item =>
+      item.advanceLineId === allocation.requestLineId
+      && item.projectId === projectId
+      && item.recipientKey === allocation.recipientKey
+      && item.advanceRequestId === allocation.requestId,
+    );
+    if (matches.length !== 1) throw new SettlementDomainError("Cash allocation phải ánh xạ đúng một AdvanceApplication theo requestLineId, Project và recipient.");
+    const application = matches[0];
+    if (allocation.cash.projectId !== projectId
+      || allocation.cash.requestId !== allocation.requestId
+      || allocation.cash.recipientKey !== allocation.recipientKey
+      || allocation.cash.direction !== "OUT") {
+      throw new SettlementDomainError("Cash installment không khớp Project, request, recipient hoặc chiều OUT.");
+    }
+    const allocationAmount = exact(allocation.amount);
+    if (compare(allocationAmount, decimal("0")) <= 0 || compare(allocationAmount, exact(allocation.cash.amount)) > 0) {
+      throw new SettlementDomainError("Số tiền installment phải dương và không vượt Cash OUT nguồn.");
+    }
+    const applicationTotal = add(allocatedByApplication.get(application.id) ?? decimal("0"), allocationAmount);
+    if (compare(applicationTotal, exact(application.amount)) > 0) throw new SettlementDomainError("Tổng installment vượt số tiền AdvanceApplication.");
+    allocatedByApplication.set(application.id, applicationTotal);
+    const cashTotal = add(allocatedByCash.get(allocation.cashId) ?? decimal("0"), allocationAmount);
+    if (compare(cashTotal, exact(allocation.cash.amount)) > 0) throw new SettlementDomainError("Tổng allocation vượt số tiền Cash OUT.");
+    allocatedByCash.set(allocation.cashId, cashTotal);
     const evidence = evidenceById.get(allocation.cash.evidenceId);
     advanceAllocations.push({
       projectId,
@@ -505,7 +537,7 @@ async function deriveSourcesForCreate(tx: Prisma.TransactionClient, projectId: s
       rawGross: allocation.amount,
       evidence: evidence ? [{ id: evidence.id, sha256: evidence.sha256, origin: "INHERITED", satisfies: ["DISBURSEMENT_PROOF"] }] : [],
     });
-    advanceApplications.push({ id: application.id, recipientKey: application.recipientKey, cashAllocationId: allocation.id });
+    advanceApplications.push({ id: application.id, recipientKey: application.recipientKey, cashAllocationId: allocation.id, amount: allocation.amount });
   }
   return {
     draftInput: { projectId, actualCostLines, advanceAllocations },
@@ -517,7 +549,9 @@ async function deriveSourcesForCreate(tx: Prisma.TransactionClient, projectId: s
         versionId: application.versionId,
         approvalId: application.approvalId,
       })),
-      advanceAllocations: advanceApplications.map(application => ({ projectId, recipientKey: application.recipientKey, applicationId: application.id, cashAllocationId: application.cashAllocationId })),
+      advanceAllocations: advanceApplications
+        .map(application => ({ projectId, recipientKey: application.recipientKey, applicationId: application.id, cashAllocationId: application.cashAllocationId, amount: application.amount }))
+        .sort((left, right) => left.cashAllocationId.localeCompare(right.cashAllocationId)),
     },
     actualApplications,
     advanceApplications,
@@ -526,14 +560,73 @@ async function deriveSourcesForCreate(tx: Prisma.TransactionClient, projectId: s
 
 async function supplementalEvidence(tx: Prisma.TransactionClient, projectId: string, dossierVersionId: string) {
   const rows = await tx.settlementEvidence.findMany({ where: { projectId, dossierVersionId, kind: { contains: ":" } }, include: { evidence: true } });
-  return rows.flatMap(row => {
-    const satisfies = evidenceRequirements(row.kind);
-    return satisfies.length ? [{ id: row.evidenceId, sha256: row.sha256, recipientKey: row.kind.split(":", 2)[1], origin: "SUPPLEMENTAL" as const, satisfies }] : [];
-  });
+  return rows.map(row => {
+    const separator = row.kind.indexOf(":");
+    const kind = separator > 0 ? row.kind.slice(0, separator) : "";
+    const recipientKey = separator > 0 ? row.kind.slice(separator + 1) : "";
+    const satisfies = evidenceRequirements(kind);
+    if (!kind || !recipientKey || !(recipientKey.startsWith("USER:") || recipientKey.startsWith("VENDOR:")) || !satisfies.length) {
+      throw new SettlementDomainError("Loại hoặc recipient của chứng từ bổ sung không hợp lệ.");
+    }
+    if (!hashesEqual(row.sha256, row.evidence.sha256)) throw new SettlementDomainError("Hash chứng từ bổ sung đã thay đổi so với manifest.");
+    return { id: row.evidenceId, sha256: row.sha256, recipientKey, origin: "SUPPLEMENTAL" as const, satisfies };
+  }).sort((left, right) => left.id.localeCompare(right.id));
 }
 
 function blockersFromProjection(projection: ReturnType<typeof buildProjectSettlementDraft>): SettlementBlocker[] {
   return projection.submitBlockers.map(blocker => ({ code: blocker.code, recipientKey: blocker.recipientKey }));
+}
+
+async function assertPersistedAdvanceManifest(
+  tx: Prisma.TransactionClient,
+  projectId: string,
+  dossierVersionId: string,
+  manifest: SettlementSourceManifest,
+) {
+  const rows = await tx.settlementAdvanceManifestRow.findMany({
+    where: { projectId, dossierVersionId },
+    include: { advanceApplication: true, sourceCashAllocation: true },
+    orderBy: { sourceCashAllocationId: "asc" },
+  });
+  const expected = [...manifest.advanceAllocations].sort((left, right) => left.cashAllocationId.localeCompare(right.cashAllocationId));
+  if (rows.length !== expected.length) throw new SettlementDomainError("Manifest installment đã lưu không còn đầy đủ.");
+  rows.forEach((row, index) => {
+    const source = expected[index];
+    if (row.projectId !== source.projectId
+      || row.recipientKey !== source.recipientKey
+      || row.advanceApplicationId !== source.applicationId
+      || row.sourceCashAllocationId !== source.cashAllocationId
+      || row.advanceApplication.advanceLineId !== row.sourceCashAllocation.requestLineId
+      || row.advanceApplication.projectId !== projectId
+      || row.sourceCashAllocation.projectId !== projectId
+      || row.advanceApplication.recipientKey !== row.sourceCashAllocation.recipientKey
+      || row.sourceCashAllocation.recipientKey !== source.recipientKey
+      || row.sourceCashAllocation.amount !== source.amount) {
+      throw new SettlementDomainError("Manifest installment không khớp application, allocation, recipient, Project hoặc số tiền đã lưu.");
+    }
+  });
+}
+
+async function reconstructAndVerifyProjection(
+  tx: Prisma.TransactionClient,
+  projectId: string,
+  requestId: string,
+  dossierVersion: { id: string; canonicalHash: string; sourceManifestHash: string | null },
+  payload: StoredSettlementPayload,
+  supplemental: SettlementEvidenceRef[],
+) {
+  const sourceManifestHash = canonicalHash(payload.sourceManifest);
+  if (!hashesEqual(dossierVersion.sourceManifestHash, sourceManifestHash)) {
+    throw new SettlementDomainError("Hash source manifest đã thay đổi so với phiên bản quyết toán.");
+  }
+  await assertPersistedAdvanceManifest(tx, projectId, dossierVersion.id, payload.sourceManifest);
+  const sourceProjection = await projectionFromStoredSources(tx, projectId, requestId, payload.sourceManifest, supplemental);
+  const projection = buildProjectSettlementDraft(sourceProjection);
+  const projectionHash = canonicalHash(projection);
+  if (!hashesEqual(payload.projectionHash, projectionHash) || !hashesEqual(dossierVersion.canonicalHash, projectionHash)) {
+    throw new SettlementDomainError("Projection quyết toán đã thay đổi so với payload hoặc phiên bản đã lưu.");
+  }
+  return { projection, projectionHash, sourceManifestHash };
 }
 
 export function isSettlementCommand(value: string) {
@@ -560,8 +653,18 @@ export async function executeSettlementCommand(actor: SettlementActor, form: For
       const sources = await deriveSourcesForCreate(tx, projectId, request.id, actor.id);
       const projection = buildProjectSettlementDraft(sources.draftInput);
       const projectionHash = canonicalHash(projection);
-      const version = await tx.projectSettlementVersion.create({ data: { projectId, dossierId: dossier.id, requestId: request.id, version: 1, attemptId: randomUUID(), canonicalHash: projectionHash, createdById: actor.id } });
-      for (const row of projection.recipients) await tx.settlementRecipientObligation.create({ data: { projectId, dossierVersionId: version.id, recipientKey: row.recipientKey, recipientType: row.recipientType, direction: row.refundDue !== "0" ? "REFUND" : row.additionalDue !== "0" ? "ADDITIONAL" : "BALANCED", approvedAcGross: row.actualGross, disbursedAdvance: row.advanceGross, amountDue: row.refundDue !== "0" ? row.refundDue : row.additionalDue } });
+      const sourceManifestHash = canonicalHash(sources.manifest);
+      const version = await tx.projectSettlementVersion.create({ data: { projectId, dossierId: dossier.id, requestId: request.id, version: 1, attemptId: randomUUID(), canonicalHash: projectionHash, sourceManifestHash, createdById: actor.id } });
+      const obligations = new Map<string, string>();
+      for (const row of projection.recipients) {
+        const obligation = await tx.settlementRecipientObligation.create({ data: { projectId, dossierVersionId: version.id, recipientKey: row.recipientKey, recipientType: row.recipientType, direction: row.refundDue !== "0" ? "REFUND" : row.additionalDue !== "0" ? "ADDITIONAL" : "BALANCED", approvedAcGross: row.actualGross, disbursedAdvance: row.advanceGross, amountDue: row.refundDue !== "0" ? row.refundDue : row.additionalDue }, select: { id: true } });
+        obligations.set(row.recipientKey, obligation.id);
+      }
+      for (const source of sources.manifest.advanceAllocations) {
+        const obligationId = obligations.get(source.recipientKey);
+        if (!obligationId) throw new SettlementDomainError("Thiếu nghĩa vụ cho installment trong manifest.");
+        await tx.settlementAdvanceManifestRow.create({ data: { projectId, dossierVersionId: version.id, obligationId, recipientKey: source.recipientKey, advanceApplicationId: source.applicationId, sourceCashAllocationId: source.cashAllocationId } });
+      }
       const inheritedEvidence = new Map(projection.recipients.flatMap(row => row.evidenceManifest.map(evidence => [evidence.id, evidence] as const)));
       for (const evidence of inheritedEvidence.values()) await tx.settlementEvidence.create({ data: { projectId, dossierVersionId: version.id, evidenceId: evidence.id, kind: evidence.satisfies.join("+"), sha256: evidence.sha256, addedById: actor.id } });
       const payload: StoredSettlementPayload = { dossierId: dossier.id, dossierVersionId: version.id, sourceManifest: sources.manifest, projectionHash, submitBlockers: blockersFromProjection(projection) };
@@ -585,9 +688,16 @@ export async function executeSettlementCommand(actor: SettlementActor, form: For
       if (!await tx.settlementRecipientObligation.findFirst({ where: { dossierVersionId: dossierVersion.id, projectId, recipientKey } })) throw new SettlementDomainError("Chứng từ không thuộc người nhận trong phiên bản quyết toán.");
       const kind = required(formText(form, "evidenceKind"), "loại chứng từ");
       if (!evidenceRequirements(kind).length) throw new SettlementDomainError("Loại chứng từ quyết toán không hợp lệ.");
+      const beforeSupplemental = await supplementalEvidence(tx, projectId, dossierVersion.id);
+      await reconstructAndVerifyProjection(tx, projectId, request.id, dossierVersion, payload, beforeSupplemental);
       const evidence = await tx.costFlowEvidence.create({ data: { projectId, requestId: request.id, sourceFileId: `settlement:${randomUUID()}`, kind, name: prepared.name, mimeType: prepared.mimeType, data: prepared.data, sha256: prepared.sha256, createdBy: actor.id } });
       await tx.settlementEvidence.create({ data: { projectId, dossierVersionId: dossierVersion.id, evidenceId: evidence.id, kind: `${kind}:${recipientKey}`, sha256: evidence.sha256, addedById: actor.id } });
-      const updated = await tx.workflowRequest.updateMany({ where: { id: request.id, version: expectedVersion }, data: { version: { increment: 1 } } });
+      const afterSupplemental = await supplementalEvidence(tx, projectId, dossierVersion.id);
+      const nextProjection = buildProjectSettlementDraft(await projectionFromStoredSources(tx, projectId, request.id, payload.sourceManifest, afterSupplemental));
+      const nextProjectionHash = canonicalHash(nextProjection);
+      await tx.projectSettlementVersion.update({ where: { id: dossierVersion.id }, data: { canonicalHash: nextProjectionHash } });
+      const nextPayload = { ...payload, projectionHash: nextProjectionHash, submitBlockers: blockersFromProjection(nextProjection) };
+      const updated = await tx.workflowRequest.updateMany({ where: { id: request.id, version: expectedVersion }, data: { payload: json({ settlement: nextPayload }), version: { increment: 1 } } });
       if (updated.count !== 1) throw new SettlementDomainError("Hồ sơ đã thay đổi khi bổ sung chứng từ.");
       return { success: "Đã lưu chứng từ bổ sung và hash theo đúng phiên bản hồ sơ.", requestId: request.id, settlementVersion: expectedVersion + 1 };
     }
@@ -614,7 +724,7 @@ export async function executeSettlementCommand(actor: SettlementActor, form: For
         hasCash: cashCount > 0,
         hasLocks: lockCount > 0,
       });
-      const nextVersion = await tx.projectSettlementVersion.create({ data: { id: lineage.replacedById, projectId, dossierId: dossierVersion.dossierId, requestId: request.id, version: dossierVersion.version + 1, attemptId: randomUUID(), canonicalHash: dossierVersion.canonicalHash, createdById: actor.id, supersedesId: dossierVersion.id, replacementReason: lineage.replacementReason, replacementActorId: actor.id, replacedAt: new Date(lineage.replacedAt) } });
+      const nextVersion = await tx.projectSettlementVersion.create({ data: { id: lineage.replacedById, projectId, dossierId: dossierVersion.dossierId, requestId: request.id, version: dossierVersion.version + 1, attemptId: randomUUID(), canonicalHash: dossierVersion.canonicalHash, sourceManifestHash: dossierVersion.sourceManifestHash, createdById: actor.id, supersedesId: dossierVersion.id, replacementReason: lineage.replacementReason, replacementActorId: actor.id, replacedAt: new Date(lineage.replacedAt) } });
       await copySettlementVersion(tx, dossierVersion.id, nextVersion.id, projectId, actor.id);
       const nextPayload = { ...payload, dossierVersionId: nextVersion.id };
       if ((await tx.workflowRequest.updateMany({ where: { id: request.id, version: expectedVersion }, data: { state: "DRAFT", currentStep: 0, currentAttemptId: null, payload: json({ settlement: nextPayload }), version: { increment: 1 } } })).count !== 1) throw new SettlementDomainError("Hồ sơ đã thay đổi khi tạo bản thay thế.");
@@ -622,9 +732,14 @@ export async function executeSettlementCommand(actor: SettlementActor, form: For
     }
 
     const supplemental = await supplementalEvidence(tx, projectId, dossierVersion.id);
-    const sourceProjection = await projectionFromStoredSources(tx, projectId, request.id, payload.sourceManifest, supplemental);
-    const projection = buildProjectSettlementDraft(sourceProjection);
-    if (canonicalHash({ ...projection, submitBlockers: undefined, canSubmit: undefined }) !== canonicalHash({ ...projection, submitBlockers: undefined, canSubmit: undefined })) throw new SettlementDomainError("Projection quyết toán không ổn định.");
+    const { projection, projectionHash, sourceManifestHash } = await reconstructAndVerifyProjection(
+      tx,
+      projectId,
+      request.id,
+      dossierVersion,
+      payload,
+      supplemental,
+    );
     const blockers = blockersFromProjection(projection);
     const lifecycle = lifecycleFromRequest(request, payload, steps, lockCount);
 
@@ -635,11 +750,11 @@ export async function executeSettlementCommand(actor: SettlementActor, form: For
       let submittedVersionId = dossierVersion.id;
       if (command === "RESUBMIT_SETTLEMENT_DOSSIER") {
         const response = required(formText(form, "reason"), "phản hồi sửa hồ sơ");
-        const immutableVersion = await tx.projectSettlementVersion.create({ data: { projectId, dossierId: dossierVersion.dossierId, requestId: request.id, version: dossierVersion.version + 1, attemptId: next.attemptId, canonicalHash: canonicalHash(projection), createdById: actor.id, supersedesId: dossierVersion.id, replacementReason: response, replacementActorId: actor.id, replacedAt: new Date() } });
+        const immutableVersion = await tx.projectSettlementVersion.create({ data: { projectId, dossierId: dossierVersion.dossierId, requestId: request.id, version: dossierVersion.version + 1, attemptId: next.attemptId, canonicalHash: projectionHash, sourceManifestHash, createdById: actor.id, supersedesId: dossierVersion.id, replacementReason: response, replacementActorId: actor.id, replacedAt: new Date() } });
         await copySettlementVersion(tx, dossierVersion.id, immutableVersion.id, projectId, actor.id);
         submittedVersionId = immutableVersion.id;
       }
-      const submittedPayload = { ...payload, dossierVersionId: submittedVersionId, projectionHash: canonicalHash(projection), submitBlockers: [] };
+      const submittedPayload = { ...payload, dossierVersionId: submittedVersionId, projectionHash, submitBlockers: [] };
       if ((await tx.workflowRequest.updateMany({ where: { id: request.id, version: expectedVersion }, data: { state: next.state, currentStep: 0, currentAttemptId: next.attemptId, currentStepArrivedAt: new Date(), payload: json({ settlement: submittedPayload }), version: { increment: 1 } } })).count !== 1) throw new SettlementDomainError("Hồ sơ đã thay đổi khi gửi duyệt.");
       await recordApprovalEvent(tx, { requestId: request.id, module: request.module, attemptId: next.attemptId, submittedVersion: expectedVersion + 1, mutationVersion: expectedVersion + 1, stepIndex: 0, role: "MANAGER", actorId: actor.id, action: command === "SUBMIT_SETTLEMENT_DOSSIER" ? "SUBMIT" : "RESUBMIT", recipients: [steps[0].assigneeId] });
       return { success: "Đã gửi hồ sơ quyết toán theo snapshot nguồn phía server.", requestId: request.id, settlementVersion: expectedVersion + 1 };
@@ -715,10 +830,20 @@ async function persistSettlementLocks(tx: Prisma.TransactionClient, dossierVersi
 }
 
 async function copySettlementVersion(tx: Prisma.TransactionClient, oldVersionId: string, newVersionId: string, projectId: string, actorId: string) {
-  const [obligations, evidence] = await Promise.all([
+  const [obligations, evidence, advanceManifest] = await Promise.all([
     tx.settlementRecipientObligation.findMany({ where: { projectId, dossierVersionId: oldVersionId } }),
     tx.settlementEvidence.findMany({ where: { projectId, dossierVersionId: oldVersionId } }),
+    tx.settlementAdvanceManifestRow.findMany({ where: { projectId, dossierVersionId: oldVersionId } }),
   ]);
-  for (const item of obligations) await tx.settlementRecipientObligation.create({ data: { projectId, dossierVersionId: newVersionId, recipientKey: item.recipientKey, recipientType: item.recipientType, direction: item.direction, approvedAcGross: item.approvedAcGross, disbursedAdvance: item.disbursedAdvance, amountDue: item.amountDue } });
+  const obligationIds = new Map<string, string>();
+  for (const item of obligations) {
+    const copied = await tx.settlementRecipientObligation.create({ data: { projectId, dossierVersionId: newVersionId, recipientKey: item.recipientKey, recipientType: item.recipientType, direction: item.direction, approvedAcGross: item.approvedAcGross, disbursedAdvance: item.disbursedAdvance, amountDue: item.amountDue }, select: { id: true } });
+    obligationIds.set(item.recipientKey, copied.id);
+  }
   for (const item of evidence) await tx.settlementEvidence.create({ data: { projectId, dossierVersionId: newVersionId, evidenceId: item.evidenceId, kind: item.kind, sha256: item.sha256, addedById: actorId } });
+  for (const item of advanceManifest) {
+    const obligationId = obligationIds.get(item.recipientKey);
+    if (!obligationId) throw new SettlementDomainError("Thiếu nghĩa vụ khi sao chép manifest installment.");
+    await tx.settlementAdvanceManifestRow.create({ data: { projectId, dossierVersionId: newVersionId, obligationId, recipientKey: item.recipientKey, advanceApplicationId: item.advanceApplicationId, sourceCashAllocationId: item.sourceCashAllocationId } });
+  }
 }

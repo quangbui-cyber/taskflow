@@ -41,7 +41,7 @@ async function withMigratedSettlementSchema(run) {
   }
 }
 
-async function createFixture(client, service, label, { completeEvidence = false } = {}) {
+async function createFixture(client, service, label, { completeEvidence = false, actualAmount = "800" } = {}) {
   const suffix = `${label}-${randomUUID()}`;
   const ids = {
     owner: `owner-${suffix}`,
@@ -208,12 +208,12 @@ async function createFixture(client, service, label, { completeEvidence = false 
     fundingSource: "EMPLOYEE_ADVANCE",
     quantity: "1",
     days: "1",
-    unitPrice: "800",
+    unitPrice: actualAmount,
     unit: "item",
     basis: "GROSS",
     vatPercent: "0",
-    amount: "800",
-    rawAmount: "800",
+    amount: actualAmount,
+    rawAmount: actualAmount,
     createdById: ids.owner,
   } });
   await client.actualCostApproval.create({ data: {
@@ -288,10 +288,10 @@ test("persisted settlement manifest classifies evidence, keeps every installment
     assert.ok(manifestRows.every(row => row.advanceApplicationId !== fixture.ids.distractorApplication));
 
     let requestVersion = 0;
-    for (const [kind, clearedCode] of [
-      ["RELATED_IC_AC", "MISSING_RELATED_IC_AC"],
-      ["VAT_INVOICE", "MISSING_EXPENSE_EVIDENCE"],
-      ["PAYMENT_PROOF", "MISSING_DISBURSEMENT_PROOF"],
+    for (const [kind, clearedCode, remainingCodes] of [
+      ["RELATED_IC_AC", "MISSING_RELATED_IC_AC", ["MISSING_EXPENSE_EVIDENCE", "MISSING_DISBURSEMENT_PROOF"]],
+      ["VAT_INVOICE", "MISSING_EXPENSE_EVIDENCE", ["MISSING_DISBURSEMENT_PROOF"]],
+      ["PAYMENT_PROOF", "MISSING_DISBURSEMENT_PROOF", []],
     ]) {
       const uploaded = await addEvidence(service, fixture, requestVersion, kind);
       requestVersion = uploaded.settlementVersion;
@@ -300,7 +300,7 @@ test("persisted settlement manifest classifies evidence, keeps every installment
           () => submit(service, fixture, requestVersion),
           error => {
             assert.ok(!error.codes.includes(clearedCode), `${kind} should clear only ${clearedCode}`);
-            assert.ok(error.codes.length > 0);
+            assert.deepEqual(error.codes, remainingCodes);
             return true;
           },
         );
@@ -311,6 +311,12 @@ test("persisted settlement manifest classifies evidence, keeps every installment
     const submittedRequest = await client.workflowRequest.findUniqueOrThrow({ where: { id: fixture.request.id } });
     assert.equal(submittedRequest.state, "SUBMITTED");
     assert.equal(await client.costFlowCash.count({ where: { projectId: fixture.ids.project } }), 2, "dossier lifecycle must be cash-neutral");
+
+    const additional = await createFixture(client, service, "additional", { completeEvidence: true, actualAmount: "1200" });
+    const additionalObligation = await client.settlementRecipientObligation.findFirstOrThrow({ where: { dossierVersionId: additional.version.id } });
+    assert.equal(additionalObligation.direction, "ADDITIONAL");
+    assert.equal(additionalObligation.amountDue, "200");
+    await submit(service, additional, 0);
 
     const driftCases = [
       {

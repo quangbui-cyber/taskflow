@@ -134,7 +134,7 @@ function mergeEvidence(rows: SettlementEvidenceRef[]) {
       satisfies: [...new Set([...existing.satisfies, ...row.satisfies])],
     } : { ...row, satisfies: [...new Set(row.satisfies)] });
   }
-  return [...byId.values()];
+  return [...byId.values()].sort((left, right) => left.id.localeCompare(right.id));
 }
 
 function accumulatorFor(
@@ -334,7 +334,11 @@ export function buildProjectSettlementDraft(input: ProjectSettlementDraftInput) 
     supplementalByRecipient.set(recipientKey, [...(supplementalByRecipient.get(recipientKey) ?? []), evidence]);
   }
 
-  const recipientRows = [...recipients.values()].map(recipient => {
+  actualManifest.sort((left, right) => left.stableLineId.localeCompare(right.stableLineId));
+  allocationManifest.sort((left, right) => left.allocationId.localeCompare(right.allocationId));
+  const recipientRows = [...recipients.values()]
+    .sort((left, right) => left.recipientKey.localeCompare(right.recipientKey))
+    .map(recipient => {
     const actual = roundedActual(recipient);
     const advanceGross = BigInt(round(sum(recipient.advanceGross)));
     const actualGross = BigInt(actual.gross);
@@ -378,7 +382,7 @@ export function buildProjectSettlementDraft(input: ProjectSettlementDraftInput) 
         moneyInWords: actual.gross,
       },
     };
-  });
+    });
 
   const submitBlockers: Array<{
     code: "UNAPPROVED_AC" | SettlementMissingCode;

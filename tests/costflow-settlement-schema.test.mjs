@@ -10,6 +10,8 @@ const root = path.resolve(import.meta.dirname, "..");
 const schema = readFileSync(path.join(root, "prisma/schema.prisma"), "utf8");
 const migrationName = "20261012090000_phase10_gap_contracts";
 const migrationPath = path.join(root, "prisma/migrations", migrationName, "migration.sql");
+const latestMigrationName = "20261012100000_phase10_draft_manifest_hash";
+const latestMigrationPath = path.join(root, "prisma/migrations", latestMigrationName, "migration.sql");
 const baselineMigrationPath = path.join(root, "prisma/migrations/20261011090000_phase10_settlement_dossier/migration.sql");
 const baselineTables = [
   "ProjectSettlementDossier",
@@ -131,8 +133,8 @@ function hasPostgresCode(code) {
 
 test("Phase 10 migration sorts strictly after all existing migrations", () => {
   const names = migrationNames();
-  assert.equal(names.at(-1), migrationName);
-  assert.ok(names.indexOf(migrationName) > names.findLastIndex(name => name.startsWith("20261010_phase9_")));
+  assert.equal(names.at(-1), latestMigrationName);
+  assert.ok(names.indexOf(latestMigrationName) > names.indexOf(migrationName));
   assert.equal(new Set(names).size, names.length);
 });
 
@@ -147,6 +149,7 @@ test("schema keeps settlement lock separate from producer lifecycle state", () =
 
 test("migration enforces provenance, idempotency, replacement, and append-only audit constraints", () => {
   const sql = readFileSync(migrationPath, "utf8");
+  const latestSql = readFileSync(latestMigrationPath, "utf8");
   const baselineSql = readFileSync(baselineMigrationPath, "utf8");
   for (const table of gapTables) assert.match(sql, new RegExp(`CREATE TABLE "${table}"`));
   assert.match(baselineSql, /SettlementLock_source_xor_check/);
@@ -157,6 +160,8 @@ test("migration enforces provenance, idempotency, replacement, and append-only a
   assert.match(sql, /SettlementCorrectionAttempt_one_open_per_project_idx[\s\S]*?terminalAt/);
   assert.match(sql, /SettlementExportSourceProjection_exact_source_key/);
   assert.match(sql, /SettlementExportAudit_file_sha256_check/);
+  assert.match(latestSql, /ProjectSettlementVersion_source_manifest_hash_check/);
+  assert.match(latestSql, /approvedAttemptId[\s\S]*?approvedSnapshotId[\s\S]*?approvedProjectionHash/);
   assert.doesNotMatch(sql, /ON DELETE CASCADE/);
   assert.doesNotMatch(sql, /UPDATE "(?:ActualCostApplication|AdvanceApplication)"[\s\S]*?SET[\s\S]*?SETTLED/i);
 });
