@@ -20,6 +20,7 @@ import { Alert } from "@/components/ui/Presentation";
 import { SignaturePad } from "@/components/SignaturePad";
 import { moneyInWords } from "@/lib/costflow/money";
 import { workflowQueueAction } from "@/app/actions/workflow";
+import { CreativeStationLogo } from "@/components/CreativeStationLogo";
 
 export type DetailedFinanceLine = {
   stt?: number;
@@ -286,18 +287,21 @@ export function WorkflowPrintView({ doc, backHref }: { doc: WorkflowPrintDocumen
 
         {/* A. CORPORATE HEADER METADATA (Excel Parity) */}
         <header className="relative flex items-start justify-between border-b-2 border-zinc-900 pb-4 font-sans">
-          <div className="space-y-1">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-900">
-              CÔNG TY CỔ PHẦN TRUYỀN THÔNG VÀ SỰ KIỆN CREATIVE STATION
-            </p>
-            <p className="text-[10px] text-zinc-600">
-              Mã số thuế: 0316484346 · Website: https://mycreative.vn
-            </p>
-            {doc.projectName && (
-              <p className="text-[11px] font-semibold text-zinc-800">
-                Dự án: <span className="text-indigo-900">{doc.projectName}</span>
+          <div className="flex items-center gap-3.5">
+            <CreativeStationLogo className="h-10 w-auto print:h-9 shrink-0" />
+            <div className="space-y-0.5 border-l border-zinc-300 pl-3">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-900">
+                CÔNG TY CỔ PHẦN TRUYỀN THÔNG VÀ SỰ KIỆN CREATIVE STATION
               </p>
-            )}
+              <p className="text-[10px] text-zinc-600">
+                Mã số thuế: 0316484346 · Website: https://mycreative.vn
+              </p>
+              {doc.projectName && (
+                <p className="text-[11px] font-semibold text-zinc-800">
+                  Dự án: <span className="text-indigo-900">{doc.projectName}</span>
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="text-right text-[11px]">

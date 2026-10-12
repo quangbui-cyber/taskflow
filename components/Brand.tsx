@@ -1,11 +1,13 @@
-import Image from "next/image";
+import { CreativeStationLogo } from "@/components/CreativeStationLogo";
 
 export default function Brand({
   compact = false,
   large = false,
+  className = "",
 }: {
   compact?: boolean;
   large?: boolean;
+  className?: string;
 }) {
   const logoSize = large
     ? "w-[260px]"
@@ -14,15 +16,8 @@ export default function Brand({
       : "w-[200px]";
 
   return (
-    <span className="flex min-w-0 items-center">
-      <Image
-        src="/creative-station-logo.png"
-        width={1914}
-        height={370}
-        alt="Creative Station"
-        className={`h-auto ${logoSize}`}
-        priority
-      />
+    <span className={`flex min-w-0 items-center ${className}`}>
+      <CreativeStationLogo className={`h-auto ${logoSize}`} />
     </span>
   );
 }
