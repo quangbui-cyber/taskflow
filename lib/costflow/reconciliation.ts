@@ -26,12 +26,25 @@ export type FinancialCloseRequestRecord = {
 };
 
 export type TwoWayCloseInput = {
-  dossier: { id: string; versionId: string; state: string; sourceCount: number; lockCount: number } | null;
+  dossier: {
+    id: string;
+    versionId: string;
+    canonicalHash?: string;
+    state: string;
+    sourceCount: number;
+    lockCount: number;
+    manifestMatchesLocks?: boolean;
+    persistedManifestMatches?: boolean;
+    sourceManifestHashMatches?: boolean;
+    canonicalHashMatches?: boolean;
+    isLatestApproved?: boolean;
+  } | null;
   obligations: Array<{ recipientKey: string; amountDue: string; allocatedAmount: string; everyCashHasEvidence: boolean }>;
   customerAccounting: {
     currentLiquidation: { id: string; documentNumber: string; signedAt: string; evidence: { id: string } | null } | null;
     receivable: { outstandingGross: string };
   };
+  openCorrectionLifecycle?: boolean;
 };
 
 export type ReopenedDossierSource = { identity: string; recipientKey: string; amount: string; provenance: string; approvalState: string };
@@ -71,9 +84,19 @@ export function twoWayCloseBlockers(input: TwoWayCloseInput) {
   const blockers: string[] = [];
   if (!input.dossier || input.dossier.state !== "APPROVED") {
     blockers.push("Hồ sơ quyết toán cuối cùng chưa được CEO phê duyệt.");
-  } else if (input.dossier.sourceCount === 0 || input.dossier.lockCount !== input.dossier.sourceCount) {
-    blockers.push("Nguồn AC/tạm ứng của hồ sơ quyết toán chưa có đủ khóa SETTLED bất biến.");
+  } else {
+    if (
+      input.dossier.sourceCount === 0
+      || input.dossier.lockCount !== input.dossier.sourceCount
+      || input.dossier.manifestMatchesLocks === false
+      || input.dossier.persistedManifestMatches === false
+    ) blockers.push("Manifest nguồn của phiên bản quyết toán không bằng chính xác tập khóa SETTLED bất biến.");
+    if (input.dossier.sourceManifestHashMatches === false || input.dossier.canonicalHashMatches === false) {
+      blockers.push("Hash manifest/canonical của phiên bản quyết toán không còn khớp dữ liệu bất biến.");
+    }
+    if (input.dossier.isLatestApproved === false) blockers.push("Phiên bản quyết toán được yêu cầu không còn là bản phê duyệt mới nhất.");
   }
+  if (input.openCorrectionLifecycle) blockers.push("OPEN_CORRECTION_LIFECYCLE: vòng sửa quyết toán chưa kết thúc.");
   if (input.obligations.some(item => compare(decimal(item.amountDue), decimal(item.allocatedAmount)) !== 0)) {
     blockers.push("Còn công nợ nội bộ chưa thực hiện đủ (balance != 0).");
   }
@@ -140,7 +163,7 @@ export function decideFinancialClose(request: FinancialCloseRequestRecord, input
 }) {
   if (!input.assignedManagerId || input.actorId !== input.assignedManagerId) throw new Error("Chỉ Quản lý được phân công của Project được quyết định.");
   if (request.events.some(event => event.decision !== "REQUESTED")) throw new Error("Yêu cầu đóng/mở đã có quyết định bất biến.");
-  if (input.currentVersion < request.expectedVersion) throw new Error("Phiên bản quyết định cũ hơn yêu cầu đóng/mở tài chính.");
+  if (input.currentVersion !== request.expectedVersion) throw new Error("Phiên bản quyết định không còn đúng bằng yêu cầu đóng/mở tài chính bất biến.");
   const reason = input.reason.trim();
   if (!reason) throw new Error("Thiếu lý do quyết định đóng/mở tài chính.");
   if (input.decision === "APPROVE") {

@@ -9,6 +9,14 @@ import { PrismaClient } from "@prisma/client";
 const PINNED_DATABASE_URL = "postgresql://postgres@127.0.0.1:55439/taskflow";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sha = value => createHash("sha256").update(value).digest("hex");
+const canonicalSha = value => {
+  const stable = input => {
+    if (Array.isArray(input)) return input.map(stable).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+    if (input && typeof input === "object") return Object.fromEntries(Object.entries(input).sort(([left], [right]) => left.localeCompare(right)).map(([key, child]) => [key, stable(child)]));
+    return input;
+  };
+  return sha(JSON.stringify(stable(value)));
+};
 
 async function withMigratedSchema(run) {
   const schemaName = `phase10_close_${randomUUID().replaceAll("-", "")}`;
@@ -87,18 +95,25 @@ async function fixture(client, label) {
     recipientKey, direction: "OUT", amount: "1000",
   } });
 
+  const sourceManifest = {
+    actualCosts: [],
+    advanceAllocations: [{
+      projectId: project.id, applicationId: advance.id, cashAllocationId: sourceAllocation.id,
+      recipientKey, amount: "1000",
+    }],
+  };
+  const canonicalHash = sha(`settlement-${label}`);
   const settlementRequest = await client.workflowRequest.create({ data: {
     projectId: project.id, module: "COSTFLOW", kind: "SETTLEMENT", title: `Settlement ${label}`,
     creatorId: actors.owner.id, cashAssigneeId: actors.accountant.id, state: "APPROVED", version: 4,
     currentAttemptId: `attempt-${label}`,
     steps: [{ role: "MANAGER", assigneeId: actors.manager.id }, { role: "ACCOUNTANT", assigneeId: actors.accountant.id }, { role: "CEO", assigneeId: actors.ceo.id }],
-    payload: {},
+    payload: { settlement: { sourceManifest, projectionHash: canonicalHash } },
   } });
   const dossier = await client.projectSettlementDossier.create({ data: { projectId: project.id, createdById: actors.owner.id } });
-  const canonicalHash = sha(`settlement-${label}`);
   const version = await client.projectSettlementVersion.create({ data: {
     projectId: project.id, dossierId: dossier.id, requestId: settlementRequest.id, version: 1,
-    attemptId: `attempt-${label}`, canonicalHash, sourceManifestHash: sha(`manifest-${label}`), createdById: actors.owner.id,
+    attemptId: `attempt-${label}`, canonicalHash, sourceManifestHash: canonicalSha(sourceManifest), createdById: actors.owner.id,
   } });
   const obligation = await client.settlementRecipientObligation.create({ data: {
     projectId: project.id, dossierVersionId: version.id, recipientKey, recipientType: "EMPLOYEE",
@@ -153,7 +168,7 @@ async function fixture(client, label) {
     projectId: project.id, advanceRequestId: advanceRequest.id, advanceLineId: unrelatedLine.id,
     expenseId: `unrelated-expense-${label}`, recipientKey, amount: "25", createdBy: actors.owner.id,
   } });
-  return { actors, project, dossier, version, settlementRequest, obligation, lock, advance, sourceAllocation, unrelatedAdvance, canonicalHash };
+  return { actors, project, dossier, version, settlementRequest, obligation, lock, advance, sourceAllocation, unrelatedAdvance, canonicalHash, settlementCash, liquidation };
 }
 
 function closeForm(reason = "Đối soát hoàn tất") {
@@ -183,7 +198,7 @@ test("financial close binds the exact approved manifest/version/hash and rejects
     const stored = await client.financialCloseRequest.findUniqueOrThrow({ where: { id: requested.closeRequestId } });
     assert.equal(stored.dossierVersionId, exact.version.id);
     assert.equal(stored.canonicalHash, exact.canonicalHash);
-    assert.equal(stored.workspaceVersion, 0);
+    assert.equal(stored.workspaceVersion, 1);
     await service.executeFinance(exact.project.id, 1, exact.actors.manager, decisionForm(stored.id), null);
     assert.equal((await client.costFlowWorkspace.findUniqueOrThrow({ where: { projectId: exact.project.id } })).data.closed, true);
 
@@ -194,6 +209,7 @@ test("financial close binds the exact approved manifest/version/hash and rejects
         await client.settlementLock.create({ data: {
           projectId: fx.project.id, dossierVersionId: fx.version.id, obligationId: fx.obligation.id,
           recipientKey: fx.obligation.recipientKey, advanceApplicationId: fx.unrelatedAdvance.id,
+          sourceCashAllocationId: fx.sourceAllocation.id,
         } });
       }
       if (mismatch === "wrong-version") {
@@ -214,6 +230,34 @@ test("financial close binds the exact approved manifest/version/hash and rejects
       await assert.rejects(() => requestClose(service, fx), /manifest|khóa|lock|phiên bản/i);
     }
 
+    for (const blocker of ["incomplete-additional", "incomplete-refund", "unsigned-liquidation", "ar-nonzero"]) {
+      const fx = await fixture(client, blocker);
+      if (blocker.startsWith("incomplete")) {
+        await client.settlementCashAllocation.updateMany({ where: { obligationId: fx.obligation.id }, data: { amount: "999" } });
+      }
+      if (blocker === "incomplete-refund") {
+        await client.settlementRecipientObligation.update({ where: { id: fx.obligation.id }, data: { direction: "REFUND" } });
+        await client.costFlowCash.update({ where: { id: fx.settlementCash.id }, data: { direction: "IN" } });
+      }
+      if (blocker === "unsigned-liquidation") {
+        await client.customerCashIn.deleteMany({ where: { projectId: fx.project.id } });
+        await client.customerLiquidation.delete({ where: { id: fx.liquidation.id } });
+      }
+      if (blocker === "ar-nonzero") await client.customerCashIn.updateMany({ where: { projectId: fx.project.id }, data: { amount: "999" } });
+      await assert.rejects(() => requestClose(service, fx), /công nợ|chứng từ|thanh lý|AR/i);
+      assert.equal((await client.costFlowWorkspace.findUniqueOrThrow({ where: { projectId: fx.project.id } })).data.closed, false);
+    }
+
+    const noEvidence = await fixture(client, "cash-no-evidence");
+    await assert.rejects(
+      () => client.$executeRawUnsafe(
+        `INSERT INTO "CostFlowCash" ("id", "projectId", "requestId", "recipientKey", "direction", "channel", "amount", "reference", "idempotencyKey", "commandFingerprint", "allocations", "occurredAt", "confirmedBy") VALUES ($1,$2,$3,$4,'OUT','BANK_TRANSFER','1',$5,$6,$7,'[]'::jsonb,NOW(),$8)`,
+        randomUUID(), noEvidence.project.id, noEvidence.settlementRequest.id, noEvidence.obligation.recipientKey,
+        `NO-EVIDENCE-${randomUUID()}`, `no-evidence-${randomUUID()}`, sha("no-evidence"), noEvidence.actors.accountant.id,
+      ),
+      /evidenceId|null|constraint/i,
+    );
+
     for (const stage of ["REQUESTED", "APPROVED", "VERSION_CREATED", "RECOVERY_PENDING", "PAYMENT_PENDING", "APPROVAL_PENDING", "SIGNING_PENDING"]) {
       const fx = await fixture(client, `correction-${stage.toLowerCase()}`);
       await client.settlementCorrectionAttempt.create({ data: {
@@ -222,6 +266,22 @@ test("financial close binds the exact approved manifest/version/hash and rejects
         reason: `Open correction ${stage}`, stage,
       } });
       await assert.rejects(() => requestClose(service, fx), /vòng sửa|correction|chưa kết thúc/i);
+    }
+
+    for (const stage of ["REQUESTED", "APPROVED", "VERSION_CREATED", "RECOVERY_PENDING", "PAYMENT_PENDING", "APPROVAL_PENDING", "SIGNING_PENDING"]) {
+      const fx = await fixture(client, `decision-correction-${stage.toLowerCase()}`);
+      const result = await requestClose(service, fx);
+      await client.settlementCorrectionAttempt.create({ data: {
+        projectId: fx.project.id, dossierId: fx.dossier.id, baseVersionId: fx.version.id,
+        requestedFieldScopes: ["ADD_NEW_AC"], requestedLockScopes: [], requestedById: fx.actors.owner.id,
+        reason: `Decision correction ${stage}`, stage,
+      } });
+      await assert.rejects(
+        () => service.executeFinance(fx.project.id, 1, fx.actors.manager, decisionForm(result.closeRequestId), null),
+        /vòng sửa|correction|chưa kết thúc/i,
+      );
+      assert.equal(await client.financialCloseEvent.count({ where: { closeRequestId: result.closeRequestId } }), 1);
+      assert.equal((await client.costFlowWorkspace.findUniqueOrThrow({ where: { projectId: fx.project.id } })).data.closed, false);
     }
 
     for (const status of ["COMPLETED", "REJECTED", "CANCELLED"]) {
@@ -263,5 +323,19 @@ test("financial close binds the exact approved manifest/version/hash and rejects
       /vòng sửa|correction|chưa kết thúc/i,
     );
     assert.equal(await client.financialCloseEvent.count({ where: { closeRequestId: result.closeRequestId } }), 1);
+
+    const independentAxes = await fixture(client, "independent-axes");
+    await client.settlementCashAllocation.updateMany({ where: { obligationId: independentAxes.obligation.id }, data: { amount: "1" } });
+    await client.workflowApprovedSnapshot.create({ data: {
+      requestId: independentAxes.settlementRequest.id, version: independentAxes.settlementRequest.version,
+      mode: "DIGITAL", evidenceState: "DIGITAL_CONFIRMED", projection: { approved: true },
+      projectionSha256: sha("signed"), attestationKeyId: "signing-key", attestation: "signed",
+    } });
+    await client.task.create({ data: {
+      projectId: independentAxes.project.id, creatorId: independentAxes.actors.owner.id,
+      title: "Settlement task", status: "DONE", completedAt: new Date(),
+    } });
+    await assert.rejects(() => requestClose(service, independentAxes), /công nợ|chưa thực hiện đủ|balance/i);
+    assert.equal((await client.costFlowWorkspace.findUniqueOrThrow({ where: { projectId: independentAxes.project.id } })).data.closed, false);
   });
 });

@@ -65,32 +65,108 @@ export async function assertCostFlowMutationAllowed(projectId: string, command: 
   }
 }
 
-async function currentTwoWayCloseInput(tx: Prisma.TransactionClient, projectId: string): Promise<TwoWayCloseInput> {
+function canonicalCloseHash(value: unknown) {
+  const stable = (input: unknown): unknown => {
+    if (Array.isArray(input)) return input.map(stable).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+    if (input && typeof input === "object") return Object.fromEntries(
+      Object.entries(input as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, child]) => [key, stable(child)]),
+    );
+    return input;
+  };
+  return createHash("sha256").update(JSON.stringify(stable(value))).digest("hex");
+}
+
+type CloseSourceManifest = {
+  actualCosts: Array<{ applicationId: string }>;
+  advanceAllocations: Array<{ applicationId: string; cashAllocationId: string }>;
+};
+
+function closeManifest(payload: Prisma.JsonValue): { manifest: CloseSourceManifest; projectionHash: string } | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+  const settlement = (payload as Record<string, unknown>).settlement;
+  if (!settlement || typeof settlement !== "object" || Array.isArray(settlement)) return null;
+  const raw = settlement as Record<string, unknown>;
+  const manifest = raw.sourceManifest;
+  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) return null;
+  const source = manifest as Record<string, unknown>;
+  if (!Array.isArray(source.actualCosts) || !Array.isArray(source.advanceAllocations) || typeof raw.projectionHash !== "string") return null;
+  const actualCosts = source.actualCosts.filter((row): row is { applicationId: string } => (
+    !!row && typeof row === "object" && !Array.isArray(row) && typeof (row as Record<string, unknown>).applicationId === "string"
+  ));
+  const advanceAllocations = source.advanceAllocations.filter((row): row is { applicationId: string; cashAllocationId: string } => (
+    !!row && typeof row === "object" && !Array.isArray(row)
+      && typeof (row as Record<string, unknown>).applicationId === "string"
+      && typeof (row as Record<string, unknown>).cashAllocationId === "string"
+  ));
+  if (actualCosts.length !== source.actualCosts.length || advanceAllocations.length !== source.advanceAllocations.length) return null;
+  return { manifest: { actualCosts, advanceAllocations }, projectionHash: raw.projectionHash };
+}
+
+function sameSet(left: Iterable<string>, right: Iterable<string>) {
+  const a = new Set(left);
+  const b = new Set(right);
+  return a.size === b.size && [...a].every(value => b.has(value));
+}
+
+async function currentTwoWayCloseInput(tx: Prisma.TransactionClient, projectId: string, exactVersionId?: string): Promise<TwoWayCloseInput> {
   const dossier = await tx.projectSettlementDossier.findUnique({
     where: { projectId },
     include: {
       versions: {
         orderBy: { version: "desc" },
         include: {
-          request: { select: { state: true } },
+          request: { select: { state: true, payload: true } },
           obligations: { include: { cashAllocations: { include: { cash: { select: { evidenceId: true } } } } } },
-          locks: { select: { id: true } },
+          locks: { select: { id: true, actualCostApplicationId: true, advanceApplicationId: true, sourceCashAllocationId: true } },
+          advanceManifestRows: { select: { advanceApplicationId: true, sourceCashAllocationId: true } },
         },
       },
     },
   });
-  const approvedVersion = dossier?.versions.find(version => version.request.state === "APPROVED") ?? null;
-  const [approvedActualCount, advanceCount, liquidation, customerCash] = await Promise.all([
-    tx.actualCostApplication.count({ where: { projectId, state: "ACTIVE", approval: { action: "APPROVED" } } }),
-    tx.advanceApplication.count({ where: { projectId } }),
+  const latestApprovedVersion = dossier?.versions.find(version => version.request.state === "APPROVED") ?? null;
+  const approvedVersion = exactVersionId
+    ? dossier?.versions.find(version => version.id === exactVersionId && version.request.state === "APPROVED") ?? null
+    : latestApprovedVersion;
+  const [liquidation, customerCash, openCorrection] = await Promise.all([
     tx.customerLiquidation.findFirst({ where: { projectId }, orderBy: { version: "desc" }, include: { evidence: { select: { id: true } } } }),
     tx.customerCashIn.findMany({ where: { projectId }, select: { amount: true } }),
+    tx.settlementCorrectionAttempt.findFirst({ where: { projectId, terminalAt: null }, select: { id: true } }),
   ]);
-  const lockCount = dossier?.versions.reduce((total, version) => total + version.locks.length, 0) ?? 0;
+  const payloadManifest = approvedVersion ? closeManifest(approvedVersion.request.payload) : null;
+  const expectedLockSources = payloadManifest
+    ? payloadManifest.manifest.actualCosts.map(source => `AC:${source.applicationId}`)
+    : [];
+  const expectedAdvanceLockApplications = new Set<string>();
+  for (const source of payloadManifest?.manifest.advanceAllocations ?? []) {
+    if (expectedAdvanceLockApplications.has(source.applicationId)) continue;
+    expectedAdvanceLockApplications.add(source.applicationId);
+    expectedLockSources.push(`ADVANCE:${source.applicationId}:${source.cashAllocationId}`);
+  }
+  const actualLockSources = (approvedVersion?.locks ?? []).flatMap(lock => lock.actualCostApplicationId
+    ? [`AC:${lock.actualCostApplicationId}`]
+    : lock.advanceApplicationId && lock.sourceCashAllocationId
+      ? [`ADVANCE:${lock.advanceApplicationId}:${lock.sourceCashAllocationId}`]
+      : []);
+  const expectedAdvanceRows = payloadManifest?.manifest.advanceAllocations.map(source => `ADVANCE:${source.applicationId}:${source.cashAllocationId}`) ?? [];
+  const actualAdvanceRows = (approvedVersion?.advanceManifestRows ?? []).map(row => `ADVANCE:${row.advanceApplicationId}:${row.sourceCashAllocationId}`);
   const collected = customerCash.reduce((total, row) => total + BigInt(row.amount), BigInt(0));
   const target = liquidation ? BigInt(liquidation.grossAmount) : BigInt(0);
   return {
-    dossier: approvedVersion && dossier ? { id: dossier.id, versionId: approvedVersion.id, state: "APPROVED", sourceCount: approvedActualCount + advanceCount, lockCount } : null,
+    dossier: approvedVersion && dossier ? {
+      id: dossier.id,
+      versionId: approvedVersion.id,
+      canonicalHash: approvedVersion.canonicalHash,
+      state: "APPROVED",
+      sourceCount: new Set(expectedLockSources).size,
+      lockCount: new Set(actualLockSources).size,
+      manifestMatchesLocks: sameSet(expectedLockSources, actualLockSources),
+      persistedManifestMatches: sameSet(expectedAdvanceRows, actualAdvanceRows),
+      sourceManifestHashMatches: !!payloadManifest && approvedVersion.sourceManifestHash === canonicalCloseHash(payloadManifest.manifest),
+      canonicalHashMatches: !!payloadManifest && approvedVersion.canonicalHash === payloadManifest.projectionHash,
+      isLatestApproved: latestApprovedVersion?.id === approvedVersion.id,
+    } : null,
     obligations: (approvedVersion?.obligations ?? []).map(obligation => ({
       recipientKey: obligation.recipientKey,
       amountDue: obligation.amountDue,
@@ -101,6 +177,7 @@ async function currentTwoWayCloseInput(tx: Prisma.TransactionClient, projectId: 
       currentLiquidation: liquidation ? { id: liquidation.id, documentNumber: liquidation.documentNumber, signedAt: liquidation.signedAt.toISOString(), evidence: liquidation.evidence } : null,
       receivable: { outstandingGross: (target - collected).toString() },
     },
+    openCorrectionLifecycle: Boolean(openCorrection),
   };
 }
 
@@ -468,6 +545,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
     let savedCustomerAcceptanceId: string | undefined;
     let savedCustomerAcceptanceVersion: number | undefined;
     let savedCloseRequestId: string | undefined;
+    let exactCloseBinding: { dossierVersionId: string; canonicalHash: string; workspaceVersion: number } | undefined;
     let financialCloseState: "OPEN" | "CLOSED" | undefined;
     let savedScopes: string[] | undefined;
     let customerCashFingerprint: string | undefined;
@@ -725,18 +803,18 @@ export async function executeFinance(projectId: string, expectedVersion: number,
           kind,
           reason: text(form, "reason"),
           requester: { id: actor.id, role: currentActor.role, isProjectMember: member, isProjectOwner: project.ownerId === actor.id },
-          expectedVersion,
+          expectedVersion: expectedVersion + 1,
           financialCloseState: data.closed ? "CLOSED" : "OPEN",
         });
         if (kind === "CLOSE") {
-          if (await tx.settlementCorrectionAttempt.findFirst({ where: { projectId, terminalAt: null }, select: { id: true } })) {
-            throw new Error("Không thể đóng tài chính khi vòng sửa quyết toán chưa kết thúc.");
-          }
-          const blockers = twoWayCloseBlockers(await currentTwoWayCloseInput(tx, projectId));
+          const closeInput = await currentTwoWayCloseInput(tx, projectId);
+          const blockers = twoWayCloseBlockers(closeInput);
           if (blockers.length) throw new Error(blockers.join(" "));
+          if (!closeInput.dossier?.canonicalHash) throw new Error("Phiên bản quyết toán thiếu binding hash bất biến.");
+          exactCloseBinding = { dossierVersionId: closeInput.dossier.versionId, canonicalHash: closeInput.dossier.canonicalHash, workspaceVersion: expectedVersion + 1 };
         }
         const attemptId = randomUUID();
-        const created = await tx.financialCloseRequest.create({ data: { projectId, dossierId: dossier.id, attemptId, action: kind, reason: closeRequest.reason, requestedById: actor.id } });
+        const created = await tx.financialCloseRequest.create({ data: { projectId, dossierId: dossier.id, attemptId, action: kind, reason: closeRequest.reason, requestedById: actor.id, ...exactCloseBinding } });
         if (kind === "REOPEN") {
           const baseVersion = await tx.projectSettlementVersion.findFirst({ where: { projectId, dossierId: dossier.id }, orderBy: { version: "desc" }, select: { id: true } });
           if (!baseVersion) throw new Error("Project chưa có phiên bản quyết toán nền để mở lại.");
@@ -766,7 +844,15 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         const record: FinancialCloseRequestRecord = { projectId, dossierId: stored.dossierId, kind: stored.action as "CLOSE" | "REOPEN", reason: stored.reason, requesterId: stored.requestedById, requesterRole: metadata.requesterRole, expectedVersion: metadata.expectedVersion, events: stored.events.map(event => ({ decision: event.decision as "REQUESTED" | "APPROVE" | "RETURN" | "REJECT", actorId: event.actorId, reason: event.reason, expectedVersion: metadata.expectedVersion, createdAt: event.createdAt.toISOString() })) };
         const decision = text(form, "decision");
         if (decision !== "APPROVE" && decision !== "RETURN" && decision !== "REJECT") throw new Error("Quyết định đóng/mở không hợp lệ.");
-        const blockers = stored.action === "CLOSE" ? twoWayCloseBlockers(await currentTwoWayCloseInput(tx, projectId)) : [];
+        let blockers: string[] = [];
+        if (stored.action === "CLOSE") {
+          if (!stored.dossierVersionId || !stored.canonicalHash || stored.workspaceVersion === null) throw new Error("Yêu cầu đóng thiếu binding phiên bản/hash bất biến.");
+          if (workspace.version !== stored.workspaceVersion) throw new Error("Phiên bản workspace không còn đúng bằng yêu cầu đóng bất biến.");
+          const closeInput = await currentTwoWayCloseInput(tx, projectId, stored.dossierVersionId);
+          if (!closeInput.dossier || closeInput.dossier.versionId !== stored.dossierVersionId) throw new Error("Phiên bản quyết toán yêu cầu không còn được phê duyệt.");
+          if (closeInput.dossier.canonicalHash !== stored.canonicalHash) throw new Error("Canonical hash của phiên bản quyết toán đã thay đổi.");
+          blockers = twoWayCloseBlockers(closeInput);
+        }
         const next = decideFinancialClose(record, { actorId: actor.id, assignedManagerId: data.config.managerId, decision, reason: text(form, "reason"), currentVersion: expectedVersion, currentCloseState: data.closed ? "CLOSED" : "OPEN", blockers });
         const eventReason = text(form, "reason");
         await tx.financialCloseEvent.create({ data: { closeRequestId: stored.id, decision, reason: eventReason, actorId: actor.id, eventHash: createHash("sha256").update(JSON.stringify({ closeRequestId: stored.id, decision, actorId: actor.id, reason: eventReason, expectedVersion })).digest("hex") } });
