@@ -1,4 +1,5 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { Prisma } from "@prisma/client";
 import {
   SETTLEMENT_EXPORT_FAMILIES,
   normalizeSettlementExportProjection,
@@ -230,5 +231,117 @@ export function validateSettlementExportAccess(input: {
   if (input.routeProjectId !== input.sourceProjectId) throw new Error("Phiên bản xuất không thuộc Project trên route.");
   if (input.requestedVersionId !== input.sourceVersionId) throw new Error("Phiên bản xuất không khớp nguồn bất biến.");
   if (input.sourceState !== "APPROVED") throw new Error("Chỉ xuất từ nguồn đã duyệt và immutable.");
+}
+
+type SealedSourceRow = {
+  id: string;
+  projectId: string;
+  dossierVersionId: string | null;
+  family: string;
+  sourceKind: string;
+  sourceId: string;
+  sourceVersion: number;
+  projectionHash: string;
+  approvalAttemptId: string | null;
+  approvedSnapshotId: string | null;
+  signingState: string | null;
+};
+
+function sameToken(left: string, right: string) {
+  const a = Buffer.from(left, "utf8");
+  const b = Buffer.from(right, "utf8");
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+export async function reserveSettlementExportArtifact(tx: Prisma.TransactionClient, input: {
+  sourceProjection: SealedSourceRow;
+  format: "PDF" | "XLSX";
+  createdById: string;
+}) {
+  const source = input.sourceProjection;
+  if (!source.approvalAttemptId || !source.signingState) throw new Error("Source projection thiếu attempt/signing identity.");
+  const idempotencyKey = ["SEALED_EXPORT_V2", input.format, source.family, source.sourceKind, source.sourceId, source.sourceVersion, source.approvalAttemptId, source.approvedSnapshotId ?? "UNSIGNED", source.projectionHash].join(":");
+  const token = randomBytes(32).toString("base64url");
+  let audit = await tx.settlementExportAudit.upsert({
+    where: { projectId_idempotencyKey: { projectId: source.projectId, idempotencyKey } },
+    create: {
+      project: { connect: { id: source.projectId } },
+      ...(source.dossierVersionId ? { dossierVersion: { connect: { id: source.dossierVersionId } } } : {}),
+      sourceProjection: { connect: { id_projectId: { id: source.id, projectId: source.projectId } } },
+      ...(source.approvedSnapshotId ? { approvedSnapshot: { connect: { id: source.approvedSnapshotId } } } : {}),
+      createdBy: { connect: { id: input.createdById } },
+      family: source.family,
+      format: input.format,
+      canonicalHash: source.projectionHash,
+      approvalAttemptId: source.approvalAttemptId,
+      sourceKind: source.sourceKind,
+      sourceId: source.sourceId,
+      sourceVersion: source.sourceVersion,
+      artifactStatus: "RESERVED",
+      reservationToken: token,
+      idempotencyKey,
+    },
+    update: {},
+  });
+  const identical = audit.sourceProjectionId === source.id && audit.canonicalHash === source.projectionHash
+    && audit.approvalAttemptId === source.approvalAttemptId && audit.approvedSnapshotId === source.approvedSnapshotId
+    && audit.sourceKind === source.sourceKind && audit.sourceId === source.sourceId && audit.sourceVersion === source.sourceVersion
+    && audit.family === source.family && audit.format === input.format && !!audit.reservationToken;
+  if (!identical) throw new Error("Export reservation xung đột exact source identity.");
+  if (audit.artifactStatus === "FAILED") {
+    const retryToken = randomBytes(32).toString("base64url");
+    const retried = await tx.settlementExportAudit.updateMany({
+      where: { id: audit.id, artifactStatus: "FAILED", canonicalHash: source.projectionHash },
+      data: { artifactStatus: "RESERVED", reservationToken: retryToken },
+    });
+    if (retried.count !== 1) throw new Error("Export reservation retry đã thay đổi trước khi reserve lại.");
+    audit = await tx.settlementExportAudit.findUniqueOrThrow({ where: { id: audit.id } });
+  }
+  return { audit, reservationToken: audit.reservationToken! };
+}
+
+export async function finalizeSettlementExportArtifact(tx: Prisma.TransactionClient, input: {
+  auditId: string;
+  reservationToken: string;
+  bytes: Uint8Array;
+}) {
+  const audit = await tx.settlementExportAudit.findUnique({ where: { id: input.auditId } });
+  if (!audit?.reservationToken || !sameToken(audit.reservationToken, input.reservationToken)) throw new Error("Export reservation token không hợp lệ.");
+  const bytes = Buffer.from(input.bytes);
+  if (!bytes.length) throw new Error("Artifact bytes không được rỗng.");
+  const fileSha256 = settlementFileHash(bytes);
+  if (audit.artifactStatus === "FINALIZED") {
+    if (!audit.artifactBytes || audit.artifactByteLength !== bytes.length || audit.fileSha256 !== fileSha256 || !Buffer.from(audit.artifactBytes).equals(bytes)) {
+      throw new Error("Finalized export bytes/hash conflict.");
+    }
+    return audit;
+  }
+  if (audit.artifactStatus !== "RESERVED") throw new Error("Export reservation không còn ở trạng thái RESERVED.");
+  const updated = await tx.settlementExportAudit.updateMany({
+    where: { id: audit.id, artifactStatus: "RESERVED", reservationToken: input.reservationToken, canonicalHash: audit.canonicalHash },
+    data: { artifactStatus: "FINALIZED", artifactBytes: bytes, artifactByteLength: bytes.length, fileSha256 },
+  });
+  if (updated.count !== 1) throw new Error("Export reservation đã thay đổi trước khi finalize.");
+  return tx.settlementExportAudit.findUniqueOrThrow({ where: { id: audit.id } });
+}
+
+export async function failSettlementExportArtifact(tx: Prisma.TransactionClient, auditId: string, reservationToken: string) {
+  await tx.settlementExportAudit.updateMany({
+    where: { id: auditId, artifactStatus: "RESERVED", reservationToken },
+    data: { artifactStatus: "FAILED", artifactBytes: null, artifactByteLength: null, fileSha256: null },
+  });
+}
+
+export async function readFinalizedSettlementExportArtifact(client: Pick<Prisma.TransactionClient, "settlementExportAudit">, auditId: string) {
+  const audit = await client.settlementExportAudit.findUnique({ where: { id: auditId }, include: { sourceProjection: true } });
+  if (!audit || audit.artifactStatus !== "FINALIZED" || !audit.artifactBytes || !audit.fileSha256 || !audit.artifactByteLength || !audit.sourceProjection) {
+    throw new Error("Artifact chưa FINALIZED hoặc thiếu exact source identity.");
+  }
+  const bytes = Buffer.from(audit.artifactBytes);
+  const hash = settlementFileHash(bytes);
+  if (bytes.length !== audit.artifactByteLength || hash !== audit.fileSha256 || audit.canonicalHash !== audit.sourceProjection.projectionHash) {
+    throw new Error("Artifact bytes/hash bị tamper hoặc không khớp source projection.");
+  }
+  return { audit, bytes: new Uint8Array(bytes) };
 }
 

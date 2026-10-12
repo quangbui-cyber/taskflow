@@ -545,7 +545,7 @@ model WorkflowApprovedSnapshot {
   createdAt         DateTime                              @default(now())
   signingEvents     WorkflowSigningEvent[]
   lifecycles        WorkflowSigningLifecycle[]
-  publicCapability  WorkflowPublicVerificationCapability?
+  publicCapabilities WorkflowPublicVerificationCapability[]
   settlementExports SettlementExportAudit[]
   settlementVersions ProjectSettlementVersion[] @relation("SettlementVersionApprovedSnapshot")
 
@@ -557,8 +557,10 @@ model WorkflowApprovedSnapshot {
 
 model WorkflowPublicVerificationCapability {
   id                   String                   @id @default(cuid())
-  snapshotId           String                   @unique
+  snapshotId           String
   snapshot             WorkflowApprovedSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  exportAuditId        String?                  @unique
+  exportAudit          SettlementExportAudit?  @relation(fields: [exportAuditId], references: [id], onDelete: Restrict)
   publicNonce          String                   @unique
   tokenDigest          String                   @unique
   attestationKeyId     String
@@ -569,6 +571,7 @@ model WorkflowPublicVerificationCapability {
 
   @@index([revokedAt, replacedAt])
   @@index([attestationKeyId])
+  @@index([snapshotId])
 }
 
 model WorkflowPublicVerificationRateLimit {
@@ -1450,10 +1453,12 @@ model SettlementExportAudit {
   sourceVersion      Int?
   artifactStatus     String                   @default("RESERVED")
   artifactBytes      Bytes?
+  artifactByteLength Int?
   reservationToken   String?
   fileSha256         String?
-  approvedSnapshotId String
-  approvedSnapshot   WorkflowApprovedSnapshot @relation(fields: [approvedSnapshotId], references: [id], onDelete: Restrict)
+  approvedSnapshotId String?
+  approvedSnapshot   WorkflowApprovedSnapshot? @relation(fields: [approvedSnapshotId], references: [id], onDelete: Restrict)
+  publicCapability   WorkflowPublicVerificationCapability?
   idempotencyKey     String
   createdById        String
   createdBy          User                     @relation("SettlementExportActor", fields: [createdById], references: [id], onDelete: Restrict)

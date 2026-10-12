@@ -26,6 +26,7 @@ export type PublicVerificationDto = {
   statement: "INTERNAL_ISSUER_ATTESTATION";
   family?: string;
   version?: number;
+  signingValidity?: "CONFIRMED";
 };
 
 function attestationKey(keyId: string) {
@@ -51,8 +52,8 @@ export function digestPublicVerificationToken(token: string) {
 }
 
 export async function ensurePublicCapabilityForSnapshot(snapshotId: string) {
-  const existing = await prisma.workflowPublicVerificationCapability.findUnique({
-    where: { snapshotId },
+  const existing = await prisma.workflowPublicVerificationCapability.findFirst({
+    where: { snapshotId, exportAuditId: null },
     include: { snapshot: { select: { projectionSha256: true, mode: true, evidenceState: true } } },
   });
   if (existing) {
@@ -83,12 +84,17 @@ export async function ensurePublicCapabilityForSnapshot(snapshotId: string) {
     snapshotDigest: snapshot.projectionSha256,
     keyId: snapshot.attestationKeyId,
   });
-  return prisma.workflowPublicVerificationCapability.upsert({
-    where: { snapshotId: snapshot.id },
-    create: { id, snapshotId: snapshot.id, publicNonce, tokenDigest: digestPublicVerificationToken(token), attestationKeyId: snapshot.attestationKeyId },
-    update: {},
-    include: { snapshot: { select: { projectionSha256: true } } },
-  });
+  try {
+    return await prisma.workflowPublicVerificationCapability.create({
+      data: { id, snapshotId: snapshot.id, publicNonce, tokenDigest: digestPublicVerificationToken(token), attestationKeyId: snapshot.attestationKeyId },
+      include: { snapshot: { select: { projectionSha256: true } } },
+    });
+  } catch {
+    return prisma.workflowPublicVerificationCapability.findFirstOrThrow({
+      where: { snapshotId: snapshot.id, exportAuditId: null },
+      include: { snapshot: { select: { projectionSha256: true } } },
+    });
+  }
 }
 
 export async function deriveAuthorizedPublicTokenForSnapshot(snapshotId: string) {
@@ -100,6 +106,35 @@ export async function deriveAuthorizedPublicTokenForSnapshot(snapshotId: string)
     snapshotDigest: capability.snapshot.projectionSha256,
     keyId: capability.attestationKeyId,
   });
+  if (digestPublicVerificationToken(token) !== capability.tokenDigest) throw new Error("Capability công khai không còn khớp digest đã phát hành.");
+  return token;
+}
+
+export async function ensurePublicCapabilityForExportAudit(exportAuditId: string) {
+  const audit = await prisma.settlementExportAudit.findUnique({
+    where: { id: exportAuditId },
+    include: { sourceProjection: true, approvedSnapshot: true },
+  });
+  if (!audit || !audit.sourceProjection || !audit.approvedSnapshot || !["RESERVED", "FINALIZED"].includes(audit.artifactStatus)) throw new Error("Export audit chưa có exact signed reservation identity.");
+  if (audit.canonicalHash !== audit.sourceProjection.projectionHash || audit.approvalAttemptId !== audit.sourceProjection.approvalAttemptId || audit.approvedSnapshotId !== audit.sourceProjection.approvedSnapshotId) {
+    throw new Error("Export audit không khớp exact source/attempt/signing identity.");
+  }
+  if (!["DIGITAL_CONFIRMED", "PHYSICAL_CONFIRMED"].includes(audit.approvedSnapshot.evidenceState)) throw new Error("Export audit chưa có signing evidence được xác nhận.");
+  const existing = await prisma.workflowPublicVerificationCapability.findUnique({ where: { exportAuditId: audit.id }, include: { snapshot: { select: { projectionSha256: true } } } });
+  if (existing) return existing;
+  const id = randomUUID();
+  const publicNonce = randomBytes(32).toString("base64url");
+  const token = derivePublicVerificationToken({ capabilityId: id, publicNonce, snapshotDigest: audit.approvedSnapshot.projectionSha256, keyId: audit.approvedSnapshot.attestationKeyId });
+  return prisma.workflowPublicVerificationCapability.create({
+    data: { id, snapshotId: audit.approvedSnapshot.id, exportAuditId: audit.id, publicNonce, tokenDigest: digestPublicVerificationToken(token), attestationKeyId: audit.approvedSnapshot.attestationKeyId },
+    include: { snapshot: { select: { projectionSha256: true } } },
+  });
+}
+
+export async function deriveAuthorizedPublicTokenForExportAudit(exportAuditId: string) {
+  const capability = await ensurePublicCapabilityForExportAudit(exportAuditId);
+  if (capability.revokedAt || capability.replacedAt) throw new Error("Capability xác thực công khai không còn hoạt động.");
+  const token = derivePublicVerificationToken({ capabilityId: capability.id, publicNonce: capability.publicNonce, snapshotDigest: capability.snapshot.projectionSha256, keyId: capability.attestationKeyId });
   if (digestPublicVerificationToken(token) !== capability.tokenDigest) throw new Error("Capability công khai không còn khớp digest đã phát hành.");
   return token;
 }
@@ -156,7 +191,7 @@ function safeTokenEquals(left: string, right: string) {
 function publicDto(
   projection: WorkflowApprovedProjection,
   digest: string,
-  settlement?: { family: string; dossierVersion: { version: number } | null },
+  settlement?: { family: string; sourceVersion?: number | null; authoritativeGross?: string | null; dossierVersion?: { version: number } | null },
 ): PublicVerificationDto {
   return {
     valid: true,
@@ -165,12 +200,13 @@ function publicDto(
     templateName: projection.template.name,
     approvedAt: projection.request.approvedAt,
     requesterName: projection.request.creatorName,
-    amount: projection.finance.amount,
+    amount: settlement?.authoritativeGross ?? projection.finance.amount,
     signers: projection.signatures.map(item => ({ role: item.role, name: item.actorName, signedAt: item.signedAt })),
     digestShort: digest.slice(0, 12),
     statement: "INTERNAL_ISSUER_ATTESTATION",
     family: settlement?.family,
-    version: settlement?.dossierVersion?.version,
+    version: settlement?.sourceVersion ?? settlement?.dossierVersion?.version,
+    signingValidity: settlement ? "CONFIRMED" : undefined,
   };
 }
 
@@ -183,16 +219,8 @@ export async function verifyPublicCapability(tokenInput: string): Promise<{ stat
     const capability = await prisma.workflowPublicVerificationCapability.findUnique({
       where: { tokenDigest },
       include: {
-        snapshot: {
-          include: {
-            settlementExports: {
-              where: { format: "PDF" },
-              orderBy: { createdAt: "desc" },
-              take: 1,
-              select: { family: true, dossierVersion: { select: { version: true } } },
-            },
-          },
-        },
+        exportAudit: { include: { sourceProjection: true } },
+        snapshot: true,
       },
     });
     if (!capability || capability.revokedAt || capability.replacedAt) return { status: "INVALID" };
@@ -219,9 +247,17 @@ export async function verifyPublicCapability(tokenInput: string): Promise<{ stat
     } else {
       return { status: "INVALID" };
     }
+    if (capability.exportAuditId) {
+      const audit = capability.exportAudit;
+      if (!audit || audit.artifactStatus !== "FINALIZED" || !audit.artifactBytes || !audit.artifactByteLength || !audit.fileSha256 || !audit.sourceProjection) return { status: "INVALID" };
+      const bytes = Buffer.from(audit.artifactBytes);
+      if (bytes.length !== audit.artifactByteLength || createHash("sha256").update(bytes).digest("hex") !== audit.fileSha256) return { status: "INVALID" };
+      if (audit.canonicalHash !== audit.sourceProjection.projectionHash || audit.approvalAttemptId !== audit.sourceProjection.approvalAttemptId || audit.approvedSnapshotId !== capability.snapshotId) return { status: "INVALID" };
+      return { status: "VALID", data: publicDto(projection, audit.canonicalHash, { family: audit.family, sourceVersion: audit.sourceVersion, authoritativeGross: audit.sourceProjection.authoritativeGross }) };
+    }
     return {
       status: "VALID",
-      data: publicDto(projection, capability.snapshot.projectionSha256, capability.snapshot.settlementExports[0]),
+      data: publicDto(projection, capability.snapshot.projectionSha256),
     };
   } catch {
     return { status: "INVALID" };

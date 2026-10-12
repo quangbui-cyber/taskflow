@@ -1,6 +1,11 @@
+import "server-only";
+
+import { createHash } from "node:crypto";
+import { Prisma } from "@prisma/client";
 import ExcelJS from "exceljs";
 import { moneyInWords } from "./money";
 import type { RequestPayload } from "./types";
+import { computeApprovedProjectionSha256, verifyApprovedProjectionAttestation, type WorkflowApprovedProjection } from "@/lib/workflow/approvedSnapshot";
 
 export const SETTLEMENT_EXPORT_FAMILIES = [
   "QUOTATION",
@@ -100,7 +105,8 @@ export function normalizeSettlementExportProjection(input: SettlementExportProje
   const net = integerVnd(input.totals.net, "Net");
   const vat = integerVnd(input.totals.vat, "VAT");
   const gross = integerVnd(input.totals.gross, "Gross");
-  if (BigInt(net) + BigInt(vat) !== BigInt(gross)) throw new Error("Bản chiếu xuất phải giữ Net + VAT = Gross.");
+  const aggregateAdjustment = BigInt(gross) - BigInt(net) - BigInt(vat);
+  if (aggregateAdjustment < BigInt(-1) || aggregateAdjustment > BigInt(1)) throw new Error("Bản chiếu xuất chỉ cho phép chênh lệch làm tròn -1, 0 hoặc +1 VND.");
   for (const row of input.recipients) {
     integerVnd(row.actualGross, "AC người nhận");
     integerVnd(row.advanceGross, "tạm ứng người nhận");
@@ -114,6 +120,148 @@ export function normalizeSettlementExportProjection(input: SettlementExportProje
     if (BigInt(rowNet) + BigInt(rowVat) !== BigInt(rowGross)) throw new Error("Dòng AC phải giữ Net + VAT = Gross.");
   }
   return { ...input, totals: { ...input.totals, net, vat, gross }, approvedGross: gross, moneyInWords: moneyInWords(gross) };
+}
+
+type ExactSealedSource = {
+  projectId: string;
+  family: SettlementExportFamily;
+  sourceKind: string;
+  sourceId: string;
+  sourceVersion: number;
+};
+
+function object(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function stable(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stable);
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, child]) => [key, stable(child)]));
+  return value;
+}
+
+function canonicalHash(value: unknown) {
+  return createHash("sha256").update(JSON.stringify(stable(value)), "utf8").digest("hex");
+}
+
+function text(value: unknown) {
+  return typeof value === "string" ? value : "";
+}
+
+export async function resolveSealedExportProjection(tx: Prisma.TransactionClient, input: ExactSealedSource) {
+  const exact = {
+    projectId: input.projectId,
+    family: input.family,
+    sourceKind: input.sourceKind,
+    sourceId: input.sourceId,
+    sourceVersion: input.sourceVersion,
+  };
+  const sourceProjection = await tx.settlementExportSourceProjection.findUnique({
+    where: { projectId_family_sourceKind_sourceId_sourceVersion: exact },
+    include: { project: { select: { name: true } } },
+  });
+  if (!sourceProjection) throw new Error(`Thiếu source projection seal cho ${exact.family}/${exact.sourceKind}/${exact.sourceId}/v${exact.sourceVersion}.`);
+  if (!sourceProjection.approvalAttemptId || !sourceProjection.signingState || !sourceProjection.canonicalPayload) {
+    throw new Error("Source projection seal thiếu attempt, signing state hoặc canonical payload.");
+  }
+  if (canonicalHash(sourceProjection.canonicalPayload) !== sourceProjection.projectionHash) throw new Error("Source projection canonical hash không còn khớp.");
+
+  const canonical = object(sourceProjection.canonicalPayload);
+  const payload = object(canonical?.payload) ?? {};
+  const rawLines = Array.isArray(canonical?.lines) ? canonical.lines.map(object).filter((line): line is Record<string, unknown> => !!line) : [];
+  if (!rawLines.length) throw new Error("Source projection seal thiếu persisted line projection.");
+  const payloadRows = Array.isArray(payload.rows) ? payload.rows.map(object).filter((row): row is Record<string, unknown> => !!row) : [];
+  const paymentLines = Array.isArray(payload.paymentLines) ? payload.paymentLines.map(object).filter((row): row is Record<string, unknown> => !!row) : [];
+  const settlementRecipients = Array.isArray(payload.recipients) ? payload.recipients.map(object).filter((row): row is Record<string, unknown> => !!row) : [];
+  const labels = new Map([...payloadRows, ...paymentLines, ...settlementRecipients].flatMap(row => {
+    const id = text(row.id) || text(row.stableKey) || text(row.obligationId);
+    return id ? [[id, { description: text(row.description) || text(row.name) || id, recipientKey: text(row.recipientKey) }]] as const : [];
+  }));
+
+  let signingSnapshot: SettlementExportProjection["signingSnapshot"] = {
+    id: sourceProjection.approvalAttemptId,
+    state: "UNSIGNED",
+    projectionSha256: sourceProjection.projectionHash,
+    events: [],
+  };
+  if (sourceProjection.signingState !== "UNSIGNED") {
+    if (!sourceProjection.approvedSnapshotId) throw new Error("Source projection đã ký nhưng thiếu exact approved snapshot ID.");
+    const snapshot = await tx.workflowApprovedSnapshot.findUnique({
+      where: { id: sourceProjection.approvedSnapshotId },
+      include: { signingEvents: { orderBy: [{ signedAt: "asc" }, { id: "asc" }] } },
+    });
+    if (!snapshot || snapshot.evidenceState !== sourceProjection.signingState) throw new Error("Exact approved signing snapshot không khớp source projection.");
+    const approvedProjection = snapshot.projection as unknown as WorkflowApprovedProjection;
+    if (snapshot.attestationKeyId !== "v1" || computeApprovedProjectionSha256(approvedProjection) !== snapshot.projectionSha256 || !verifyApprovedProjectionAttestation(approvedProjection, {
+      keyId: "v1",
+      algorithm: "HMAC-SHA256",
+      value: snapshot.attestation,
+    })) throw new Error("Approved signing snapshot không còn khớp digest/attestation.");
+    signingSnapshot = {
+      id: snapshot.id,
+      state: snapshot.evidenceState,
+      projectionSha256: snapshot.projectionSha256,
+      events: snapshot.signingEvents.map(event => ({ role: event.role, actorId: event.actorId, eventHash: event.eventHash, signedAt: event.signedAt.toISOString() })),
+    };
+  }
+
+  const items = rawLines.map(line => {
+    const id = text(line.id);
+    const label = labels.get(id);
+    return {
+      stableLineId: id,
+      description: label?.description ?? id,
+      recipientKey: label?.recipientKey ?? "",
+      rawNet: text(line.rawNet),
+      rawVat: text(line.rawVat),
+      rawGross: text(line.rawGross),
+      net: text(line.net),
+      vat: text(line.vat),
+      gross: text(line.gross),
+    };
+  });
+  if (items.some(item => !item.stableLineId || !item.net || !item.vat || !item.gross)) throw new Error("Source projection line thiếu persisted rounded amounts.");
+
+  const recipients = settlementRecipients.map(row => ({
+    recipientKey: text(row.recipientKey),
+    recipientType: text(row.recipientType),
+    displayName: text(row.recipientName) || text(row.displayName),
+    actualGross: text(row.actualGross) || text(row.grossAmount) || "0",
+    advanceGross: text(row.advanceGross) || "0",
+    refundDue: text(row.refundDue) || "0",
+    additionalDue: text(row.additionalDue) || "0",
+  })).filter(row => row.recipientKey);
+
+  const projection: SettlementExportProjection = {
+    projectId: sourceProjection.projectId,
+    projectName: sourceProjection.project.name,
+    family: sourceProjection.family as SettlementExportFamily,
+    source: {
+      dossierId: sourceProjection.projectId,
+      dossierVersionId: sourceProjection.sourceId,
+      dossierVersion: sourceProjection.sourceVersion,
+      documentVersionId: sourceProjection.approvedSnapshotId ?? sourceProjection.approvalAttemptId,
+      documentVersion: sourceProjection.sourceVersion,
+      state: "APPROVED",
+    },
+    title: text(payload.title) || text(object(payload.document)?.title) || sourceProjection.family,
+    totals: {
+      rawNet: sourceProjection.authoritativeNet,
+      rawVat: sourceProjection.authoritativeVat,
+      rawGross: sourceProjection.authoritativeGross,
+      net: sourceProjection.authoritativeNet,
+      vat: sourceProjection.authoritativeVat,
+      gross: sourceProjection.authoritativeGross,
+    },
+    recipients,
+    items,
+    obligations: settlementRecipients.map(row => ({ recipientKey: text(row.recipientKey), direction: text(row.direction) || "BALANCED", amountDue: text(row.amountDue) || "0" })).filter(row => row.recipientKey),
+    evidence: [],
+    signingSnapshot,
+  };
+  return { sourceProjection, projection: normalizeSettlementExportProjection(projection) };
 }
 
 function titleFor(family: SettlementExportFamily) {

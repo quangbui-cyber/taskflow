@@ -30,7 +30,9 @@ test("public token is stable, opaque and issuer-authenticated", () => {
 test("schema stores only token digest, random nonce, key version and lifecycle timestamps", async () => {
   const schema = await readFile(new URL("../prisma/schema.prisma", import.meta.url), "utf8");
   const model = schema.match(/model WorkflowPublicVerificationCapability \{[\s\S]*?\n\}/)?.[0] ?? "";
-  assert.match(model, /snapshotId\s+String\s+@unique/);
+  assert.match(model, /snapshotId\s+String/);
+  assert.match(model, /exportAuditId\s+String\?\s+@unique/);
+  assert.match(model, /@@index\(\[snapshotId\]\)/);
   assert.match(model, /publicNonce\s+String\s+@unique/);
   assert.match(model, /tokenDigest\s+String\s+@unique/);
   assert.match(model, /attestationKeyId\s+String/);

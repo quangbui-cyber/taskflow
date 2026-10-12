@@ -86,6 +86,15 @@ export type Finance = {
     projection: import("@/lib/costflow/customerAcceptanceProjection").CustomerAcceptanceProjection;
     createdAt: string;
   }[];
+  exportSources?: {
+    id: string;
+    family: string;
+    sourceKind: string;
+    sourceId: string;
+    sourceVersion: number;
+    projectionHash: string;
+    signingState: string | null;
+  }[];
 };
 
 import { KIND_LABELS, STATE_LABELS, STATE_TONES } from "@/lib/costflow/labels";

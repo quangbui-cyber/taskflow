@@ -120,7 +120,7 @@ export default function SettlementPanel({ finance: baseFinance, user, canCreate 
         {!canEditDossier && <SettlementEvidenceUploader finance={finance} requestId={current.request.id} settlementVersion={current.request.version} obligations={current.obligations} evidence={current.evidence} canEdit={false} recipientName={recipientName} />}
         {canManageCash && current.request.state === "APPROVED" && current.obligations.some(item => item.amountDue !== "0") && <div className="flex flex-wrap gap-2">{current.obligations.filter(item => item.amountDue !== "0").map(item => <Button key={item.id} variant="secondary" className="min-h-11" disabled={settlementProgress.find(row => row.obligationId === item.id)?.cashProgress === "DA_CHI_DU"} onClick={() => setCashObligationId(item.id)}>{item.direction === "REFUND" ? "Ghi nhận thu hoàn" : "Xác nhận chi thêm"} · {recipientName(item.recipientKey)}</Button>)}</div>}
       </Panel>
-      <SettlementExportActions projectId={finance.project.id} versionId={current.id} version={current.version} state={current.request.state} />
+      <SettlementExportActions projectId={finance.project.id} sources={finance.exportSources ?? []} state={current.request.state} />
     </>}
 
     <Panel className="space-y-4"><div className="flex items-center gap-2"><Landmark size={18} aria-hidden="true" /><div><h3 className="font-bold">Pending Disbursement và sổ tiền</h3><p className="text-xs text-[var(--text-secondary)]">Tái sử dụng cùng read model Phase 7; người thụ hưởng, provenance, đã chi lũy kế và số dư không bị tách thành một ledger khác.</p></div></div><PaymentLedgerTable projectId={finance.project.id} rows={finance.paymentLedger ?? []} /></Panel>

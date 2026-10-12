@@ -81,7 +81,7 @@ test("reservation finalizes exact bytes once and rejects tampered stored artifac
   assert.equal(finalized.artifactByteLength, bytes.length);
   const replay = await client.$transaction(tx => security.finalizeSettlementExportArtifact(tx, { auditId: reservation.audit.id, reservationToken: reservation.reservationToken, bytes }));
   assert.equal(replay.id, finalized.id);
-  await client.settlementExportAudit.update({ where: { id: finalized.id }, data: { artifactBytes: Buffer.from("tampered") } });
+  await client.settlementExportAudit.update({ where: { id: finalized.id }, data: { artifactBytes: Buffer.alloc(bytes.length, 0x78) } });
   await assert.rejects(security.readFinalizedSettlementExportArtifact(client, finalized.id), /hash|bytes|tamper/i);
 }));
 

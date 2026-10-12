@@ -426,6 +426,11 @@ export async function loadFinance(projectId: string, actor: Actor) {
     const projection = parseCustomerAcceptanceProjection(snapshot.projection);
     return projection ? [{ id: snapshot.id, version: snapshot.version, quotationId: snapshot.quotationId, projection, createdAt: snapshot.createdAt.toISOString() }] : [];
   }) : [];
+  const exportSources = fullAccess ? await prisma.settlementExportSourceProjection.findMany({
+    where: { projectId },
+    orderBy: [{ family: "asc" }, { sourceVersion: "desc" }, { createdAt: "desc" }],
+    select: { id: true, family: true, sourceKind: true, sourceId: true, sourceVersion: true, projectionHash: true, signingState: true },
+  }) : [];
   const settlementDossier = fullAccess ? await prisma.projectSettlementDossier.findUnique({
     where: { projectId },
     include: {
@@ -509,7 +514,7 @@ export async function loadFinance(projectId: string, actor: Actor) {
     signingState: correction.correctionVersion?.request.signingLifecycle?.evidenceState ?? "NOT_CREATED",
     baseObligations: correction.baseVersion.obligations.map(obligation => ({ id: obligation.id, recipientKey: obligation.recipientKey, amountDue: obligation.amountDue, paidAmount: obligation.cashAllocations.reduce((total, row) => total + BigInt(row.amount), BigInt(0)).toString() })),
   } : null;
-  return { project: { ...project, members: fullAccess ? project.members : [], client: fullAccess ? project.client : null }, clients, fullAccess, canManageCustomerAccounting, canManageSettlementCash, settlementObligationProgress, version: workspace?.version ?? 0, data: fullAccess && savedData ? savedData : { ...emptyFinance(), closed: savedData?.closed ?? false }, requests: visible.map(({ signingLifecycle, ...request }) => ({ ...request, signingMode: signingLifecycle?.mode ?? null, signingEvidenceState: signingLifecycle?.evidenceState ?? null })), cash, users, files, evidence, supplements, history, paymentDossiers, paymentLedger, actualCosts, customerAccounting, customerAcceptanceSnapshots, settlementDossier, settlementCorrection };
+  return { project: { ...project, members: fullAccess ? project.members : [], client: fullAccess ? project.client : null }, clients, fullAccess, canManageCustomerAccounting, canManageSettlementCash, settlementObligationProgress, version: workspace?.version ?? 0, data: fullAccess && savedData ? savedData : { ...emptyFinance(), closed: savedData?.closed ?? false }, requests: visible.map(({ signingLifecycle, ...request }) => ({ ...request, signingMode: signingLifecycle?.mode ?? null, signingEvidenceState: signingLifecycle?.evidenceState ?? null })), cash, users, files, evidence, supplements, history, paymentDossiers, paymentLedger, actualCosts, customerAccounting, customerAcceptanceSnapshots, exportSources, settlementDossier, settlementCorrection };
 }
 
 function correctionScopesForRead(value: Prisma.JsonValue) {

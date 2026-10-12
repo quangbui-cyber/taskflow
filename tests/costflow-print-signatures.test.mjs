@@ -150,9 +150,11 @@ test("print route/layout: server-bound projection, accessible tables, print brea
   assert.match(route, /await params/);
   assert.match(route, /requireUser|getCurrentUser/);
   assert.match(route, /workflowSigningEvent|signingEvents/);
-  assert.match(route, /deriveAuthorizedPublicTokenForSnapshot/);
+  assert.match(route, /deriveAuthorizedPublicTokenForExportAudit/);
+  assert.match(route, /resolveSealedExportProjection/);
   assert.match(route, /settlementExportAudit/);
   assert.match(route, /format:\s*"PDF"/);
+  assert.doesNotMatch(route, /calculateTotals|calculateLineCost|orderBy:\s*\[?\{?\s*(?:version|createdAt):\s*"desc"/);
   assert.doesNotMatch(route, /publicVerificationToken:\s*(?:id|projectId|version|source\.id)/);
   assert.match(layout, /<caption/);
   assert.match(layout, /scope="col"/);
