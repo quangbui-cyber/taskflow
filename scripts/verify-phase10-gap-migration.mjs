@@ -129,7 +129,12 @@ try {
   assert.equal(database?.name, "taskflow");
   const names = migrationNames();
   if (mode === "before") {
-    assert.ok(!names.includes(MIGRATION), `${MIGRATION} already exists before implementation`);
+    assert.equal(names.at(-1), MIGRATION, `${MIGRATION} must be the final lexical migration`);
+    const [applied] = await client.$queryRawUnsafe(`
+      SELECT COUNT(*)::int AS count FROM "_prisma_migrations"
+      WHERE migration_name = $1 AND finished_at IS NOT NULL AND rolled_back_at IS NULL
+    `, MIGRATION);
+    assert.equal(applied.count, 0, `${MIGRATION} is already applied before guarded deploy`);
     const legacy = await readLegacySnapshot(client);
     mkdirSync(path.dirname(snapshotPath), { recursive: true });
     writeFileSync(snapshotPath, JSON.stringify({ database: database.name, migration: MIGRATION, legacy }, null, 2));
