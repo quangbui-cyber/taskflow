@@ -28,6 +28,7 @@ const unitSuites = [
   "tests/quotation-template-seed.test.ts", "tests/workspace-flow.test.ts", "tests/workflow-documents.test.ts",
   "tests/workflow-approval.test.ts", "tests/workflow-routes.test.ts",
   "tests/workflow-print-layout.test.ts",
+  "tests/session-secret-build.test.ts",
   ...(phase8 ? ["tests/actual-cost.test.ts", "tests/actual-cost-control-center.test.ts", "tests/actual-cost-security.test.ts", "tests/actual-cost-ui-contract.test.ts", "tests/customer-liquidation.test.ts", "tests/customer-acceptance-export.test.ts"] : []),
 ];
 const integrationSuites = integration ? [

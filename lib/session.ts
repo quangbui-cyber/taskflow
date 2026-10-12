@@ -1,15 +1,17 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 
-const rawSecret = process.env.SESSION_SECRET;
-if (!rawSecret) {
-  // Không được phép chạy tiếp với secret mặc định: ai biết chuỗi đó sẽ tự ký
-  // được cookie phiên đăng nhập và vào app với bất kỳ vai trò nào.
-  throw new Error(
-    "Thiếu biến môi trường SESSION_SECRET. Thêm vào .env (xem .env.example) rồi khởi động lại app."
-  );
+function getSessionSecret() {
+  const rawSecret = process.env.SESSION_SECRET;
+  if (!rawSecret) {
+    // Không được phép chạy tiếp với secret mặc định: ai biết chuỗi đó sẽ tự ký
+    // được cookie phiên đăng nhập và vào app với bất kỳ vai trò nào.
+    throw new Error(
+      "Thiếu biến môi trường SESSION_SECRET. Thêm vào .env (xem .env.example) rồi khởi động lại app."
+    );
+  }
+  return new TextEncoder().encode(rawSecret);
 }
-const secret = new TextEncoder().encode(rawSecret);
 
 const COOKIE_NAME = "session";
 const MAX_AGE = 60 * 60 * 24 * 7; // 7 ngày
@@ -20,6 +22,7 @@ export type SessionData = {
 };
 
 export async function createSession(userId: string, sessionVersion: number) {
+  const secret = getSessionSecret();
   const token = await new SignJWT({ sessionVersion })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(userId)
@@ -38,6 +41,7 @@ export async function createSession(userId: string, sessionVersion: number) {
 }
 
 export async function getSession(): Promise<SessionData | null> {
+  const secret = getSessionSecret();
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
   if (!token) return null;
