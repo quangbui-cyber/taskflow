@@ -133,6 +133,11 @@ test("settlement dossier: Manager cancellation is append-only and replacement pr
   const cancelled = cancelSettlementLifecycle(draft(), { actorId: "manager", expectedVersion: 0, reason: "Dừng hồ sơ", hasCash: false });
   assert.equal(cancelled.state, "CANCELLED");
   assert.equal(cancelled.events.at(-1).action, "CANCEL");
+  assert.throws(
+    () => cancelSettlementLifecycle(cancelled, { actorId: "manager", expectedVersion: 1, reason: "Dừng lần nữa", hasCash: false }),
+    /cancelled|đã hủy|trạng thái/i,
+  );
+  assert.equal(cancelled.events.filter(event => event.action === "CANCEL").length, 1);
   assert.throws(() => cancelSettlementLifecycle(draft(), { actorId: "manager", expectedVersion: 0, reason: "Dừng", hasCash: true }), /tiền|cash/i);
 
   const replacement = assertSettlementReplacementAllowed({
