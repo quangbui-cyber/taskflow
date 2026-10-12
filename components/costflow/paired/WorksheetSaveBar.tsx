@@ -137,7 +137,7 @@ export default function WorksheetSaveBar({
           )}
           {!embedded && capabilities.finalizeQuotation && (
             <Button variant="secondary" size="sm" disabled={pending} onClick={onFinalize}>
-              Chốt phiên bản BG
+              Chốt phiên bản báo giá
             </Button>
           )}
         </div>

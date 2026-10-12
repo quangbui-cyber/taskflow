@@ -293,13 +293,13 @@ export default function WorksheetDetailDrawer({
                           size="sm"
                           onClick={() => onOpenEvidence([detail.itemId])}
                         >
-                          <Paperclip size={14} />
+                          <Paperclip size={14} aria-hidden="true" />
                           Minh chứng ·{" "}
                           {detail.buy.evidenceIds.length
                             ? detail.buy.evidenceIds.length + " file"
                             : detail.buy.evidenceReason
                             ? "Có lý do"
-                            : "Chưa có nguồn"}
+                            : "Chưa có minh chứng"}
                         </Button>
                       </>
                     )}
@@ -433,6 +433,7 @@ export default function WorksheetDetailDrawer({
                 variant="danger"
                 size="sm"
                 onClick={() => {
+                  if (typeof window !== "undefined" && !window.confirm("Bạn có chắc chắn muốn bỏ dòng này khỏi báo giá?")) return;
                   onRemoveFromQuote(detail.itemId);
                   onClose();
                 }}
@@ -441,7 +442,7 @@ export default function WorksheetDetailDrawer({
               </Button>
             ) : (
               <Button variant="secondary" size="sm" onClick={() => onUpdate(detail.itemId, { saleRemoved: false })}>
-                Khôi phục bán dòng này
+                Khôi phục dòng vào báo giá
               </Button>
             )}
           </div>

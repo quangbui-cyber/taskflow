@@ -175,7 +175,19 @@ export default function QuotationTotalsEditor({ title = "Phí và phần tính t
                   : <Button size="sm" variant="ghost" onClick={() => { setError(""); setDraft({ ...custom!, references: custom!.references.map(reference => ({ ...reference })) }); }}><Pencil size={14} aria-hidden="true" />Sửa</Button>}
                 <IconButton size="sm" variant="ghost" aria-label={`Di chuyển ${row.label} lên`} disabled={index === 0} onClick={() => moveLayout(index, -1)}><ArrowUp size={16} aria-hidden="true" /></IconButton>
                 <IconButton size="sm" variant="ghost" aria-label={`Di chuyển ${row.label} xuống`} disabled={index === layout.length - 1} onClick={() => moveLayout(index, 1)}><ArrowDown size={16} aria-hidden="true" /></IconButton>
-                {!system && <IconButton size="sm" variant="ghost" aria-label={`Xóa ${row.label}`} onClick={() => apply(lines.filter(line => line.id !== row.id))}><Trash2 size={16} aria-hidden="true" /></IconButton>}
+                {!system && (
+                  <IconButton
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`Xóa ${row.label}`}
+                    onClick={() => {
+                      if (typeof window !== "undefined" && !window.confirm(`Bạn có chắc chắn muốn xóa dòng "${row.label}"?`)) return;
+                      apply(lines.filter(line => line.id !== row.id));
+                    }}
+                  >
+                    <Trash2 size={16} aria-hidden="true" />
+                  </IconButton>
+                )}
               </div>}
             </li>;
           })}

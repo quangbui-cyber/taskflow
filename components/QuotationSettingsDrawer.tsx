@@ -133,7 +133,7 @@ export default function QuotationSettingsDrawer({
           {/* SECTION 1: THÔNG TIN CHUNG & KHÁCH HÀNG */}
           <section className="space-y-3 pb-5 border-b border-[var(--border)]">
             <div className="flex items-center gap-2 text-sm font-semibold text-[var(--foreground)]">
-              <FileText size={16} className="text-[var(--text-secondary)]" />
+              <FileText size={16} className="text-[var(--text-secondary)]" aria-hidden="true" />
               <h3>1. Thông tin chung & Khách hàng</h3>
             </div>
             <div className="grid grid-cols-1 gap-3">
@@ -162,12 +162,12 @@ export default function QuotationSettingsDrawer({
           <section className="space-y-3 pb-5 border-b border-[var(--border)]">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-sm font-semibold text-[var(--foreground)]">
-                <SlidersHorizontal size={16} className="text-[var(--color-brand-700)]" />
+                <SlidersHorizontal size={16} className="text-[var(--color-brand-700)]" aria-hidden="true" />
                 <h3>2. Tham số & Tác động giá</h3>
               </div>
               {parameterConfig && (
                 <span className="text-xs text-[var(--color-brand-700)] bg-[var(--primary-soft)] px-2 py-0.5 rounded font-medium border border-[var(--color-brand-300)] flex items-center gap-1">
-                  <Sparkles size={11} /> Wave 7 Auto-eval
+                  <Sparkles size={11} aria-hidden="true" /> Định giá theo tham số
                 </span>
               )}
             </div>
@@ -283,7 +283,7 @@ export default function QuotationSettingsDrawer({
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <h4 className="text-xs font-bold text-[var(--foreground)] flex items-center gap-1.5">
-                      <CheckCircle2 size={14} className="text-[var(--success)]" /> Tác động dự kiến
+                      <CheckCircle2 size={14} className="text-[var(--success)]" aria-hidden="true" /> Tác động dự kiến
                     </h4>
                     <p className="text-xs text-[var(--text-secondary)]">
                       {impact.affected.length} giá trị sẽ thay đổi khi áp dụng.
@@ -291,10 +291,10 @@ export default function QuotationSettingsDrawer({
                   </div>
                   <div className="text-right text-xs">
                     <div>
-                      Bán: <strong className="font-mono text-[var(--success)]">{displayMoney(impact.oldTotals.sell.gross)} → {displayMoney(impact.newTotals.sell.gross)}</strong>
+                      Bán: <strong className="font-mono tabular-nums text-[var(--success)]">{displayMoney(impact.oldTotals.sell.gross)} → {displayMoney(impact.newTotals.sell.gross)}</strong>
                     </div>
                     <div>
-                      Vốn: <strong className="font-mono text-[var(--info)]">{displayMoney(impact.oldTotals.buy.gross)} → {displayMoney(impact.newTotals.buy.gross)}</strong>
+                      Vốn: <strong className="font-mono tabular-nums text-[var(--info)]">{displayMoney(impact.oldTotals.buy.gross)} → {displayMoney(impact.newTotals.buy.gross)}</strong>
                     </div>
                   </div>
                 </div>
@@ -311,6 +311,7 @@ export default function QuotationSettingsDrawer({
 
                 <div className="max-h-48 overflow-y-auto border border-[var(--border)] rounded bg-[var(--surface)] text-xs">
                   <table className="w-full border-collapse">
+                    <caption className="sr-only">Chi tiết các dòng bị tác động bởi thay đổi tham số</caption>
                     <thead className="bg-[var(--surface-soft)] border-b border-[var(--border)] text-[var(--text-secondary)]">
                       <tr>
                         <th className="p-1.5 text-left font-semibold">Hạng mục</th>
@@ -327,17 +328,17 @@ export default function QuotationSettingsDrawer({
                             {change.rowName || change.rowId}
                           </td>
                           <td className="p-1.5 text-center">
-                            <span className={`px-1 rounded text-[10px] font-semibold ${change.side === "sell" ? "bg-[var(--primary-soft)] text-[var(--color-brand-800)]" : "bg-[var(--info-soft)] text-[var(--info)]"}`}>
+                            <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${change.side === "sell" ? "bg-[var(--primary-soft)] text-[var(--color-brand-800)]" : "bg-[var(--info-soft)] text-[var(--info)]"}`}>
                               {change.side === "sell" ? "Bán" : "IC"}
                             </span>
                           </td>
                           <td className="p-1.5 text-center text-[var(--text-secondary)]">
                             {change.field === "quantity" ? "Số lượng" : change.field === "days" ? "Số ngày" : "Đơn giá"}
                           </td>
-                          <td className="p-1.5 text-right font-mono text-[var(--text-secondary)]">
+                          <td className="p-1.5 text-right font-mono tabular-nums text-[var(--text-secondary)]">
                             {change.oldValue || "—"}
                           </td>
-                          <td className="p-1.5 text-right font-mono font-semibold text-[var(--foreground)]">
+                          <td className="p-1.5 text-right font-mono tabular-nums font-semibold text-[var(--foreground)]">
                             {change.newValue || "—"}
                           </td>
                         </tr>
@@ -352,7 +353,7 @@ export default function QuotationSettingsDrawer({
           {/* SECTION 3: TÙY CHỌN BẢN KHÁCH & ĐIỀU KHOẢN */}
           <section className="space-y-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-[var(--foreground)]">
-              <FileText size={16} className="text-[var(--text-secondary)]" />
+              <FileText size={16} className="text-[var(--text-secondary)]" aria-hidden="true" />
               <h3>3. Tùy chọn bản khách & Điều khoản</h3>
             </div>
             <Textarea

@@ -85,6 +85,7 @@ export default function WorksheetGrid({
   return (
     <div className="tf-worksheet-table-container">
       <table className="w-full border-collapse text-sm tf-quotation-hierarchy-table">
+        <caption className="sr-only">Bảng tính Báo giá và IC song song</caption>
         <thead>
           <tr className="text-xs font-semibold text-[var(--foreground)] bg-[var(--surface-soft)] border-b border-[var(--border-strong)]">
             {/* Checkbox select all */}
@@ -92,6 +93,7 @@ export default function WorksheetGrid({
               <label className="inline-flex items-center cursor-pointer" title="Chọn tất cả">
                 <input
                   type="checkbox"
+                  aria-label="Chọn tất cả các dòng"
                   checked={rows.length > 0 && selected.length === rows.length}
                   onChange={e => onSelectAll(e.target.checked)}
                   className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--focus-ring)] h-3.5 w-3.5"
@@ -139,6 +141,16 @@ export default function WorksheetGrid({
           </tr>
         </thead>
         <tbody>
+          {visibleRows.length === 0 && (
+            <tr>
+              <td
+                colSpan={viewFilter === "ALL" ? 10 : 7}
+                className="p-8 text-center text-xs text-[var(--text-secondary)] bg-[var(--surface)]"
+              >
+                Chưa có hạng mục nào trong bảng tính. Bấm &ldquo;Thêm dòng&rdquo; để bắt đầu lập báo giá.
+              </td>
+            </tr>
+          )}
           {visibleRows.map(({ row }, i) => {
             const group = childrenOf(rows, row.itemId).length > 0;
             const structuralGroup = row.rowType === "GROUP";
@@ -190,7 +202,7 @@ export default function WorksheetGrid({
                                   setInsertMenuId(null);
                                 }}
                               >
-                                <Plus size={13} className="text-[var(--muted)]" /> Thêm nhóm bên dưới
+                                <Plus size={13} className="text-[var(--muted)]" aria-hidden="true" /> Thêm nhóm bên dưới
                               </button>
                               <button
                                 type="button"
@@ -200,7 +212,7 @@ export default function WorksheetGrid({
                                   setInsertMenuId(null);
                                 }}
                               >
-                                <Plus size={13} className="text-[var(--muted)]" /> Thêm hạng mục trong nhóm
+                                <Plus size={13} className="text-[var(--muted)]" aria-hidden="true" /> Thêm hạng mục trong nhóm
                               </button>
                             </div>
                           )}
@@ -239,7 +251,7 @@ export default function WorksheetGrid({
                         aria-label={(collapsedRow ? "Mở rộng nhóm " : "Thu gọn nhóm ") + row.name}
                         onClick={() => onToggleCollapse(row.itemId)}
                       >
-                        {collapsedRow ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                        {collapsedRow ? <ChevronRight size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
                       </button>
                       <button
                         type="button"
@@ -253,7 +265,7 @@ export default function WorksheetGrid({
                           ({row.description})
                         </span>
                       )}
-                      <span className="text-[11px] text-[var(--text-secondary)] bg-[var(--surface-muted)] rounded px-1.5 py-0.5 ml-1">
+                      <span className="text-xs text-[var(--text-secondary)] bg-[var(--surface-muted)] rounded px-1.5 py-0.5 ml-1">
                         {childCount} hạng mục
                       </span>
                     </div>
@@ -309,8 +321,9 @@ export default function WorksheetGrid({
                       onClick={() => onOpenDetail(row.itemId)}
                       className="p-1 text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-muted)] rounded transition-colors"
                       title="Thiết lập nhóm"
+                      aria-label="Thiết lập nhóm"
                     >
-                      <Settings2 size={15} />
+                      <Settings2 size={15} aria-hidden="true" />
                     </button>
                   </td>
                 </tr>
@@ -356,7 +369,7 @@ export default function WorksheetGrid({
                                   setInsertMenuId(null);
                                 }}
                               >
-                                <Plus size={13} className="text-[var(--muted)]" /> Thêm nhóm bên dưới
+                                <Plus size={13} className="text-[var(--muted)]" aria-hidden="true" /> Thêm nhóm bên dưới
                               </button>
                               <button
                                 type="button"
@@ -366,7 +379,7 @@ export default function WorksheetGrid({
                                   setInsertMenuId(null);
                                 }}
                               >
-                                <Plus size={13} className="text-[var(--muted)]" /> Thêm hạng mục cùng cấp
+                                <Plus size={13} className="text-[var(--muted)]" aria-hidden="true" /> Thêm hạng mục cùng cấp
                               </button>
                               <button
                                 type="button"
@@ -376,7 +389,7 @@ export default function WorksheetGrid({
                                   setInsertMenuId(null);
                                 }}
                               >
-                                <Plus size={13} className="text-[var(--muted)]" /> Thêm chi tiết con
+                                <Plus size={13} className="text-[var(--muted)]" aria-hidden="true" /> Thêm chi tiết con
                               </button>
                             </div>
                           )}
@@ -415,7 +428,7 @@ export default function WorksheetGrid({
                         aria-label={(collapsedRow ? "Mở rộng " : "Thu gọn ") + row.name}
                         onClick={() => onToggleCollapse(row.itemId)}
                       >
-                        {collapsedRow ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                        {collapsedRow ? <ChevronRight size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
                       </button>
                       <button
                         type="button"
@@ -482,8 +495,9 @@ export default function WorksheetGrid({
                       onClick={() => onOpenDetail(row.itemId)}
                       className="p-1 text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-muted)] rounded transition-colors"
                       title={`Mở chi tiết ${row.name || ""}`}
+                      aria-label={`Mở chi tiết ${row.name || ""}`}
                     >
-                      <Settings2 size={15} />
+                      <Settings2 size={15} aria-hidden="true" />
                     </button>
                   </td>
                 </tr>
@@ -529,7 +543,7 @@ export default function WorksheetGrid({
                                 setInsertMenuId(null);
                               }}
                             >
-                              <Plus size={13} className="text-[var(--muted)]" /> Thêm nhóm bên dưới
+                              <Plus size={13} className="text-[var(--muted)]" aria-hidden="true" /> Thêm nhóm bên dưới
                             </button>
                             <button
                               type="button"
@@ -539,7 +553,7 @@ export default function WorksheetGrid({
                                 setInsertMenuId(null);
                               }}
                             >
-                              <Plus size={13} className="text-[var(--muted)]" /> Thêm hạng mục cùng cấp
+                              <Plus size={13} className="text-[var(--muted)]" aria-hidden="true" /> Thêm hạng mục cùng cấp
                             </button>
                           </div>
                         )}
@@ -585,24 +599,24 @@ export default function WorksheetGrid({
                       </span>
                     )}
                     {row.saleRemoved && (
-                      <span className="text-[11px] text-[var(--warning)] bg-[var(--warning-soft)] rounded px-1 border border-[var(--warning)] ml-1">
-                        Đã bỏ khỏi BG
+                      <span className="text-xs text-[var(--warning)] bg-[var(--warning-soft)] rounded px-1.5 py-0.5 border border-[var(--warning)] ml-1">
+                        Đã bỏ khỏi báo giá
                       </span>
                     )}
                     {/* Parameter / Formula Status Badges */}
                     {row.sell.parameterBinding?.mode === "OVERRIDDEN" || row.buy.parameterBinding?.mode === "OVERRIDDEN" ? (
                       <span
-                        className="text-[10px] font-medium text-[var(--warning)] bg-[var(--warning-soft)] rounded px-1.5 py-0.5 border border-[var(--warning)] inline-flex items-center gap-1 ml-1"
+                        className="text-xs font-medium text-[var(--warning)] bg-[var(--warning-soft)] rounded px-1.5 py-0.5 border border-[var(--warning)] inline-flex items-center gap-1 ml-1"
                         title="Đã sửa tay đè lên công thức tham số. Bấm nút hoàn tác tại ô đơn giá để khôi phục công thức"
                       >
-                        <RotateCcw size={10} aria-hidden="true" /> Đã sửa tay
+                        <RotateCcw size={11} aria-hidden="true" /> Đã sửa tay
                       </span>
                     ) : row.sell.parameterBinding?.mode === "PARAMETER" ||
                       row.sell.parameterBinding?.mode === "FORMULA" ||
                       row.buy.parameterBinding?.mode === "PARAMETER" ||
                       row.buy.parameterBinding?.mode === "FORMULA" ? (
                       <span
-                        className="text-[10px] font-medium text-[var(--color-brand-800)] bg-[var(--primary-soft)] rounded px-1.5 py-0.5 border border-[var(--color-brand-300)] inline-flex items-center gap-1 ml-1"
+                        className="text-xs font-medium text-[var(--color-brand-800)] bg-[var(--primary-soft)] rounded px-1.5 py-0.5 border border-[var(--color-brand-300)] inline-flex items-center gap-1 ml-1"
                         title="Được tính từ tham số cấu hình quy mô"
                       >
                         Tham số
@@ -641,6 +655,7 @@ export default function WorksheetGrid({
                           <button
                             type="button"
                             title="Đã sửa tay · Bấm để khôi phục công thức tham số"
+                            aria-label="Khôi phục công thức tham số cho đơn giá bán"
                             disabled={mode === "ic"}
                             onClick={() => onReuseFormula(row, "sell")}
                             className="p-1 rounded text-[var(--warning)] hover:bg-[var(--warning-soft)] transition-colors flex-shrink-0"
@@ -674,6 +689,7 @@ export default function WorksheetGrid({
                           <button
                             type="button"
                             title="Đã sửa tay · Bấm để khôi phục công thức tham số"
+                            aria-label="Khôi phục công thức tham số cho giá vốn"
                             disabled={locked}
                             onClick={() => onReuseFormula(row, "buy")}
                             className="p-1 rounded text-[var(--warning)] hover:bg-[var(--warning-soft)] transition-colors flex-shrink-0"
@@ -714,8 +730,15 @@ export default function WorksheetGrid({
                               ? `Lý do: ${row.buy.evidenceReason}`
                               : "Gắn minh chứng"
                           }
+                          aria-label={
+                            row.buy.evidenceIds.length
+                              ? `${row.buy.evidenceIds.length} file minh chứng`
+                              : row.buy.evidenceReason
+                              ? `Lý do: ${row.buy.evidenceReason}`
+                              : "Gắn minh chứng"
+                          }
                         >
-                          <Paperclip size={13} />
+                          <Paperclip size={13} aria-hidden="true" />
                           {row.buy.evidenceIds.length > 0 && <span>{row.buy.evidenceIds.length}</span>}
                         </button>
                       </td>
@@ -751,8 +774,9 @@ export default function WorksheetGrid({
                     onClick={() => onOpenDetail(row.itemId)}
                     className="p-1 text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-muted)] rounded transition-colors"
                     title={`Mở chi tiết ${row.name || ""}`}
+                    aria-label={`Mở chi tiết ${row.name || ""}`}
                   >
-                    <Settings2 size={15} />
+                    <Settings2 size={15} aria-hidden="true" />
                   </button>
                 </td>
               </tr>

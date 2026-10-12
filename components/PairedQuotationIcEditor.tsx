@@ -573,7 +573,10 @@ export default function PairedQuotationIcEditor({
     if (readinessIssues.length) setPreflightOpen(true);
     else if (initial?.priceReviewRequired && !priceReviewed)
       setState({ error: "Xác nhận đã rà soát giá bán, VAT và các dòng phí từ nguồn dùng lại trước khi chốt." });
-    else save("FINALIZE_PAIRED_QUOTATION");
+    else {
+      if (typeof window !== "undefined" && !window.confirm("Bạn có chắc chắn muốn chốt phiên bản báo giá này? Sau khi chốt, phiên bản báo giá sẽ trở thành chính thức.")) return;
+      save("FINALIZE_PAIRED_QUOTATION");
+    }
   };
 
   const startPairedFromQuote = () => {

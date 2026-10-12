@@ -96,11 +96,11 @@ export default function WorksheetHeader({
               className="tf-button-secondary tf-button-size-sm"
               href={`/projects/${projectId}/costflow/quotations/${source.id}/ic`}
             >
-              Lập IC từ BG-{source.number}
+              Lập IC từ Báo giá #{source.number}
             </Link>
             {versionAction}
             <Button size="sm" disabled={pending} onClick={onFinalize}>
-              Chốt phiên bản BG
+              Chốt phiên bản báo giá
             </Button>
           </div>
         ) : !embedded && (
@@ -209,7 +209,7 @@ export default function WorksheetHeader({
             onClick={onCollapseGroups}
             title="Thu gọn nhanh về các nhóm"
           >
-            <ChevronsDownUp size={14} /> Thu gọn về nhóm ({groupRowsCount})
+            <ChevronsDownUp size={14} aria-hidden="true" /> Thu gọn về nhóm ({groupRowsCount})
           </button>
           <button
             type="button"
@@ -217,7 +217,7 @@ export default function WorksheetHeader({
             onClick={onExpandAll}
             title="Mở rộng toàn bộ các dòng"
           >
-            <ChevronsUpDown size={14} /> Mở rộng tất cả
+            <ChevronsUpDown size={14} aria-hidden="true" /> Mở rộng tất cả
           </button>
 
           {selectedCount > 0 && mode !== "quote" && (
