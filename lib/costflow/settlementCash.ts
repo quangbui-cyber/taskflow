@@ -219,7 +219,36 @@ async function executeSettlementCashOnce(projectId: string, actor: Actor, form: 
         locks: { select: { id: true } },
       },
     });
-    if (!obligationRow || obligationRow.dossierVersion.request.state !== "APPROVED") throw new Error("Nghĩa vụ không thuộc hồ sơ quyết toán đã duyệt của Project.");
+    if (!obligationRow) throw new Error("Nghĩa vụ không thuộc hồ sơ quyết toán của Project.");
+    const [recoveryPair, correctedPaymentPair] = await Promise.all([
+      tx.settlementCorrectionObligationPair.findUnique({
+        where: { recoveryObligationId: obligationRow.id },
+        include: { correctionAttempt: true, correctedPaymentObligation: { include: { cashAllocations: true } } },
+      }),
+      tx.settlementCorrectionObligationPair.findUnique({
+        where: { correctedPaymentObligationId: obligationRow.id },
+        include: { correctionAttempt: true, recoveryObligation: { include: { cashAllocations: true } } },
+      }),
+    ]);
+    const correctionPair = recoveryPair ?? correctedPaymentPair;
+    if (!correctionPair && obligationRow.dossierVersion.request.state !== "APPROVED") throw new Error("Nghĩa vụ không thuộc hồ sơ quyết toán đã duyệt của Project.");
+    if (correctionPair && (correctionPair.projectId !== projectId
+      || correctionPair.correctionAttempt.projectId !== projectId
+      || correctionPair.correctionAttempt.correctionVersionId !== obligationRow.dossierVersionId
+      || correctionPair.correctionAttempt.terminalAt)) {
+      throw new Error("Cặp thu hồi/thanh toán sửa không thuộc đúng Project, phiên bản hoặc vòng sửa đang mở.");
+    }
+    if (correctedPaymentPair) {
+      const recoveryRemaining = BigInt(correctedPaymentPair.recoveryObligation.amountDue)
+        - correctedPaymentPair.recoveryObligation.cashAllocations.reduce((total, row) => total + BigInt(row.amount), BigInt(0));
+      if (recoveryRemaining !== BigInt(0)) throw new Error("Phải thu hồi đủ recovery Cash IN trước khi chi corrected OUT.");
+      if (obligationRow.dossierVersion.request.state !== "APPROVED" || correctedPaymentPair.correctionAttempt.stage !== "PAYMENT_PENDING") {
+        throw new Error("Corrected OUT chỉ sẵn sàng sau phê duyệt mới và khi vòng sửa ở bước thanh toán.");
+      }
+    }
+    if (recoveryPair && !["RECOVERY_PENDING", "VERSION_CREATED", "APPROVAL_PENDING"].includes(recoveryPair.correctionAttempt.stage)) {
+      throw new Error("Vòng sửa không còn cho phép ghi recovery Cash IN.");
+    }
     const membership = actorRow.role === "ADMIN" ? null : await tx.projectMember.findUnique({ where: { projectId_userId: { projectId, userId: actor.id } }, select: { id: true } });
     const workspace = actorRow.role === "ADMIN" ? null : await tx.costFlowWorkspace.findUnique({ where: { projectId }, select: { data: true } });
     const config = workspace?.data && typeof workspace.data === "object" ? workspace.data as Record<string, unknown> : null;
@@ -272,7 +301,7 @@ async function executeSettlementCashOnce(projectId: string, actor: Actor, form: 
       accountLast4: null,
       direction: obligationDirection,
       amountDue: obligationRow.amountDue,
-      locked: obligationRow.locks.length > 0,
+      locked: obligationRow.locks.length > 0 || Boolean(correctionPair),
       sourceKind: "SETTLEMENT",
     };
     const allocations = priorRows.map(item => ({
@@ -313,6 +342,19 @@ async function executeSettlementCashOnce(projectId: string, actor: Actor, form: 
       idempotencyKey: command.idempotencyKey,
       commandFingerprint: validated.commandFingerprint,
     } });
+    if (recoveryPair) {
+      const recovered = priorRows.reduce((total, row) => total + BigInt(row.amount), BigInt(0)) + BigInt(command.amount);
+      if (recovered === BigInt(obligationRow.amountDue)) {
+        const nextStage = obligationRow.dossierVersion.request.state === "APPROVED" ? "PAYMENT_PENDING" : "APPROVAL_PENDING";
+        await tx.settlementCorrectionAttempt.update({ where: { id: recoveryPair.correctionAttemptId }, data: { stage: nextStage } });
+      }
+    }
+    if (correctedPaymentPair) {
+      const paid = priorRows.reduce((total, row) => total + BigInt(row.amount), BigInt(0)) + BigInt(command.amount);
+      if (paid === BigInt(obligationRow.amountDue)) {
+        await tx.settlementCorrectionAttempt.update({ where: { id: correctedPaymentPair.correctionAttemptId }, data: { stage: "SIGNING_PENDING" } });
+      }
+    }
     const allObligations = await tx.settlementRecipientObligation.findMany({ where: { projectId, dossierVersionId: obligationRow.dossierVersionId }, include: { cashAllocations: true } });
     const dossierProgress: SettlementCashProgress = allObligations.every(item => settlementObligationProgress(item.amountDue, item.cashAllocations.reduce((sum, allocation) => sum + BigInt(allocation.amount), BigInt(0)).toString()).cashProgress === "DA_CHI_DU") ? "DA_CHI_DU" : "DANG_CHI_MOT_PHAN";
     return { success: "Đã ghi nhận tiền quyết toán và chứng từ.", requestId: obligationRow.dossierVersion.requestId, cashId: cash.id, idempotent: false, dossierProgress };

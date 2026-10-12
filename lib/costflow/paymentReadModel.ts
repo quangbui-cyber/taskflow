@@ -241,6 +241,48 @@ export type SettlementObligationProgressRow = {
   cashProgress: PaymentProgress;
 };
 
+export type SettlementCorrectionProgressRow = SettlementObligationProgressRow & {
+  correctionAttemptId: string;
+  recoveryRemaining: string;
+  availability: "RECOVERY_IN" | "BLOCKED_RECOVERY" | "READY" | "COMPLETE";
+};
+
+export function projectSettlementCorrectionProgress(input: {
+  obligations: SettlementObligationCashSource[];
+  allocations: SettlementCashAllocationSource[];
+  pairs: Array<{
+    projectId: string;
+    correctionAttemptId: string;
+    recoveryObligationId: string;
+    correctedPaymentObligationId: string;
+  }>;
+}): SettlementCorrectionProgressRow[] {
+  const progress = projectSettlementObligationProgress(input);
+  const progressById = new Map(progress.map(row => [row.obligationId, row]));
+  return input.pairs.flatMap(pair => {
+    const recovery = progressById.get(pair.recoveryObligationId);
+    const payment = progressById.get(pair.correctedPaymentObligationId);
+    if (!recovery || !payment || recovery.projectId !== pair.projectId || payment.projectId !== pair.projectId) return [];
+    const recoveryRemaining = recovery.remainingAmount;
+    return [
+      {
+        ...recovery,
+        correctionAttemptId: pair.correctionAttemptId,
+        recoveryRemaining,
+        availability: recovery.remainingAmount === "0" ? "COMPLETE" as const : "RECOVERY_IN" as const,
+      },
+      {
+        ...payment,
+        correctionAttemptId: pair.correctionAttemptId,
+        recoveryRemaining,
+        availability: payment.remainingAmount === "0"
+          ? "COMPLETE" as const
+          : recoveryRemaining === "0" ? "READY" as const : "BLOCKED_RECOVERY" as const,
+      },
+    ];
+  });
+}
+
 export function projectSettlementObligationProgress(input: {
   obligations: SettlementObligationCashSource[];
   allocations: SettlementCashAllocationSource[];

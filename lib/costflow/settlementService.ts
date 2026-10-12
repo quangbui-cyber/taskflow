@@ -79,6 +79,15 @@ export type SettlementLockDraft = {
 };
 
 const REQUIRED_ROLES = ["MANAGER", "ACCOUNTANT", "CEO"] as const;
+const CORRECTION_CAPABILITIES = new Set([
+  "ADD_NEW_AC",
+  "CORRECT_RECIPIENT",
+  "CORRECT_AMOUNT",
+  "REPLACE_EVIDENCE",
+  "RECOVER_CASH",
+] as const);
+
+export type SettlementCorrectionCapability = "ADD_NEW_AC" | "CORRECT_RECIPIENT" | "CORRECT_AMOUNT" | "REPLACE_EVIDENCE" | "RECOVER_CASH";
 
 function required(value: string, label: string) {
   const normalized = value.trim();
@@ -97,6 +106,259 @@ function assertSteps(steps: SettlementApprovalStep[]) {
     || steps.some((step, index) => step.role !== REQUIRED_ROLES[index] || !step.assigneeId.trim())) {
     throw new SettlementDomainError("Chuỗi duyệt quyết toán phải là Manager -> Accountant -> CEO và đủ người được phân công.");
   }
+}
+
+function correctionScopes(value: Prisma.JsonValue): SettlementCorrectionCapability[] {
+  if (!Array.isArray(value) || value.some(item => typeof item !== "string" || !CORRECTION_CAPABILITIES.has(item as SettlementCorrectionCapability))) {
+    throw new SettlementDomainError("Phạm vi sửa quyết toán không hợp lệ.");
+  }
+  return value as SettlementCorrectionCapability[];
+}
+
+function correctionObligationIds(value: Prisma.JsonValue) {
+  if (!Array.isArray(value) || value.some(item => typeof item !== "string" || !item.trim())) {
+    throw new SettlementDomainError("Phạm vi nghĩa vụ cần sửa không hợp lệ.");
+  }
+  return value as string[];
+}
+
+export async function requestSettlementCorrection(tx: Prisma.TransactionClient, input: {
+  projectId: string;
+  dossierId: string;
+  baseVersionId: string;
+  requestedById: string;
+  reason: string;
+  capabilities: SettlementCorrectionCapability[];
+  obligationIds: string[];
+}) {
+  const capabilities = [...new Set(input.capabilities)];
+  const obligationIds = [...new Set(input.obligationIds)];
+  if (!capabilities.length || capabilities.some(capability => !CORRECTION_CAPABILITIES.has(capability))) {
+    throw new SettlementDomainError("Chọn ít nhất một phạm vi sửa quyết toán hợp lệ.");
+  }
+  const [project, dossier, baseVersion, openAttempt] = await Promise.all([
+    tx.project.findUnique({ where: { id: input.projectId }, select: { ownerId: true } }),
+    tx.projectSettlementDossier.findFirst({ where: { id: input.dossierId, projectId: input.projectId }, select: { id: true } }),
+    tx.projectSettlementVersion.findFirst({ where: { id: input.baseVersionId, projectId: input.projectId, dossierId: input.dossierId }, select: { id: true } }),
+    tx.settlementCorrectionAttempt.findFirst({ where: { projectId: input.projectId, terminalAt: null }, select: { id: true } }),
+  ]);
+  if (!project || project.ownerId !== input.requestedById) throw new SettlementDomainError("Chỉ Account/Project Owner được yêu cầu phạm vi sửa quyết toán.");
+  if (!dossier || !baseVersion) throw new SettlementDomainError("Dossier hoặc phiên bản nền không thuộc đúng Project.");
+  if (openAttempt) throw new SettlementDomainError("Project đang có một vòng sửa quyết toán chưa kết thúc.");
+  if (capabilities.some(capability => capability !== "ADD_NEW_AC") && !obligationIds.length) {
+    throw new SettlementDomainError("Phạm vi sửa dòng cũ phải chỉ rõ nghĩa vụ nguồn.");
+  }
+  if (obligationIds.length) {
+    const count = await tx.settlementRecipientObligation.count({ where: { projectId: input.projectId, dossierVersionId: input.baseVersionId, id: { in: obligationIds } } });
+    if (count !== obligationIds.length) throw new SettlementDomainError("Phạm vi sửa chứa nghĩa vụ ngoài phiên bản nền.");
+  }
+  return tx.settlementCorrectionAttempt.create({ data: {
+    projectId: input.projectId,
+    dossierId: input.dossierId,
+    baseVersionId: input.baseVersionId,
+    requestedFieldScopes: json(capabilities),
+    requestedLockScopes: json(obligationIds),
+    requestedById: input.requestedById,
+    reason: required(input.reason, "lý do mở lại"),
+    stage: "REQUESTED",
+  } });
+}
+
+export async function approveSettlementCorrection(tx: Prisma.TransactionClient, input: {
+  projectId: string;
+  attemptId: string;
+  actorId: string;
+}) {
+  const attempt = await tx.settlementCorrectionAttempt.findFirst({ where: { id: input.attemptId, projectId: input.projectId, terminalAt: null } });
+  if (!attempt || attempt.stage !== "REQUESTED") throw new SettlementDomainError("Vòng sửa không còn ở bước chờ Manager duyệt.");
+  const project = await tx.project.findUnique({
+    where: { id: input.projectId },
+    select: { owner: { select: { managerId: true } }, costFlow: { select: { data: true } } },
+  });
+  const data = project?.costFlow?.data && typeof project.costFlow.data === "object" && !Array.isArray(project.costFlow.data)
+    ? project.costFlow.data as Record<string, unknown>
+    : {};
+  const config = data.config && typeof data.config === "object" && !Array.isArray(data.config) ? data.config as Record<string, unknown> : {};
+  const managerId = String(config.managerId ?? project?.owner.managerId ?? "");
+  if (!managerId || input.actorId !== managerId) throw new SettlementDomainError("Chỉ Manager được phân công mới được duyệt phạm vi sửa quyết toán.");
+  return tx.settlementCorrectionAttempt.update({ where: { id: attempt.id }, data: { stage: "APPROVED" } });
+}
+
+export async function rejectSettlementCorrection(tx: Prisma.TransactionClient, input: {
+  projectId: string;
+  attemptId: string;
+  actorId: string;
+  status?: "REJECTED" | "CANCELLED";
+}) {
+  const attempt = await tx.settlementCorrectionAttempt.findFirst({ where: { id: input.attemptId, projectId: input.projectId, terminalAt: null } });
+  if (!attempt) throw new SettlementDomainError("Không tìm thấy vòng sửa đang mở.");
+  if (input.actorId !== attempt.requestedById && attempt.stage !== "REQUESTED") throw new SettlementDomainError("Không có quyền kết thúc vòng sửa này.");
+  const status = input.status ?? "CANCELLED";
+  return tx.settlementCorrectionAttempt.update({ where: { id: attempt.id }, data: { stage: status, status, terminalAt: new Date() } });
+}
+
+export async function createSettlementCorrectionVersion(tx: Prisma.TransactionClient, input: {
+  projectId: string;
+  attemptId: string;
+  actorId: string;
+  obligationId?: string;
+  correctedRecipientKey?: string;
+  correctedAmount?: string;
+}) {
+  const attempt = await tx.settlementCorrectionAttempt.findFirst({
+    where: { id: input.attemptId, projectId: input.projectId, terminalAt: null },
+    include: {
+      dossier: { include: { versions: { orderBy: { version: "desc" }, take: 1 } } },
+      baseVersion: { include: { obligations: { include: { cashAllocations: true } }, evidence: true } },
+      project: { select: { ownerId: true } },
+    },
+  });
+  if (!attempt || attempt.stage !== "APPROVED" || attempt.correctionVersionId) throw new SettlementDomainError("Vòng sửa chưa được duyệt hoặc đã tạo phiên bản; replay bị từ chối.");
+  if (attempt.project.ownerId !== input.actorId || attempt.requestedById !== input.actorId) throw new SettlementDomainError("Chỉ Account/Project Owner đã yêu cầu được tạo phiên bản sửa.");
+  const capabilities = correctionScopes(attempt.requestedFieldScopes);
+  const scopedIds = correctionObligationIds(attempt.requestedLockScopes);
+  const original = input.obligationId ? attempt.baseVersion.obligations.find(item => item.id === input.obligationId) : undefined;
+  if (!original || !scopedIds.includes(original.id)) throw new SettlementDomainError("Nghĩa vụ sửa không nằm trong phạm vi Manager đã duyệt.");
+  const correctedRecipientKey = required(input.correctedRecipientKey ?? original.recipientKey, "người nhận đã sửa");
+  if (correctedRecipientKey !== original.recipientKey && !capabilities.includes("CORRECT_RECIPIENT")) throw new SettlementDomainError("Phạm vi đã duyệt không cho phép sửa người nhận.");
+  const correctedAmount = input.correctedAmount ?? original.amountDue;
+  if (!/^\d+$/.test(correctedAmount) || BigInt(correctedAmount) <= BigInt(0)) throw new SettlementDomainError("Số tiền sửa phải là số nguyên VND dương.");
+  if (correctedAmount !== original.amountDue && !capabilities.includes("CORRECT_AMOUNT")) throw new SettlementDomainError("Phạm vi đã duyệt không cho phép sửa số tiền.");
+  const paidAmount = original.cashAllocations.reduce((total, row) => total + BigInt(row.amount), BigInt(0));
+  if (paidAmount > BigInt(0) && !capabilities.includes("RECOVER_CASH")) throw new SettlementDomainError("Dòng đã chi cần phạm vi thu hồi tiền riêng.");
+
+  const { steps } = await projectApprovalSteps(tx, input.projectId);
+  const approvalAttemptId = randomUUID();
+  const request = await tx.workflowRequest.create({ data: {
+    projectId: input.projectId,
+    module: "COSTFLOW",
+    kind: "SETTLEMENT",
+    title: `Hồ sơ quyết toán sửa v${(attempt.dossier.versions[0]?.version ?? attempt.baseVersion.version) + 1}`,
+    creatorId: input.actorId,
+    cashAssigneeId: steps[1].assigneeId,
+    state: "SUBMITTED",
+    steps: json(steps),
+    currentStep: 0,
+    currentAttemptId: approvalAttemptId,
+    currentStepArrivedAt: new Date(),
+    payload: json({ correctionAttemptId: attempt.id, baseVersionId: attempt.baseVersionId }),
+  } });
+  const correctionProjection = {
+    correctionAttemptId: attempt.id,
+    baseVersionId: attempt.baseVersionId,
+    obligationId: original.id,
+    correctedRecipientKey,
+    correctedAmount,
+    capabilities,
+  };
+  const projectionHash = canonicalHash(correctionProjection);
+  const version = await tx.projectSettlementVersion.create({ data: {
+    projectId: input.projectId,
+    dossierId: attempt.dossierId,
+    requestId: request.id,
+    version: (attempt.dossier.versions[0]?.version ?? attempt.baseVersion.version) + 1,
+    attemptId: approvalAttemptId,
+    canonicalHash: projectionHash,
+    sourceManifestHash: canonicalHash({ baseVersionId: attempt.baseVersionId, correctionAttemptId: attempt.id }),
+    createdById: input.actorId,
+    supersedesId: attempt.baseVersionId,
+    replacementReason: attempt.reason,
+    replacementActorId: input.actorId,
+    replacedAt: new Date(),
+  } });
+  for (const evidence of attempt.baseVersion.evidence) {
+    await tx.settlementEvidence.create({ data: {
+      projectId: input.projectId,
+      dossierVersionId: version.id,
+      evidenceId: evidence.evidenceId,
+      kind: evidence.kind,
+      sha256: evidence.sha256,
+      addedById: input.actorId,
+    } });
+  }
+  if (paidAmount === BigInt(0)) {
+    await tx.settlementRecipientObligation.create({ data: {
+      projectId: input.projectId,
+      dossierVersionId: version.id,
+      recipientKey: correctedRecipientKey,
+      recipientType: correctedRecipientKey.startsWith("VENDOR:") ? "VENDOR" : "EMPLOYEE",
+      direction: original.direction,
+      approvedAcGross: original.approvedAcGross,
+      disbursedAdvance: original.disbursedAdvance,
+      amountDue: correctedAmount,
+    } });
+  } else {
+    const recovery = await tx.settlementRecipientObligation.create({ data: {
+      projectId: input.projectId,
+      dossierVersionId: version.id,
+      recipientKey: original.recipientKey,
+      recipientType: original.recipientType,
+      direction: "REFUND",
+      approvedAcGross: "0",
+      disbursedAdvance: paidAmount.toString(),
+      amountDue: paidAmount.toString(),
+    } });
+    const correctedPayment = await tx.settlementRecipientObligation.create({ data: {
+      projectId: input.projectId,
+      dossierVersionId: version.id,
+      recipientKey: correctedRecipientKey,
+      recipientType: correctedRecipientKey.startsWith("VENDOR:") ? "VENDOR" : "EMPLOYEE",
+      direction: "ADDITIONAL",
+      approvedAcGross: correctedAmount,
+      disbursedAdvance: "0",
+      amountDue: correctedAmount,
+    } });
+    await tx.settlementCorrectionObligationPair.create({ data: {
+      projectId: input.projectId,
+      correctionAttemptId: attempt.id,
+      originalObligationId: original.id,
+      recoveryObligationId: recovery.id,
+      correctedPaymentObligationId: correctedPayment.id,
+    } });
+  }
+  await tx.workflowRequest.update({ where: { id: request.id }, data: { payload: json({ settlement: { correctionAttemptId: attempt.id, dossierId: attempt.dossierId, dossierVersionId: version.id, projectionHash } }) } });
+  await recordApprovalEvent(tx, { requestId: request.id, module: request.module, attemptId: approvalAttemptId, submittedVersion: request.version, mutationVersion: request.version, stepIndex: 0, role: "MANAGER", actorId: input.actorId, action: "SUBMIT", recipients: [steps[0].assigneeId] });
+  const stage = paidAmount > BigInt(0) ? "RECOVERY_PENDING" : "APPROVAL_PENDING";
+  await tx.settlementCorrectionAttempt.update({ where: { id: attempt.id }, data: { correctionVersionId: version.id, stage } });
+  return { dossierId: attempt.dossierId, versionId: version.id, requestId: request.id, approvalAttemptId, steps, stage };
+}
+
+export async function refreshSettlementCorrectionLifecycle(tx: Prisma.TransactionClient, input: { projectId: string; attemptId: string }) {
+  const attempt = await tx.settlementCorrectionAttempt.findFirst({
+    where: { id: input.attemptId, projectId: input.projectId, terminalAt: null },
+    include: {
+      correctionVersion: { include: { request: true } },
+      obligationPairs: {
+        include: {
+          recoveryObligation: { include: { cashAllocations: true } },
+          correctedPaymentObligation: { include: { cashAllocations: true } },
+        },
+      },
+    },
+  });
+  if (!attempt?.correctionVersion) throw new SettlementDomainError("Vòng sửa chưa có phiên bản mới.");
+  const remaining = (obligation: { amountDue: string; cashAllocations: Array<{ amount: string }> }) => BigInt(obligation.amountDue) - obligation.cashAllocations.reduce((total, row) => total + BigInt(row.amount), BigInt(0));
+  if (attempt.obligationPairs.some(pair => remaining(pair.recoveryObligation) !== BigInt(0))) {
+    return tx.settlementCorrectionAttempt.update({ where: { id: attempt.id }, data: { stage: "RECOVERY_PENDING" } });
+  }
+  if (attempt.correctionVersion.request.state !== "APPROVED") {
+    return tx.settlementCorrectionAttempt.update({ where: { id: attempt.id }, data: { stage: "APPROVAL_PENDING" } });
+  }
+  if (attempt.obligationPairs.some(pair => remaining(pair.correctedPaymentObligation) !== BigInt(0))) {
+    return tx.settlementCorrectionAttempt.update({ where: { id: attempt.id }, data: { stage: "PAYMENT_PENDING" } });
+  }
+  const snapshot = await tx.workflowApprovedSnapshot.findUnique({
+    where: { requestId_version: { requestId: attempt.correctionVersion.requestId, version: attempt.correctionVersion.request.version } },
+  });
+  if (!snapshot || snapshot.requestId !== attempt.correctionVersion.requestId) {
+    throw new SettlementDomainError("Phiên bản sửa chưa có signing snapshot mới được bind chính xác.");
+  }
+  await tx.projectSettlementVersion.update({ where: { id: attempt.correctionVersion.id }, data: {
+    approvedAttemptId: attempt.correctionVersion.request.currentAttemptId,
+    approvedSnapshotId: snapshot.id,
+    approvedProjectionHash: snapshot.projectionSha256,
+  } });
+  return tx.settlementCorrectionAttempt.update({ where: { id: attempt.id }, data: { stage: "COMPLETED", status: "COMPLETED", terminalAt: new Date() } });
 }
 
 export function createSettlementLifecycle(input: {
@@ -352,9 +614,10 @@ type SettlementActor = { id: string; role: string };
 type StoredSettlementPayload = {
   dossierId: string;
   dossierVersionId: string;
-  sourceManifest: SettlementSourceManifest;
+  sourceManifest?: SettlementSourceManifest;
   projectionHash: string;
-  submitBlockers: SettlementBlocker[];
+  submitBlockers?: SettlementBlocker[];
+  correctionAttemptId?: string;
 };
 
 const SETTLEMENT_COMMANDS = new Set([
@@ -612,7 +875,7 @@ async function reconstructAndVerifyProjection(
   projectId: string,
   requestId: string,
   dossierVersion: { id: string; canonicalHash: string; sourceManifestHash: string | null },
-  payload: StoredSettlementPayload,
+  payload: StoredSettlementPayload & { sourceManifest: SettlementSourceManifest },
   supplemental: SettlementEvidenceRef[],
 ) {
   const sourceManifestHash = canonicalHash(payload.sourceManifest);
@@ -679,6 +942,39 @@ export async function executeSettlementCommand(actor: SettlementActor, form: For
     const payload = storedPayload(request.payload);
     const dossierVersion = await tx.projectSettlementVersion.findFirstOrThrow({ where: { id: payload.dossierVersionId, projectId, requestId: request.id } });
 
+    if (payload.correctionAttemptId && command === "DECIDE_SETTLEMENT_DOSSIER") {
+      const action = formText(form, "decision");
+      if (action !== "APPROVE" && action !== "RETURN") throw new SettlementDomainError("Quyết định quyết toán không hợp lệ.");
+      const lifecycle = lifecycleFromRequest(request, { ...payload, sourceManifest: payload.sourceManifest ?? { actualCosts: [], advanceAllocations: [] } }, steps, 0);
+      const next = decideSettlementLifecycle(lifecycle, { actorId: actor.id, expectedVersion, action, reason: formText(form, "reason") });
+      if ((await tx.workflowRequest.updateMany({ where: { id: request.id, version: expectedVersion, state: "SUBMITTED", currentStep: request.currentStep }, data: { state: next.state, currentStep: next.currentStep, currentStepArrivedAt: next.state === "SUBMITTED" ? new Date() : null, version: { increment: 1 } } })).count !== 1) throw new SettlementDomainError("Bước duyệt đã thay đổi. Tải lại trước khi quyết định.");
+      if (next.state === "APPROVED") {
+        const correctionAttempt = await tx.settlementCorrectionAttempt.findFirst({
+          where: { id: payload.correctionAttemptId, correctionVersionId: dossierVersion.id, projectId, terminalAt: null },
+          include: { obligationPairs: { include: { recoveryObligation: { include: { cashAllocations: true } } } } },
+        });
+        if (!correctionAttempt) throw new SettlementDomainError("Phiên bản sửa không còn gắn với vòng sửa đang mở.");
+        const recoveryOpen = correctionAttempt.obligationPairs.some(pair => BigInt(pair.recoveryObligation.amountDue)
+          !== pair.recoveryObligation.cashAllocations.reduce((total, row) => total + BigInt(row.amount), BigInt(0)));
+        await tx.settlementCorrectionAttempt.update({
+          where: { id: correctionAttempt.id },
+          data: { stage: recoveryOpen ? "RECOVERY_PENDING" : correctionAttempt.obligationPairs.length ? "PAYMENT_PENDING" : "SIGNING_PENDING" },
+        });
+      }
+      const nextAssignee = next.state === "SUBMITTED" ? steps[next.currentStep]?.assigneeId : undefined;
+      await recordApprovalEvent(tx, { requestId: request.id, module: request.module, attemptId: request.currentAttemptId, submittedVersion: expectedVersion, mutationVersion: expectedVersion + 1, stepIndex: request.currentStep, role: steps[request.currentStep].role, actorId: actor.id, action, reason: formText(form, "reason"), recipients: nextAssignee ? [nextAssignee] : [request.creatorId] });
+      return { success: next.state === "APPROVED" ? "CEO đã duyệt phiên bản sửa; cash và signing vẫn là trục riêng." : action === "RETURN" ? "Đã trả phiên bản sửa để xử lý lại." : "Đã chuyển phiên bản sửa sang bước duyệt kế tiếp.", requestId: request.id, settlementVersion: expectedVersion + 1 };
+    }
+    if (payload.correctionAttemptId && command === "CANCEL_SETTLEMENT_DOSSIER") {
+      const managerId = steps[0].assigneeId;
+      if (actor.id !== request.creatorId && actor.id !== managerId) throw new SettlementDomainError("Chỉ người lập hoặc Manager được kết thúc vòng sửa.");
+      const reason = required(formText(form, "reason"), "lý do hủy");
+      if ((await tx.workflowRequest.updateMany({ where: { id: request.id, version: expectedVersion }, data: { state: "CANCELLED", version: { increment: 1 } } })).count !== 1) throw new SettlementDomainError("Phiên bản sửa đã thay đổi khi hủy.");
+      await tx.settlementCorrectionAttempt.update({ where: { id: payload.correctionAttemptId }, data: { stage: "CANCELLED", status: "CANCELLED", terminalAt: new Date() } });
+      await recordApprovalEvent(tx, { requestId: request.id, module: request.module, attemptId: request.currentAttemptId, mutationVersion: expectedVersion + 1, stepIndex: request.currentStep, role: actor.id === managerId ? "MANAGER" : "CREATOR", actorId: actor.id, action: "CANCEL", reason });
+      return { success: "Đã hủy vòng sửa bằng sự kiện terminal bất biến.", requestId: request.id, settlementVersion: expectedVersion + 1 };
+    }
+
     if (command === "ADD_SETTLEMENT_EVIDENCE") {
       if (request.state !== "DRAFT" && request.state !== "RETURNED") throw new SettlementDomainError("Chỉ bổ sung chứng từ khi hồ sơ đang nháp hoặc bị trả.");
       if (actor.id !== request.creatorId) throw new SettlementDomainError("Chỉ người lập được bổ sung chứng từ quyết toán.");
@@ -689,7 +985,8 @@ export async function executeSettlementCommand(actor: SettlementActor, form: For
       const kind = required(formText(form, "evidenceKind"), "loại chứng từ");
       if (!evidenceRequirements(kind).length) throw new SettlementDomainError("Loại chứng từ quyết toán không hợp lệ.");
       const beforeSupplemental = await supplementalEvidence(tx, projectId, dossierVersion.id);
-      await reconstructAndVerifyProjection(tx, projectId, request.id, dossierVersion, payload, beforeSupplemental);
+      if (!payload.sourceManifest) throw new SettlementDomainError("Phiên bản quyết toán thiếu source manifest.");
+      await reconstructAndVerifyProjection(tx, projectId, request.id, dossierVersion, { ...payload, sourceManifest: payload.sourceManifest }, beforeSupplemental);
       const evidence = await tx.costFlowEvidence.create({ data: { projectId, requestId: request.id, sourceFileId: `settlement:${randomUUID()}`, kind, name: prepared.name, mimeType: prepared.mimeType, data: prepared.data, sha256: prepared.sha256, createdBy: actor.id } });
       await tx.settlementEvidence.create({ data: { projectId, dossierVersionId: dossierVersion.id, evidenceId: evidence.id, kind: `${kind}:${recipientKey}`, sha256: evidence.sha256, addedById: actor.id } });
       const afterSupplemental = await supplementalEvidence(tx, projectId, dossierVersion.id);
@@ -706,7 +1003,8 @@ export async function executeSettlementCommand(actor: SettlementActor, form: For
     const lockCount = await tx.settlementLock.count({ where: { projectId, dossierVersionId: dossierVersion.id } });
 
     if (command === "CANCEL_SETTLEMENT_DOSSIER") {
-      const lifecycle = lifecycleFromRequest(request, payload, steps, lockCount);
+      if (!payload.sourceManifest) throw new SettlementDomainError("Phiên bản quyết toán thiếu source manifest.");
+      const lifecycle = lifecycleFromRequest(request, { ...payload, sourceManifest: payload.sourceManifest }, steps, lockCount);
       const next = cancelSettlementLifecycle(lifecycle, { actorId: actor.id, expectedVersion, reason: formText(form, "reason"), hasCash: cashCount > 0 });
       if ((await tx.workflowRequest.updateMany({ where: { id: request.id, version: expectedVersion }, data: { state: next.state, version: { increment: 1 } } })).count !== 1) throw new SettlementDomainError("Hồ sơ đã thay đổi khi hủy.");
       await recordApprovalEvent(tx, { requestId: request.id, module: request.module, attemptId: request.currentAttemptId, mutationVersion: expectedVersion + 1, stepIndex: request.currentStep, role: "MANAGER", actorId: actor.id, action: "CANCEL", reason: formText(form, "reason") });
@@ -737,11 +1035,13 @@ export async function executeSettlementCommand(actor: SettlementActor, form: For
       projectId,
       request.id,
       dossierVersion,
-      payload,
+      { ...payload, sourceManifest: payload.sourceManifest ?? { actualCosts: [], advanceAllocations: [] } },
       supplemental,
     );
     const blockers = blockersFromProjection(projection);
-    const lifecycle = lifecycleFromRequest(request, payload, steps, lockCount);
+    const sourceManifest = payload.sourceManifest;
+    if (!sourceManifest) throw new SettlementDomainError("Phiên bản quyết toán thiếu source manifest.");
+    const lifecycle = lifecycleFromRequest(request, { ...payload, sourceManifest }, steps, lockCount);
 
     if (command === "SUBMIT_SETTLEMENT_DOSSIER" || command === "RESUBMIT_SETTLEMENT_DOSSIER") {
       const next = command === "SUBMIT_SETTLEMENT_DOSSIER"
@@ -764,8 +1064,22 @@ export async function executeSettlementCommand(actor: SettlementActor, form: For
       const action = formText(form, "decision");
       if (action !== "APPROVE" && action !== "RETURN") throw new SettlementDomainError("Quyết định quyết toán không hợp lệ.");
       const next = decideSettlementLifecycle(lifecycle, { actorId: actor.id, expectedVersion, action, reason: formText(form, "reason") });
-      if (next.state === "APPROVED") await persistSettlementLocks(tx, dossierVersion.id, projectId, payload.sourceManifest);
+      if (next.state === "APPROVED") await persistSettlementLocks(tx, dossierVersion.id, projectId, sourceManifest);
       if ((await tx.workflowRequest.updateMany({ where: { id: request.id, version: expectedVersion, state: "SUBMITTED", currentStep: request.currentStep }, data: { state: next.state, currentStep: next.currentStep, currentStepArrivedAt: next.state === "SUBMITTED" ? new Date() : null, version: { increment: 1 } } })).count !== 1) throw new SettlementDomainError("Bước duyệt đã thay đổi. Tải lại trước khi quyết định.");
+      if (next.state === "APPROVED") {
+        const correctionAttempt = await tx.settlementCorrectionAttempt.findFirst({
+          where: { correctionVersionId: dossierVersion.id, projectId, terminalAt: null },
+          include: { obligationPairs: { include: { recoveryObligation: { include: { cashAllocations: true } } } } },
+        });
+        if (correctionAttempt) {
+          const recoveryOpen = correctionAttempt.obligationPairs.some(pair => BigInt(pair.recoveryObligation.amountDue)
+            !== pair.recoveryObligation.cashAllocations.reduce((total, row) => total + BigInt(row.amount), BigInt(0)));
+          await tx.settlementCorrectionAttempt.update({
+            where: { id: correctionAttempt.id },
+            data: { stage: recoveryOpen ? "RECOVERY_PENDING" : correctionAttempt.obligationPairs.length ? "PAYMENT_PENDING" : "SIGNING_PENDING" },
+          });
+        }
+      }
       const nextAssignee = next.state === "SUBMITTED" ? steps[next.currentStep]?.assigneeId : undefined;
       await recordApprovalEvent(tx, { requestId: request.id, module: request.module, attemptId: request.currentAttemptId, submittedVersion: expectedVersion, mutationVersion: expectedVersion + 1, stepIndex: request.currentStep, role: steps[request.currentStep].role, actorId: actor.id, action, reason: formText(form, "reason"), recipients: nextAssignee ? [nextAssignee] : [request.creatorId] });
       return { success: next.state === "APPROVED" ? "CEO đã duyệt và hệ thống đã thêm khóa nguồn bất biến." : action === "RETURN" ? "Đã trả toàn bộ hồ sơ để sửa." : "Đã chuyển hồ sơ sang bước duyệt kế tiếp.", requestId: request.id, settlementVersion: expectedVersion + 1 };
@@ -774,7 +1088,7 @@ export async function executeSettlementCommand(actor: SettlementActor, form: For
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15000 });
 }
 
-function lifecycleFromRequest(request: { id: string; projectId: string | null; creatorId: string; version: number; state: string; currentStep: number; currentAttemptId: string | null }, payload: StoredSettlementPayload, steps: SettlementApprovalStep[], lockCount: number): SettlementLifecycle {
+function lifecycleFromRequest(request: { id: string; projectId: string | null; creatorId: string; version: number; state: string; currentStep: number; currentAttemptId: string | null }, payload: StoredSettlementPayload & { sourceManifest: SettlementSourceManifest }, steps: SettlementApprovalStep[], lockCount: number): SettlementLifecycle {
   if (!request.projectId) throw new SettlementDomainError("Hồ sơ quyết toán thiếu Project.");
   if (!["DRAFT", "SUBMITTED", "RETURNED", "APPROVED", "CANCELLED"].includes(request.state)) throw new SettlementDomainError("Trạng thái hồ sơ quyết toán không hợp lệ.");
   return {

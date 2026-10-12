@@ -60,6 +60,7 @@ async function fixture(client, label) {
     ownerId: actors.owner.id,
     members: { create: [actors.owner, actors.manager, actors.accountant, actors.ceo, actors.wrong, actors.correct].map(member => ({ userId: member.id })) },
   } });
+  await client.user.update({ where: { id: actors.owner.id }, data: { managerId: actors.manager.id } });
   await client.costFlowWorkspace.create({ data: { projectId: project.id, data: financeData(actors.accountant.id, actors.manager.id, actors.ceo.id) } });
   const request = await client.workflowRequest.create({ data: {
     projectId: project.id, module: "COSTFLOW", kind: "SETTLEMENT", title: `Settlement ${label}`,
@@ -145,8 +146,7 @@ function cashForm(versionId, obligation, amount, key) {
 
 const proof = label => ({ name: `${label}.pdf`, mimeType: "application/pdf", size: label.length, data: Buffer.from(label) });
 
-test("scoped reopen keeps one open lifecycle and appends an immutable correction version", async () => {
-  await withMigratedSchema(async ({ client, correction }) => {
+async function scopedCorrectionCase({ client, correction }) {
     const fx = await fixture(client, "scope");
     const before = {
       cash: await client.costFlowCash.findMany({ where: { projectId: fx.project.id }, orderBy: { id: "asc" } }),
@@ -162,7 +162,7 @@ test("scoped reopen keeps one open lifecycle and appends an immutable correction
     const attempt = await client.$transaction(tx => correction.requestSettlementCorrection(tx, requestInput));
     await assert.rejects(
       () => client.$transaction(tx => correction.requestSettlementCorrection(tx, requestInput)),
-      /đang mở|đã tồn tại|unique/i,
+      /vòng sửa|đã tồn tại|unique/i,
     );
     await assert.rejects(
       () => client.$transaction(tx => correction.approveSettlementCorrection(tx, { projectId: fx.project.id, attemptId: attempt.id, actorId: fx.actors.unrelatedManager.id })),
@@ -193,11 +193,9 @@ test("scoped reopen keeps one open lifecycle and appends an immutable correction
     assert.deepEqual(await client.settlementCashAllocation.findMany({ where: { projectId: fx.project.id, obligationId: fx.original.id }, orderBy: { id: "asc" } }), before.allocations);
     assert.deepEqual(await client.settlementLock.findMany({ where: { projectId: fx.project.id, dossierVersionId: fx.version.id }, orderBy: { id: "asc" } }), before.locks);
     assert.deepEqual(await client.workflowApprovedSnapshot.findMany({ where: { requestId: fx.request.id }, orderBy: { id: "asc" } }), before.snapshots);
-  });
-});
+}
 
-test("recovery gates corrected OUT through partial, replay, foreign-pair and concurrent paths", async () => {
-  await withMigratedSchema(async ({ client, correction, cash, readModel }) => {
+async function recoveryCashCase({ client, correction, cash, readModel }) {
     const fx = await fixture(client, "cash");
     const foreign = await fixture(client, "foreign");
     const attempt = await client.$transaction(tx => correction.requestSettlementCorrection(tx, {
@@ -257,5 +255,11 @@ test("recovery gates corrected OUT through partial, replay, foreign-pair and con
     const completed = await client.$transaction(tx => correction.refreshSettlementCorrectionLifecycle(tx, { projectId: fx.project.id, attemptId: attempt.id }));
     assert.equal(completed.stage, "COMPLETED");
     assert.ok(completed.terminalAt);
+}
+
+test("scoped correction preserves history and recovery gates corrected OUT", async () => {
+  await withMigratedSchema(async context => {
+    await scopedCorrectionCase(context);
+    await recoveryCashCase(context);
   });
 });

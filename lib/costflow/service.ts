@@ -34,6 +34,13 @@ import { deriveCustomerAccounting, validateLiquidationAmounts } from "./customer
 import { projectQuotation } from "./quotationProjection";
 import { createCustomerAcceptanceSnapshot, parseCustomerAcceptanceProjection, type CustomerAcceptanceActualInput } from "./customerAcceptanceProjection";
 import { appendDigitalSigningEvent, finalizeDigitalApprovedSnapshot, requiresDigitalSignature, type DigitalSigningRole } from "@/lib/workflow/signing";
+import {
+  approveSettlementCorrection,
+  createSettlementCorrectionVersion,
+  rejectSettlementCorrection,
+  requestSettlementCorrection,
+  type SettlementCorrectionCapability,
+} from "./settlementService";
 
 type Actor = { id: string; role: string };
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -645,11 +652,28 @@ export async function executeFinance(projectId: string, expectedVersion: number,
           financialCloseState: data.closed ? "CLOSED" : "OPEN",
         });
         if (kind === "CLOSE") {
+          if (await tx.settlementCorrectionAttempt.findFirst({ where: { projectId, terminalAt: null }, select: { id: true } })) {
+            throw new Error("Không thể đóng tài chính khi vòng sửa quyết toán chưa kết thúc.");
+          }
           const blockers = twoWayCloseBlockers(await currentTwoWayCloseInput(tx, projectId));
           if (blockers.length) throw new Error(blockers.join(" "));
         }
         const attemptId = randomUUID();
         const created = await tx.financialCloseRequest.create({ data: { projectId, dossierId: dossier.id, attemptId, action: kind, reason: closeRequest.reason, requestedById: actor.id } });
+        if (kind === "REOPEN") {
+          const baseVersion = await tx.projectSettlementVersion.findFirst({ where: { projectId, dossierId: dossier.id }, orderBy: { version: "desc" }, select: { id: true } });
+          if (!baseVersion) throw new Error("Project chưa có phiên bản quyết toán nền để mở lại.");
+          const capabilities = form.getAll("correctionCapability").map(String).filter(Boolean) as SettlementCorrectionCapability[];
+          await requestSettlementCorrection(tx, {
+            projectId,
+            dossierId: dossier.id,
+            baseVersionId: baseVersion.id,
+            requestedById: actor.id,
+            reason: closeRequest.reason,
+            capabilities: capabilities.length ? capabilities : ["ADD_NEW_AC"],
+            obligationIds: form.getAll("correctionObligationId").map(String).filter(Boolean),
+          });
+        }
         const requestMetadata = JSON.stringify({ requesterRole: closeRequest.requesterRole, expectedVersion: closeRequest.expectedVersion });
         await tx.financialCloseEvent.create({ data: { closeRequestId: created.id, decision: "REQUESTED", reason: requestMetadata, actorId: actor.id, eventHash: createHash("sha256").update(JSON.stringify({ closeRequestId: created.id, decision: "REQUESTED", actorId: actor.id, reason: closeRequest.reason, requestMetadata })).digest("hex") } });
         savedCloseRequestId = created.id;
@@ -669,6 +693,15 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         const next = decideFinancialClose(record, { actorId: actor.id, assignedManagerId: data.config.managerId, decision, reason: text(form, "reason"), currentVersion: expectedVersion, currentCloseState: data.closed ? "CLOSED" : "OPEN", blockers });
         const eventReason = text(form, "reason");
         await tx.financialCloseEvent.create({ data: { closeRequestId: stored.id, decision, reason: eventReason, actorId: actor.id, eventHash: createHash("sha256").update(JSON.stringify({ closeRequestId: stored.id, decision, actorId: actor.id, reason: eventReason, expectedVersion })).digest("hex") } });
+        if (stored.action === "REOPEN") {
+          const correctionAttempt = await tx.settlementCorrectionAttempt.findFirst({ where: { projectId, terminalAt: null }, orderBy: { createdAt: "desc" } });
+          if (!correctionAttempt) throw new Error("Yêu cầu mở lại thiếu vòng sửa có phạm vi phía server.");
+          if (decision === "APPROVE") {
+            await approveSettlementCorrection(tx, { projectId, attemptId: correctionAttempt.id, actorId: actor.id });
+          } else if (decision === "REJECT") {
+            await rejectSettlementCorrection(tx, { projectId, attemptId: correctionAttempt.id, actorId: actor.id, status: "REJECTED" });
+          }
+        }
         if (decision === "APPROVE") data.closed = next.financialCloseState === "CLOSED";
         savedCloseRequestId = stored.id;
         financialCloseState = data.closed ? "CLOSED" : "OPEN";
@@ -683,6 +716,21 @@ export async function executeFinance(projectId: string, expectedVersion: number,
           include: { events: { where: { decision: "APPROVE" }, orderBy: { createdAt: "desc" }, take: 1 } },
         });
         if (!approvedReopen) throw new Error("Chưa có quyết định REOPEN được Quản lý phê duyệt.");
+        const correctionAttempt = await tx.settlementCorrectionAttempt.findFirst({ where: { projectId, terminalAt: null }, orderBy: { createdAt: "desc" } });
+        if (!correctionAttempt || correctionAttempt.stage !== "APPROVED") throw new Error("Vòng sửa chưa được Manager duyệt hoặc không còn hiệu lực.");
+        const correctionObligationId = text(form, "correctionObligationId");
+        if (correctionObligationId) {
+          const corrected = await createSettlementCorrectionVersion(tx, {
+            projectId,
+            attemptId: correctionAttempt.id,
+            actorId: actor.id,
+            obligationId: correctionObligationId,
+            correctedRecipientKey: text(form, "correctedRecipientKey") || undefined,
+            correctedAmount: text(form, "correctedAmount") || undefined,
+          });
+          affectedRequestId = corrected.requestId;
+          break;
+        }
         const dossier = await tx.projectSettlementDossier.findUnique({
           where: { projectId },
           include: { versions: { orderBy: { version: "desc" }, include: { request: { select: { state: true } } } } },
@@ -740,6 +788,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
           await tx.settlementEvidence.create({ data: { projectId, dossierVersionId: createdVersion.id, evidenceId: link.evidenceId, kind: link.kind, sha256: link.evidence.sha256, addedById: actor.id } });
         }
         await tx.workflowRequest.update({ where: { id: deltaRequest.id }, data: { payload: json({ settlement: { dossierId: dossier.id, dossierVersionId: createdVersion.id, sourceManifest, projectionHash, submitBlockers: [], baselineVersionIds: plan.delta.baselineVersionIds } }) } });
+        await tx.settlementCorrectionAttempt.update({ where: { id: correctionAttempt.id }, data: { correctionVersionId: createdVersion.id, stage: "APPROVAL_PENDING" } });
         affectedRequestId = deltaRequest.id;
         break;
       }
