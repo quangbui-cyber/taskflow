@@ -8,9 +8,10 @@ import { PrismaClient } from "@prisma/client";
 
 const root = path.resolve(import.meta.dirname, "..");
 const schema = readFileSync(path.join(root, "prisma/schema.prisma"), "utf8");
-const migrationName = "20261011090000_phase10_settlement_dossier";
+const migrationName = "20261012090000_phase10_gap_contracts";
 const migrationPath = path.join(root, "prisma/migrations", migrationName, "migration.sql");
-const expectedTables = [
+const baselineMigrationPath = path.join(root, "prisma/migrations/20261011090000_phase10_settlement_dossier/migration.sql");
+const baselineTables = [
   "ProjectSettlementDossier",
   "ProjectSettlementVersion",
   "SettlementRecipientObligation",
@@ -21,6 +22,13 @@ const expectedTables = [
   "FinancialCloseEvent",
   "SettlementExportAudit",
 ];
+const gapTables = [
+  "SettlementAdvanceManifestRow",
+  "SettlementCorrectionAttempt",
+  "SettlementCorrectionObligationPair",
+  "SettlementExportSourceProjection",
+];
+const expectedTables = [...baselineTables, ...gapTables];
 
 function migrationNames() {
   return readdirSync(path.join(root, "prisma/migrations"), { withFileTypes: true })
@@ -117,6 +125,10 @@ async function captureFailure(failures, label, operation) {
   }
 }
 
+function hasPostgresCode(code) {
+  return error => error?.meta?.code === code || String(error).includes(`Code: \`${code}\``);
+}
+
 test("Phase 10 migration sorts strictly after all existing migrations", () => {
   const names = migrationNames();
   assert.equal(names.at(-1), migrationName);
@@ -135,13 +147,16 @@ test("schema keeps settlement lock separate from producer lifecycle state", () =
 
 test("migration enforces provenance, idempotency, replacement, and append-only audit constraints", () => {
   const sql = readFileSync(migrationPath, "utf8");
-  for (const table of expectedTables) assert.match(sql, new RegExp(`CREATE TABLE "${table}"`));
-  assert.match(sql, /SettlementLock_source_xor_check/);
-  assert.match(sql, /SettlementLock_advance_cash_check/);
-  assert.match(sql, /SettlementCashAllocation_projectId_idempotencyKey_key/);
-  assert.match(sql, /SettlementRecipientObligation_dossierVersionId_recipientKey_key/);
-  assert.match(sql, /ProjectSettlementVersion_supersedesId_fkey[\s\S]*?ON DELETE RESTRICT/);
-  assert.match(sql, /SettlementExportAudit_approvedSnapshotId_fkey[\s\S]*?ON DELETE RESTRICT/);
+  const baselineSql = readFileSync(baselineMigrationPath, "utf8");
+  for (const table of gapTables) assert.match(sql, new RegExp(`CREATE TABLE "${table}"`));
+  assert.match(baselineSql, /SettlementLock_source_xor_check/);
+  assert.match(baselineSql, /SettlementLock_advance_cash_check/);
+  assert.match(baselineSql, /SettlementCashAllocation_projectId_idempotencyKey_key/);
+  assert.match(baselineSql, /SettlementRecipientObligation_dossierVersionId_recipientKey_key/);
+  assert.match(baselineSql, /ProjectSettlementVersion_supersedesId_fkey[\s\S]*?ON DELETE RESTRICT/);
+  assert.match(sql, /SettlementCorrectionAttempt_one_open_per_project_idx[\s\S]*?terminalAt/);
+  assert.match(sql, /SettlementExportSourceProjection_exact_source_key/);
+  assert.match(sql, /SettlementExportAudit_file_sha256_check/);
   assert.doesNotMatch(sql, /ON DELETE CASCADE/);
   assert.doesNotMatch(sql, /UPDATE "(?:ActualCostApplication|AdvanceApplication)"[\s\S]*?SET[\s\S]*?SETTLED/i);
 });
@@ -191,13 +206,16 @@ test("fully migrated schema accepts runtime vocabulary and exact gap identities"
   await withMigratedSchema(async client => {
     const ids = await insertSettlementFixture(client);
     const failures = [];
+    const obligationIds = new Map();
 
     for (const [index, direction] of ["REFUND", "ADDITIONAL", "BALANCED"].entries()) {
+      const obligationId = `obligation_${direction}_${randomUUID()}`;
+      obligationIds.set(direction, obligationId);
       await captureFailure(failures, `obligation ${direction}`, () => client.$executeRawUnsafe(
         `INSERT INTO "SettlementRecipientObligation"
           ("id", "projectId", "dossierVersionId", "recipientKey", "recipientType", "direction", "approvedAcGross", "disbursedAdvance", "amountDue")
          VALUES ($1, $2, $3, $4, 'EMPLOYEE', $5, '100', '50', $6)`,
-        `obligation_${direction}_${randomUUID()}`,
+        obligationId,
         ids.project,
         ids.version,
         `recipient-${index}`,
@@ -244,22 +262,24 @@ test("fully migrated schema accepts runtime vocabulary and exact gap identities"
       "d".repeat(64),
     ));
 
+    const correctionId = `correction_${randomUUID()}`;
     await captureFailure(failures, "open correction lifecycle", () => client.$executeRawUnsafe(
       `INSERT INTO "SettlementCorrectionAttempt"
         ("id", "projectId", "dossierId", "baseVersionId", "requestedFieldScopes", "requestedLockScopes", "requestedById", "reason", "stage", "status")
        VALUES ($1, $2, $3, $4, '["RECIPIENT"]'::jsonb, '["PAID"]'::jsonb, $5, 'wrong recipient', 'REQUESTED', 'OPEN')`,
-      `correction_${randomUUID()}`,
+      correctionId,
       ids.project,
       ids.dossier,
       ids.version,
       ids.actor,
     ));
 
+    const projectionId = `projection_${randomUUID()}`;
     await captureFailure(failures, "exact export projection", () => client.$executeRawUnsafe(
       `INSERT INTO "SettlementExportSourceProjection"
         ("id", "projectId", "dossierVersionId", "family", "sourceKind", "sourceId", "sourceVersion", "authoritativeNet", "authoritativeVat", "authoritativeGross", "roundingAdjustment", "vatLineAssignment", "projectionHash")
        VALUES ($1, $2, $3, 'DNTT', 'PAYMENT_REQUEST', 'request-a', 1, '100', '8', '108', 0, '{"lineId":"line-a"}'::jsonb, $4)`,
-      `projection_${randomUUID()}`,
+      projectionId,
       ids.project,
       ids.version,
       "e".repeat(64),
@@ -268,8 +288,8 @@ test("fully migrated schema accepts runtime vocabulary and exact gap identities"
     await captureFailure(failures, "structured finalized export audit", () => client.$executeRawUnsafe(
       `INSERT INTO "SettlementExportAudit"
         ("id", "projectId", "dossierVersionId", "family", "format", "canonicalHash", "approvedSnapshotId", "idempotencyKey", "createdById",
-         "approvalAttemptId", "sourceKind", "sourceId", "sourceVersion", "artifactStatus", "artifactBytes", "reservationToken", "fileSha256")
-       VALUES ($1, $2, $3, 'DNTT', 'PDF', $4, $5, $6, $7, 'attempt-1', 'PAYMENT_REQUEST', 'request-a', 1, 'FINALIZED', $8, $9, $10)`,
+         "approvalAttemptId", "sourceProjectionId", "sourceKind", "sourceId", "sourceVersion", "artifactStatus", "artifactBytes", "reservationToken", "fileSha256")
+       VALUES ($1, $2, $3, 'DNTT', 'PDF', $4, $5, $6, $7, 'attempt-1', $8, 'PAYMENT_REQUEST', 'request-a', 1, 'FINALIZED', $9, $10, $11)`,
       `audit_${randomUUID()}`,
       ids.project,
       ids.version,
@@ -277,11 +297,171 @@ test("fully migrated schema accepts runtime vocabulary and exact gap identities"
       ids.snapshot,
       `audit-key-${randomUUID()}`,
       ids.actor,
+      projectionId,
       Buffer.from("deterministic-pdf"),
       `reservation-${randomUUID()}`,
       "1".repeat(64),
     ));
 
     assert.deepEqual(failures, [], `database contract failures:\n${failures.join("\n")}`);
+
+    await client.$executeRawUnsafe(
+      `INSERT INTO "FinancialCloseRequest"
+        ("id", "projectId", "dossierId", "dossierVersionId", "canonicalHash", "workspaceVersion", "attemptId", "action", "reason", "requestedById")
+       VALUES ($1, $2, $3, $4, $5, 0, 'close-exact', 'CLOSE', 'exact binding', $6)`,
+      `close_${randomUUID()}`, ids.project, ids.dossier, ids.version, "b".repeat(64), ids.actor,
+    );
+
+    const recipientKey = "recipient-1";
+    const recipientSnapshotId = `recipient_${randomUUID()}`;
+    const requestLineId = `line_${randomUUID()}`;
+    const cashId = `cash_${randomUUID()}`;
+    const sourceAllocationId = `allocation_${randomUUID()}`;
+    const advanceApplicationId = `advance_${randomUUID()}`;
+    await client.$executeRawUnsafe(
+      `INSERT INTO "PaymentRecipientSnapshot"
+        ("id", "projectId", "requestId", "recipientKey", "recipientType", "displayName", "totalAmount")
+       VALUES ($1, $2, $3, $4, 'EMPLOYEE', 'Recipient', '50')`,
+      recipientSnapshotId, ids.project, ids.request, recipientKey,
+    );
+    await client.$executeRawUnsafe(
+      `INSERT INTO "PaymentRequestLine"
+        ("id", "projectId", "requestId", "stableKey", "position", "description", "amount", "icRevisionId", "icLineId", "sourceSnapshot", "recipientKey", "evidenceManifest")
+       VALUES ($1, $2, $3, 'line-1', 0, 'Advance line', '50', 'ic-r1', 'ic-l1', '{}'::jsonb, $4, '[]'::jsonb)`,
+      requestLineId, ids.project, ids.request, recipientKey,
+    );
+    await client.$executeRawUnsafe(
+      `INSERT INTO "CostFlowCash"
+        ("id", "projectId", "requestId", "recipientKey", "direction", "channel", "amount", "reference", "idempotencyKey", "commandFingerprint", "allocations", "evidenceId", "occurredAt", "confirmedBy")
+       VALUES ($1, $2, $3, $4, 'OUT', 'BANK', '50', $5, $6, 'fingerprint', '[]'::jsonb, 'evidence-ref', CURRENT_TIMESTAMP, $7)`,
+      cashId, ids.project, ids.request, recipientKey, `ref-${randomUUID()}`, `cash-key-${randomUUID()}`, ids.actor,
+    );
+    await client.$executeRawUnsafe(
+      `INSERT INTO "CostFlowCashAllocation"
+        ("id", "projectId", "cashId", "requestId", "requestLineId", "recipientKey", "direction", "amount")
+       VALUES ($1, $2, $3, $4, $5, $6, 'OUT', '50')`,
+      sourceAllocationId, ids.project, cashId, ids.request, requestLineId, recipientKey,
+    );
+    await client.$executeRawUnsafe(
+      `INSERT INTO "AdvanceApplication"
+        ("id", "projectId", "advanceRequestId", "advanceLineId", "expenseId", "recipientKey", "amount", "createdBy")
+       VALUES ($1, $2, $3, $4, 'expense-1', $5, '50', $6)`,
+      advanceApplicationId, ids.project, ids.request, requestLineId, recipientKey, ids.actor,
+    );
+    await client.$executeRawUnsafe(
+      `INSERT INTO "SettlementAdvanceManifestRow"
+        ("id", "projectId", "dossierVersionId", "obligationId", "recipientKey", "advanceApplicationId", "sourceCashAllocationId")
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      `manifest_${randomUUID()}`, ids.project, ids.version, obligationIds.get("ADDITIONAL"), recipientKey,
+      advanceApplicationId, sourceAllocationId,
+    );
+
+    const secondProjectId = `project_${randomUUID()}`;
+    const crossProjectAdvanceId = `advance_${randomUUID()}`;
+    await client.$executeRawUnsafe(
+      `INSERT INTO "AdvanceApplication"
+        ("id", "projectId", "advanceRequestId", "advanceLineId", "expenseId", "recipientKey", "amount", "createdBy")
+       VALUES ($1, $2, $3, $4, 'expense-2', $5, '50', $6)`,
+      crossProjectAdvanceId, ids.project, ids.request, requestLineId, recipientKey, ids.actor,
+    );
+    await client.$executeRawUnsafe(
+      `INSERT INTO "Project" ("id", "name", "ownerId") VALUES ($1, 'Other project', $2)`,
+      secondProjectId, ids.actor,
+    );
+    await assert.rejects(() => client.$executeRawUnsafe(
+      `INSERT INTO "SettlementAdvanceManifestRow"
+        ("id", "projectId", "dossierVersionId", "obligationId", "recipientKey", "advanceApplicationId", "sourceCashAllocationId")
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      `manifest_${randomUUID()}`, secondProjectId, ids.version, obligationIds.get("ADDITIONAL"), recipientKey,
+      crossProjectAdvanceId, sourceAllocationId,
+    ), hasPostgresCode("23503"));
+
+    await assert.rejects(() => client.$executeRawUnsafe(
+      `INSERT INTO "SettlementCorrectionAttempt"
+        ("id", "projectId", "dossierId", "baseVersionId", "requestedFieldScopes", "requestedLockScopes", "requestedById", "reason", "stage", "status")
+       VALUES ($1, $2, $3, $4, '["AMOUNT"]'::jsonb, '[]'::jsonb, $5, 'second open', 'REQUESTED', 'OPEN')`,
+      `second_${randomUUID()}`, ids.project, ids.dossier, ids.version, ids.actor,
+    ), hasPostgresCode("23505"));
+
+    const correctionVersionId = `version_${randomUUID()}`;
+    await client.$executeRawUnsafe(
+      `INSERT INTO "ProjectSettlementVersion"
+        ("id", "projectId", "dossierId", "requestId", "version", "attemptId", "canonicalHash", "createdById",
+         "supersedesId", "replacementReason", "replacementActorId", "replacedAt")
+       VALUES ($1, $2, $3, $4, 2, 'attempt-2', $5, $6, $7, 'correction', $6, CURRENT_TIMESTAMP)`,
+      correctionVersionId, ids.project, ids.dossier, ids.request, "2".repeat(64), ids.actor, ids.version,
+    );
+    for (const stage of ["APPROVED", "VERSION_CREATED", "RECOVERY_PENDING", "PAYMENT_PENDING", "APPROVAL_PENDING", "SIGNING_PENDING"]) {
+      await client.$executeRawUnsafe(
+        `UPDATE "SettlementCorrectionAttempt"
+         SET "stage" = $2, "correctionVersionId" = CASE WHEN $2 = 'VERSION_CREATED' THEN $3 ELSE "correctionVersionId" END
+         WHERE "id" = $1`,
+        correctionId, stage, correctionVersionId,
+      );
+      await assert.rejects(() => client.$executeRawUnsafe(
+        `INSERT INTO "SettlementCorrectionAttempt"
+          ("id", "projectId", "dossierId", "baseVersionId", "requestedFieldScopes", "requestedLockScopes", "requestedById", "reason", "stage", "status")
+         VALUES ($1, $2, $3, $4, '["AMOUNT"]'::jsonb, '[]'::jsonb, $5, 'still exclusive', 'REQUESTED', 'OPEN')`,
+        `second_${randomUUID()}`, ids.project, ids.dossier, ids.version, ids.actor,
+      ), hasPostgresCode("23505"));
+    }
+    await assert.rejects(() => client.$executeRawUnsafe(
+      `UPDATE "SettlementCorrectionAttempt" SET "stage" = 'COMPLETED', "status" = 'COMPLETED' WHERE "id" = $1`,
+      correctionId,
+    ), hasPostgresCode("23514"));
+    await client.$executeRawUnsafe(
+      `UPDATE "SettlementCorrectionAttempt" SET "stage" = 'COMPLETED', "status" = 'COMPLETED', "terminalAt" = CURRENT_TIMESTAMP WHERE "id" = $1`,
+      correctionId,
+    );
+    await client.$executeRawUnsafe(
+      `INSERT INTO "SettlementCorrectionAttempt"
+        ("id", "projectId", "dossierId", "baseVersionId", "requestedFieldScopes", "requestedLockScopes", "requestedById", "reason", "stage", "status")
+       VALUES ($1, $2, $3, $4, '["AMOUNT"]'::jsonb, '[]'::jsonb, $5, 'new after terminal', 'REQUESTED', 'OPEN')`,
+      `second_${randomUUID()}`, ids.project, ids.dossier, correctionVersionId, ids.actor,
+    );
+
+    const [cashBeforePair] = await client.$queryRawUnsafe(`SELECT COUNT(*)::int AS count FROM "CostFlowCash"`);
+    await client.$executeRawUnsafe(
+      `INSERT INTO "SettlementCorrectionObligationPair"
+        ("id", "projectId", "correctionAttemptId", "originalObligationId", "recoveryObligationId", "correctedPaymentObligationId")
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      `pair_${randomUUID()}`, ids.project, correctionId,
+      obligationIds.get("BALANCED"), obligationIds.get("REFUND"), obligationIds.get("ADDITIONAL"),
+    );
+    const [cashAfterPair] = await client.$queryRawUnsafe(`SELECT COUNT(*)::int AS count FROM "CostFlowCash"`);
+    assert.equal(cashAfterPair.count, cashBeforePair.count, "correction pairing must not mutate old cash");
+
+    await assert.rejects(() => client.$executeRawUnsafe(
+      `INSERT INTO "SettlementExportSourceProjection"
+        ("id", "projectId", "dossierVersionId", "family", "sourceKind", "sourceId", "sourceVersion", "authoritativeNet", "authoritativeVat", "authoritativeGross", "roundingAdjustment", "vatLineAssignment", "projectionHash")
+       VALUES ($1, $2, $3, 'DNTT', 'PAYMENT_REQUEST', 'request-b', 1, '100', '8', '108', 2, '{}'::jsonb, $4)`,
+      `projection_${randomUUID()}`, ids.project, ids.version, "3".repeat(64),
+    ), hasPostgresCode("23514"));
+    await client.$executeRawUnsafe(
+      `INSERT INTO "SettlementExportSourceProjection"
+        ("id", "projectId", "dossierVersionId", "family", "sourceKind", "sourceId", "sourceVersion", "authoritativeNet", "authoritativeVat", "authoritativeGross", "roundingAdjustment", "vatLineAssignment", "projectionHash")
+       VALUES ($1, $2, $3, 'DNTT', 'PAYMENT_REQUEST', 'request-b', 1, '200', '16', '216', -1, '{"lineId":"line-b"}'::jsonb, $4)`,
+      `projection_${randomUUID()}`, ids.project, ids.version, "4".repeat(64),
+    );
+    await assert.rejects(() => client.$executeRawUnsafe(
+      `INSERT INTO "SettlementExportSourceProjection"
+        ("id", "projectId", "dossierVersionId", "family", "sourceKind", "sourceId", "sourceVersion", "authoritativeNet", "authoritativeVat", "authoritativeGross", "roundingAdjustment", "vatLineAssignment", "projectionHash")
+       VALUES ($1, $2, $3, 'DNTT', 'PAYMENT_REQUEST', 'request-cross-project', 1, '1', '0', '1', 0, '{}'::jsonb, $4)`,
+      `projection_${randomUUID()}`, secondProjectId, ids.version, "7".repeat(64),
+    ), hasPostgresCode("23503"));
+    await assert.rejects(() => client.$executeRawUnsafe(
+      `INSERT INTO "SettlementExportSourceProjection"
+        ("id", "projectId", "dossierVersionId", "family", "sourceKind", "sourceId", "sourceVersion", "authoritativeNet", "authoritativeVat", "authoritativeGross", "roundingAdjustment", "vatLineAssignment", "projectionHash")
+       VALUES ($1, $2, $3, 'DNTT', 'PAYMENT_REQUEST', 'request-a', 1, '100', '8', '108', 0, '{}'::jsonb, $4)`,
+      `projection_${randomUUID()}`, ids.project, ids.version, "5".repeat(64),
+    ), hasPostgresCode("23505"));
+    await assert.rejects(() => client.$executeRawUnsafe(
+      `INSERT INTO "SettlementExportAudit"
+        ("id", "projectId", "dossierVersionId", "family", "format", "canonicalHash", "approvedSnapshotId", "idempotencyKey", "createdById",
+         "approvalAttemptId", "sourceProjectionId", "sourceKind", "sourceId", "sourceVersion", "artifactStatus", "artifactBytes", "reservationToken", "fileSha256")
+       VALUES ($1, $2, $3, 'DNTT', 'PDF', $4, $5, $6, $7, 'attempt-1', $8, 'PAYMENT_REQUEST', 'request-a', 1, 'FINALIZED', NULL, 'reservation', 'bad')`,
+      `audit_${randomUUID()}`, ids.project, ids.version, "6".repeat(64), ids.snapshot,
+      `audit-key-${randomUUID()}`, ids.actor, projectionId,
+    ), hasPostgresCode("23514"));
   });
 });
