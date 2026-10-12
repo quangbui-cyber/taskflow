@@ -24,7 +24,7 @@ import { normalizePaymentDraft } from "./paymentPolicy";
 import type { PaymentDraftLineInput } from "./paymentTypes";
 import { diffPaymentDossiers, type PaymentDossierSnapshot, type PaymentDocumentSnapshot } from "./paymentDiff";
 import { derivePaymentProgress } from "./paymentCash";
-import { projectPaymentLedger, type BeneficiaryVerification } from "./paymentReadModel";
+import { projectPaymentLedger, projectSettlementObligationProgress, type BeneficiaryVerification } from "./paymentReadModel";
 import { settlementObligationDirection } from "./settlementCash";
 import { resolveProductionApprovedActualCost } from "./approvedActualCost";
 import { loadActualCosts } from "./actualCostReadModel";
@@ -190,7 +190,7 @@ export async function loadFinance(projectId: string, actor: Actor) {
     orderBy: { version: "desc" },
     include: {
       dossier: { select: { id: true } },
-      request: { select: { id: true } },
+      request: { select: { id: true, cashAssigneeId: true } },
       obligations: {
         include: {
           locks: { select: { id: true } },
@@ -208,6 +208,47 @@ export async function loadFinance(projectId: string, actor: Actor) {
   for (const recipient of settlementRecipientSnapshots) {
     if (!settlementRecipientByKey.has(recipient.recipientKey)) settlementRecipientByKey.set(recipient.recipientKey, recipient);
   }
+  const settlementCashProjection = settlementQueueVersion ? {
+    obligations: settlementQueueVersion.obligations.flatMap(obligation => {
+      const direction = settlementObligationDirection(obligation.direction);
+      if (!direction || obligation.amountDue === "0") return [];
+      const snapshot = settlementRecipientByKey.get(obligation.recipientKey);
+      const vendor = obligation.recipientKey.startsWith("VENDOR:") ? savedData?.beneficiaries.find(item => `VENDOR:${item.id}` === obligation.recipientKey) : undefined;
+      const employee = obligation.recipientKey.startsWith("USER:") ? users.find(item => item.id === obligation.recipientKey.slice(5)) : undefined;
+      return [{
+        projectId,
+        dossierId: settlementQueueVersion.dossier.id,
+        dossierVersionId: settlementQueueVersion.id,
+        requestId: settlementQueueVersion.request.id,
+        obligationId: obligation.id,
+        recipientKey: obligation.recipientKey,
+        recipientType: obligation.recipientType,
+        recipientName: snapshot?.displayName ?? vendor?.name ?? employee?.name ?? obligation.recipientKey,
+        bankName: snapshot?.bankName ?? vendor?.bank ?? null,
+        accountLast4: snapshot?.accountLast4 ?? (vendor?.account ? vendor.account.replace(/\D/g, "").slice(-4) || null : null),
+        direction,
+        amountDue: obligation.amountDue,
+        locked: obligation.locks.length > 0,
+        sourceKind: "SETTLEMENT" as const,
+      }];
+    }),
+    allocations: settlementQueueVersion.obligations.flatMap(obligation => obligation.cashAllocations.map(allocation => ({
+      projectId,
+      dossierVersionId: settlementQueueVersion.id,
+      obligationId: obligation.id,
+      recipientKey: obligation.recipientKey,
+      direction: allocation.cash.direction === "IN" ? "IN" as const : "OUT" as const,
+      amount: allocation.amount,
+      cashId: allocation.cashId,
+      idempotencyKey: allocation.idempotencyKey,
+      commandFingerprint: allocation.commandFingerprint,
+      evidenceId: allocation.cash.evidenceId,
+    }))),
+  } : { obligations: [], allocations: [] };
+  const settlementObligationProgress = projectSettlementObligationProgress(settlementCashProjection);
+  const canManageSettlementCash = activeActor.role === "ADMIN" || (activeActor.role === "ACCOUNT"
+    && project.members.some(member => member.userId === actor.id)
+    && (savedData?.config.accountantId === actor.id || settlementQueueVersion?.request.cashAssigneeId === actor.id));
   const paymentLedger = projectPaymentLedger({
     normalized: normalizedPaymentRequests.map(request => ({
       requestId: request.id,
@@ -314,7 +355,7 @@ export async function loadFinance(projectId: string, actor: Actor) {
       },
     },
   }) : null;
-  return { project: { ...project, members: fullAccess ? project.members : [], client: fullAccess ? project.client : null }, clients, fullAccess, canManageCustomerAccounting, version: workspace?.version ?? 0, data: fullAccess && savedData ? savedData : { ...emptyFinance(), closed: savedData?.closed ?? false }, requests: visible.map(({ signingLifecycle, ...request }) => ({ ...request, signingMode: signingLifecycle?.mode ?? null, signingEvidenceState: signingLifecycle?.evidenceState ?? null })), cash, users, files, evidence, supplements, history, paymentDossiers, paymentLedger, actualCosts, customerAccounting, customerAcceptanceSnapshots, settlementDossier };
+  return { project: { ...project, members: fullAccess ? project.members : [], client: fullAccess ? project.client : null }, clients, fullAccess, canManageCustomerAccounting, canManageSettlementCash, settlementObligationProgress, version: workspace?.version ?? 0, data: fullAccess && savedData ? savedData : { ...emptyFinance(), closed: savedData?.closed ?? false }, requests: visible.map(({ signingLifecycle, ...request }) => ({ ...request, signingMode: signingLifecycle?.mode ?? null, signingEvidenceState: signingLifecycle?.evidenceState ?? null })), cash, users, files, evidence, supplements, history, paymentDossiers, paymentLedger, actualCosts, customerAccounting, customerAcceptanceSnapshots, settlementDossier };
 }
 
 export async function executeFinance(projectId: string, expectedVersion: number, actor: Actor, form: FormData, upload: ProjectUpload | null) {

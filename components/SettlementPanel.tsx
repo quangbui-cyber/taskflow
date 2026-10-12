@@ -24,7 +24,11 @@ type SettlementDossierView = {
   versions: SettlementVersionView[];
 };
 
-type SettlementFinance = Finance & { settlementDossier?: SettlementDossierView | null };
+type SettlementFinance = Finance & {
+  settlementDossier?: SettlementDossierView | null;
+  canManageSettlementCash?: boolean;
+  settlementObligationProgress?: import("@/lib/costflow/paymentReadModel").SettlementObligationProgressRow[];
+};
 
 function sum(values: string[]) {
   return values.reduce((total, value) => total + BigInt(/^\d+$/.test(value) ? value : "0"), BigInt(0)).toString();
@@ -50,12 +54,12 @@ export default function SettlementPanel({ finance: baseFinance, user, canCreate 
   const users = useMemo(() => new Map(finance.users.map(person => [person.id, person.name])), [finance.users]);
   const recipientName = (key: string) => recipientDisplayName(key, users, finance.data.beneficiaries);
   const settlementRows = (finance.paymentLedger ?? []).filter(row => row.provenance === "settlement" && (!current || row.dossierVersionId === current.id));
+  const settlementProgress = (finance.settlementObligationProgress ?? []).filter(row => !current || row.dossierVersionId === current.id);
   const warningLines = (finance.actualCosts?.lines ?? []).filter(line => line.source === "normalized" && line.reviewState !== "approved").map(line => ({ stableLineId: line.stableLineId, description: line.description }));
   const actualGross = current ? sum(current.obligations.map(item => item.approvedAcGross)) : "0";
   const advanceGross = current ? sum(current.obligations.map(item => item.disbursedAdvance)) : "0";
   const outstandingGross = current ? sum(current.obligations.map(item => {
-    const payment = settlementRows.find(row => row.obligationId === item.id);
-    return payment?.additionalOutBalance ?? payment?.refundInBalance ?? item.amountDue;
+    return settlementProgress.find(row => row.obligationId === item.id)?.remainingAmount ?? item.amountDue;
   })) : "0";
   const totalSources = Math.max(current?.obligations.length ?? 0, (current?.locks.length ?? 0) + warningLines.length);
   const internalComplete = !!current && current.request.state === "APPROVED" && current.locks.length > 0 && warningLines.length === 0 && outstandingGross === "0";
@@ -74,9 +78,9 @@ export default function SettlementPanel({ finance: baseFinance, user, canCreate 
     ...(customer.receivable.outstandingGross !== "0" ? ["Customer AR chưa về đúng 0."] : []),
   ];
   const selectedObligation = current?.obligations.find(item => item.id === cashObligationId) ?? null;
-  const selectedPayment = selectedObligation ? settlementRows.find(row => row.obligationId === selectedObligation.id) : undefined;
-  const selectedRemaining = selectedPayment?.additionalOutBalance ?? selectedPayment?.refundInBalance ?? selectedObligation?.amountDue ?? "0";
-  const canManageCash = ["ADMIN", "ACCOUNT"].includes(user.role) && !finance.data.closed;
+  const selectedPayment = selectedObligation ? settlementProgress.find(row => row.obligationId === selectedObligation.id) : undefined;
+  const selectedRemaining = selectedPayment?.remainingAmount ?? selectedObligation?.amountDue ?? "0";
+  const canManageCash = !!finance.canManageSettlementCash && !finance.data.closed;
   const canEditDossier = canCreate && !!current && ["DRAFT", "RETURNED"].includes(current.request.state) && dossier?.createdById === user.id;
 
   return <div className="space-y-6" style={{ "--control-height": "44px" } as CSSProperties}>
@@ -114,7 +118,7 @@ export default function SettlementPanel({ finance: baseFinance, user, canCreate 
           </ActionForm>
         </div>}
         {!canEditDossier && <SettlementEvidenceUploader finance={finance} requestId={current.request.id} settlementVersion={current.request.version} obligations={current.obligations} evidence={current.evidence} canEdit={false} recipientName={recipientName} />}
-        {canManageCash && current.request.state === "APPROVED" && current.obligations.some(item => item.amountDue !== "0") && <div className="flex flex-wrap gap-2">{current.obligations.filter(item => item.amountDue !== "0").map(item => <Button key={item.id} variant="secondary" className="min-h-11" disabled={settlementRows.find(row => row.obligationId === item.id)?.cashProgress === "DA_CHI_DU"} onClick={() => setCashObligationId(item.id)}>{item.direction === "REFUND" ? "Ghi nhận thu hoàn" : "Xác nhận chi thêm"} · {recipientName(item.recipientKey)}</Button>)}</div>}
+        {canManageCash && current.request.state === "APPROVED" && current.obligations.some(item => item.amountDue !== "0") && <div className="flex flex-wrap gap-2">{current.obligations.filter(item => item.amountDue !== "0").map(item => <Button key={item.id} variant="secondary" className="min-h-11" disabled={settlementProgress.find(row => row.obligationId === item.id)?.cashProgress === "DA_CHI_DU"} onClick={() => setCashObligationId(item.id)}>{item.direction === "REFUND" ? "Ghi nhận thu hoàn" : "Xác nhận chi thêm"} · {recipientName(item.recipientKey)}</Button>)}</div>}
       </Panel>
       <SettlementExportActions projectId={finance.project.id} versionId={current.id} version={current.version} state={current.request.state} />
     </>}
@@ -129,7 +133,7 @@ export default function SettlementPanel({ finance: baseFinance, user, canCreate 
 
     <Dialog open={!!selectedObligation} onClose={() => setCashObligationId(null)} title={selectedObligation?.direction === "REFUND" ? "Ghi nhận thu hoàn tạm ứng" : "Xác nhận chi bổ sung"} description="Giao dịch tiền là sự kiện riêng, bắt buộc chứng từ và idempotency key; duyệt hồ sơ không tự ghi tiền.">
       {selectedObligation && <div className="[&_button]:min-h-11"><ActionForm finance={finance} command="SETTLEMENT_CASH" requestId={current?.request.id} label="Ghi nhận giao dịch thực tế" onSuccess={() => setCashObligationId(null)}>
-        <input type="hidden" name="settlementObligationId" value={selectedObligation.id} /><input type="hidden" name="recipientKey" value={selectedObligation.recipientKey} /><input type="hidden" name="direction" value={selectedObligation.direction === "REFUND" ? "IN" : "OUT"} />
+        <input type="hidden" name="settlementObligationId" value={selectedObligation.id} /><input type="hidden" name="dossierVersionId" value={current?.id ?? ""} /><input type="hidden" name="recipientKey" value={selectedObligation.recipientKey} /><input type="hidden" name="direction" value={selectedObligation.direction === "REFUND" ? "IN" : "OUT"} />
         <Alert tone="warning" title="Không vượt số dư server">Còn phải thực hiện: {displayMoney(selectedRemaining)} · người thụ hưởng {recipientName(selectedObligation.recipientKey)}.</Alert>
         <Input name="amount" label="Số tiền VND" inputMode="numeric" pattern="[1-9][0-9]*" defaultValue={selectedRemaining} required />
         <Select name="channel" label="Hình thức giao dịch" required><option value="BANK_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option><option value="OTHER">Khác</option></Select>

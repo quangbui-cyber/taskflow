@@ -163,6 +163,7 @@ test("settlement cash enforces project authority and exposes private-safe IN/OUT
     };
     const fixture = await createProjectFixture(client, actors, "primary");
     const foreign = await createProjectFixture(client, actors, "foreign");
+    await client.projectMember.create({ data: { projectId: fixture.project.id, userId: actors.inactive.id } });
 
     await assert.rejects(() => cash.executeSettlementCash(fixture.project.id, actors.unrelated, cashForm(fixture, fixture.refund), proof("unrelated")), /quyền|Project|phân công|Kế toán/i);
     await assert.rejects(() => cash.executeSettlementCash(fixture.project.id, actors.inactive, cashForm(fixture, fixture.refund), proof("inactive")), /hoạt động|quyền/i);
@@ -187,9 +188,14 @@ test("settlement cash enforces project authority and exposes private-safe IN/OUT
     });
     assert.equal("bankName" in progressById(workspace, fixture.refund.id), false);
     assert.equal("accountLast4" in progressById(workspace, fixture.refund.id), false);
+    assert.equal(workspace.paymentLedger.some(row => row.obligationId === fixture.refund.id), false, "refund IN never enters the OUT-only disbursement queue");
 
     await cash.executeSettlementCash(fixture.project.id, actors.cashAssignee, cashForm(fixture, fixture.refund, { amount: "600", idempotencyKey: `${fixture.refund.id}-cash-2`, reference: "IN-refund-2" }), proof("refund-600"));
+    workspace = await service.loadFinance(fixture.project.id, actors.cashAssignee);
+    assert.equal(progressById(workspace, fixture.refund.id).remainingAmount, "0");
     await cash.executeSettlementCash(fixture.project.id, actors.admin, cashForm(fixture, fixture.additional, { amount: "300", idempotencyKey: `${fixture.additional.id}-cash-1`, reference: "OUT-additional-1" }), proof("additional-300"));
+    workspace = await service.loadFinance(fixture.project.id, actors.admin);
+    assert.equal(progressById(workspace, fixture.additional.id).remainingAmount, "700");
     await cash.executeSettlementCash(fixture.project.id, actors.cashAssignee, cashForm(fixture, fixture.additional, { amount: "700", idempotencyKey: `${fixture.additional.id}-cash-2`, reference: "OUT-additional-2" }), proof("additional-700"));
 
     workspace = await service.loadFinance(fixture.project.id, actors.accountant);
@@ -202,12 +208,8 @@ test("settlement cash enforces project authority and exposes private-safe IN/OUT
     await assert.rejects(() => cash.executeSettlementCash(fixture.project.id, actors.accountant, cashForm(fixture, fixture.additional, { recipientKey: fixture.refund.recipientKey, idempotencyKey: "foreign-recipient", reference: "foreign-recipient" }), proof("foreign-recipient")), /người nhận/i);
     await assert.rejects(() => cash.executeSettlementCash(fixture.project.id, actors.accountant, cashForm(fixture, fixture.additional, { dossierVersionId: foreign.version.id, idempotencyKey: "foreign-version", reference: "foreign-version" }), proof("foreign-version")), /phiên bản|version/i);
     await assert.rejects(() => cash.executeSettlementCash(fixture.project.id, actors.accountant, cashForm(foreign, foreign.additional, { idempotencyKey: "foreign-project", reference: "foreign-project" }), proof("foreign-project")), /Project|hồ sơ/i);
-  });
-});
 
-test("settlement cash serializes concurrent distinct-key overpayment", async () => {
-  await withMigratedSchema(async ({ client, cash }) => {
-    const actors = {
+    const raceActors = {
       owner: await createUser(client, "race-owner", "ACCOUNT"),
       manager: await createUser(client, "race-manager"),
       accountant: await createUser(client, "race-accountant", "ACCOUNT"),
@@ -215,13 +217,13 @@ test("settlement cash serializes concurrent distinct-key overpayment", async () 
       beneficiary: await createUser(client, "race-beneficiary"),
       ceo: await createUser(client, "race-ceo"),
     };
-    const fixture = await createProjectFixture(client, actors, "race");
+    const raceFixture = await createProjectFixture(client, raceActors, "race");
     const race = await Promise.allSettled([
-      cash.executeSettlementCash(fixture.project.id, actors.accountant, cashForm(fixture, fixture.additional, { amount: "700", idempotencyKey: "race-a", reference: "race-a" }), proof("race-a")),
-      cash.executeSettlementCash(fixture.project.id, actors.accountant, cashForm(fixture, fixture.additional, { amount: "700", idempotencyKey: "race-b", reference: "race-b" }), proof("race-b")),
+      cash.executeSettlementCash(raceFixture.project.id, raceActors.accountant, cashForm(raceFixture, raceFixture.additional, { amount: "700", idempotencyKey: "race-a", reference: "race-a" }), proof("race-a")),
+      cash.executeSettlementCash(raceFixture.project.id, raceActors.accountant, cashForm(raceFixture, raceFixture.additional, { amount: "700", idempotencyKey: "race-b", reference: "race-b" }), proof("race-b")),
     ]);
-    assert.equal(race.filter(result => result.status === "fulfilled").length, 1);
-    const allocated = await client.settlementCashAllocation.aggregate({ where: { obligationId: fixture.additional.id }, _sum: { amount: true } });
-    assert.equal(allocated._sum.amount, "700");
+    assert.equal(race.filter(result => result.status === "fulfilled").length, 1, race.map(result => result.status === "rejected" ? String(result.reason) : "fulfilled").join(" | "));
+    const allocated = await client.settlementCashAllocation.findMany({ where: { obligationId: raceFixture.additional.id }, select: { amount: true } });
+    assert.equal(allocated.reduce((total, row) => total + BigInt(row.amount), 0n), 700n);
   });
 });

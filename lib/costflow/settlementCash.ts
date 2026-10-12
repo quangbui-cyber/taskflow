@@ -215,11 +215,22 @@ async function executeSettlementCashOnce(projectId: string, actor: Actor, form: 
     const obligationRow = await tx.settlementRecipientObligation.findFirst({
       where: { id: obligationId, projectId },
       include: {
-        dossierVersion: { include: { dossier: true, request: { select: { id: true, state: true } } } },
+        dossierVersion: { include: { dossier: true, request: { select: { id: true, state: true, cashAssigneeId: true } } } },
         locks: { select: { id: true } },
       },
     });
     if (!obligationRow || obligationRow.dossierVersion.request.state !== "APPROVED") throw new Error("Nghĩa vụ không thuộc hồ sơ quyết toán đã duyệt của Project.");
+    const membership = actorRow.role === "ADMIN" ? null : await tx.projectMember.findUnique({ where: { projectId_userId: { projectId, userId: actor.id } }, select: { id: true } });
+    const workspace = actorRow.role === "ADMIN" ? null : await tx.costFlowWorkspace.findUnique({ where: { projectId }, select: { data: true } });
+    const config = workspace?.data && typeof workspace.data === "object" ? workspace.data as Record<string, unknown> : null;
+    const configured = config?.config && typeof config.config === "object" ? config.config as Record<string, unknown> : null;
+    const isProjectAccountant = configured?.accountantId === actor.id;
+    const isCashAssignee = obligationRow.dossierVersion.request.cashAssigneeId === actor.id;
+    if (actorRow.role !== "ADMIN" && (!membership || (!isProjectAccountant && !isCashAssignee))) {
+      throw new Error("Chỉ Kế toán hoặc người xử lý tiền được phân công và còn là thành viên Project mới được xác nhận tiền quyết toán.");
+    }
+    const dossierVersionId = required(formText(form, "dossierVersionId"), "phiên bản quyết toán");
+    if (dossierVersionId !== obligationRow.dossierVersionId) throw new Error("Cash phải gắn đúng phiên bản quyết toán bất biến.");
     const direction = formText(form, "direction") as SettlementCashDirection;
     if (direction !== "IN" && direction !== "OUT") throw new Error("Chiều giao dịch không hợp lệ.");
     const evidenceIdentity = upload

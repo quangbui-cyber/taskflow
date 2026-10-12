@@ -229,12 +229,24 @@ export type SettlementPendingDisbursementRow = {
   sourceKind: "SETTLEMENT";
 };
 
-export function projectSettlementPendingDisbursements(input: {
+export type SettlementObligationProgressRow = {
+  projectId: string;
+  dossierVersionId: string;
+  obligationId: string;
+  recipientKey: string;
+  direction: "IN" | "OUT";
+  approvedAmount: string;
+  cumulativeAmount: string;
+  remainingAmount: string;
+  cashProgress: PaymentProgress;
+};
+
+export function projectSettlementObligationProgress(input: {
   obligations: SettlementObligationCashSource[];
   allocations: SettlementCashAllocationSource[];
-}): SettlementPendingDisbursementRow[] {
+}): SettlementObligationProgressRow[] {
   return input.obligations.flatMap(obligation => {
-    if (obligation.sourceKind !== "SETTLEMENT" || !obligation.locked || obligation.direction !== "OUT") return [];
+    if (obligation.sourceKind !== "SETTLEMENT" || !obligation.locked) return [];
     const cumulative = input.allocations
       .filter(allocation => allocation.projectId === obligation.projectId
         && allocation.dossierVersionId === obligation.dossierVersionId
@@ -243,7 +255,29 @@ export function projectSettlementPendingDisbursements(input: {
         && allocation.direction === obligation.direction)
       .reduce((total, allocation) => total + BigInt(allocation.amount), BigInt(0));
     const progress = settlementObligationProgress(obligation.amountDue, cumulative.toString());
-    if (progress.remainingAmount === "0") return [];
+    return [{
+      projectId: obligation.projectId,
+      dossierVersionId: obligation.dossierVersionId,
+      obligationId: obligation.obligationId,
+      recipientKey: obligation.recipientKey,
+      direction: obligation.direction,
+      approvedAmount: progress.approvedAmount,
+      cumulativeAmount: progress.cumulativePaid,
+      remainingAmount: progress.remainingAmount,
+      cashProgress: progress.cashProgress,
+    }];
+  });
+}
+
+export function projectSettlementPendingDisbursements(input: {
+  obligations: SettlementObligationCashSource[];
+  allocations: SettlementCashAllocationSource[];
+}): SettlementPendingDisbursementRow[] {
+  const obligationById = new Map(input.obligations.map(obligation => [obligation.obligationId, obligation]));
+  return projectSettlementObligationProgress(input).flatMap(progress => {
+    if (progress.direction !== "OUT" || progress.remainingAmount === "0") return [];
+    const obligation = obligationById.get(progress.obligationId);
+    if (!obligation) return [];
     return [{
       projectId: obligation.projectId,
       requestId: obligation.requestId,
@@ -255,7 +289,7 @@ export function projectSettlementPendingDisbursements(input: {
       recipientLabel: obligation.recipientName,
       direction: "OUT" as const,
       approvedAmount: progress.approvedAmount,
-      cumulativePaid: progress.cumulativePaid,
+      cumulativePaid: progress.cumulativeAmount,
       remainingAmount: progress.remainingAmount,
       cashProgress: progress.cashProgress,
       sourceKind: "SETTLEMENT" as const,
