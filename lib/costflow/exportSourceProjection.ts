@@ -2,6 +2,8 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
+import { projectQuotation } from "./quotationProjection";
+import type { FinanceData, Quotation } from "./types";
 
 export const EXPORT_SOURCE_FAMILIES = ["QUOTATION", "CUSTOMER_ACCEPTANCE", "DNTU", "DNTT", "DNHTU", "PROJECT_SETTLEMENT"] as const;
 export type ExportSourceFamily = typeof EXPORT_SOURCE_FAMILIES[number];
@@ -29,7 +31,7 @@ export type ExportSourceSealInput = {
 };
 
 const PUBLIC_PAYLOAD_KEYS = new Set(["title", "customer", "project", "document", "rows"]);
-const PUBLIC_ROW_KEYS = new Set(["id", "numberLabel", "name", "description", "unit", "quantity", "days", "unitPrice", "net", "vat", "gross", "vatPercent"]);
+const PUBLIC_ROW_KEYS = new Set(["id", "kind", "numberLabel", "name", "description", "unit", "quantity", "days", "unitPrice", "contractQuantity", "contractDays", "actualQuantity", "actualDays", "quantityDelta", "daysDelta", "saleUnitPrice", "basis", "net", "vat", "gross", "netAmount", "vatAmount", "grossAmount", "vatPercent", "notes", "amount", "summary"]);
 
 function requiredText(value: string | null | undefined, label: string) {
   const normalized = String(value ?? "").trim();
@@ -222,11 +224,104 @@ export async function sealExportSourceProjection(tx: Prisma.TransactionClient, i
 
 export type LegacyExportSourceTuple = Pick<ExportSourceSealInput, "projectId" | "family" | "sourceKind" | "sourceId" | "sourceVersion">;
 
+function object(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+async function legacyCandidate(tx: Prisma.TransactionClient, tuple: LegacyExportSourceTuple): Promise<ExportSourceSealInput | { reason: string }> {
+  if (tuple.family === "QUOTATION" && tuple.sourceKind === "QUOTATION") {
+    const rows = await tx.costFlowHistory.findMany({
+      where: { projectId: tuple.projectId, action: "FINALIZE_PAIRED_QUOTATION" },
+      select: { id: true, snapshot: true },
+      orderBy: { version: "asc" },
+    });
+    const matches = rows.flatMap(row => {
+      const snapshot = object(row.snapshot) as FinanceData | null;
+      const quotation = snapshot?.quotations?.find(item => item.id === tuple.sourceId && item.number === tuple.sourceVersion);
+      return quotation ? [{ row, quotation }] : [];
+    });
+    if (matches.length !== 1) return { reason: matches.length ? "Nguồn báo giá lịch sử bị mơ hồ cho exact tuple." : "Không tìm thấy immutable finalized quotation source." };
+    const quotation = matches[0].quotation as Quotation;
+    const payload = projectQuotation(quotation);
+    return {
+      ...tuple,
+      approvalAttemptId: matches[0].row.id,
+      approvedSnapshotId: null,
+      signingState: "UNSIGNED",
+      payload,
+      lines: quotation.lines.map(line => ({ id: line.id, rawNet: line.cost.rawNet, rawVat: line.cost.rawVat, rawGross: line.cost.rawGross, vatPercent: line.vatPercent })),
+      authoritativeTotals: { net: payload.amount.net, vat: payload.amount.vat, gross: payload.amount.gross },
+    };
+  }
+
+  if (tuple.family === "CUSTOMER_ACCEPTANCE" && tuple.sourceKind === "CUSTOMER_ACCEPTANCE") {
+    const snapshot = await tx.customerAcceptanceSnapshot.findFirst({ where: { id: tuple.sourceId, projectId: tuple.projectId, version: tuple.sourceVersion } });
+    const payload = object(snapshot?.projection);
+    const rows = Array.isArray(payload?.rows) ? payload.rows.map(object).filter((row): row is Record<string, unknown> => !!row) : [];
+    const totals = object(payload?.totals);
+    if (!snapshot || !payload || !rows.length || !totals) return { reason: "Nguồn nghiệm thu lịch sử thiếu exact snapshot, dòng hoặc authoritative totals." };
+    return {
+      ...tuple,
+      approvalAttemptId: `CUSTOMER_ACCEPTANCE:${snapshot.id}`,
+      approvedSnapshotId: null,
+      signingState: "UNSIGNED",
+      payload,
+      lines: rows.map(row => ({
+        id: String(row.id ?? ""),
+        rawNet: String(row.netAmount ?? ""),
+        rawVat: String(row.vatAmount ?? ""),
+        rawGross: String(row.grossAmount ?? ""),
+        vatPercent: String(row.vatPercent ?? ""),
+      })),
+      authoritativeTotals: { net: String(totals.net ?? ""), vat: String(totals.vat ?? ""), gross: String(totals.gross ?? "") },
+    };
+  }
+
+  const paymentKind = tuple.family === "DNTU" ? "ADVANCE" : tuple.family === "DNTT" ? "VENDOR_PAYMENT" : tuple.family === "DNHTU" ? "REIMBURSEMENT" : null;
+  if (paymentKind && tuple.sourceKind === paymentKind) {
+    const request = await tx.workflowRequest.findFirst({
+      where: { id: tuple.sourceId, projectId: tuple.projectId, kind: paymentKind, state: "APPROVED", version: tuple.sourceVersion },
+      include: { paymentLines: { orderBy: { position: "asc" } }, paymentRecipients: { orderBy: { recipientKey: "asc" } }, approvedSnapshots: true },
+    });
+    if (!request) return { reason: "Không tìm thấy exact approved payment source version." };
+    if (!request.currentAttemptId) return { reason: "Approved payment source thiếu approval attempt identity." };
+    const snapshots = request.approvedSnapshots.filter(snapshot => snapshot.evidenceState === "DIGITAL_CONFIRMED");
+    if (snapshots.length !== 1) return { reason: snapshots.length ? "Approved payment source có signing snapshot mơ hồ giữa nhiều attempt." : "Approved payment source thiếu signing snapshot identity." };
+    if (!request.paymentLines.length) return { reason: "Approved payment source thiếu immutable payment lines." };
+    const snapshot = snapshots[0];
+    return {
+      ...tuple,
+      approvalAttemptId: request.currentAttemptId,
+      approvedSnapshotId: snapshot.id,
+      signingState: snapshot.evidenceState,
+      payload: {
+        request: { id: request.id, kind: request.kind, title: request.title, approvedVersion: request.version },
+        paymentLines: request.paymentLines,
+        paymentRecipients: request.paymentRecipients,
+        approvedProjectionHash: snapshot.projectionSha256,
+      },
+      lines: request.paymentLines.map(line => ({ id: line.stableKey, rawNet: line.amount, rawVat: "0", rawGross: line.amount, vatPercent: "0" })),
+    };
+  }
+
+  return { reason: "Source family chưa có đủ immutable identity để seal legacy an toàn." };
+}
+
 export async function sealLegacyExportSourceProjection(tx: Prisma.TransactionClient, tuple: LegacyExportSourceTuple) {
   const existing = await tx.settlementExportSourceProjection.findUnique({
     where: { projectId_family_sourceKind_sourceId_sourceVersion: tuple },
   });
   if (existing) return { status: "ALREADY_IDENTICAL" as const, projection: existing };
+
+  const candidate = await legacyCandidate(tx, tuple);
+  if (!("reason" in candidate)) {
+    try {
+      const projection = await sealExportSourceProjection(tx, candidate);
+      return { status: "SEALED" as const, projection };
+    } catch (error) {
+      return { status: "BLOCKED" as const, reason: error instanceof Error ? error.message : "Không thể xác minh legacy source identity." };
+    }
+  }
 
   const history = await tx.costFlowHistory.findMany({
     where: { projectId: tuple.projectId, version: tuple.sourceVersion },
@@ -240,14 +335,14 @@ export async function sealLegacyExportSourceProjection(tx: Prisma.TransactionCli
   if (!record || typeof record !== "object" || Array.isArray(record)) {
     return { status: "BLOCKED" as const, reason: "Nguồn lịch sử thiếu exportSourceSeal identity gồm attempt, signing snapshot, lines và evidence." };
   }
-  const candidate = record as Partial<ExportSourceSealInput>;
-  if (candidate.projectId !== tuple.projectId || candidate.family !== tuple.family || candidate.sourceKind !== tuple.sourceKind || candidate.sourceId !== tuple.sourceId || candidate.sourceVersion !== tuple.sourceVersion) {
+  const historyCandidate = record as Partial<ExportSourceSealInput>;
+  if (historyCandidate.projectId !== tuple.projectId || historyCandidate.family !== tuple.family || historyCandidate.sourceKind !== tuple.sourceKind || historyCandidate.sourceId !== tuple.sourceId || historyCandidate.sourceVersion !== tuple.sourceVersion) {
     return { status: "BLOCKED" as const, reason: "Immutable source history không khớp exact source tuple." };
   }
   try {
-    const projection = await sealExportSourceProjection(tx, candidate as ExportSourceSealInput);
+    const projection = await sealExportSourceProjection(tx, historyCandidate as ExportSourceSealInput);
     return { status: "SEALED" as const, projection };
   } catch (error) {
-    return { status: "BLOCKED" as const, reason: error instanceof Error ? error.message : "Không thể xác minh legacy source identity." };
+    return { status: "BLOCKED" as const, reason: error instanceof Error ? error.message : candidate.reason };
   }
 }

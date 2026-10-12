@@ -41,6 +41,7 @@ import {
   requestSettlementCorrection,
   type SettlementCorrectionCapability,
 } from "./settlementService";
+import { sealExportSourceProjection } from "./exportSourceProjection";
 
 type Actor = { id: string; role: string };
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -1147,6 +1148,22 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         affectedRequestId = result.revisionId ? data.revisions.find(revision => revision.id === result.revisionId)?.requestId : affectedRequestId;
         if (command === "FINALIZE_PAIRED_QUOTATION") {
           savedQuotationId = finalizePairedQuotation(data, result.draftId, actor.id, text(form, "priceReviewConfirmed") === "yes");
+          const quotation = data.quotations?.find(item => item.id === savedQuotationId);
+          if (!quotation) throw new Error("Không tìm thấy báo giá vừa chốt để seal nguồn xuất phiếu.");
+          const publicProjection = projectQuotation(quotation);
+          await sealExportSourceProjection(tx, {
+            projectId,
+            family: "QUOTATION",
+            sourceKind: "QUOTATION",
+            sourceId: quotation.id,
+            sourceVersion: quotation.number,
+            approvalAttemptId: `FINALIZE_PAIRED_QUOTATION:${quotation.id}`,
+            approvedSnapshotId: null,
+            signingState: "UNSIGNED",
+            payload: publicProjection,
+            lines: quotation.lines.map(line => ({ id: line.id, rawNet: line.cost.rawNet, rawVat: line.cost.rawVat, rawGross: line.cost.rawGross, vatPercent: line.vatPercent })),
+            authoritativeTotals: { net: publicProjection.amount.net, vat: publicProjection.amount.vat, gross: publicProjection.amount.gross },
+          });
           if (result.savedScopes.includes("IC nháp")) {
             const linked = data.revisions.find(r=>r.id===result.revisionId)!;
             linked.quotationId = savedQuotationId;
@@ -1701,7 +1718,32 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         const decisionDetails = corrections.length || vendorChecks.length ? json({ ...(corrections.length ? { correctionItems: corrections } : {}), ...(vendorChecks.length ? { vendorChecks } : {}) }) : undefined;
         await recordApprovalEvent(tx, { requestId: request.id, module: request.module, attemptId: request.currentAttemptId, submittedVersion, mutationVersion: request.version + 1, stepIndex: request.currentStep, role: role ?? "CREATOR", actorId: actor.id, action, reason: text(form, "reason"), details: decisionDetails, recipients: ceoRecipients.length ? ceoRecipients : nextAssignee ? [nextAssignee] : [] });
         if (action === "APPROVE" && next.state === "APPROVED" && requiresDigitalSignature(request.kind)) {
-          await finalizeDigitalApprovedSnapshot(tx, { requestId: request.id, version: submittedVersion! });
+          const approvedSnapshot = await finalizeDigitalApprovedSnapshot(tx, { requestId: request.id, version: submittedVersion! });
+          const family = request.kind === "ADVANCE" ? "DNTU" : request.kind === "VENDOR_PAYMENT" ? "DNTT" : request.kind === "REIMBURSEMENT" ? "DNHTU" : null;
+          if (family && approvedSnapshot) {
+            const approvedRequest = await tx.workflowRequest.findUniqueOrThrow({
+              where: { id: request.id },
+              include: { paymentLines: { orderBy: { position: "asc" } }, paymentRecipients: { orderBy: { recipientKey: "asc" } } },
+            });
+            if (!request.currentAttemptId) throw new Error("Hồ sơ thanh toán đã duyệt thiếu approval attempt identity.");
+            await sealExportSourceProjection(tx, {
+              projectId,
+              family,
+              sourceKind: request.kind,
+              sourceId: request.id,
+              sourceVersion: request.version + 1,
+              approvalAttemptId: request.currentAttemptId,
+              approvedSnapshotId: approvedSnapshot.id,
+              signingState: approvedSnapshot.evidenceState,
+              payload: {
+                request: { id: request.id, kind: request.kind, title: request.title, approvedVersion: request.version + 1 },
+                paymentLines: approvedRequest.paymentLines,
+                paymentRecipients: approvedRequest.paymentRecipients,
+                approvedProjectionHash: approvedSnapshot.projectionSha256,
+              },
+              lines: approvedRequest.paymentLines.map(line => ({ id: line.stableKey, rawNet: line.amount, rawVat: "0", rawGross: line.amount, vatPercent: "0" })),
+            });
+          }
         }
         if (normalizedPayload.normalizedPayment === true && action === "RETURN") {
           const existingDraft = await tx.workflowRequest.findFirst({ where: { projectId, module: "COSTFLOW", parentId: request.id, state: "DRAFT" }, select: { id: true } });

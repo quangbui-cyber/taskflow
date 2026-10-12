@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { calculateLineCost, compare, decimal, normalizeDecimalInput, subtract, totals, type Rational } from "./money";
 import { projectQuotation, type CustomerQuotation } from "./quotationProjection";
 import type { FinanceData } from "./types";
+import { sealExportSourceProjection } from "./exportSourceProjection";
 
 export const CUSTOMER_ACCEPTANCE_SIGNATURES = ["Đại diện Khách hàng", "Đại diện Creative Station"] as const;
 
@@ -307,6 +308,22 @@ export async function createCustomerAcceptanceSnapshot(tx: Prisma.TransactionCli
     createdById: input.actorId,
     createdAt,
   } });
+  await sealExportSourceProjection(tx, {
+    projectId: input.projectId,
+    family: "CUSTOMER_ACCEPTANCE",
+    sourceKind: "CUSTOMER_ACCEPTANCE",
+    sourceId: snapshot.id,
+    sourceVersion: version,
+    approvalAttemptId: `CUSTOMER_ACCEPTANCE:${snapshot.id}`,
+    approvedSnapshotId: null,
+    signingState: "UNSIGNED",
+    payload: projection,
+    lines: projection.rows.map(row => {
+      const amount = actualCost(row.actualQuantity, row.actualDays, row.saleUnitPrice, row.basis, row.vatPercent);
+      return { id: row.id, rawNet: amount.rawNet, rawVat: amount.rawVat, rawGross: amount.rawGross, vatPercent: row.vatPercent };
+    }),
+    authoritativeTotals: projection.totals,
+  });
   return { id: snapshot.id, version, projection, projectionHash: customerAcceptanceProjectionHash(projection) };
 }
 

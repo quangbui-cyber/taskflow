@@ -5,6 +5,7 @@ import type { ProjectUpload } from "@/lib/projectFiles";
 import { recordApprovalEvent } from "@/lib/workflow/approvalEvents";
 import { buildProjectSettlementDraft, type ProjectSettlementDraftInput, type SettlementEvidenceRef } from "./projectSettlement";
 import { add, compare, decimal, exact } from "./money";
+import { sealExportSourceProjection } from "./exportSourceProjection";
 
 export type SettlementApprovalStep = {
   role: "MANAGER" | "ACCOUNTANT" | "CEO";
@@ -1087,6 +1088,31 @@ export async function executeSettlementCommand(actor: SettlementActor, form: For
       }
       const nextAssignee = next.state === "SUBMITTED" ? steps[next.currentStep]?.assigneeId : undefined;
       await recordApprovalEvent(tx, { requestId: request.id, module: request.module, attemptId: request.currentAttemptId, submittedVersion: expectedVersion, mutationVersion: expectedVersion + 1, stepIndex: request.currentStep, role: steps[request.currentStep].role, actorId: actor.id, action, reason: formText(form, "reason"), recipients: nextAssignee ? [nextAssignee] : [request.creatorId] });
+      if (next.state === "APPROVED") {
+        if (!request.currentAttemptId) throw new SettlementDomainError("Hồ sơ quyết toán đã duyệt thiếu approval attempt identity.");
+        await tx.projectSettlementVersion.update({
+          where: { id: dossierVersion.id },
+          data: { approvedAttemptId: request.currentAttemptId, approvedSnapshotId: null, approvedProjectionHash: projectionHash },
+        });
+        await sealExportSourceProjection(tx, {
+          projectId,
+          dossierVersionId: dossierVersion.id,
+          family: "PROJECT_SETTLEMENT",
+          sourceKind: "PROJECT_SETTLEMENT",
+          sourceId: dossierVersion.id,
+          sourceVersion: dossierVersion.version,
+          approvalAttemptId: request.currentAttemptId,
+          approvedSnapshotId: null,
+          signingState: "UNSIGNED",
+          payload: projection,
+          lines: projection.recipients.map(row => ({
+            id: row.obligationId,
+            rawNet: row.rawActual.net,
+            rawVat: row.rawActual.vat,
+            rawGross: row.rawActual.gross,
+          })),
+        });
+      }
       return { success: next.state === "APPROVED" ? "CEO đã duyệt và hệ thống đã thêm khóa nguồn bất biến." : action === "RETURN" ? "Đã trả toàn bộ hồ sơ để sửa." : "Đã chuyển hồ sơ sang bước duyệt kế tiếp.", requestId: request.id, settlementVersion: expectedVersion + 1 };
     }
     throw new SettlementDomainError("Thao tác quyết toán không hợp lệ.");

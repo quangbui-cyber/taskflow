@@ -115,3 +115,29 @@ test("legacy sealing is fail-closed and does not mutate approval, cash, lock or 
   }, before);
   assert.equal(await client.settlementExportSourceProjection.count(), 0);
 }));
+
+test("legacy sealing reads one exact immutable history snapshot and is idempotent", () => withMigratedSchema(async ({ client, projection }) => {
+  const { owner, project } = await fixture(client, "legacy-safe");
+  const legacyInput = input(project.id, { sourceId: "legacy-quote", sourceVersion: 1, approvalAttemptId: "legacy-finalize" });
+  await client.costFlowHistory.create({
+    data: { projectId: project.id, version: 1, actorId: owner.id, action: "FINALIZE_PAIRED_QUOTATION", snapshot: { exportSourceSeal: legacyInput } },
+  });
+  const first = await client.$transaction(tx => projection.sealLegacyExportSourceProjection(tx, {
+    projectId: project.id,
+    family: legacyInput.family,
+    sourceKind: legacyInput.sourceKind,
+    sourceId: legacyInput.sourceId,
+    sourceVersion: legacyInput.sourceVersion,
+  }));
+  assert.equal(first.status, "SEALED");
+  const replay = await client.$transaction(tx => projection.sealLegacyExportSourceProjection(tx, {
+    projectId: project.id,
+    family: legacyInput.family,
+    sourceKind: legacyInput.sourceKind,
+    sourceId: legacyInput.sourceId,
+    sourceVersion: legacyInput.sourceVersion,
+  }));
+  assert.equal(replay.status, "ALREADY_IDENTICAL");
+  assert.equal(replay.projection.id, first.projection.id);
+  assert.equal(await client.settlementExportSourceProjection.count({ where: { projectId: project.id } }), 1);
+}));
