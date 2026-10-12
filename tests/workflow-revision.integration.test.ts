@@ -36,7 +36,8 @@ test("cash remains explicit after confirmed signing and is exposed in both surfa
   const settlement = await readFile(new URL("../components/SettlementPanel.tsx", import.meta.url), "utf8");
   assert.match(cash, /PHYSICAL_CONFIRMED|DIGITAL_CONFIRMED/);
   assert.match(modal, /CashConfirmationEditor/);
-  assert.match(settlement, /CashConfirmationEditor/);
+  assert.match(settlement, /command="SETTLEMENT_CASH"/);
+  assert.match(settlement, /Giao dịch tiền là sự kiện riêng/);
   assert.doesNotMatch(cash, /finalizeDigitalApprovedSnapshot/);
 });
 

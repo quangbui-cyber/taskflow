@@ -19,14 +19,14 @@ export default function ActualCostDecisionBar({ projectId, lineId, version, revi
         Chỉ một người giữ vai trò <strong>AC_DD</strong> đang hoạt động được quyết định phiên bản này.
       </p>
       <Input name="reason" label="Lý do trả lại / ghi chú duyệt" placeholder="Bắt buộc khi RETURNED" />
-      {warnings.length > 0 && <label className="flex items-start gap-2 text-xs text-[var(--warning)]">
-        <input type="checkbox" name="acknowledgeMissingEvidence" value="yes" />
+      {warnings.length > 0 && <label className="flex items-start gap-2 rounded-lg border border-[var(--warning)] bg-[var(--warning-soft)] p-2 text-xs text-[var(--foreground)]">
+        <input type="checkbox" name="acknowledgeMissingEvidence" value="yes" className="mt-0.5" />
         <span>Tôi xác nhận duyệt dù còn thiếu chứng từ: {warnings.join(" · ")}</span>
       </label>}
       {state.error && <Alert tone="danger" title={state.error} />}
       {state.success && <Alert tone="success" title={state.success} />}
       <div className="flex flex-wrap justify-end gap-2">
-        <Button type="submit" name="decision" value="RETURNED" variant="secondary" size="sm" loading={pending}>
+        <Button type="submit" name="decision" value="RETURNED" variant="secondary" size="sm" loading={pending} onClick={event => { if (!window.confirm("Bạn có chắc chắn muốn trả lại phiên bản Actual Cost này? Lý do trả lại là bắt buộc.")) { event.preventDefault(); } }}>
           RETURNED · Trả lại
         </Button>
         <Button type="submit" name="decision" value="APPROVED" size="sm" loading={pending}>

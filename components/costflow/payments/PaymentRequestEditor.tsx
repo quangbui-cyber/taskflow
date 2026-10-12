@@ -68,7 +68,14 @@ export function PaymentRequestEditor({ finance, onCreated, draft }:
     { ...line, stableKey: crypto.randomUUID() },
     ...current.slice(index + 1),
   ]);
-  const remove = (stableKey: string) => setLines(current => current.filter(item => item.stableKey !== stableKey));
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const remove = (stableKey: string) => {
+    const target = lines.find(item => item.stableKey === stableKey);
+    if (target && (target.description.trim() || target.amount.trim())) {
+      if (typeof window !== "undefined" && !window.confirm("Bạn có chắc chắn muốn xóa khoản này không?")) return;
+    }
+    setLines(current => current.filter(item => item.stableKey !== stableKey));
+  };
 
   if (!revision) return <Alert tone="warning" title="Chưa có IC hiệu lực">Đề nghị tạm ứng đa khoản chỉ được lập từ một IC đang có hiệu lực ngân sách.</Alert>;
   return <Panel className="space-y-5">
@@ -138,21 +145,21 @@ export function PaymentRequestEditor({ finance, onCreated, draft }:
           <Button variant="secondary" size="sm" onClick={() => setPreviewOpen(true)}>Xem trước snapshot gửi duyệt</Button>
         </div>
 
-        {/* Khối Ký số người lập bắt buộc theo WF-04 */}
+        {/* Khối Ký số người lập hồ sơ */}
         <div className="pt-2">
           {signatureData ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/70">
+            <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl border border-[var(--success-border,#bbf7d0)] bg-[var(--success-soft,#f0fdf4)]">
               <div className="flex items-center gap-3">
-                <div className="w-16 h-10 bg-white rounded border border-emerald-200 p-0.5 flex items-center justify-center overflow-hidden shadow-inner">
+                <div className="w-16 h-10 bg-[var(--surface,#ffffff)] rounded border border-[var(--border)] p-0.5 flex items-center justify-center overflow-hidden shadow-inner">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={signatureData} alt="Chữ ký người lập" className="max-w-full max-h-full object-contain" />
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-emerald-800 flex items-center gap-1.5">
-                    <CheckCircle2 size={14} className="text-emerald-600" aria-hidden="true" />
+                  <p className="text-xs font-semibold text-[var(--success,#15803d)] flex items-center gap-1.5">
+                    <CheckCircle2 size={14} className="text-[var(--success,#16a34a)]" aria-hidden="true" />
                     Đã ký số người đề nghị (E-Sign sẵn sàng)
                   </p>
-                  <p className="text-[11px] text-zinc-500">Mã PIN xác thực: •••••• · Khóa toàn vẹn phiên gửi</p>
+                  <p className="text-xs text-[var(--text-secondary)]">Mã PIN xác thực: •••••• · Khóa toàn vẹn phiên gửi</p>
                 </div>
               </div>
               <Button variant="ghost" size="sm" type="button" onClick={() => setSignPadOpen(true)}>
@@ -161,13 +168,13 @@ export function PaymentRequestEditor({ finance, onCreated, draft }:
               </Button>
             </div>
           ) : (
-            <div className="p-3.5 rounded-xl border border-amber-200 bg-amber-50/70 flex flex-wrap items-center justify-between gap-3">
+            <div className="p-3.5 rounded-xl border border-[var(--warning-border,#fde68a)] bg-[var(--warning-soft,#fffbeb)] flex flex-wrap items-center justify-between gap-3">
               <div className="space-y-0.5">
-                <p className="text-xs font-semibold text-amber-900 flex items-center gap-1.5">
-                  <ShieldCheck size={14} className="text-amber-600" aria-hidden="true" />
-                  Yêu cầu ký số người lập hồ sơ (WF-04 & ERPNext OSS)
+                <p className="text-xs font-semibold text-[var(--warning,#b45309)] flex items-center gap-1.5">
+                  <ShieldCheck size={14} className="text-[var(--warning,#d97706)]" aria-hidden="true" />
+                  Yêu cầu ký số người lập hồ sơ
                 </p>
-                <p className="text-[11px] text-amber-700">
+                <p className="text-xs text-[var(--text-secondary)]">
                   Toàn bộ chứng từ chi bắt buộc ký số và nhập mã PIN 6 số trước khi gửi duyệt.
                 </p>
               </div>
@@ -177,9 +184,10 @@ export function PaymentRequestEditor({ finance, onCreated, draft }:
                 type="button"
                 onClick={() => {
                   if (!title.trim() || !milestone.trim() || !lines.length || !lines[0].description) {
-                    alert("Vui lòng nhập Tên hồ sơ, Mốc chung và ít nhất 1 khoản chi trước khi ký số.");
+                    setValidationError("Vui lòng nhập Tên hồ sơ, Mốc chung và ít nhất 1 khoản chi trước khi ký số.");
                     return;
                   }
+                  setValidationError(null);
                   setSignPadOpen(true);
                 }}
               >
@@ -190,9 +198,15 @@ export function PaymentRequestEditor({ finance, onCreated, draft }:
           )}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between border-t border-zinc-100 pt-4 gap-3">
-          <div className="text-xs text-zinc-500">
-            Tổng đề nghị: <strong className="text-zinc-900 font-mono text-sm">{new Intl.NumberFormat("vi-VN").format(Number(clientTotal || 0))} ₫</strong>
+        {validationError && (
+          <Alert tone="danger" title="Chưa đủ thông tin ký số">
+            {validationError}
+          </Alert>
+        )}
+
+        <div className="flex flex-wrap items-center justify-between border-t border-[var(--border)] pt-4 gap-3">
+          <div className="text-xs text-[var(--text-secondary)]">
+            Tổng đề nghị: <strong className="text-[var(--foreground)] font-mono text-sm">{new Intl.NumberFormat("vi-VN").format(Number(clientTotal || 0))} VND</strong>
           </div>
           <Button
             type="submit"

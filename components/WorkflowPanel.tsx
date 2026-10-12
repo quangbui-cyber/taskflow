@@ -29,14 +29,14 @@ const ROLES: Record<string, string> = { MANAGER: "Quản lý", ACCOUNTANT: "Kế
 const ACTIONS: Record<string, string> = { APPROVE: "Duyệt", RETURN: "Trả hồ sơ", REJECT: "Từ chối", WITHDRAW: "Rút hồ sơ", TRANSFER: "Chuyển giao", SAVE_DOCUMENT: "Lưu nháp", SUBMIT_DOCUMENT: "Gửi duyệt", DECIDE_DOCUMENT: "Quyết định", TRANSFER_DOCUMENT: "Chuyển giao", ADD_REFERENCE: "Bổ sung tham khảo", UPLOAD_SIGNED: "Tải bản ký", CONFIRM_SIGNED: "Xác nhận đủ bản ký" };
 const fileHref = (id: string) => `/api/workflow/files/${id}`;
 
-function Form({ command, version = 0, requestId, request, templateId, children, label, redirectAfterSave = false }: { command: string; version?: number; requestId?: string; request?: Pick<Summary,"module"|"currentAttemptId"|"currentStep"|"submittedVersion">; templateId?: string; children?: ReactNode; label: string; redirectAfterSave?: boolean }) {
+function Form({ command, version = 0, requestId, request, templateId, children, label, redirectAfterSave = false, confirmMessage }: { command: string; version?: number; requestId?: string; request?: Pick<Summary,"module"|"currentAttemptId"|"currentStep"|"submittedVersion">; templateId?: string; children?: ReactNode; label: string; redirectAfterSave?: boolean; confirmMessage?: string }) {
   const router = useRouter();
   const [state, action, pending] = useActionState(async (previous: WorkflowActionState, form: FormData) => {
     const result = await workflowAction(previous, form);
     if (result.success) { if (redirectAfterSave && result.requestId) router.push(workflowDocumentHref(result.requestId)); router.refresh(); }
     return result;
   }, {});
-  return <form action={action} className="space-y-4"><input type="hidden" name="command" value={command} /><input type="hidden" name="version" value={version} />{requestId && <input type="hidden" name="requestId" value={requestId} />}{request && <><input type="hidden" name="module" value={request.module} /><input type="hidden" name="attemptId" value={request.currentAttemptId ?? ""} /><input type="hidden" name="stepIndex" value={request.currentStep} /><input type="hidden" name="submittedVersion" value={request.submittedVersion ?? ""} /></>}{templateId && <input type="hidden" name="templateId" value={templateId} />}{children}{state.error && <Alert tone="danger" title={state.error} />}{state.success && <Alert tone="success" title={state.success} />}<div className="flex justify-end border-t border-zinc-100 pt-4"><Button type="submit" loading={pending} loadingLabel="Đang lưu…">{label}</Button></div></form>;
+  return <form action={action} onSubmit={(e) => { if (confirmMessage && !window.confirm(confirmMessage)) e.preventDefault(); }} className="space-y-4"><input type="hidden" name="command" value={command} /><input type="hidden" name="version" value={version} />{requestId && <input type="hidden" name="requestId" value={requestId} />}{request && <><input type="hidden" name="module" value={request.module} /><input type="hidden" name="attemptId" value={request.currentAttemptId ?? ""} /><input type="hidden" name="stepIndex" value={request.currentStep} /><input type="hidden" name="submittedVersion" value={request.submittedVersion ?? ""} /></>}{templateId && <input type="hidden" name="templateId" value={templateId} />}{children}{state.error && <Alert tone="danger" title={state.error} />}{state.success && <Alert tone="success" title={state.success} />}<div className="flex justify-end border-t border-zinc-100 pt-4"><Button type="submit" loading={pending} loadingLabel="Đang lưu…">{label}</Button></div></form>;
 }
 function PersonField({ users, name, label, value }: { users: Person[]; name: string; label: string; value?: string }) {
   return <Select name={name} label={label} defaultValue={value ?? ""}><option value="">Chưa phân công</option>{users.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</Select>;
@@ -155,7 +155,7 @@ export function WorkflowDocumentPanel({ detail, templates, projects, user, submi
     {selfRoles > 1 && <Alert tone="warning" title="Bạn tham gia nhiều vai trò">Mỗi bước cần quyết định riêng, hệ thống không tự bỏ bước.</Alert>}{r.parentId && <Link className="tf-link" href={workflowDocumentHref(r.parentId)}>Xem hồ sơ nguồn của bản trình lại</Link>}
     {!blankOpen && (r.state === "DRAFT" && owner ? <Panel><h2 className="mb-3 font-semibold">Sửa nháp</h2><DocumentEditor document={r} templates={templates} projects={projects} /><div className="my-5 space-y-4">{effectiveRequirements(r.template?.requirements).requiredDocuments.map(slot=><section key={slot.key} id={`wf-${r.id}-${slot.key}`} tabIndex={-1}><h3 className="font-semibold">{slot.label} · Bắt buộc khi gửi</h3>{body.supportingFiles?.[slot.key] && <Link className="tf-link" href={fileHref(body.supportingFiles[slot.key])}>Tài liệu đã lưu</Link>}<Form command="ADD_SUPPORTING_DOCUMENT" requestId={r.id} version={r.version} label="Lưu tài liệu bắt buộc"><input type="hidden" name="supportingSlot" value={slot.key}/><UploadField label={slot.label} required /></Form></section>)}</div><div className="mt-5 border-t pt-4"><SubmitDocumentForm request={r} /></div></Panel> : <Panel><h2 className="mb-3 font-semibold">Nội dung đã trình</h2><p className="whitespace-pre-wrap">{body.content}</p>{body.counterparty && <p className="mt-3">Đối tác: {body.counterparty}</p>}{body.amount && <p>Giá trị: {body.amount} VND</p>}<p className="tf-ui-help mt-3 whitespace-pre-wrap">{body.templateSnapshot?.instructions}</p>{body.mainFileId && <Link className="tf-link mt-3 inline-block" href={fileHref(body.mainFileId)}>Tải tài liệu chính đúng bản</Link>}{detail.linked && <p className="mt-3"><Link className="tf-link" href={requestHref(detail.linked)}>Hồ sơ liên quan: {detail.linked.title}</Link></p>}</Panel>)}
     {r.state === "SUBMITTED" && <Panel><h2 className="mb-3 font-semibold">Đang chờ {ROLES[current?.role]} · {name(current?.assigneeId)}</h2>{current?.assigneeId === user.id && <WorkflowDecisionDialog request={r} />}{owner && <details className="mt-4"><summary className="cursor-pointer">Rút hồ sơ đang trình</summary><div className="mt-3"><Form command="DECIDE_DOCUMENT" requestId={r.id} request={r} version={r.version} label="Rút hồ sơ"><input type="hidden" name="decision" value="WITHDRAW" /><Textarea name="reason" label="Lý do rút" required /></Form></div></details>}</Panel>}
-    {owner && r.state === "APPROVED" && !r.pendingReplacementRequestId && !r.replacedByRequestId && <Panel><details><summary className="cursor-pointer font-semibold">Tạo bản sửa đổi và trình lại từ đầu</summary><div className="mt-4"><Form command="REVISE_DOCUMENT" requestId={r.id} version={r.version} label="Tạo bản sửa đổi sạch" redirectAfterSave><Textarea name="postSigningReason" label="Lý do sửa đổi sau duyệt / sau ký" required={["DIGITAL_CONFIRMED", "PHYSICAL_CONFIRMED"].includes(r.signingEvidenceState ?? "")} hint="Bản mới chỉ kế thừa trường nghiệp vụ cho phép; tài liệu, chữ ký, scan, QR và trạng thái cũ không được sao chép." /></Form></div></details></Panel>}
+    {owner && r.state === "APPROVED" && !r.pendingReplacementRequestId && !r.replacedByRequestId && <Panel><details><summary className="cursor-pointer font-semibold">Tạo bản sửa đổi và trình lại từ đầu</summary><div className="mt-4"><Form command="REVISE_DOCUMENT" requestId={r.id} version={r.version} label="Tạo bản sửa đổi sạch" redirectAfterSave confirmMessage="Hồ sơ này đã được phê duyệt. Bạn có chắc chắn muốn tạo bản sửa đổi mới? Việc này sẽ bắt đầu lại toàn bộ quy trình duyệt 4 cấp."><Textarea name="postSigningReason" label="Lý do sửa đổi sau duyệt / sau ký" required={["DIGITAL_CONFIRMED", "PHYSICAL_CONFIRMED"].includes(r.signingEvidenceState ?? "")} hint="Bản mới chỉ kế thừa trường nghiệp vụ cho phép; tài liệu, chữ ký, scan, QR và trạng thái cũ không được sao chép." /></Form></div></details></Panel>}
     {owner && ["RETURNED", "WITHDRAWN", "REJECTED"].includes(r.state) && <Panel><details><summary className="cursor-pointer font-semibold">Tạo bản mới để sửa / trình lại</summary><div className="mt-4"><DocumentEditor parent={r} templates={templates} projects={projects} /></div></details></Panel>}
     <DocumentFiles document={r} />{canAddReference && ["APPROVED", "REPLACED"].includes(r.state) && <Panel><details><summary className="cursor-pointer">Bổ sung tài liệu tham khảo</summary><div className="mt-3"><Form command="ADD_REFERENCE" requestId={r.id} version={r.version} label="Lưu file tham khảo"><UploadField label="File tham khảo" required /></Form></div></details></Panel>}
     {r.state === "APPROVED" && body.templateSnapshot?.requiresExecutionTracking && <Panel><div className="tf-section-heading"><div><h2>Theo dõi thực hiện</h2><p>Chỉ bắt đầu sau khi hồ sơ có bằng chứng ký hoàn tất. Giao việc, nộp bằng chứng và nghiệm thu chi tiết thuộc Phase 11.</p></div><Badge tone={body.execution?.startedAt ? "success" : "warning"}>{body.execution?.startedAt ? "Đang thực hiện" : "Chưa bắt đầu"}</Badge></div>{!body.execution?.startedAt && body.responsibleManagerId === user.id && ["DIGITAL_CONFIRMED", "PHYSICAL_CONFIRMED"].includes(r.signingEvidenceState ?? "") && <Form command="START_EXECUTION" requestId={r.id} version={r.version} label="Bắt đầu theo dõi thực hiện" />}</Panel>}
@@ -164,23 +164,23 @@ export function WorkflowDocumentPanel({ detail, templates, projects, user, submi
     {r.state === "APPROVED" && body.cancellation?.status === "PENDING" && body.responsibleManagerId === user.id && <Panel><h2 className="mb-3 font-semibold">Quyết định yêu cầu hủy</h2><Form command="DECIDE_DOCUMENT_CANCEL" requestId={r.id} request={r} version={r.version} label="Lưu quyết định hủy"><Select name="cancelDecision" label="Kết quả"><option value="CONFIRM">Xác nhận hủy</option><option value="REJECT">Không chấp nhận hủy</option></Select><Textarea name="reason" label="Lý do quyết định" required /></Form></Panel>}
     {r.state === "APPROVED" && (
       <Panel>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-zinc-100">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-[var(--border)]">
           <div>
-            <h2 className="font-semibold text-zinc-900 text-base">Ký hồ sơ & Bản lưu trữ văn bản</h2>
-            <p className="text-xs text-zinc-500 mt-0.5">
-              Người/bên ký theo mẫu: <span className="font-medium text-zinc-700">{body.templateSnapshot?.signerNames || "Chưa quy định"}</span>
+            <h2 className="font-semibold text-[var(--foreground)] text-base">Ký hồ sơ & Bản lưu trữ văn bản</h2>
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+              Người/bên ký theo mẫu: <span className="font-medium text-[var(--foreground)]">{body.templateSnapshot?.signerNames || "Chưa quy định"}</span>
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Link
               href={workflowPrintHref(r.id)}
               target="_blank"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[var(--info)] bg-[var(--info-soft)] border border-[var(--border)] rounded-lg hover:bg-[var(--surface-muted)] transition-colors"
             >
               <Printer size={13} aria-hidden="true" />
               In / Lưu PDF biểu mẫu A4
             </Link>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[var(--success)] bg-[var(--success-soft)] border border-[var(--border)] rounded-lg">
               <ShieldCheck size={13} aria-hidden="true" />
               QR an toàn nằm trên bản in đã duyệt
             </span>
@@ -189,27 +189,30 @@ export function WorkflowDocumentPanel({ detail, templates, projects, user, submi
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Track 1: Ký số nội bộ */}
-          <div className="p-4 rounded-xl border border-zinc-200 bg-zinc-50/50 flex flex-col justify-between">
+          <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Hình thức 1</span>
+                <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Ký duyệt số</span>
                 <Badge tone={eSignedData ? "success" : "neutral"}>
                   {eSignedData ? "Đã ký số (Xem trước)" : "Chưa ký số"}
                 </Badge>
               </div>
-              <h3 className="font-semibold text-zinc-900 text-sm mb-1">Ký duyệt điện tử (E-Sign)</h3>
-              <p className="text-xs text-zinc-600 mb-3 leading-relaxed">
+              <h3 className="font-semibold text-[var(--foreground)] text-sm mb-1">Ký duyệt điện tử (E-Sign)</h3>
+              <p className="text-xs text-[var(--text-secondary)] mb-3 leading-relaxed">
                 Ký tay trực tiếp trên màn hình cảm ứng, tái sử dụng chữ ký mẫu hồ sơ hoặc tải ảnh chữ ký đã lọc nền trong suốt.
               </p>
               {eSignedData && (
-                <div className="mb-3 p-2 bg-white rounded-lg border border-emerald-200 flex items-center gap-3">
-                  <div className="w-16 h-10 bg-zinc-50 rounded border border-zinc-200 flex items-center justify-center p-1 overflow-hidden">
+                <div
+                  className="mb-3 p-2 rounded-lg border flex items-center gap-3"
+                  style={{ backgroundColor: "var(--success-soft)", borderColor: "var(--border)" }}
+                >
+                  <div className="w-16 h-10 bg-white rounded border border-[var(--border)] flex items-center justify-center p-1 overflow-hidden">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={eSignedData} alt="Chữ ký đã chọn" className="max-w-full max-h-full object-contain" />
                   </div>
                   <div className="text-xs">
-                    <p className="font-medium text-emerald-800">Chữ ký điện tử sẵn sàng</p>
-                    <p className="text-zinc-500 text-[11px]">{name(user.id)} · Đã gắn vào phiên UI</p>
+                    <p className="font-medium text-[var(--success)]">Chữ ký điện tử sẵn sàng</p>
+                    <p className="text-[var(--text-secondary)] text-xs">{name(user.id)} · Sẵn sàng xác nhận</p>
                   </div>
                 </div>
               )}
@@ -226,6 +229,29 @@ export function WorkflowDocumentPanel({ detail, templates, projects, user, submi
             </div>
           </div>
 
+          {/* Track 2: In biểu mẫu & Ký giấy vật lý */}
+          <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Ký giấy vật lý</span>
+                <Badge tone="neutral">Biểu mẫu chuẩn A4</Badge>
+              </div>
+              <h3 className="font-semibold text-[var(--foreground)] text-sm mb-1">In bản giấy & Quét lưu trữ</h3>
+              <p className="text-xs text-[var(--text-secondary)] mb-3 leading-relaxed">
+                In bản A4 có đóng dấu mã QR xác thực bảo mật để thu thập chữ ký sống, sau đó tải tệp scan lên để hoàn tất lưu trữ.
+              </p>
+            </div>
+            <div className="pt-2">
+              <Link
+                href={workflowPrintHref(r.id)}
+                target="_blank"
+                className="inline-flex items-center justify-center gap-1.5 w-full px-3 py-2 text-xs font-semibold text-[var(--foreground)] bg-white border border-[var(--border)] rounded-lg hover:bg-[var(--surface-muted)] transition-colors text-center"
+              >
+                <Printer size={13} aria-hidden="true" />
+                Mở bản in A4 để ký giấy
+              </Link>
+            </div>
+          </div>
         </div>
 
         {signPadOpen && (

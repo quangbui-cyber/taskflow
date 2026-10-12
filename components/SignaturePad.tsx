@@ -368,7 +368,7 @@ export function SignaturePad({
                 className="pointer-events-none absolute left-6 right-6 bottom-9 border-b border-dashed border-zinc-200"
                 aria-hidden="true"
               >
-                <span className="absolute -top-4 right-0 text-[10px] uppercase tracking-wider text-zinc-300">
+                <span className="absolute -top-4 right-0 text-xs uppercase tracking-wider text-zinc-300">
                   Đường ký tên
                 </span>
               </div>
@@ -571,9 +571,8 @@ export function SignaturePad({
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-[11px] text-zinc-500">
-              <span>Nhập mã PIN đã thiết lập trong hồ sơ cá nhân</span>
-              <span className="font-mono text-zinc-400">Gợi ý thử nghiệm: 123456</span>
+            <div className="flex items-center text-xs text-zinc-500">
+              <span>Nhập mã PIN 6 số đã thiết lập trong hồ sơ cá nhân</span>
             </div>
           </div>
         )}

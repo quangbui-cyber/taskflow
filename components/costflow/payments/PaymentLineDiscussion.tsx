@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { MessageSquare } from "lucide-react";
 import ActionForm from "@/components/CostFlowActionForm";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Field";
@@ -13,7 +14,7 @@ export function PaymentLineDiscussion({ finance, requestId, lineId, discussions 
   const members = finance.project.members.map(member => finance.users.find(user => user.id === member.userId)).filter((user): user is Finance["users"][number] => !!user);
   const toggle = (userId: string) => setMentionIds(current => current.includes(userId) ? current.filter(id => id !== userId) : [...current, userId]);
   return <details className="tf-payment-line-discussion rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
-    <summary className="cursor-pointer text-xs font-semibold">Trao đổi về khoản này ({discussions.length})</summary>
+    <summary className="cursor-pointer text-xs font-semibold flex items-center gap-1.5"><MessageSquare size={13} className="text-[var(--text-secondary)]" aria-hidden="true" />Trao đổi về khoản này ({discussions.length})</summary>
     <div className="mt-3 space-y-3">
       {discussions.length > 0 && <ol className="space-y-2">
         {discussions.map(discussion => <li key={discussion.id} className="rounded-lg bg-[var(--surface-soft)] p-2 text-xs">

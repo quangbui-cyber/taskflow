@@ -41,7 +41,7 @@ export default function CashConfirmationEditor({ finance, request, dossier, reci
       <Badge tone={recipient.progress === "DA_CHI_DU" ? "success" : recipient.progress === "DANG_CHI_MOT_PHAN" ? "warning" : "neutral"}>{PROGRESS[recipient.progress]}</Badge>
     </div>
     <p className="text-sm">Đã chi <strong>{displayMoney(recipient.paidOutAmount)}</strong> / {displayMoney(recipient.totalAmount)} · Còn {displayMoney(recipient.remainingAmount)}</p>
-    {!canConfirm ? <Alert tone="warning" title={!signingConfirmed ? "Cần đủ 4 chữ ký hoặc xác nhận bản ký giấy trước Cash OUT/IN." : BigInt(amount) === BigInt(0) ? "Nghĩa vụ tiền của người nhận này đã được ghi nhận đủ." : "Chỉ Account/Admin được phân công mới có thể ghi nhận tiền của hồ sơ đã duyệt."} /> : <ActionForm finance={finance} command="CASH" requestId={request.id} label={direction === "IN" ? "Xác nhận Cash IN hoàn trả" : "Xác nhận Cash OUT"} onSuccess={onSuccess}>
+    {!canConfirm ? <Alert tone="warning" title={!signingConfirmed ? "Cần đủ 4 chữ ký hoặc xác nhận bản ký giấy trước khi thực hiện chi/thu tiền (Cash OUT/IN)." : BigInt(amount) === BigInt(0) ? "Nghĩa vụ tiền của người nhận này đã được ghi nhận đủ." : "Chỉ Account/Admin được phân công mới có thể ghi nhận tiền của hồ sơ đã duyệt."} /> : <ActionForm finance={finance} command="CASH" requestId={request.id} label={direction === "IN" ? "Xác nhận Cash IN hoàn trả" : "Xác nhận Cash OUT"} onSuccess={onSuccess}>
       <input type="hidden" name="recipientKey" value={recipient.recipientKey} />
       <input type="hidden" name="direction" value={direction} />
       <input type="hidden" name="idempotencyKey" value={operationId} />

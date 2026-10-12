@@ -314,7 +314,7 @@ export function ProfileSignatureForm({
         <div>
           <h2 className="font-semibold text-zinc-900 flex items-center gap-2">
             <Sparkles size={16} className="text-brand-600" aria-hidden="true" />
-            Bảo mật chữ ký số & Mã PIN (WF-04)
+            Bảo mật chữ ký số & Mã PIN
           </h2>
           <p className="mt-0.5 text-xs text-zinc-500">
             Quản lý chữ ký mẫu và mã PIN xác thực 6 số khi nộp đơn hoặc phê duyệt chứng từ.
@@ -450,7 +450,7 @@ export function ProfileSignatureForm({
                         className="pointer-events-none absolute left-6 right-6 bottom-9 border-b border-dashed border-zinc-200"
                         aria-hidden="true"
                       >
-                        <span className="absolute -top-4 right-0 text-[10px] uppercase tracking-wider text-zinc-300">
+                        <span className="absolute -top-4 right-0 text-xs uppercase tracking-wider text-zinc-300">
                           Đường ký mẫu
                         </span>
                       </div>
@@ -570,7 +570,7 @@ export function ProfileSignatureForm({
                 </Badge>
               </div>
               <p className="text-xs text-zinc-600 leading-relaxed">
-                Mã PIN bảo mật 6 số được yêu cầu mỗi khi bạn ký số hoặc duyệt hồ sơ trên hệ thống (D-22 & ERPNext OSS).
+                Mã PIN bảo mật 6 số được yêu cầu mỗi khi bạn ký số hoặc duyệt hồ sơ trên hệ thống.
                 Mã này được mã hóa bảo mật một chiều bằng thuật toán bcrypt.
               </p>
             </div>
@@ -667,8 +667,7 @@ export function ProfileSignatureForm({
                 </div>
               </div>
 
-              <div className="flex items-center justify-between border-t border-zinc-100 pt-4">
-                <span className="text-xs text-zinc-400">Gợi ý thử nghiệm: 123456</span>
+              <div className="flex items-center justify-end border-t border-zinc-100 pt-4">
                 <Button
                   variant="primary"
                   onClick={handleSavePin}

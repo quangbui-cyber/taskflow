@@ -69,7 +69,7 @@ export default function ActualCostEditor({ finance, currentUserId }: { finance: 
       </Alert>}
 
       <Alert tone="info" title="[Phát sinh ngoài IC] · Thu thêm từ khách">
-        Cần ít nhất một chứng từ đã lưu trong kho AC trước khi gửi DD. Form phát sinh ngoài IC sẽ được mở ở Plan 08-03; hệ thống không tự tạo hoặc đoán mã chứng từ.
+        Cần ít nhất một chứng từ đã lưu trong kho AC trước khi gửi DD; hệ thống không tự tạo hoặc đoán mã chứng từ.
       </Alert>
 
       {effective ? (
@@ -87,12 +87,12 @@ export default function ActualCostEditor({ finance, currentUserId }: { finance: 
             {recipients.map(recipient => <option key={recipient.value} value={recipient.value}>{recipient.label}</option>)}
           </Select>
           <Select name="fundingSource" label="Nguồn thanh toán" defaultValue="EMPLOYEE_OUT_OF_POCKET" required>
-            {FUNDING_OPTIONS.map(([value, label]) => <option key={value} value={value}>{value} · {label}</option>)}
+            {FUNDING_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </Select>
           <Input name="description" label="Nội dung thực tế" defaultValue={effective.lines.find(line => line.id === icLineId)?.description ?? ""} required className="sm:col-span-2" />
-          <Input name="quantity" label="quantity · Số lượng" defaultValue="1" inputMode="decimal" required />
-          <Input name="days" label="days · Số ngày" defaultValue="1" inputMode="decimal" required />
-          <Input name="unitPrice" label="unitPrice · Đơn giá VND" defaultValue="0" inputMode="decimal" required />
+          <Input name="quantity" label="Số lượng" defaultValue="1" inputMode="decimal" required />
+          <Input name="days" label="Số ngày" defaultValue="1" inputMode="decimal" required />
+          <Input name="unitPrice" label="Đơn giá (VND)" defaultValue="0" inputMode="decimal" required />
           <div className="sm:col-span-2 lg:col-span-4">
             {state.error && <Alert tone="danger" title={state.error} />}
             {state.success && <Alert tone="success" title={state.success} />}

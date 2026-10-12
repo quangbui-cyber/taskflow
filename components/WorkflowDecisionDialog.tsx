@@ -102,24 +102,32 @@ export default function WorkflowDecisionDialog({ request }: { request: QueueRequ
                   Ký duyệt số (E-Sign & Mã PIN 6 số)
                 </span>
                 <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                    signatureData ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
-                  }`}
+                  className="text-xs font-semibold px-2 py-0.5 rounded"
+                  style={{
+                    backgroundColor: signatureData ? "var(--success-soft)" : "var(--warning-soft)",
+                    color: signatureData ? "var(--success)" : "var(--warning)",
+                  }}
                 >
                   {signatureData ? "Đã ký số" : "Chưa ký"}
                 </span>
               </div>
 
               {signatureData ? (
-                <div className="flex items-center justify-between gap-3 p-2.5 bg-emerald-50 rounded-lg border border-emerald-200">
+                <div
+                  className="flex items-center justify-between gap-3 p-2.5 rounded-lg border"
+                  style={{
+                    backgroundColor: "var(--success-soft)",
+                    borderColor: "var(--border)",
+                  }}
+                >
                   <div className="flex items-center gap-2.5">
-                    <div className="w-14 h-9 bg-white rounded border border-emerald-300 flex items-center justify-center p-0.5 shadow-xs">
+                    <div className="w-14 h-9 bg-white rounded border border-[var(--border)] flex items-center justify-center p-0.5 shadow-xs">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={signatureData} alt="Chữ ký phê duyệt" className="max-w-full max-h-full object-contain" />
                     </div>
                     <div className="text-xs">
-                      <p className="font-semibold text-emerald-950">Chữ ký số đã sẵn sàng</p>
-                      <p className="text-[11px] text-emerald-700 flex items-center gap-1">
+                      <p className="font-semibold text-[var(--foreground)]">Chữ ký số đã sẵn sàng</p>
+                      <p className="text-xs text-[var(--success)] flex items-center gap-1">
                         <ShieldCheck size={12} />
                         PIN 6 số đã sẵn sàng để máy chủ xác thực
                       </p>

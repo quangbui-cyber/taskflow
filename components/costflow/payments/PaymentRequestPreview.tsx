@@ -31,14 +31,14 @@ export function PaymentRequestPreview({ title, milestone, explanation, revisionL
       <Badge tone={serverProjection ? "success" : "info"}>{serverProjection ? "Dữ liệu đã lưu trên server" : "Bản xem trước sẽ được server tính lại"}</Badge>
     </div>
     {!lines.length ? <Alert title="Chưa có khoản đề nghị">Thêm ít nhất một khoản để gửi duyệt.</Alert> : <><div className="tf-payment-preview-table"><Table caption="Các khoản trong đề nghị tạm ứng">
-      <thead><tr><th>Khoản</th><th>Người nhận</th><th>IC nguồn</th><th className="text-right">Số tiền</th></tr></thead>
+      <thead><tr><th scope="col">Khoản</th><th scope="col">Người nhận</th><th scope="col">IC nguồn</th><th scope="col" className="text-right">Số tiền</th></tr></thead>
       <tbody>{lines.map(line => <tr key={line.stableKey}>
         <td>{line.description || "Chưa nhập nội dung"}</td>
         <td>{line.recipientLabel || line.recipientKey || "Chưa chọn"}</td>
         <td>{line.sourceLabel || "Chưa chọn"}</td>
         <td className="text-right tabular-nums">{/^\d+$/.test(line.amount) ? displayMoney(line.amount) : "Chưa hợp lệ"}</td>
       </tr>)}</tbody>
-      <tfoot><tr><th colSpan={3}>Tổng đề nghị</th><th className="text-right tabular-nums">{displayMoney(total(lines))}</th></tr></tfoot>
+      <tfoot><tr><th colSpan={3} scope="row">Tổng đề nghị</th><th className="text-right tabular-nums">{displayMoney(total(lines))}</th></tr></tfoot>
     </Table></div><ol className="tf-payment-preview-cards space-y-2" aria-label="Các khoản trong đề nghị tạm ứng">
       {lines.map((line, index) => <li key={line.stableKey} className="rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] p-3">
         <div className="flex items-start justify-between gap-2"><strong>Khoản {index + 1}</strong><strong className="tabular-nums">{/^\d+$/.test(line.amount) ? displayMoney(line.amount) : "Chưa hợp lệ"}</strong></div>

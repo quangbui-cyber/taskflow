@@ -16,6 +16,8 @@ const EVIDENCE_KINDS = [
   ["FIELD_PHOTO_REPORT", "Ảnh hiện trường / báo cáo"],
 ] as const;
 
+const KIND_LABELS: Record<string, string> = Object.fromEntries(EVIDENCE_KINDS);
+
 type Line = NonNullable<Finance["actualCosts"]>["lines"][number];
 
 export default function ActualCostEvidenceVault({ projectId, line }: { projectId: string; line: Line }) {
@@ -48,7 +50,7 @@ export default function ActualCostEvidenceVault({ projectId, line }: { projectId
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-xs font-semibold text-[var(--foreground)]">Evidence Vault · phiên bản {line.version}</p>
-          <p className="text-[11px] text-[var(--text-secondary)]">Nhiều file, tối đa 4 MiB/file. File mới tạo phiên bản manifest mới.</p>
+          <p className="text-xs text-[var(--text-secondary)]">Nhiều file, tối đa 4 MiB/file. File mới tạo phiên bản manifest mới.</p>
         </div>
         <Badge tone={line.missingEvidenceWarnings.length ? "warning" : "success"}>{line.missingEvidenceWarnings.length ? `${line.missingEvidenceWarnings.length} cảnh báo thiếu` : "Đủ chứng từ cốt lõi"}</Badge>
       </div>
@@ -57,11 +59,11 @@ export default function ActualCostEvidenceVault({ projectId, line }: { projectId
       </Alert>}
       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <Select label="Loại chứng từ" value={kind} onChange={event => setKind(event.target.value as typeof kind)} disabled={busy}>
-          {EVIDENCE_KINDS.map(([value, label]) => <option key={value} value={value}>{value} · {label}</option>)}
+          {EVIDENCE_KINDS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </Select>
         <label className="block text-xs font-medium text-[var(--text-secondary)]">
-          File chứng từ
-          <input className="mt-1 block w-full text-xs" type="file" multiple disabled={busy} onChange={event => { void upload(event.target.files); event.target.value = ""; }} />
+          Tệp chứng từ
+          <input className="mt-1 block w-full text-xs file:mr-2 file:rounded-md file:border file:border-[var(--border)] file:bg-[var(--surface)] file:px-2.5 file:py-1 file:text-xs file:font-medium file:text-[var(--foreground)] hover:file:bg-[var(--surface-muted)] cursor-pointer" type="file" multiple disabled={busy} onChange={event => { void upload(event.target.files); event.target.value = ""; }} />
         </label>
       </div>
       {message && <Alert tone={message.startsWith("Đã") ? "success" : "danger"} title={message} />}
@@ -70,7 +72,7 @@ export default function ActualCostEvidenceVault({ projectId, line }: { projectId
           const canPreview = item.mimeType === "application/pdf" || item.mimeType.startsWith("image/");
           return <div key={`${item.id}:${item.kind}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2 text-xs">
             <div className="min-w-0">
-              <p className="font-medium text-[var(--foreground)]">{item.kind} · {item.name}</p>
+              <p className="font-medium text-[var(--foreground)]">{KIND_LABELS[item.kind] ?? item.kind} · {item.name}</p>
               <p className="text-[var(--text-secondary)]">{formatProjectFileSize(item.size)} · sha256 {item.sha256.slice(0, 12)}… · {item.createdByName} · {new Date(item.createdAt).toLocaleString("vi-VN")}</p>
             </div>
             <div className="flex gap-2">
