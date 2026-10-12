@@ -32,7 +32,19 @@ test("print supports four form kinds, four roles, draft watermark and no draft Q
   for (const role of ["CREATOR", "MANAGER", "ACCOUNTANT", "CEO"]) assert.match(source, new RegExp(role));
   assert.match(source, /BẢN NHÁP/);
   assert.match(source, /!doc\.isDraft && doc\.qrDataUrl/);
+  assert.match(source, /CreativeStationLogo withTagline/);
+  assert.match(source, /DocumentFooter/);
+  assert.match(source, /Không phải chứng thư hoặc chữ ký số CA/);
+  assert.doesNotMatch(source, /không nhận bonus/i);
   assert.doesNotMatch(source, /Bùi Duy Quang|Đỗ Vũ Phương Uyên|Đoàn Thái Sơn|1903 8888/);
+});
+
+test("brand footer uses per-instance SVG definition identifiers", async () => {
+  const source = await readFile(new URL("../components/DocumentFooter.tsx", import.meta.url), "utf8");
+  assert.match(source, /React\.useId\(\)/);
+  assert.match(source, /gradientId/);
+  assert.match(source, /logoShadowId/);
+  assert.match(source, /textShadowId/);
 });
 
 test("QR implementation uses maintained encoder with explicit EC and quiet zone", async () => {

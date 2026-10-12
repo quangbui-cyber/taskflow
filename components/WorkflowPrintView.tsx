@@ -21,6 +21,7 @@ import { SignaturePad } from "@/components/SignaturePad";
 import { moneyInWords } from "@/lib/costflow/money";
 import { workflowQueueAction } from "@/app/actions/workflow";
 import { CreativeStationLogo } from "@/components/CreativeStationLogo";
+import { DocumentFooter } from "@/components/DocumentFooter";
 
 export type DetailedFinanceLine = {
   stt?: number;
@@ -273,7 +274,7 @@ export function WorkflowPrintView({ doc, backHref }: { doc: WorkflowPrintDocumen
 
       {/* 2. THE CORPORATE A4 SHEET CANVAS */}
       <article
-        className="relative mx-auto min-h-[1123px] max-w-[794px] overflow-hidden border border-zinc-200 bg-white p-10 font-serif text-zinc-900 shadow-md print:border-0 print:p-8 print:shadow-none"
+        className="relative mx-auto min-h-[1123px] max-w-[794px] flex flex-col justify-between overflow-hidden border border-zinc-200 bg-white p-8 sm:p-10 font-serif text-zinc-900 shadow-md print:border-0 print:p-0 print:shadow-none"
       >
         {/* DRAFT WATERMARK */}
         {doc.isDraft && (
@@ -285,352 +286,351 @@ export function WorkflowPrintView({ doc, backHref }: { doc: WorkflowPrintDocumen
           </div>
         )}
 
-        {/* A. CORPORATE HEADER METADATA (Excel Parity) */}
-        <header className="relative flex items-start justify-between border-b-2 border-zinc-900 pb-4 font-sans">
-          <div className="flex items-center gap-3.5">
-            <CreativeStationLogo className="h-10 w-auto print:h-9 shrink-0" />
-            <div className="space-y-0.5 border-l border-zinc-300 pl-3">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-900">
-                CÔNG TY CỔ PHẦN TRUYỀN THÔNG VÀ SỰ KIỆN CREATIVE STATION
-              </p>
-              <p className="text-[10px] text-zinc-600">
-                Mã số thuế: 0316484346 · Website: https://mycreative.vn
-              </p>
-              {doc.projectName && (
-                <p className="text-[11px] font-semibold text-zinc-800">
-                  Dự án: <span className="text-indigo-900">{doc.projectName}</span>
+        <div className="space-y-4">
+          {/* A. CORPORATE HEADER (Excel Parity: Logo with Tagline on left, Boxed Form Code Badge on right, Centered Title below) */}
+          <header className="relative border-b-2 border-zinc-900 pb-3 font-sans">
+            <div className="flex items-start justify-between">
+              <div className="flex flex-col items-start">
+                <CreativeStationLogo withTagline className="h-10 w-auto print:h-9" />
+              </div>
+
+              <div className="text-right">
+                <div className="inline-block border border-zinc-900 px-2.5 py-0.5 text-xs font-semibold text-zinc-950">
+                  Mẫu số: <strong>{templateCode}</strong>
+                </div>
+                <p className="mt-1 font-mono text-[11px] text-zinc-700">Số: {doc.code}</p>
+              </div>
+            </div>
+
+            <div className="mt-2 text-center">
+              <h1 className="text-xl sm:text-2xl font-bold uppercase tracking-wide text-zinc-950">
+                {formTitle}
+              </h1>
+              {doc.title && doc.title !== formTitle && (
+                <p className="mt-0.5 text-xs italic text-zinc-600">
+                  V/v: {doc.title}
                 </p>
               )}
             </div>
-          </div>
+          </header>
 
-          <div className="text-right text-[11px]">
-            <p className="font-mono font-bold text-zinc-900">Mẫu số: {templateCode}</p>
-            <p className="font-mono text-zinc-700">Số: {doc.code}</p>
-            <p className="text-[10px] text-zinc-500">
-              {doc.isDraft
-                ? `Ngày lập: ${doc.createdDate ? new Date(doc.createdDate).toLocaleDateString("vi-VN") : "—"}`
-                : `Ngày duyệt: ${new Date(doc.approvedAt).toLocaleDateString("vi-VN")}`}
-            </p>
-          </div>
-        </header>
+          {/* B. METADATA SECTION (Excel Form Fields) */}
+          <section className="relative space-y-1.5 text-xs leading-relaxed font-serif text-zinc-900">
+            <div className="flex items-baseline">
+              <span className="whitespace-nowrap font-medium text-zinc-800">
+                {doc.kind === "ADVANCE" || doc.kind === "PROPOSAL_ADVANCE" ? "Người xin tạm ứng:" : "Người đề nghị:"}
+              </span>
+              <span className="mx-2 flex-1 border-b border-dotted border-zinc-400 font-semibold text-zinc-950 px-1">
+                {doc.creatorName || "Người đề nghị"}
+              </span>
+              <span className="whitespace-nowrap font-medium text-zinc-800 ml-3">Số ĐT:</span>
+              <span className="mx-2 min-w-[110px] max-w-[150px] border-b border-dotted border-zinc-400 text-zinc-950 px-1">
+                {doc.creatorPhone || "—"}
+              </span>
+            </div>
 
-        {/* B. DOCUMENT TITLE & SUBTITLE */}
-        <section className="relative mt-6 text-center font-sans">
-          <h1 className="text-xl sm:text-2xl font-black uppercase tracking-wide text-zinc-900">
-            {formTitle}
-          </h1>
-          <p className="mt-1 text-xs italic text-zinc-600">
-            Kính gửi: Ban Giám đốc & Phòng Kế toán - Tài chính
-          </p>
-          {doc.title && doc.title !== formTitle && (
-            <p className="mt-1 text-xs font-semibold text-zinc-800">
-              V/v: {doc.title}
-            </p>
-          )}
-        </section>
+            <div className="flex items-baseline">
+              <span className="whitespace-nowrap font-medium text-zinc-800">Dự án:</span>
+              <span className="mx-2 flex-1 border-b border-dotted border-zinc-400 font-semibold text-zinc-950 px-1">
+                {doc.projectName || "Nội bộ Creative Station"}
+              </span>
+            </div>
 
-        {/* C. FORM METADATA FIELDS (2-Column Key-Value List) */}
-        <section className="relative mt-6 space-y-2 text-xs leading-relaxed font-sans text-zinc-800">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
-            <div>
-              <span className="text-zinc-600">Họ và tên người đề nghị:</span>{" "}
-              <strong className="text-zinc-950 font-bold">{doc.creatorName || "Người đề nghị"}</strong>
-            </div>
-            <div>
-              <span className="text-zinc-600">Bộ phận / Phòng ban:</span>{" "}
-              <span className="font-medium text-zinc-900">{doc.creatorDepartment || "Bộ phận Dự án"}</span>
-            </div>
-            <div>
-              <span className="text-zinc-600">Dự án triển khai:</span>{" "}
-              <strong className="text-zinc-900">{doc.projectName || "Nội bộ Creative Station"}</strong>
-            </div>
-            <div>
-              <span className="text-zinc-600">Thời hạn hoàn ứng / thanh toán:</span>{" "}
-              <span className="font-semibold text-zinc-900">
+            <div className="flex items-baseline">
+              <span className="whitespace-nowrap font-medium text-zinc-800">
+                {doc.kind === "ADVANCE" || doc.kind === "PROPOSAL_ADVANCE" ? "Ngày hoàn tạm ứng:" : "Thời hạn thanh toán:"}
+              </span>
+              <span className="mx-2 flex-1 border-b border-dotted border-zinc-400 text-zinc-950 px-1">
                 {doc.expectedSettlementDate
                   ? new Date(doc.expectedSettlementDate).toLocaleDateString("vi-VN")
                   : "Theo tiến độ dự án"}
               </span>
             </div>
-          </div>
 
-          <div className="pt-1">
-            <span className="text-zinc-600">Lý do / Nội dung đề nghị:</span>
-            <p className="mt-1 whitespace-pre-wrap rounded border border-zinc-200 bg-zinc-50/60 p-2.5 text-xs text-zinc-900 font-serif">
-              {doc.content || "Chi phí phục vụ sản xuất thực hiện dự án theo hợp đồng và kế hoạch được duyệt."}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-baseline justify-between gap-2 pt-1 border-t border-zinc-200">
-            <div>
-              <span className="text-zinc-600">Tổng số tiền đề nghị:</span>{" "}
-              <strong className="text-sm sm:text-base font-bold text-zinc-950 tabular-nums">
-                {formatVnd(doc.amount)}
-              </strong>
-            </div>
-            {/^\d+$/.test(doc.amount) && (
-              <div className="italic text-zinc-700 text-xs">
-                (Bằng chữ: <strong>{moneyInWords(doc.amount)} đồng ./.</strong>)
+            {doc.content && (
+              <div className="pt-0.5 text-[11px] text-zinc-600">
+                <span className="italic">Nội dung đề nghị: </span>
+                <span>{doc.content}</span>
               </div>
             )}
-          </div>
-        </section>
-
-        {/* D. 5-COLUMN FINANCIAL BREAKDOWN TABLE (EXCEL PARITY) */}
-        {((doc.detailedLines && doc.detailedLines.length > 0) || doc.financeLines.length > 0) && (
-          <section className="relative mt-6 font-sans">
-            <table className="w-full border-collapse border border-zinc-800 text-xs">
-              <caption className="mb-2 text-left font-bold uppercase tracking-wider text-[11px] text-zinc-900">
-                Bảng kê chi tiết các khoản chi:
-              </caption>
-              <thead>
-                <tr className="bg-zinc-100 text-zinc-900 font-bold">
-                  <th scope="col" className="border border-zinc-800 p-2 text-center w-[6%]">STT</th>
-                  <th scope="col" className="border border-zinc-800 p-2 text-left w-[38%]">Nội dung chi</th>
-                  <th scope="col" className="border border-zinc-800 p-2 text-left w-[16%]">Mục IC</th>
-                  <th scope="col" className="border border-zinc-800 p-2 text-right w-[18%]">Số tiền (₫)</th>
-                  <th scope="col" className="border border-zinc-800 p-2 text-left w-[22%]">Người nhận / STK</th>
-                </tr>
-              </thead>
-              <tbody>
-                {doc.detailedLines && doc.detailedLines.length > 0 ? (
-                  doc.detailedLines.map((line, idx) => (
-                    <tr key={line.id || idx} className="hover:bg-zinc-50/50">
-                      <td className="border border-zinc-800 p-2 text-center tabular-nums text-zinc-600">
-                        {line.stt ?? idx + 1}
-                      </td>
-                      <td className="border border-zinc-800 p-2 text-zinc-900 font-medium">
-                        {line.description}
-                      </td>
-                      <td className="border border-zinc-800 p-2 text-zinc-600 text-[11px]">
-                        {line.icLineLabel || "—"}
-                      </td>
-                      <td className="border border-zinc-800 p-2 text-right tabular-nums font-semibold text-zinc-950">
-                        {formatVnd(line.amount)}
-                      </td>
-                      <td className="border border-zinc-800 p-2 text-zinc-800 text-[11px] leading-tight">
-                        <div className="font-medium text-zinc-900">{line.recipientName || "—"}</div>
-                        {line.recipientAccount && (
-                          <div className="text-[10px] text-zinc-500 font-mono">
-                            {line.recipientBank ? `${line.recipientBank} · ` : ""}
-                            STK: {line.recipientAccount}
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  doc.financeLines.map((line, idx) => (
-                    <tr key={line.id || idx}>
-                      <td className="border border-zinc-800 p-2 text-center tabular-nums text-zinc-600">{idx + 1}</td>
-                      <td className="border border-zinc-800 p-2 text-zinc-900">{line.description}</td>
-                      <td className="border border-zinc-800 p-2 text-zinc-600 text-[11px]">—</td>
-                      <td className="border border-zinc-800 p-2 text-right tabular-nums font-semibold text-zinc-950">{formatVnd(line.amount)}</td>
-                      <td className="border border-zinc-800 p-2 text-zinc-600 text-[11px]">—</td>
-                    </tr>
-                  ))
-                )}
-                <tr className="bg-zinc-100 font-bold text-zinc-950">
-                  <td colSpan={3} className="border border-zinc-800 p-2 text-right uppercase">
-                    TỔNG CỘNG:
-                  </td>
-                  <td className="border border-zinc-800 p-2 text-right tabular-nums font-black text-sm">
-                    {formatVnd(doc.amount)}
-                  </td>
-                  <td className="border border-zinc-800 p-2 text-zinc-500">—</td>
-                </tr>
-              </tbody>
-            </table>
           </section>
-        )}
 
-        {/* E. 4-TIER SIGNATURE SECTION (3 BOXES ROW 1 + 1 BOX ROW 2) */}
-        <section className="relative mt-8 font-sans">
-          <div className="grid grid-cols-3 gap-2.5 text-center text-xs">
-            {["CREATOR", "MANAGER", "ACCOUNTANT"].map(role => {
-              const signature = doc.signatures.find(item => item.role === role);
-              const isCurrentTurn = doc.canAct && doc.currentActorRole === role;
+          {/* C. 5-COLUMN FINANCIAL BREAKDOWN TABLE (EXCEL PARITY) */}
+          {((doc.detailedLines && doc.detailedLines.length > 0) || doc.financeLines.length > 0) && (
+            <section className="relative font-serif">
+              <table className="w-full border-collapse border border-zinc-900 text-xs">
+                <thead>
+                  <tr className="bg-zinc-50 text-zinc-950 font-bold">
+                    <th scope="col" className="border border-zinc-900 p-2 text-center w-[7%]">STT</th>
+                    <th scope="col" className="border border-zinc-900 p-2 text-left w-[37%]">Nội dung</th>
+                    <th scope="col" className="border border-zinc-900 p-2 text-right w-[18%]">
+                      {doc.kind === "ADVANCE" || doc.kind === "PROPOSAL_ADVANCE"
+                        ? "Số tiền tạm ứng"
+                        : doc.kind === "REIMBURSEMENT" || doc.kind === "PROPOSAL_ADVANCE_SETTLEMENT"
+                        ? "Số tiền hoàn ứng"
+                        : "Số tiền"}
+                    </th>
+                    <th scope="col" className="border border-zinc-900 p-2 text-left w-[18%]">Người nhận</th>
+                    <th scope="col" className="border border-zinc-900 p-2 text-left w-[20%]">STK - NGÂN HÀNG</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {doc.detailedLines && doc.detailedLines.length > 0 ? (
+                    doc.detailedLines.map((line, idx) => (
+                      <tr key={line.id || idx}>
+                        <td className="border border-zinc-900 p-2 text-center tabular-nums text-zinc-700">
+                          {line.stt ?? idx + 1}
+                        </td>
+                        <td className="border border-zinc-900 p-2 text-zinc-950">
+                          <div>{line.description}</div>
+                          {line.icLineLabel && (
+                            <div className="text-[10px] text-zinc-500 font-sans italic">Mục IC: {line.icLineLabel}</div>
+                          )}
+                        </td>
+                        <td className="border border-zinc-900 p-2 text-right tabular-nums font-semibold text-zinc-950">
+                          {formatVnd(line.amount)}
+                        </td>
+                        <td className="border border-zinc-900 p-2 text-zinc-950 font-medium">
+                          {line.recipientName || "—"}
+                        </td>
+                        <td className="border border-zinc-900 p-2 text-zinc-800 text-[11px] leading-tight font-sans">
+                          {line.recipientAccount ? (
+                            <div>
+                              {line.recipientBank && <div className="font-semibold text-zinc-900">{line.recipientBank}</div>}
+                              <div className="font-mono">{line.recipientAccount}</div>
+                            </div>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    doc.financeLines.map((line, idx) => (
+                      <tr key={line.id || idx}>
+                        <td className="border border-zinc-900 p-2 text-center tabular-nums text-zinc-700">{idx + 1}</td>
+                        <td className="border border-zinc-900 p-2 text-zinc-950">{line.description}</td>
+                        <td className="border border-zinc-900 p-2 text-right tabular-nums font-semibold text-zinc-950">{formatVnd(line.amount)}</td>
+                        <td className="border border-zinc-900 p-2 text-zinc-600">—</td>
+                        <td className="border border-zinc-900 p-2 text-zinc-600">—</td>
+                      </tr>
+                    ))
+                  )}
+                  <tr className="font-bold text-zinc-950">
+                    <td colSpan={2} className="border border-zinc-900 p-2 text-center uppercase">
+                      Tổng cộng
+                    </td>
+                    <td className="border border-zinc-900 p-2 text-right tabular-nums font-bold">
+                      {formatVnd(doc.amount)}
+                    </td>
+                    <td colSpan={2} className="border border-zinc-900 p-2"></td>
+                  </tr>
+                </tbody>
+              </table>
 
-              return (
-                <div
-                  key={role}
-                  className={`flex min-h-44 flex-col justify-between rounded border p-2.5 transition-all ${
-                    isCurrentTurn
-                      ? "border-amber-400 bg-amber-50/40 ring-2 ring-amber-300 print:border-zinc-300 print:bg-white print:ring-0"
-                      : "border-zinc-300 bg-white"
-                  }`}
-                >
-                  <div className="space-y-0.5">
-                    <strong className="block text-[11px] font-bold uppercase text-zinc-900">
-                      {ROLE_LABEL[role]}
-                    </strong>
-                    <span className="block text-[10px] text-zinc-500 italic">
-                      (Ký, ghi rõ họ tên)
-                    </span>
-                  </div>
-
-                  {/* Signature display slot */}
-                  <div className="my-2 flex flex-1 flex-col items-center justify-center min-h-[64px]">
-                    {signature?.signaturePngUrl ? (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img
-                        src={signature.signaturePngUrl}
-                        alt={`Chữ ký ${signature.name}`}
-                        className="max-h-16 max-w-full object-contain"
-                      />
-                    ) : signature?.name ? (
-                      <div className="flex flex-col items-center">
-                        <div className="w-7 h-7 rounded-full border-2 border-emerald-600 flex items-center justify-center text-emerald-700 font-serif font-black text-xs rotate-[-12deg] mb-0.5">
-                          ✓
-                        </div>
-                        <span className="text-[9px] font-bold text-emerald-800 uppercase tracking-tight">
-                          ĐÃ KÝ SỐ NỘI BỘ
-                        </span>
-                      </div>
-                    ) : isCurrentTurn ? (
-                      <button
-                        type="button"
-                        onClick={() => setSignPadOpen(true)}
-                        className="group flex w-full flex-col items-center justify-center rounded border-2 border-dashed border-amber-400 bg-amber-50/70 p-2 transition-all hover:bg-amber-100 print:hidden cursor-pointer"
-                        title="Nhấp để ký trực tiếp bằng chữ ký số và mã PIN"
-                      >
-                        <PenTool size={15} className="text-amber-600 mb-1 group-hover:scale-110 transition-transform" />
-                        <span className="text-[11px] font-bold text-amber-900">Nhấp để ký tại đây</span>
-                        <span className="text-[9px] text-amber-700">Mã PIN 6 số</span>
-                      </button>
-                    ) : (
-                      <span className="text-zinc-400 italic text-[11px]">
-                        {doc.isDraft ? "Chờ ký" : doc.signingMode === "PHYSICAL" ? "Bằng chứng bản giấy" : "Chưa ký"}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="border-t border-zinc-100 pt-1 text-[11px]">
-                    <p className="font-semibold text-zinc-900 truncate">{signature?.name ?? "—"}</p>
-                    {signature?.signedAt && (
-                      <p className="text-[10px] text-zinc-500 font-mono">
-                        {new Date(signature.signedAt).toLocaleDateString("vi-VN")}
-                      </p>
-                    )}
-                  </div>
+              {/* SỐ TIỀN BẰNG CHỮ */}
+              {/^\d+$/.test(doc.amount) && (
+                <div className="mt-2 text-xs text-zinc-950">
+                  <span>Bằng chữ: </span>
+                  <span className="italic font-medium">{moneyInWords(doc.amount)} đồng ./.</span>
                 </div>
-              );
-            })}
-          </div>
+              )}
+            </section>
+          )}
 
-          {/* ROW 2: CEO BOX (CENTERED / PROMINENT) */}
-          <div className="mt-3 mx-auto max-w-xs text-center text-xs">
-            {(() => {
-              const role = "CEO";
-              const signature = doc.signatures.find(item => item.role === role);
-              const isCurrentTurn = doc.canAct && doc.currentActorRole === role;
+          {/* D. 2-TIER SIGNATURE SECTION (Excel Parity: 3 Columns Row 1, Line Divider, Centered CEO Row 2) */}
+          <section className="relative pt-2 font-serif">
+            <div className="text-right text-xs italic text-zinc-800 pr-4 mb-2">
+              {doc.approvedAt
+                ? `Ngày ${new Date(doc.approvedAt).getDate()} tháng ${new Date(doc.approvedAt).getMonth() + 1} năm ${new Date(doc.approvedAt).getFullYear()}`
+                : doc.createdDate
+                ? `Ngày ${new Date(doc.createdDate).getDate()} tháng ${new Date(doc.createdDate).getMonth() + 1} năm ${new Date(doc.createdDate).getFullYear()}`
+                : "Ngày ... tháng ... năm ..."}
+            </div>
 
-              return (
-                <div
-                  className={`flex min-h-44 flex-col justify-between rounded border p-2.5 transition-all ${
-                    isCurrentTurn
-                      ? "border-amber-400 bg-amber-50/40 ring-2 ring-amber-300 print:border-zinc-300 print:bg-white print:ring-0"
-                      : "border-zinc-300 bg-white"
-                  }`}
-                >
-                  <div className="space-y-0.5">
-                    <strong className="block text-[11px] font-bold uppercase text-zinc-900">
-                      {ROLE_LABEL[role]}
-                    </strong>
-                    <span className="block text-[10px] text-zinc-500 italic">
-                      (Phê duyệt & Đóng dấu)
-                    </span>
-                  </div>
+            {/* TẦNG 1: 3 CỘT (ACCOUNTANT - MANAGER - CREATOR) */}
+            <div className="grid grid-cols-3 gap-3 text-center text-xs">
+              {(["ACCOUNTANT", "MANAGER", "CREATOR"] as const).map(role => {
+                const signature = doc.signatures.find(item => item.role === role);
+                const isCurrentTurn = doc.canAct && doc.currentActorRole === role;
+                const displayName = signature?.name || (role === "CREATOR" ? doc.creatorName : "");
 
-                  {/* Signature display slot */}
-                  <div className="my-2 flex flex-1 flex-col items-center justify-center min-h-[64px] relative">
-                    {signature?.signaturePngUrl ? (
-                      <div className="relative">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                return (
+                  <div
+                    key={role}
+                    className={`flex min-h-32 flex-col justify-between rounded p-2 transition-all ${
+                      isCurrentTurn
+                        ? "border-amber-400 bg-amber-50/40 ring-2 ring-amber-300 print:border-transparent print:bg-white print:ring-0"
+                        : "border border-transparent bg-white"
+                    }`}
+                  >
+                    <div className="space-y-0.5">
+                      <strong className="block text-xs font-bold text-zinc-950">
+                        {ROLE_LABEL[role]}
+                      </strong>
+                      <span className="block text-[10px] text-zinc-500 italic">
+                        (Ký, ghi rõ họ tên)
+                      </span>
+                    </div>
+
+                    {/* Vùng chữ ký */}
+                    <div className="my-1 flex flex-1 flex-col items-center justify-center min-h-[50px]">
+                      {signature?.signaturePngUrl ? (
+                        /* eslint-disable-next-line @next/next/no-img-element */
                         <img
                           src={signature.signaturePngUrl}
                           alt={`Chữ ký ${signature.name}`}
-                          className="max-h-16 max-w-full object-contain"
+                          className="max-h-12 max-w-full object-contain"
                         />
-                        <div className="absolute -top-3 -right-6 rounded border border-rose-600 bg-rose-50/90 px-1.5 py-0.5 text-[9px] font-black tracking-widest text-rose-700 rotate-[12deg] shadow-2xs">
-                          ĐÃ DUYỆT
+                      ) : signature?.name ? (
+                        <div className="flex flex-col items-center">
+                          <span className="text-[10px] font-bold text-emerald-800 font-sans tracking-tight">
+                            ĐÃ DUYỆT ĐIỆN TỬ
+                          </span>
+                          {signature.signedAt && (
+                            <span className="text-[9px] text-zinc-400 font-mono">
+                              {new Date(signature.signedAt).toLocaleDateString("vi-VN")}
+                            </span>
+                          )}
                         </div>
-                      </div>
-                    ) : signature?.name ? (
-                      <div className="flex flex-col items-center relative">
-                        <div className="w-8 h-8 rounded-full border-2 border-emerald-600 flex items-center justify-center text-emerald-700 font-serif font-black text-xs rotate-[-12deg] mb-0.5">
-                          ✓
-                        </div>
-                        <span className="text-[9px] font-bold text-emerald-800 uppercase tracking-tight">
-                          ĐÃ PHÊ DUYỆT
-                        </span>
-                        <div className="mt-1 rounded border border-rose-600 bg-rose-50/90 px-1 py-0.5 text-[8px] font-black text-rose-700 rotate-[8deg]">
-                          CREATIVE STN
-                        </div>
-                      </div>
-                    ) : isCurrentTurn ? (
-                      <button
-                        type="button"
-                        onClick={() => setSignPadOpen(true)}
-                        className="group flex w-full flex-col items-center justify-center rounded border-2 border-dashed border-amber-400 bg-amber-50/70 p-2 transition-all hover:bg-amber-100 print:hidden cursor-pointer"
-                        title="CEO nhấp để phê duyệt và ký số điện tử"
-                      >
-                        <PenTool size={15} className="text-amber-600 mb-1 group-hover:scale-110 transition-transform" />
-                        <span className="text-[11px] font-bold text-amber-900">CEO nhấp để phê duyệt</span>
-                        <span className="text-[9px] text-amber-700">Mã PIN 6 số</span>
-                      </button>
-                    ) : (
-                      <span className="text-zinc-400 italic text-[11px]">
-                        {doc.isDraft ? "Chờ CEO phê duyệt" : "Chưa ký"}
-                      </span>
-                    )}
-                  </div>
+                      ) : isCurrentTurn ? (
+                        <button
+                          type="button"
+                          onClick={() => setSignPadOpen(true)}
+                          className="group flex w-full flex-col items-center justify-center rounded border-2 border-dashed border-amber-400 bg-amber-50/70 p-1.5 transition-all hover:bg-amber-100 print:hidden cursor-pointer"
+                          title="Bấm để ký số"
+                        >
+                          <PenTool size={13} className="text-amber-600 mb-0.5 group-hover:scale-110 transition-transform" />
+                          <span className="text-[10px] font-bold text-amber-900">Bấm để ký số</span>
+                        </button>
+                      ) : (
+                        <div className="h-10"></div>
+                      )}
+                    </div>
 
-                  <div className="border-t border-zinc-100 pt-1 text-[11px]">
-                    <p className="font-semibold text-zinc-900 truncate">{signature?.name ?? "—"}</p>
-                    {signature?.signedAt && (
-                      <p className="text-[10px] text-zinc-500 font-mono">
-                        {new Date(signature.signedAt).toLocaleDateString("vi-VN")}
+                    <div className="pt-1">
+                      <p className="font-bold text-zinc-950 uppercase text-[11px] tracking-wide">
+                        {displayName || "—"}
                       </p>
-                    )}
+                    </div>
                   </div>
-                </div>
-              );
-            })()}
-          </div>
-        </section>
-
-        {/* F. SECURITY FOOTER & VERIFICATION QR CODE */}
-        <footer className="relative mt-8 flex items-end justify-between border-t border-zinc-200 pt-4 font-sans text-xs text-zinc-600">
-          <div className="max-w-md space-y-1">
-            <p className="leading-tight">
-              {doc.isDraft
-                ? "Bản xem trước được cấp cho người có quyền; không phải bản đã xác minh."
-                : "Bản in lấy từ snapshot bất biến đã duyệt và bằng chứng phát hành nội bộ."}
-            </p>
-            {doc.projectionSha256 && (
-              <p className="break-all font-mono text-[10px] text-zinc-500">
-                SHA-256: {doc.projectionSha256}
-              </p>
-            )}
-            <p className="text-[10px] text-zinc-400">Không phải chứng thư hoặc chữ ký số CA.</p>
-          </div>
-
-          {!doc.isDraft && doc.qrDataUrl && (
-            <div className="text-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={doc.qrDataUrl}
-                alt="QR xác minh snapshot đã duyệt"
-                width={104}
-                height={104}
-                className="mx-auto"
-              />
-              <p className="mt-1 text-[10px] text-zinc-500 font-mono">Quét để tra cứu</p>
+                );
+              })}
             </div>
-          )}
-        </footer>
+
+            <hr className="my-2 border-t border-zinc-900" />
+
+            {/* TẦNG 2: GIÁM ĐỐC (CEO - CĂN GIỮA) */}
+            <div className="mx-auto max-w-xs text-center text-xs">
+              {(() => {
+                const role = "CEO";
+                const signature = doc.signatures.find(item => item.role === role);
+                const isCurrentTurn = doc.canAct && doc.currentActorRole === role;
+
+                return (
+                  <div
+                    className={`flex min-h-32 flex-col justify-between rounded p-2 transition-all ${
+                      isCurrentTurn
+                        ? "border-amber-400 bg-amber-50/40 ring-2 ring-amber-300 print:border-transparent print:bg-white print:ring-0"
+                        : "border border-transparent bg-white"
+                    }`}
+                  >
+                    <div className="space-y-0.5">
+                      <strong className="block text-xs font-bold text-zinc-950">
+                        {ROLE_LABEL[role]}
+                      </strong>
+                      <span className="block text-[10px] text-zinc-500 italic">
+                        (Phê duyệt & Đóng dấu)
+                      </span>
+                    </div>
+
+                    <div className="my-1 flex flex-1 flex-col items-center justify-center min-h-[50px] relative">
+                      {signature?.signaturePngUrl ? (
+                        <div className="relative">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={signature.signaturePngUrl}
+                            alt={`Chữ ký ${signature.name}`}
+                            className="max-h-12 max-w-full object-contain"
+                          />
+                          <div className="absolute -top-2 -right-4 rounded border border-rose-600 bg-rose-50/90 px-1 py-0.2 text-[8px] font-black tracking-widest text-rose-700 rotate-[12deg]">
+                            ĐÃ DUYỆT
+                          </div>
+                        </div>
+                      ) : signature?.name ? (
+                        <div className="flex flex-col items-center">
+                          <div className="w-6 h-6 rounded-full border border-emerald-600 flex items-center justify-center text-emerald-700 font-bold text-xs mb-0.5">
+                            ✓
+                          </div>
+                          <span className="text-[9px] font-bold text-emerald-800 uppercase tracking-tight">
+                            ĐÃ PHÊ DUYỆT
+                          </span>
+                        </div>
+                      ) : isCurrentTurn ? (
+                        <button
+                          type="button"
+                          onClick={() => setSignPadOpen(true)}
+                          className="group flex w-full flex-col items-center justify-center rounded border-2 border-dashed border-amber-400 bg-amber-50/70 p-1.5 transition-all hover:bg-amber-100 print:hidden cursor-pointer"
+                          title="CEO nhấp để phê duyệt và ký số"
+                        >
+                          <PenTool size={13} className="text-amber-600 mb-0.5 group-hover:scale-110 transition-transform" />
+                          <span className="text-[10px] font-bold text-amber-900">CEO phê duyệt</span>
+                        </button>
+                      ) : (
+                        <div className="h-10"></div>
+                      )}
+                    </div>
+
+                    <div className="pt-1">
+                      <p className="font-bold text-zinc-950 uppercase text-[11px] tracking-wide">
+                        {signature?.name ?? "—"}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </section>
+        </div>
+
+        {/* E. SECURITY VERIFICATION & BOTTOM VECTOR FOOTER */}
+        <div className="mt-auto pt-4 space-y-2">
+          {/* SECURITY & QR CODE */}
+          <section className="relative flex items-end justify-between border-t border-zinc-200 pt-2 font-sans text-xs text-zinc-600">
+            <div className="max-w-md space-y-0.5">
+              <p className="text-[10px] leading-tight">
+                {doc.isDraft
+                  ? "Bản xem trước được cấp cho người có quyền; không phải bản đã xác minh."
+                  : "Bản in lấy từ snapshot bất biến đã duyệt và bằng chứng phát hành nội bộ."}
+              </p>
+              {doc.projectionSha256 && (
+                <p className="break-all font-mono text-[9px] text-zinc-500">
+                  SHA-256: {doc.projectionSha256}
+                </p>
+              )}
+              <p className="text-[9px] text-zinc-400">Không phải chứng thư hoặc chữ ký số CA.</p>
+            </div>
+
+            {!doc.isDraft && doc.qrDataUrl && (
+              <div className="text-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={doc.qrDataUrl}
+                  alt="QR xác minh snapshot đã duyệt"
+                  width={72}
+                  height={72}
+                  className="mx-auto"
+                />
+                <p className="mt-0.5 text-[9px] text-zinc-500 font-mono">Quét để tra cứu</p>
+              </div>
+            )}
+          </section>
+
+          {/* F. CORPORATE FOOTER STRIPE (Standard Vector with Izmir Font) */}
+          <footer className="relative pt-1">
+            <DocumentFooter variant="color" className="w-full h-auto block" />
+          </footer>
+        </div>
       </article>
 
       {/* 3. SIGNATURE PAD MODAL (CLICK-TO-SIGN) */}

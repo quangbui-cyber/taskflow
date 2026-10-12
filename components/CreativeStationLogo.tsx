@@ -8,10 +8,22 @@ export interface CreativeStationLogoProps extends React.SVGProps<SVGSVGElement> 
    */
   variant?: "color" | "monochrome";
   /**
+   * Bật hiển thị tagline chính thức "WE CREATE EMOTIONS" đã được vector hóa chuẩn font Izmir Bold.
+   */
+  withTagline?: boolean;
+  /**
    * Tiêu đề hiển thị cho accessibility (mặc định "Creative Station").
    */
   title?: string;
 }
+
+/**
+ * Đường dẫn vector đã được outline từ font chính thức Izmir Bold (Fontspring-DEMO-izmir-bold.otf)
+ * Bounding Box: x1: 1.51, y1: 403.61, x2: 1963.38, y2: 503.49
+ * Trải đều 100% chiều ngang phía dưới logo huy hiệu Creative Station.
+ */
+export const IZMIR_TAGLINE_PATH =
+  "M97.76,466.55l17.83-60.89h22.51l-30.52,95.78h-17.68l-20.1-57.74-20.1,57.74h-17.68L1.51,405.66h22.52l17.83,60.89,19.64-60.89h16.62l19.64,60.89ZM190.54,424.27v18.75h43.07v18.33h-43.07v21.48h49.41v18.61h-70.87v-95.78h70.87v18.61h-49.41ZM329.11,453.55c0-30.38,23.27-49.94,53.64-49.94,25.39,0,45.18,13.96,50.02,36.26h-22.36c-3.32-10.95-12.84-17.92-27.65-17.92-20.25,0-32.19,13-32.19,31.61s11.94,31.61,32.19,31.61c14.81,0,24.33-6.98,27.65-17.92h22.36c-4.84,22.3-24.63,36.26-50.02,36.26-30.37,0-53.64-19.57-53.64-49.94ZM544.89,501.44h-23.72l-19.64-33.11h-14.05v33.11h-21.46v-95.78h42.16c19.95,0,35.81,11.63,35.81,31.33,0,14.78-8.92,24.9-21.61,29.14l22.51,35.3Zm-57.42-77.58v26.27h21.16c8.16,0,14.2-4.93,14.2-13.14s-6.04-13.13-14.2-13.13h-21.16ZM600.95,424.27v18.75h43.07v18.33h-43.07v21.48h49.41v18.61h-70.87v-95.78h70.87v18.61h-49.41ZM782.28,501.44h-22.82l-7.4-17.65h-43.52l-7.4,17.65h-22.82l42.01-95.78h19.95l42.01,95.78Zm-66.64-34.89h29.16l-14.51-37.35-14.66,37.35ZM843.63,501.44h-21.46v-77.17h-29.77v-18.61h80.99v18.61h-29.77v77.17ZM928.4,424.27v18.75h43.07v18.33h-43.07v21.48h49.41v18.61h-70.87v-95.78h70.87v18.61h-49.41ZM1093.71,424.27v18.75h43.07v18.33h-43.07v21.48h49.41v18.61h-70.87v-95.78h70.87v18.61h-49.41ZM1260.98,405.66h21.46v95.78h-21.46v-58.29l-22.97,36.67h-14.2l-22.97-36.67v58.29h-21.46v-95.78h21.46l30.07,48.03,30.07-48.03ZM1425.99,453.55c0,30.38-23.27,49.94-53.64,49.94s-53.64-19.57-53.64-49.94,23.27-49.94,53.64-49.94,53.64,19.57,53.64,49.94Zm-21.46,0c0-18.61-11.94-31.61-32.19-31.61s-32.19,13-32.19,31.61,11.94,31.61,32.19,31.61,32.19-13,32.19-31.61ZM1502.45,501.44h-21.46v-77.17h-29.77v-18.61h80.99v18.61h-29.77v77.17ZM1587.22,501.44h-21.46v-95.78h21.46v95.78ZM1730.77,453.55c0,30.38-23.27,49.94-53.64,49.94s-53.64-19.57-53.64-49.94,23.27-49.94,53.64-49.94,53.64,19.57,53.64,49.94Zm-21.46,0c0-18.61-11.94-31.61-32.19-31.61s-32.19,13-32.19,31.61,11.94,31.61,32.19,31.61,32.19-13,32.19-31.61ZM1832.17,501.44l-44.43-62.67v62.67h-21.46v-95.78h21.46l44.43,62.26v-62.26h21.46v95.78h-21.46ZM1910.59,472.84c.45,8.76,10.27,13,20.55,13,9.37,0,18.59-3.01,18.59-11.77,0-7.25-5.74-10.12-15.56-12.31-17.83-3.97-41.4-6.57-41.4-28.87,0-20.39,16.92-29.28,37.93-29.28,19.79,0,38.68,8.48,38.68,29.01h-20.85c-.6-8.21-8.76-11.22-17.83-11.22s-16.47,3.69-16.47,11.08,9.67,9.03,22.36,11.77c17.08,3.69,35.36,9.03,35.36,29.55s-19.79,29.42-40.65,29.69c-21.16,0-41.55-9.71-41.55-30.65h20.85Z";
 
 /**
  * CreativeStationLogo - Vector Logo tối ưu hóa cao cho Web, Biểu mẫu in và Trình ký
@@ -20,10 +32,11 @@ export interface CreativeStationLogoProps extends React.SVGProps<SVGSVGElement> 
  * - 0ms Network Request: Nhúng trực tiếp dạng Inline SVG, không tốn băng thông HTTP.
  * - In ấn & Trình ký an toàn 100%: Không bao giờ bị lỗi logo trắng khi bấm In / Xuất PDF.
  * - Vector chuẩn sắc nét: Không bị vỡ hạt ở mọi độ phân giải (300+ DPI).
- * - Không gây giật layout (CLS = 0).
+ * - Tích hợp Tagline "WE CREATE EMOTIONS" dạng vector hoàn chỉnh chuẩn font Izmir Bold.
  */
 export function CreativeStationLogo({
   variant = "color",
+  withTagline = false,
   title = "Creative Station",
   className = "h-auto w-auto",
   width,
@@ -36,13 +49,16 @@ export function CreativeStationLogo({
   const rightBgFill = isMono ? "#e4e4e7" : "#98ce00";
   const creativeTextFill = isMono ? "#ffffff" : "#98ce00";
   const stationTextFill = isMono ? "#18181b" : "#000000";
+  const taglineFill = isMono ? "#18181b" : "#000000";
+
+  const viewBox = withTagline ? "0 0 1974 503.49" : "0 0 1974 324.48";
 
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 1974 324.48"
+      viewBox={viewBox}
       role="img"
-      aria-label={title}
+      aria-label={withTagline ? `${title} - We Create Emotions` : title}
       className={className}
       width={width}
       height={height}
@@ -54,7 +70,7 @@ export function CreativeStationLogo({
       }}
       {...props}
     >
-      {title ? <title>{title}</title> : null}
+      {title ? <title>{withTagline ? `${title} - We Create Emotions` : title}</title> : null}
       <g fillRule="nonzero">
         {/* Nền huy hiệu bên trái */}
         <path
@@ -105,6 +121,15 @@ export function CreativeStationLogo({
           {/* N */}
           <path d="m1897.09,40.44c-.18-10.76-.71,68.17-1.48,236.74,0,5.37-1.73,8.48-5.07,8.99-9.89,1.68-20.28,1.68-31.2,0-3.71-.51-6.06-2.68-7.07-6.41-6.87-31.02-14.8-66.11-23.81-105.29-.94-3.11-2.12-4.68-3.76-4.68-1.22,0-1.91,2.23-1.91,6.48v43.81c-.16,24.66-.33,43.78-.33,57.54,0,4.17-2.51,6.68-7.76,7.76-3.44.81-8.09,1.18-13.85.88-7.47-.21-11.66-.37-12.67-.37-4.15.3-6.29-2.05-6.57-6.96-.76-28.85-1.01-72.36-.67-130.36.58-56.23,1.19-91.93,2.26-107.23.39-4.84,1.68-7.37,4.05-7.6,4.96-.25,11.57-.25,20.14,0,10.26.27,15.81.67,16.59.67,2.95,0,4.84,2.1,5.6,6.48,10.3,49.89,17.63,82.06,21.8,96.53,1.57,5.51,2.95,8.41,3.99,8.41,1.45,0,1.96-3.2,1.47-9.7-.8-16.75-1.22-48.63-1.22-95.59,0-4.68,2.05-7.05,6.17-6.8h28.74c4.31.23,6.55,2.44,6.55,6.8Z" />
         </g>
+
+        {/* Tagline: WE CREATE EMOTIONS (Izmir Bold Vector Outlines) */}
+        {withTagline && (
+          <path
+            id="tagline-we-create-emotions"
+            fill={taglineFill}
+            d={IZMIR_TAGLINE_PATH}
+          />
+        )}
       </g>
     </svg>
   );
