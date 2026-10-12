@@ -45,6 +45,7 @@ model User {
   isLeaveManager       Boolean             @default(false)
   leaveRequests        LeaveRequest[]      @relation("LeaveRequester")
   leaveDecisions       LeaveRequest[]      @relation("LeaveDecider")
+  leaveAdjustments     LeaveUsageAdjustment[]
 
   @@index([isActive])
 }
@@ -436,6 +437,17 @@ model LeaveRequest {
 
   @@index([userId, startDate])
   @@index([status, startDate])
+}
+
+// Điều chỉnh số ngày đã dùng theo năm; đơn đã duyệt vẫn được tính tự động.
+model LeaveUsageAdjustment {
+  userId         String
+  year           Int
+  adjustmentDays Float    @default(0)
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, year])
 }
 
 // Phòng họp dùng chung của công ty. Phòng ngừng dùng (isActive = false) không đặt mới được

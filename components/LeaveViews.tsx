@@ -8,6 +8,7 @@ import {
   decideLeaveRequest,
   setAnnualLeaveDays,
   setLeaveManagers,
+  setUsedLeaveDays,
   type LeaveState,
 } from "@/app/actions/leave";
 import {
@@ -18,6 +19,7 @@ import {
   HALF_DAY_OPTIONS,
   LEAVE_TYPES,
   MAX_ANNUAL_LEAVE_DAYS,
+  MAX_USED_LEAVE_DAYS,
   countLeaveDays,
   formatLeaveDays,
   leaveRangeError,
@@ -297,6 +299,54 @@ export function LeaveQuotaInput({
         className="tf-icon-button !h-8 !min-h-8 !w-8 shrink-0"
         title="Lưu số ngày phép"
         aria-label={`Lưu số ngày phép của ${userName}`}
+      >
+        <Save size={14} aria-hidden="true" />
+      </button>
+    </form>
+  );
+}
+
+/** Admin điều chỉnh tổng số ngày đã dùng trong năm. */
+export function LeaveUsedInput({
+  userId,
+  userName,
+  year,
+  days,
+}: {
+  userId: string;
+  userName: string;
+  year: number;
+  days: number;
+}) {
+  const { pending, run } = useLeaveAction();
+  const [value, setValue] = useState(String(days));
+  const parsed = Number(value.replace(",", "."));
+  const changed = value.trim() !== "" && parsed !== days;
+
+  return (
+    <form
+      className="flex items-center justify-end gap-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        run(() => setUsedLeaveDays(userId, year, parsed));
+      }}
+    >
+      <input
+        type="number"
+        min={0}
+        max={MAX_USED_LEAVE_DAYS}
+        step={0.5}
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+        aria-label={`Số ngày phép đã dùng của ${userName} năm ${year}`}
+        className="h-8 w-20 rounded-[6px] border border-zinc-200 px-2 text-right text-[13px] tabular-nums outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+      />
+      <button
+        type="submit"
+        disabled={pending || !changed}
+        className="tf-icon-button !h-8 !min-h-8 !w-8 shrink-0"
+        title="Lưu số ngày đã dùng"
+        aria-label={`Lưu số ngày phép đã dùng của ${userName} năm ${year}`}
       >
         <Save size={14} aria-hidden="true" />
       </button>
