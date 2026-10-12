@@ -657,6 +657,18 @@ function CompactRequestCard({
           )}
 
           <div className="flex items-center gap-2">
+            {["ADVANCE", "VENDOR_PAYMENT", "REIMBURSEMENT"].includes(request.kind) && (
+              <Link
+                href={`/projects/${finance.project.id}/costflow/requests/${request.id}/print`}
+                onClick={(e) => e.stopPropagation()}
+                className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-zinc-700 bg-white border border-zinc-300 rounded-lg hover:bg-zinc-50 hover:text-indigo-600 transition-colors shadow-2xs"
+                title="Mở biểu mẫu A4 để xem và trình ký"
+              >
+                <Printer size={12} aria-hidden="true" />
+                <span>Trình ký A4</span>
+              </Link>
+            )}
+
             {isMyTurn && (
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500 text-white animate-pulse">
                 <Clock size={11} aria-hidden="true" />
@@ -944,30 +956,36 @@ function RequestInspectionModal({
           </div>
         )}
 
-        {/* Nút In ấn A4 & Tra cứu xác thực QR cho các chứng từ cần ký tên */}
+        {/* Nút In ấn & Trình ký A4 toàn trang (Dual-track signing) */}
         {isSignedKind && (
-          <div className="flex flex-wrap items-center gap-2 pt-2">
-            <Link
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors"
-              href={`/projects/${finance.project.id}/costflow/requests/${request.id}/print`}
-              target="_blank"
-            >
-              <Printer size={13} aria-hidden="true" />
-              In / Lưu PDF biểu mẫu A4
-            </Link>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg">
-              <ShieldCheck size={13} aria-hidden="true" />
-              QR an toàn nằm trên bản in đã duyệt
-            </span>
-            {request.kind === "REIMBURSEMENT" && (
+          <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl border border-indigo-100 bg-indigo-50/60 mt-2">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-700 shrink-0">
+                <Printer size={16} aria-hidden="true" />
+              </div>
+              <div className="text-xs">
+                <p className="font-semibold text-indigo-950">Biểu mẫu trình ký A4 chuẩn hoá</p>
+                <p className="text-[11px] text-indigo-700">Xem và ký số trực tiếp trên biểu mẫu A4 chuẩn Excel doanh nghiệp</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
               <Link
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-700 bg-zinc-50 border border-zinc-200 rounded-lg hover:bg-zinc-100 transition-colors"
-                href={`/api/projects/${finance.project.id}/costflow/requests/${request.id}/export`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 shadow-xs transition-colors"
+                href={`/projects/${finance.project.id}/costflow/requests/${request.id}/print`}
               >
-                <FileSpreadsheet size={13} aria-hidden="true" />
-                Tải phiếu Excel
+                <PenTool size={13} aria-hidden="true" />
+                Mở bản in trình ký A4
               </Link>
-            )}
+              {request.kind === "REIMBURSEMENT" && (
+                <Link
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-700 bg-white border border-zinc-200 rounded-lg hover:bg-zinc-50 transition-colors"
+                  href={`/api/projects/${finance.project.id}/costflow/requests/${request.id}/export`}
+                >
+                  <FileSpreadsheet size={13} aria-hidden="true" />
+                  Xuất Excel
+                </Link>
+              )}
+            </div>
           </div>
         )}
 
