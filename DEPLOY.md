@@ -196,11 +196,15 @@ curl -H "Authorization: Bearer <CRON_SECRET>" \
 > ⚠️ Endpoint này gửi tin **thật** vào group Chat của mọi dự án có việc trễ hạn.
 > Đừng gọi thử trên production nếu chưa muốn cả công ty nhận tin nhắn.
 
-## Lịch họp: gửi email mời họp qua Gmail (tuỳ chọn)
+## Email lịch họp và nghỉ phép qua Google Workspace (tuỳ chọn)
 
 Trang **Lịch họp** luôn gửi thông báo trong app. Muốn người tham dự nhận thêm
 **email kèm lịch (.ics)** khi được mời, khi đổi giờ/phòng và khi huỷ họp thì khai báo
-một hộp thư Gmail để gửi:
+một hộp thư Gmail hoặc Google Workspace để gửi. Trang **Nghỉ phép** dùng cùng
+hộp thư: gửi xác nhận cho người xin và thông báo cho người duyệt khi có đơn mới;
+gửi kết quả duyệt/từ chối cho người xin và quản lý nghỉ phép; khi hủy, báo người xin
+và người duyệt (đơn đã duyệt thì báo thêm quản lý nghỉ phép). Email nghỉ phép gửi
+riêng từng người nhận và bỏ qua tài khoản đã ngừng hoạt động.
 
 1. Tạo (hoặc chọn) một tài khoản Gmail **dùng riêng cho app** — mail mời họp sẽ gửi
    đi từ địa chỉ này.
@@ -208,11 +212,23 @@ một hộp thư Gmail để gửi:
    <https://myaccount.google.com/apppasswords>.
 3. Vercel → Settings → Environment Variables → thêm:
    - `SMTP_USER` = địa chỉ Gmail ở bước 1
-   - `SMTP_APP_PASSWORD` = mật khẩu ứng dụng 16 ký tự ở bước 2
+   - `SMTP_APP_PASSWORD` = mật khẩu ứng dụng 16 ký tự ở bước 2, lưu dạng Secret/Sensitive
+   - `SMTP_HOST` = `smtp.gmail.com`
+   - `SMTP_PORT` = `465` (TLS trực tiếp) hoặc `587` (STARTTLS bắt buộc)
+   - `MAIL_FROM_NAME` = `Creative Station` (tùy chọn)
    - `APP_URL` = địa chỉ app (không bắt buộc trên Vercel) để email có nút mở app
 4. **Redeploy.**
 
 Chưa khai báo thì app vẫn chạy bình thường, chỉ không gửi email.
+
+Không dùng mật khẩu đăng nhập Google cho `SMTP_APP_PASSWORD`. Nếu không thấy mục
+Mật khẩu ứng dụng, nhờ quản trị viên Workspace kiểm tra chính sách xác minh hai bước
+và quyền dùng mật khẩu ứng dụng. Không đưa mã thật vào Git hoặc nội dung PR.
+
+Email chạy sau khi thao tác lưu thành công; lỗi SMTP không làm mất đơn hoặc lịch đã đặt.
+Lỗi gửi mail được ghi trong runtime logs bằng mã lỗi, không ghi mật khẩu hoặc nội dung thư.
+Đây là gửi trực tiếp theo từng sự kiện, chưa có hàng đợi gửi lại khi máy chủ mail gặp lỗi.
+Lịch họp đang tạm ẩn trên production; chỉ bật lại nếu muốn bằng `MEETINGS_ENABLED=true`.
 
 - **Giới hạn của Gmail:** khoảng 500 người nhận/ngày với Gmail thường (2.000 với
   Google Workspace). Vượt mức, Google tạm khoá gửi khoảng 24 giờ.

@@ -30,6 +30,21 @@ export function emailSenderAddress(): string | null {
   return smtpCredentials()?.user ?? null;
 }
 
+export function emailAppUrl(
+  env: Record<string, string | undefined> = process.env
+): string {
+  const configured = env.APP_URL?.trim();
+  const productionHost = env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  const value = configured || (productionHost ? `https://${productionHost}` : "");
+  if (!value) return "";
+  try {
+    const url = new URL(value);
+    return ["https:", "http:"].includes(url.protocol) ? url.origin : "";
+  } catch {
+    return "";
+  }
+}
+
 function transport(): Transporter | null {
   const auth = smtpCredentials();
   if (!auth) return null;
@@ -39,6 +54,7 @@ function transport(): Transporter | null {
       host: process.env.SMTP_HOST?.trim() || "smtp.gmail.com",
       port,
       secure: port === 465,
+      requireTLS: port !== 465,
       auth,
       connectionTimeout: 10_000,
       socketTimeout: 15_000,
@@ -49,15 +65,14 @@ function transport(): Transporter | null {
 
 /** Gửi email qua SMTP (mặc định Gmail); lỗi gửi mail không làm hỏng thao tác chính. */
 export async function sendEmail(message: EmailMessage): Promise<EmailResult> {
+  if (message.to.length === 0) return { ok: true };
   const mailer = transport();
   const sender = emailSenderAddress();
   if (!mailer || !sender) {
     return { ok: false, error: "Chưa cấu hình SMTP_USER / SMTP_APP_PASSWORD." };
   }
-  if (message.to.length === 0) return { ok: true };
-
   try {
-    await mailer.sendMail({
+    const delivery = await mailer.sendMail({
       from: {
         name: process.env.MAIL_FROM_NAME?.trim() || "myCreative",
         address: sender,
@@ -74,9 +89,15 @@ export async function sendEmail(message: EmailMessage): Promise<EmailResult> {
           }
         : undefined,
     });
+    if (delivery.rejected?.length) {
+      console.warn("Email recipients rejected:", delivery.rejected.length);
+      return { ok: false, error: "Có địa chỉ người nhận bị máy chủ email từ chối." };
+    }
     return { ok: true };
   } catch (error) {
-    console.error("Email send error:", error);
+    const code = error && typeof error === "object" && "code" in error
+      ? String(error.code) : "UNKNOWN";
+    console.warn("Email delivery failed:", /^[A-Z0-9_]+$/.test(code) ? code : "UNKNOWN");
     return { ok: false, error: "Không gửi được email. Hãy kiểm tra cấu hình SMTP." };
   }
 }

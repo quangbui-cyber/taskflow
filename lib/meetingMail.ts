@@ -1,4 +1,4 @@
-import { emailSenderAddress, sendEmail, type EmailResult } from "@/lib/email";
+import { emailAppUrl, emailSenderAddress, sendEmail, type EmailResult } from "@/lib/email";
 import { buildMeetingIcs } from "@/lib/meetingIcs";
 import { formatMeetingWhen } from "@/lib/meetings";
 import { prisma } from "@/lib/prisma";
@@ -27,14 +27,6 @@ function escapeHtml(value: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-}
-
-/** Địa chỉ gốc của app để dẫn link trong email; trống thì email không kèm link */
-function appUrl(): string {
-  const configured = process.env.APP_URL?.trim().replace(/\/+$/, "");
-  if (configured) return configured;
-  const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
-  return vercel ? `https://${vercel}` : "";
 }
 
 /**
@@ -80,13 +72,14 @@ export async function sendMeetingEmail({
       : []),
     ...invited,
   ];
-  const to = (recipients ?? everyone).map((person) => person.email);
+  const to = [...new Set((recipients ?? everyone).map((person) => person.email))];
   if (to.length === 0) return { ok: true };
 
   const method = kind === "CANCELLED" || kind === "REMOVED" ? "CANCEL" : "REQUEST";
   const when = formatMeetingWhen(meeting.startAt, meeting.endAt);
   const location = meeting.room?.name ?? (meeting.meetingUrl ? "Họp online" : null);
-  const link = appUrl() ? `${appUrl()}/meetings?focus=${meeting.id}` : null;
+  const baseUrl = emailAppUrl();
+  const link = baseUrl ? `${baseUrl}/meetings?focus=${meeting.id}` : null;
 
   const details: [string, string][] = [
     ["Thời gian", `${when} (giờ Việt Nam)`],
