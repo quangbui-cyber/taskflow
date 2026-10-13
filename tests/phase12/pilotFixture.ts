@@ -4,6 +4,8 @@ import path from "node:path";
 
 import { PrismaClient, type Prisma } from "@prisma/client";
 
+import { emptyFinance } from "../../lib/costflow/types";
+
 export const PHASE12_TEST_DATABASE_URL =
   "postgresql://postgres@127.0.0.1:55439/costflow_test";
 
@@ -63,7 +65,7 @@ export async function withPhase12TestSchema<T>(
   assertPhase12TestDatabaseUrl(baseUrl);
 
   const schemaName = `${PHASE12_SCHEMA_PREFIX}${randomUUID().replaceAll("-", "")}`;
-  const databaseUrl = `${PHASE12_TEST_DATABASE_URL}?schema=${schemaName}`;
+  const databaseUrl = `${PHASE12_TEST_DATABASE_URL}?schema=${schemaName}&options=${encodeURIComponent(`-c search_path=${schemaName}`)}`;
   assertPhase12TestDatabaseUrl(databaseUrl);
 
   const admin = new PrismaClient({
@@ -165,7 +167,10 @@ export async function createPhase12Scenario(
     ],
   });
 
-  const workspaceData: Prisma.InputJsonObject = {
+  const finance = emptyFinance();
+  finance.config = { managerId, accountantId, ceoId, operationUserIds: [] };
+  const workspaceData = {
+    ...finance,
     phase12: {
       scenario: kind,
       provenance: "automated_local",
@@ -178,7 +183,7 @@ export async function createPhase12Scenario(
           ? { guests: 120, days: 2, nights: 1, currency: "VND" }
           : { purchaseOrderCount: 2, currency: "VND" },
     },
-  };
+  } as unknown as Prisma.InputJsonObject;
 
   await client.project.create({
     data: {

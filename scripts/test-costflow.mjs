@@ -22,6 +22,7 @@ const phase10GapSuites = [
 const phase12DatabaseUrl = "postgresql://postgres@127.0.0.1:55439/costflow_test";
 const phase12Suites = [
   "tests/costflow-phase12-fixture.integration.test.mjs",
+  "tests/costflow-phase12-pilot.integration.test.mjs",
 ];
 const unitSuites = [
   "tests/costflow.test.ts", "tests/budget.test.ts", "tests/ic-effectiveness.test.ts", "tests/payment-policy.test.ts",
