@@ -20,12 +20,6 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  // Prisma's client engine loads its query compiler through the filesystem at
-  // runtime. Next cannot infer that dynamic path, so keep the WASM compiler in
-  // every server trace that OpenNext packages for Cloudflare Workers.
-  outputFileTracingIncludes: {
-    "/*": ["./node_modules/.prisma/client/query_compiler_bg.wasm"],
-  },
   // Keep generated manifests out of macOS File Provider sync. Partial syncs can
   // make the dev server repeatedly invalidate and rebuild the current route.
   // Vercel's Next.js builder expects the standard .next artifact directory.
@@ -36,6 +30,15 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: "4.2mb",
     },
+  },
+  webpack(config) {
+    if (process.env.TASKFLOW_CLOUDFLARE_BUILD === "1") {
+      // The default Prisma entrypoint loads the query compiler through node:fs.
+      // Workers need the static WASM import exposed by Prisma's worker entrypoint
+      // so OpenNext and Wrangler can package it as a WebAssembly module.
+      config.resolve.alias["@prisma/client$"] = "@prisma/client/wasm";
+    }
+    return config;
   },
   async headers() {
     return [

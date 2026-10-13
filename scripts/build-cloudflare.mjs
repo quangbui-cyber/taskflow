@@ -40,18 +40,20 @@ async function restoreProxy() {
 }
 
 async function runOpenNextBuild() {
-  await runNodeCli(openNextCliPath, ["build"], "OpenNext build");
+  await runNodeCli(openNextCliPath, ["build"], "OpenNext build", {
+    TASKFLOW_CLOUDFLARE_BUILD: "1",
+  });
 }
 
 async function runPrismaGenerate() {
   await runNodeCli(prismaCliPath, ["generate"], "Prisma generate");
 }
 
-async function runNodeCli(cliPath, args, label) {
+async function runNodeCli(cliPath, args, label, extraEnv = {}) {
   await new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [cliPath, ...args], {
       cwd: appRoot,
-      env: process.env,
+      env: { ...process.env, ...extraEnv },
       stdio: "inherit",
     });
 
