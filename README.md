@@ -12,7 +12,7 @@ TaskFlow là ứng dụng quản lý project và task nội bộ cho nhóm. App 
 - [Hướng dẫn sử dụng app](#hướng-dẫn-sử-dụng-app)
 - [Chạy app trên máy cá nhân](#chạy-app-trên-máy-cá-nhân)
 - [Biến môi trường](#biến-môi-trường)
-- [Đưa app lên mạng](#đưa-app-lên-mạng)
+- [Production và triển khai](#production-và-triển-khai)
 - [Cấu trúc thư mục](#cấu-trúc-thư-mục)
 - [Luồng dữ liệu chính](#luồng-dữ-liệu-chính)
 - [Một số lưu ý vận hành](#một-số-lưu-ý-vận-hành)
@@ -232,9 +232,28 @@ Tạo `SESSION_SECRET` bằng:
 node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 ```
 
-## Đưa app lên mạng
+## Production và triển khai
 
-Xem hướng dẫn triển khai từng bước trong [DEPLOY.md](DEPLOY.md). Tài liệu đó đang hướng dẫn theo phương án Vercel + Neon PostgreSQL.
+Production hiện tại chạy tại [taskflow.work-vpth.workers.dev](https://taskflow.work-vpth.workers.dev) với kiến trúc:
+
+- **Runtime:** Cloudflare Workers, đóng gói Next.js bằng OpenNext.
+- **Database:** Neon PostgreSQL tại region Singapore.
+- **Secrets:** `DATABASE_URL` và `SESSION_SECRET` được lưu bằng Cloudflare Worker secrets; không ghi vào source, log hoặc README.
+- **Cấu hình Worker:** `wrangler.jsonc`; bundle được tạo trong `.open-next/` và không commit vào Git.
+
+Quy trình deploy production phải dùng một checkout sạch tại đúng commit cần phát hành để tránh đưa WIP chưa commit vào bundle:
+
+```bash
+npm ci
+npx prisma migrate deploy
+npm run build:cloudflare
+npx wrangler deploy
+npx wrangler deployments list
+```
+
+`DATABASE_URL` dùng cho `prisma migrate deploy` phải là kết nối trực tiếp tới đúng Neon production database. Chạy migration thành công trước khi publish Worker; không seed hoặc reset production. Sau deploy, tối thiểu kiểm tra `/login`, `manifest.webmanifest`, version ID trên Cloudflare và các luồng authenticated liên quan tới thay đổi.
+
+Deploy kỹ thuật không đồng nghĩa với business release acceptance. COSTFLOW/WORKFLOW chỉ được đánh dấu sẵn sàng phát hành khi các checkpoint human/company/native/production và sign-off tương ứng đã hoàn tất. Hướng dẫn Vercel cũ và các lưu ý nền tảng khác vẫn nằm trong [DEPLOY.md](DEPLOY.md) cho tới khi tài liệu đó được cập nhật toàn bộ sang Cloudflare.
 
 ## Cấu trúc thư mục
 
