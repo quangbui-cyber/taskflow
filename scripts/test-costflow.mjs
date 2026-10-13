@@ -19,6 +19,10 @@ const phase10GapSuites = [
   "tests/costflow-phase10-runtime.integration.test.mjs",
   "tests/costflow-phase10-http.integration.test.mjs",
 ];
+const phase12DatabaseUrl = "postgresql://postgres@127.0.0.1:55439/costflow_test";
+const phase12Suites = [
+  "tests/costflow-phase12-fixture.integration.test.mjs",
+];
 const unitSuites = [
   "tests/costflow.test.ts", "tests/budget.test.ts", "tests/ic-effectiveness.test.ts", "tests/payment-policy.test.ts",
   "tests/payment-diff.test.ts", "tests/payment-read-model.test.ts", "tests/payment-security.test.ts", "tests/payment-ui-contract.test.ts",
@@ -43,4 +47,13 @@ const env = { ...process.env };
 if (integration) env.DATABASE_URL = env.COSTFLOW_TEST_DATABASE_URL;
 else delete env.COSTFLOW_TEST_DATABASE_URL;
 const result = spawnSync(process.execPath, ["--conditions=react-server", "--import=tsx", "--test", "--test-concurrency=1", ...files], { stdio: "inherit", env });
+const phase12Result = spawnSync(
+  process.execPath,
+  ["--conditions=react-server", "--import=tsx", "--test", "--test-concurrency=1", ...phase12Suites],
+  {
+    stdio: "inherit",
+    env: { ...process.env, DATABASE_URL: phase12DatabaseUrl },
+  },
+);
+if ((phase12Result.status ?? 1) !== 0) process.exit(phase12Result.status ?? 1);
 process.exit(result.status ?? 1);
