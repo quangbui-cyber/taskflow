@@ -6,7 +6,7 @@ import { createServer } from "node:http";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 
-const PINNED_DATABASE_URL = "postgresql://postgres@127.0.0.1:55439/taskflow";
+const PINNED_DATABASE_URL = "postgresql://postgres@127.0.0.1:55439/costflow_test";
 const ORIGIN = "http://localhost:3017";
 const root = path.resolve(import.meta.dirname, "..");
 const families = [
