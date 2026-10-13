@@ -20,6 +20,12 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Prisma's client engine loads its query compiler through the filesystem at
+  // runtime. Next cannot infer that dynamic path, so keep the WASM compiler in
+  // every server trace that OpenNext packages for Cloudflare Workers.
+  outputFileTracingIncludes: {
+    "/*": ["./node_modules/.prisma/client/query_compiler_bg.wasm"],
+  },
   // Keep generated manifests out of macOS File Provider sync. Partial syncs can
   // make the dev server repeatedly invalidate and rebuild the current route.
   // Vercel's Next.js builder expects the standard .next artifact directory.
