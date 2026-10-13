@@ -213,9 +213,10 @@ function queueMeetingEmail(
 ) {
   after(async () => {
     try {
-      await sendMeetingEmail({ meetingId, kind, recipients });
-    } catch (error) {
-      console.error("Meeting email failed:", error);
+      const result = await sendMeetingEmail({ meetingId, kind, recipients });
+      if (!result.ok) console.warn("Meeting email delivery could not be completed.");
+    } catch {
+      console.warn("Meeting email delivery could not be completed.");
     }
   });
 }
