@@ -28,6 +28,7 @@ const phase12Suites = [
   "tests/costflow-phase12-performance.test.mjs",
   "tests/costflow-phase12-ui-contract.test.mjs",
   "tests/costflow-phase12-regression.test.mjs",
+  "tests/costflow-phase12-docs.test.mjs",
 ];
 const unitSuites = [
   "tests/costflow.test.ts", "tests/budget.test.ts", "tests/ic-effectiveness.test.ts", "tests/payment-policy.test.ts",
