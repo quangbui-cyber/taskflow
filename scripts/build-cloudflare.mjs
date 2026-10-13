@@ -9,6 +9,7 @@ const parkedProxyPath = path.join(appRoot, ".proxy.cloudflare-build.ts");
 const middlewarePath = path.join(appRoot, "middleware.ts");
 const cloudflareMiddlewarePath = path.join(appRoot, "cloudflare", "middleware.ts");
 const prismaSchemaPath = path.join(appRoot, "prisma", "schema.prisma");
+const prismaModulePath = path.join(appRoot, "lib", "prisma.ts");
 const openNextCliPath = path.join(
   appRoot,
   "node_modules",
@@ -21,6 +22,8 @@ const openNextCliPath = path.join(
 const prismaCliPath = path.join(appRoot, "node_modules", "prisma", "build", "index.js");
 const prismaGeneratorMarker = '  provider = "prisma-client-js"';
 const cloudflarePrismaGenerator = `${prismaGeneratorMarker}\n  engineType = "client"`;
+const prismaClientImportMarker = 'from "@prisma/client";';
+const cloudflarePrismaClientImport = 'from "@prisma/client/wasm";';
 
 async function exists(filePath) {
   try {
@@ -81,11 +84,15 @@ if (await exists(middlewarePath)) {
 }
 
 const originalPrismaSchema = await readFile(prismaSchemaPath, "utf8");
+const originalPrismaModule = await readFile(prismaModulePath, "utf8");
 if (!originalPrismaSchema.includes(prismaGeneratorMarker)) {
   throw new Error("Prisma client generator marker is missing; refusing to patch the schema.");
 }
 if (originalPrismaSchema.includes('engineType = "client"')) {
   throw new Error("Prisma schema is already configured for the client engine.");
+}
+if (!originalPrismaModule.includes(prismaClientImportMarker)) {
+  throw new Error("Prisma client import marker is missing; refusing to patch the module.");
 }
 
 await rename(proxyPath, parkedProxyPath);
@@ -93,6 +100,14 @@ await copyFile(cloudflareMiddlewarePath, middlewarePath);
 await writeFile(
   prismaSchemaPath,
   originalPrismaSchema.replace(prismaGeneratorMarker, cloudflarePrismaGenerator),
+  "utf8",
+);
+await writeFile(
+  prismaModulePath,
+  originalPrismaModule.replace(
+    prismaClientImportMarker,
+    cloudflarePrismaClientImport,
+  ),
   "utf8",
 );
 
@@ -104,6 +119,7 @@ try {
   buildError = error;
 } finally {
   await writeFile(prismaSchemaPath, originalPrismaSchema, "utf8");
+  await writeFile(prismaModulePath, originalPrismaModule, "utf8");
   await restoreProxy();
   try {
     await runPrismaGenerate();
