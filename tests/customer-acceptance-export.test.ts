@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PDFParse } from "pdf-parse";
+import { extractText, getDocumentProxy } from "unpdf";
 import {
   buildCustomerAcceptanceProjection,
   customerAcceptanceArtifactRows,
@@ -178,14 +178,14 @@ test("PDF and XLSX render the exact same stored projection rows and remain senti
   }
   assert.ok(canonical.flat().includes("Đại diện Khách hàng"));
   assert.ok(canonical.flat().includes("Đại diện Creative Station"));
-  const parser = new PDFParse({ data: new Uint8Array(pdf) });
+  const document = await getDocumentProxy(new Uint8Array(pdf));
   try {
-    const extracted = await parser.getText();
+    const extracted = await extractText(document, { mergePages: true });
     assert.match(extracted.text, /Đại diện Khách hàng/);
     assert.match(extracted.text, /Đại diện Creative Station/);
     assert.match(extracted.text, /Activation day/);
     assert.match(extracted.text, /7[.]680[.]000|7680000/);
   } finally {
-    await parser.destroy();
+    await document.cleanup();
   }
 });

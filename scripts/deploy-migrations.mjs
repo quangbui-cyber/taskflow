@@ -1,7 +1,13 @@
 import { spawnSync } from "node:child_process";
 
-if (process.env.VERCEL_ENV !== "production") {
-  console.log("Skipping production migrations outside Vercel production.");
+const forced = process.argv.includes("--force");
+const productionDeploy =
+  process.env.VERCEL_ENV === "production" ||
+  process.env.CLOUDFLARE_DEPLOY === "1" ||
+  forced;
+
+if (!productionDeploy) {
+  console.log("Skipping production migrations outside an explicit production deploy.");
   process.exit(0);
 }
 

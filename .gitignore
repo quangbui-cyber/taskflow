@@ -21,6 +21,9 @@
 /.next.*/
 /.tmp/
 /out/
+/.open-next/
+/.wrangler/
+/cloudflare-env.d.ts
 
 # production
 /build

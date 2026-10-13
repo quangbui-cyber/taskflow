@@ -1,16 +1,15 @@
-import "pdf-parse/worker";
-import { PDFParse } from "pdf-parse";
 import { parsePurchaseOrder } from "@/lib/purchaseOrder";
+import { extractText, getDocumentProxy } from "unpdf";
 
 export async function parsePurchaseOrderPdf(data: Uint8Array) {
-  // pdf-parse transfers/detaches the ArrayBuffer it receives. Parse a copy so
-  // callers can still reuse the original bytes (for example, to store the PO).
+  // Parse a copy so callers can still reuse the original bytes (for example,
+  // to store the PO) even if the PDF runtime transfers the ArrayBuffer.
   const parserData = Uint8Array.from(data);
-  const parser = new PDFParse({ data: parserData });
+  const document = await getDocumentProxy(parserData);
   try {
-    const result = await parser.getText({ first: 5 });
-    return parsePurchaseOrder(result.text);
+    const result = await extractText(document);
+    return parsePurchaseOrder(result.text.slice(0, 5).join("\n\n"));
   } finally {
-    await parser.destroy();
+    await document.cleanup();
   }
 }

@@ -1,6 +1,41 @@
 # Hướng dẫn đưa TaskFlow lên mạng cho cả công ty dùng
 
 Mục tiêu: 30 nhân viên truy cập app qua một địa chỉ web, dữ liệu chung một nơi.
+
+## Cloudflare Workers + Neon
+
+Cloudflare dùng OpenNext để giữ nguyên Next.js App Router, Server Actions và
+Route Handlers. Production database vẫn là PostgreSQL trên Neon.
+
+Các biến bí mật bắt buộc phải được lưu bằng Wrangler, không ghi vào file Git:
+
+```bash
+npx wrangler secret put DATABASE_URL
+npx wrangler secret put SESSION_SECRET
+```
+
+`DATABASE_URL` runtime nên là Neon pooled connection string có
+`sslmode=require`. Prisma Migrate chạy từ máy/CI bằng direct connection string
+của cùng Neon project, sau đó Worker dùng pooled connection string ở runtime.
+
+```bash
+# Nạp direct DATABASE_URL vào process hiện tại, rồi chạy migration một lần.
+npm run db:migrate:deploy
+
+# Build và deploy Worker. Lệnh này không tự seed hoặc reset database.
+npm run deploy:cloudflare
+```
+
+Các biến tùy chọn đang dùng bởi ứng dụng (`CRON_SECRET`, SMTP, VAPID,
+`APP_URL`, Google Chat) cũng phải thêm bằng `wrangler secret put <NAME>` nếu
+muốn bật tính năng tương ứng. Sau deploy, xác nhận route HTTPS, đăng nhập và một
+đọc/ghi database-backed trước khi chuyển traffic thật.
+
+Rollback code bằng Wrangler deployment history; rollback database phải theo
+migration bù, không chạy `migrate reset` trên Neon production.
+
+---
+
 Cách làm dưới đây dùng **Vercel** (chạy app) + **Neon** (database PostgreSQL). Chi phí gói
 miễn phí là đủ cho 30 người; tổng thời gian làm khoảng 30–45 phút.
 
