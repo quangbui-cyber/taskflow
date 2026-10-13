@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "node:path";
 
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -36,7 +37,13 @@ const nextConfig: NextConfig = {
       // The default Prisma entrypoint loads the query compiler through node:fs.
       // Workers need the static WASM import exposed by Prisma's worker entrypoint
       // so OpenNext and Wrangler can package it as a WebAssembly module.
-      config.resolve.alias["@prisma/client$"] = "@prisma/client/wasm";
+      config.resolve.alias["@prisma/client$"] = path.join(
+        process.cwd(),
+        "node_modules",
+        "@prisma",
+        "client",
+        "wasm.js",
+      );
     }
     return config;
   },
