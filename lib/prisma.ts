@@ -26,16 +26,19 @@ function createPrismaClient() {
     throw new Error("DATABASE_URL is required before Prisma can connect.");
   }
 
-  let isNeon = false;
+  let databaseUrl: URL;
   try {
-    isNeon = new URL(connectionString).hostname.endsWith(".neon.tech");
+    databaseUrl = new URL(connectionString);
   } catch {
     throw new Error("DATABASE_URL must be a valid PostgreSQL connection URL.");
   }
 
+  const isNeon = databaseUrl.hostname.endsWith(".neon.tech");
+  const schema = databaseUrl.searchParams.get("schema")?.trim() || undefined;
+
   const adapter = isNeon
     ? new PrismaNeon({ connectionString })
-    : new PrismaPg({ connectionString });
+    : new PrismaPg({ connectionString }, schema ? { schema } : undefined);
 
   return new PrismaClient({ adapter });
 }
