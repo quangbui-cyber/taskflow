@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 
-const PINNED_DATABASE_URL = "postgresql://postgres@127.0.0.1:55439/taskflow";
+const PINNED_DATABASE_URL = "postgresql://postgres@127.0.0.1:55439/costflow_test";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sha = value => createHash("sha256").update(value).digest("hex");
 const canonicalSha = value => {

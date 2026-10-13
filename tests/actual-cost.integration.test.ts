@@ -7,7 +7,7 @@ function approvedDatabaseUrl() {
   assert.ok(["postgres:", "postgresql:"].includes(url.protocol), "Phase 8 test requires PostgreSQL");
   assert.equal(url.hostname, "127.0.0.1", "Phase 8 test only uses 127.0.0.1");
   assert.equal(url.port, "55439", "Phase 8 test only uses port 55439");
-  assert.equal(url.pathname, "/taskflow", "Phase 8 test only uses database taskflow");
+  assert.equal(url.pathname, "/costflow_test", "CostFlow automation only uses database costflow_test");
   return url;
 }
 
