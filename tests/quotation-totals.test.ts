@@ -4,9 +4,17 @@ import { calculateCost } from "../lib/costflow/money";
 import { calculateQuotationTotals, normalizeQuotationTotalLayout, normalizeQuotationTotals, type QuotationTotalLine } from "../lib/costflow/quotationTotals";
 import { blankPairedRow } from "../lib/costflow/pairedDraft";
 import { projectQuotation, projectSales } from "../lib/costflow/quotationProjection";
-import { savePairedDraft, finalizePairedQuotation } from "../lib/costflow/pairedService";
+import { applyPairedCommand, savePairedDraft, finalizePairedQuotation, type PairedPersistence } from "../lib/costflow/pairedService";
 import { emptyFinance } from "../lib/costflow/types";
-import type { Prisma } from "@prisma/client";
+
+function pairedStore(requestId = "ic-request"): PairedPersistence {
+  return {
+    findClientName: async () => "Customer",
+    countProjectEvidence: async () => 0,
+    createIcWorkflowRequest: async () => ({ id: requestId }),
+    updateIcWorkflowRequest: async () => undefined,
+  };
+}
 
 const items = calculateCost({ quantity: "1", unitPrice: "100.4", basis: "NET", vatPercent: "10" });
 const fees: QuotationTotalLine[] = [
@@ -47,7 +55,7 @@ test("customer quote projection includes fees and omits IC data", () => {
 });
 test("sales-only save leaves IC untouched; final quote freezes totals; IC mode cannot rewrite source sales", async () => {
   const data = emptyFinance();
-  const tx = { client: { findUnique: async () => ({ name: "Customer" }) } } as unknown as Prisma.TransactionClient;
+  const tx = pairedStore();
   const row = blankPairedRow("item"); row.name = "Item"; row.sell = { ...row.sell, quantity: "1", unitPrice: "100.4", vatPercent: "10" };
   const form = new FormData(); form.set("workspaceMode", "quote"); form.set("rows", JSON.stringify([row])); form.set("title", "Quote"); form.set("clientId", "client"); form.set("totalLines", JSON.stringify(fees));
   const result = await savePairedDraft(tx, "project", "account", data, [], form);
@@ -61,4 +69,62 @@ test("sales-only save leaves IC untouched; final quote freezes totals; IC mode c
   assert.equal(ic.draft.rows[0].name, "Item"); assert.equal(ic.draft.rows[0].sell.unitPrice, "100.4");
   icForm.set("command", "FINALIZE_PAIRED_QUOTATION");
   await assert.rejects(savePairedDraft(tx, "project", "account", data, [], icForm), /không thay đổi/);
+});
+
+test("IC-only paired save persists buying fields without overwriting quotation fields", async () => {
+  const data = emptyFinance();
+  const requestId = "ic-request";
+  const tx = pairedStore(requestId);
+  const row = blankPairedRow("item");
+  row.name = "Original quotation item";
+  row.sell = { ...row.sell, quantity: "1", unitPrice: "100", vatPercent: "0" };
+  row.buy = { ...row.buy, quantity: "1", unitPrice: "60", vatPercent: "0" };
+  const both = new FormData();
+  both.set("workspaceMode", "paired");
+  both.set("saveScope", "BOTH");
+  both.set("rows", JSON.stringify([row]));
+  both.set("title", "Original title");
+  both.set("clientId", "client");
+  both.set("globalEvidenceIds", "[]");
+  const first = await savePairedDraft(tx, "project", "account", data, [], both);
+
+  const forged = structuredClone(first.draft.rows[0]);
+  forged.name = "FORGED QUOTATION ITEM";
+  forged.sell.unitPrice = "9999";
+  forged.buy.unitPrice = "70";
+  const icOnly = new FormData();
+  icOnly.set("workspaceMode", "paired");
+  icOnly.set("saveScope", "IC");
+  icOnly.set("draftId", first.draftId);
+  icOnly.set("rows", JSON.stringify([forged]));
+  icOnly.set("title", "FORGED TITLE");
+  icOnly.set("clientId", "forged-client");
+  icOnly.set("globalEvidenceIds", "[]");
+  const second = await savePairedDraft(tx, "project", "account", data, [{ id: requestId, state: "DRAFT", creatorId: "account" }], icOnly);
+
+  assert.deepEqual(second.savedScopes, ["IC nháp"]);
+  assert.equal(second.draft.title, "Original title");
+  assert.equal(second.draft.clientId, "client");
+  assert.equal(second.draft.rows[0].name, "Original quotation item");
+  assert.equal(second.draft.rows[0].sell.unitPrice, "100");
+  assert.equal(second.draft.rows[0].buy.unitPrice, "70");
+});
+
+test("paired finalize authority returns the immutable export seal plan from the same server-calculated quotation", async () => {
+  const data = emptyFinance();
+  const form = new FormData();
+  const row = blankPairedRow("item");
+  row.name = "Authoritative item";
+  row.sell = { ...row.sell, quantity: "2", unitPrice: "100", vatPercent: "10" };
+  form.set("command", "FINALIZE_PAIRED_QUOTATION");
+  form.set("workspaceMode", "quote");
+  form.set("rows", JSON.stringify([row]));
+  form.set("title", "Authoritative quote");
+  form.set("clientId", "client");
+  const result = await applyPairedCommand(pairedStore(), "project", "account", data, [], form);
+  assert.ok(result.quotationId);
+  assert.equal(result.exportSeal?.sourceId, result.quotationId);
+  assert.equal(result.exportSeal?.authoritativeTotals.gross, "220");
+  assert.equal(result.exportSeal?.lines[0].rawGross, "220/1");
+  assert.equal(data.quotations?.[0].id, result.quotationId);
 });

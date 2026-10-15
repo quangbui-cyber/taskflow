@@ -22,9 +22,11 @@ import {
 } from "lucide-react";
 import type { Finance } from "@/components/CostFlowPanel";
 import { Button } from "@/components/ui/Button";
-import { Textarea } from "@/components/ui/Field";
+import { Select, Textarea } from "@/components/ui/Field";
 import { Alert, Badge, EmptyState, Panel, Table } from "@/components/ui/Presentation";
+import { Dialog } from "@/components/ui/Dialog";
 import ActionForm from "@/components/CostFlowActionForm";
+import IcEvidencePanel from "@/components/IcEvidencePanel";
 import IcRevisionDiff, { IcQuotationUpdates } from "@/components/IcRevisionDiff";
 import VendorPaymentScheduleTable from "@/components/VendorPaymentScheduleTable";
 import EditIcLineModal from "@/components/EditIcLineModal";
@@ -52,6 +54,19 @@ type Props = {
     title: string;
   }) => void;
 };
+
+function IcRevisionSaveFields({ revision, title, lines }: { revision: IcRevision; title: string; lines: IcLine[] }) {
+  return (
+    <>
+      <input type="hidden" name="requestId" value={revision.requestId} />
+      <input type="hidden" name="title" value={title} />
+      <input type="hidden" name="lines" value={JSON.stringify(lines)} />
+      {revision.poIds.map(id => <input key={`bulk-po-${id}`} type="hidden" name="poIds" value={id} />)}
+      {(revision.briefIds ?? []).map(id => <input key={`bulk-brief-${id}`} type="hidden" name="briefIds" value={id} />)}
+      {(revision.evidenceIds ?? []).map(id => <input key={`bulk-evidence-${id}`} type="hidden" name="evidenceIds" value={id} />)}
+    </>
+  );
+}
 
 export default function InternalCostPanel({
   finance,
@@ -83,6 +98,13 @@ export default function InternalCostPanel({
   const [searchFilter, setSearchFilter] = useState<string>("");
   const [quotationFilter, setQuotationFilter] = useState<"ALL" | "LINKED" | "UNLINKED" | "LOW_MARGIN">("ALL");
   const [editingLine, setEditingLine] = useState<IcLine | null | undefined>(undefined);
+  const [selectedLineIds, setSelectedLineIds] = useState<string[]>([]);
+  const [bulkVendorOpen, setBulkVendorOpen] = useState(false);
+  const [bulkVendorId, setBulkVendorId] = useState("");
+  const [bulkEvidenceOpen, setBulkEvidenceOpen] = useState(false);
+  const [bulkEvidenceIds, setBulkEvidenceIds] = useState<string[]>([]);
+  const [bulkEvidenceReason, setBulkEvidenceReason] = useState("");
+  const [evidenceFiles, setEvidenceFiles] = useState(finance.evidence);
 
   // Active revision being viewed
   const visibleRevision = useMemo(() => {
@@ -374,6 +396,37 @@ export default function InternalCostPanel({
     });
   }, [visibleRevision, resolvedLines, searchFilter, quotationFilter, lineMatches, lineMargins, beneficiariesMap]);
 
+  const selectedLineIdSet = useMemo(() => {
+    const visibleIds = new Set(visibleRevision?.lines.map(line => line.id) ?? []);
+    return new Set(selectedLineIds.filter(id => visibleIds.has(id)));
+  }, [selectedLineIds, visibleRevision]);
+  const selectedLines = useMemo(
+    () => visibleRevision?.lines.filter(line => selectedLineIdSet.has(line.id)) ?? [],
+    [selectedLineIdSet, visibleRevision]
+  );
+  const allFilteredSelected = filteredLines.length > 0 && filteredLines.every(line => selectedLineIdSet.has(line.id));
+  const bulkVendorLines = useMemo(
+    () => visibleRevision?.lines.map(line => selectedLineIdSet.has(line.id) ? { ...line, vendorId: bulkVendorId } : line) ?? [],
+    [bulkVendorId, selectedLineIdSet, visibleRevision]
+  );
+  const bulkEvidenceLines = useMemo(
+    () => visibleRevision?.lines.map(line => selectedLineIdSet.has(line.id) ? {
+      ...line,
+      evidenceIds: [...new Set([...(line.evidenceIds ?? []), ...bulkEvidenceIds])],
+      evidenceReason: bulkEvidenceReason.trim() || line.evidenceReason,
+    } : line) ?? [],
+    [bulkEvidenceIds, bulkEvidenceReason, selectedLineIdSet, visibleRevision]
+  );
+
+  const clearBulkSelection = () => setSelectedLineIds([]);
+  const toggleAllFilteredLines = () => {
+    const filteredIds = new Set(filteredLines.map(line => line.id));
+    setSelectedLineIds(current => allFilteredSelected
+      ? current.filter(id => !filteredIds.has(id))
+      : [...new Set([...current, ...filteredIds])]
+    );
+  };
+
   const pairedHref = `/projects/${finance.project.id}/costflow/paired${
     latestQuotation ? `?quotationId=${encodeURIComponent(latestQuotation.id)}` : ""
   }`;
@@ -401,8 +454,7 @@ export default function InternalCostPanel({
       {/* 1. TOP TOOLBAR & QUICK ACTIONS */}
       <div className="tf-module-toolbar flex flex-wrap items-center justify-between gap-4 pb-3 border-b border-[var(--border)]">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-[var(--foreground)] flex items-center gap-2">
-            <Layers3 size={22} className="text-[#587216]" aria-hidden="true" />
+          <h2 className="text-xl font-bold tracking-tight text-[var(--foreground)]">
             Internal Cost & Ngân sách dự toán
           </h2>
           <p className="text-sm text-[var(--text-secondary)] mt-0.5">
@@ -643,30 +695,8 @@ export default function InternalCostPanel({
           {/* ═══════════ SUB-VIEW 1: BẢNG HẠNG MỤC & NHÀ CUNG CẤP ═══════════ */}
           {activeSubView === "items" && (
             <Panel id={`ic-revision-${visibleRevision.id}`} className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border)]">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h4 className="font-bold text-base text-[var(--foreground)] flex items-center gap-2">
-                      Các dòng hạng mục IC-R{visibleRevision.number}
-                      {visibleRevision.effective && <Badge tone="success">Baseline</Badge>}
-                      {visibleRequest && <Badge tone="neutral">{STATE[visibleRequest.state]}</Badge>}
-                    </h4>
-                    {activeQuotation ? (
-                      <Badge tone="info" className="text-xs">
-                        Tham chiếu song song: BG-{activeQuotation.number}
-                      </Badge>
-                    ) : (
-                      <Badge tone="neutral" className="text-xs">
-                        Chưa có Báo giá tham chiếu
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                    Đơn vị: VND · Giá mua Net/Gross & Thuế VAT · Nhà Cung Cấp phụ trách · Đối chiếu Báo giá bán song song & Biên lợi nhuận
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex flex-wrap items-center justify-end gap-3 pb-3 border-b border-[var(--border)]">
+                <div className="flex flex-wrap items-center justify-end gap-2.5">
                   <div className="relative w-full sm:w-64">
                     <Search
                       size={15}
@@ -812,10 +842,63 @@ export default function InternalCostPanel({
                 </div>
               )}
 
+              {isEditableDraft && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-2.5">
+                  <div className="text-xs text-[var(--text-secondary)]">
+                    Đã chọn <strong className="text-[var(--foreground)]">{selectedLines.length}</strong> dòng
+                    {selectedLines.length > 0 && filteredLines.length !== visibleRevision.lines.length
+                      ? " (giữ lựa chọn khi đổi bộ lọc)"
+                      : ""}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      disabled={selectedLines.length === 0}
+                      onClick={() => setBulkVendorOpen(true)}
+                    >
+                      <Building2 size={14} aria-hidden="true" />
+                      Gắn NCC hàng loạt
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      disabled={selectedLines.length === 0}
+                      onClick={() => {
+                        setBulkEvidenceIds([]);
+                        setBulkEvidenceReason("");
+                        setBulkEvidenceOpen(true);
+                      }}
+                    >
+                      <Paperclip size={14} aria-hidden="true" />
+                      Gắn Minh chứng hàng loạt
+                    </Button>
+                    {selectedLines.length > 0 && (
+                      <Button type="button" variant="ghost" size="sm" onClick={clearBulkSelection}>
+                        <X size={14} aria-hidden="true" />
+                        Bỏ chọn
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* 12-COLUMN TABLE WITH PARALLEL QUOTATION & LIVE MARGIN */}
-              <Table caption={`Các dòng chi phí và NCC của IC revision ${visibleRevision.number}`}>
+              <Table caption={`Các dòng chi phí và NCC của IC revision ${visibleRevision.number}`} hideCaption>
                 <thead>
                   <tr>
+                    {isEditableDraft && (
+                      <th scope="col" className="w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={allFilteredSelected}
+                          onChange={toggleAllFilteredLines}
+                          aria-label={`Chọn tất cả ${filteredLines.length} dòng đang hiển thị`}
+                        />
+                      </th>
+                    )}
                     <th scope="col" className="w-10 text-center">#</th>
                     <th scope="col">Nội dung chi phí & Ghi chú</th>
                     <th scope="col" className="w-16">ĐVT</th>
@@ -840,6 +923,19 @@ export default function InternalCostPanel({
 
                       return (
                         <tr key={line.id ? `${line.id}-${idx}` : `line-${idx}`}>
+                          {isEditableDraft && (
+                            <td className="text-center">
+                              <input
+                                type="checkbox"
+                                checked={selectedLineIdSet.has(line.id)}
+                                onChange={event => setSelectedLineIds(current => event.target.checked
+                                  ? [...new Set([...current, line.id])]
+                                  : current.filter(id => id !== line.id)
+                                )}
+                                aria-label={`Chọn dòng ${line.description}`}
+                              />
+                            </td>
+                          )}
                           <td className="text-center font-mono text-xs text-[var(--text-secondary)]">
                             {idx + 1}
                           </td>
@@ -988,7 +1084,7 @@ export default function InternalCostPanel({
                     })
                   ) : (
                     <tr>
-                      <td colSpan={12} className="py-6 text-center text-sm text-[var(--text-secondary)]">
+                      <td colSpan={isEditableDraft ? 13 : 12} className="py-6 text-center text-sm text-[var(--text-secondary)]">
                         {searchFilter || quotationFilter !== "ALL"
                           ? "Không tìm thấy dòng nào khớp với tiêu chí lọc."
                           : "Chưa có dòng hạng mục."}
@@ -1325,14 +1421,93 @@ export default function InternalCostPanel({
       {/* 8. EDIT IC LINE MODAL */}
       {editingLine !== undefined && visibleRevision && (
         <EditIcLineModal
+          key={editingLine?.id ?? "new-ic-line"}
           open={editingLine !== undefined}
           onClose={() => setEditingLine(undefined)}
+          onSelectLine={setEditingLine}
           line={editingLine}
           revision={visibleRevision}
           request={visibleRequest}
           finance={finance}
           isEditableDraft={isEditableDraft}
           worksheetHref={worksheetHref(visibleRevision)}
+        />
+      )}
+
+      {visibleRevision && (
+        <Dialog
+          open={bulkVendorOpen}
+          onClose={() => setBulkVendorOpen(false)}
+          title={`Gắn NCC cho ${selectedLines.length} dòng`}
+          description="NCC đã chọn sẽ thay thế NCC hiện tại trên các dòng được chọn. Các số liệu và Minh chứng khác được giữ nguyên."
+        >
+          <ActionForm
+            finance={finance}
+            command="SAVE_IC"
+            requestId={visibleRevision.requestId}
+            label={`Gắn NCC cho ${selectedLines.length} dòng`}
+            onSuccess={() => {
+              setBulkVendorOpen(false);
+              setBulkVendorId("");
+              clearBulkSelection();
+            }}
+          >
+            <IcRevisionSaveFields
+              revision={visibleRevision}
+              title={visibleRequest?.title ?? `IC-R${visibleRevision.number}`}
+              lines={bulkVendorLines}
+            />
+            <Select label="Nhà cung cấp áp dụng" value={bulkVendorId} onChange={event => setBulkVendorId(event.target.value)} required>
+              <option value="">Chọn Nhà cung cấp</option>
+              {finance.data.beneficiaries.map(beneficiary => (
+                <option key={beneficiary.id} value={beneficiary.id}>{beneficiary.name}</option>
+              ))}
+            </Select>
+            <p className="tf-ui-help">Chỉ áp dụng cho {selectedLines.length} dòng đã chọn trong IC-R{visibleRevision.number}.</p>
+          </ActionForm>
+        </Dialog>
+      )}
+
+      {visibleRevision && (
+        <IcEvidencePanel
+          finance={finance}
+          open={bulkEvidenceOpen}
+          onClose={() => setBulkEvidenceOpen(false)}
+          targets={selectedLines.map(line => line.description)}
+          ids={bulkEvidenceIds}
+          reason={bulkEvidenceReason}
+          files={evidenceFiles}
+          onFiles={file => setEvidenceFiles(current => current.some(item => item.id === file.id) ? current : [...current, file])}
+          onChange={(ids, reason) => {
+            setBulkEvidenceIds(ids);
+            setBulkEvidenceReason(reason);
+          }}
+          footer={
+            <ActionForm
+              finance={finance}
+              command="SAVE_IC"
+              requestId={visibleRevision.requestId}
+              label={`Gắn Minh chứng cho ${selectedLines.length} dòng`}
+              onSubmit={event => {
+                if (bulkEvidenceIds.length === 0 && !bulkEvidenceReason.trim()) event.preventDefault();
+              }}
+              onSuccess={() => {
+                setBulkEvidenceOpen(false);
+                setBulkEvidenceIds([]);
+                setBulkEvidenceReason("");
+                clearBulkSelection();
+              }}
+            >
+              <IcRevisionSaveFields
+                revision={visibleRevision}
+                title={visibleRequest?.title ?? `IC-R${visibleRevision.number}`}
+                lines={bulkEvidenceLines}
+              />
+              {bulkEvidenceIds.length === 0 && !bulkEvidenceReason.trim() && (
+                <Alert tone="warning" title="Chọn ít nhất một Minh chứng hoặc nhập lý do trước khi lưu." />
+              )}
+            </ActionForm>
+          }
         />
       )}
     </div>

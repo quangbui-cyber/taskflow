@@ -4,10 +4,9 @@ import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input, Select } from "@/components/ui/Field";
 import ActionForm from "@/components/CostFlowActionForm";
-import type { Finance } from "@/components/CostFlowPanel";
 import type { IcLine, IcRevision } from "@/lib/costflow/types";
 
-export default function IcLineTransform({ finance, revision }: { finance: Finance; revision: IcRevision }) {
+export default function IcLineTransform({ finance, revision }: { finance: { project: { id: string }; version: number }; revision: IcRevision }) {
   const [mode, setMode] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const blank = (): Partial<IcLine> => ({ description: "", unit: "", quantity: "", days: "", unitPrice: "", vatPercent: "", basis: "NET" });

@@ -1,14 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import type { Finance } from "./CostFlowPanel";
+import type { PairedFinance } from "@/lib/costflow/pairedReadModel";
 import PairedQuotationIcEditor from "./PairedQuotationIcEditor";
 
 export type CostFlowWorksheetMode = "quote" | "paired" | "ic";
 
 export type CostFlowWorksheetProps = {
   mode?: CostFlowWorksheetMode;
-  finance: Finance;
+  finance: PairedFinance;
   userId: string;
   quotationId?: string;
   draftId?: string;

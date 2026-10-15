@@ -47,7 +47,7 @@ test("parameter snapshots survive template drift, CAS, finalization, submit and 
 
     const row = structuredClone(draft.rows[0]);
     row.buy = { ...row.buy, unit: "Người", quantity: "10", unitPrice: "60", vatPercent: "0", evidenceReason: "Supplier estimate pending", parameterBinding: { mode: "PARAMETER", moduleId: "module", quantityFormula: { op: "PARAM", key: "participants" }, lastCalculated: { quantity: "10" } } };
-    const baseFields = (rows: PairedRow[], parameterConfig: QuotationParameterSnapshot) => ({ draftId: draft.id, workspaceMode: "paired", title: "Parameterized quote", clientId: client.id, rows: JSON.stringify(rows), parameterConfig: JSON.stringify(parameterConfig), globalEvidenceIds: "[]", totalLines: "[]", totalLayout: "[]", priceReviewConfirmed: "yes" });
+    const baseFields = (rows: PairedRow[], parameterConfig: QuotationParameterSnapshot) => ({ draftId: draft.id, workspaceMode: "paired", title: "Parameterized quote", clientId: client.id, rows: JSON.stringify(rows), parameterConfig: JSON.stringify(parameterConfig), globalEvidenceIds: "[]", totalLines: "[]", totalLayout: "[]" });
     const missing = config("");
     await act("SAVE_PAIRED_DRAFT", baseFields([row], missing));
     await assert.rejects(() => act("FINALIZE_PAIRED_QUOTATION", baseFields([row], missing)), /Delegate package: Thiếu giá trị tham số/);

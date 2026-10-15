@@ -29,10 +29,11 @@ test("workspace capabilities keep sales, buying and hierarchy boundaries explici
 });
 
 test("save labels name the record scope instead of using an ambiguous generic draft label", () => {
-  assert.equal(workspaceSaveLabel("quote", false), "Chỉ lưu Báo giá");
-  assert.equal(workspaceSaveLabel("paired", true), "Lưu Báo giá & IC");
-  assert.equal(workspaceSaveLabel("paired", false), "Chỉ lưu Báo giá");
-  assert.equal(workspaceSaveLabel("ic", true), "Lưu nháp IC");
+  assert.equal(workspaceSaveLabel("quote", "QUOTE"), "Chỉ lưu Báo giá");
+  assert.equal(workspaceSaveLabel("paired", "BOTH"), "Lưu Báo giá & IC");
+  assert.equal(workspaceSaveLabel("paired", "QUOTE"), "Chỉ lưu Báo giá");
+  assert.equal(workspaceSaveLabel("paired", "IC"), "Chỉ lưu IC");
+  assert.equal(workspaceSaveLabel("ic", "IC"), "Lưu nháp IC");
 });
 
 test("lineage helpers expose newer quotation versions without changing the IC source", () => {

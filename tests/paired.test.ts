@@ -1,10 +1,11 @@
 import test from "node:test";
 import { validateIcEvidence, IcEvidenceError, previewMime } from "../lib/costflow/icEvidence";
 import assert from "node:assert/strict";
-import { blankPairedRow, hydrateLegacyPairedDraft, normalizePairedRows, pairedFromLegacy } from "../lib/costflow/pairedDraft";
+import { blankPairedRow, deleteOwnedQuotationDraft, hydrateLegacyPairedDraft, hydratePairedEditorDefaults, normalizePairedRows, pairedFromLegacy } from "../lib/costflow/pairedDraft";
 import { pricedTotal } from "../lib/costflow/pairedPricing";
 import { projectSales, projectQuotation, quotationReadinessIssues } from "../lib/costflow/quotationProjection";
 import { calculateCost, calculateLineCost } from "../lib/costflow/money";
+import { emptyFinance, type FinanceData } from "../lib/costflow/types";
 
 test("line pricing multiplies quantity by days without changing generic cost inputs", () => {
   assert.equal(calculateLineCost({ quantity: "2", days: "3,5", unitPrice: "100", basis: "NET", vatPercent: "0" }).gross, "700");
@@ -37,6 +38,51 @@ test("paired drafts preserve unknown versus zero and independent quantities", ()
   assert.throws(() => normalizePairedRows([row, row]), /trùng/);
   assert.throws(() => normalizePairedRows([{ ...row, parentItemId: "one" }]), /vòng/);
   assert.throws(() => normalizePairedRows([{ ...row, parentItemId: "foreign" }]), /Nhóm cha/);
+});
+
+test("paired editor defaults empty buy unit, quantity and days from the customer quotation without replacing IC overrides", () => {
+  const inherited = blankPairedRow("inherited");
+  inherited.sell.unit = "Gói";
+  inherited.sell.quantity = "12";
+  inherited.sell.days = "3";
+  const overridden = blankPairedRow("overridden");
+  overridden.sell.unit = "Ngày";
+  overridden.sell.quantity = "9";
+  overridden.sell.days = "4";
+  overridden.buy.unit = "Ca";
+  overridden.buy.quantity = "7";
+  overridden.buy.days = "2";
+  const source = [inherited, overridden];
+  const snapshot = JSON.stringify(source);
+
+  const hydrated = hydratePairedEditorDefaults(source);
+
+  assert.equal(hydrated[0].buy.unit, "Gói");
+  assert.equal(hydrated[0].buy.quantity, "12");
+  assert.equal(hydrated[0].buy.days, "3");
+  assert.equal(hydrated[1].buy.unit, "Ca");
+  assert.equal(hydrated[1].buy.quantity, "7");
+  assert.equal(hydrated[1].buy.days, "2");
+  assert.equal(JSON.stringify(source), snapshot);
+});
+
+test("draft deletion is owner-only and preserves finalized quotation and IC records", () => {
+  const owned = { id: "owned", version: 2, createdBy: "account", workspaceMode: "paired" as const, title: "Owned draft", clientId: "", customer: "Client", notes: "", rows: [], globalEvidenceIds: [], latestQuotationId: "quote-1", icRevisionId: "revision-1" };
+  const foreign = { ...owned, id: "foreign", createdBy: "other", title: "Foreign draft" };
+  const icOnly = { ...owned, id: "ic-only", workspaceMode: "ic" as const };
+  const data: FinanceData = {
+    ...emptyFinance(),
+    quotationDrafts: [owned, foreign, icOnly],
+    quotations: [{ id: "quote-1", number: 1, parentId: null, title: "Finalized", customer: "Client", notes: "", lines: [], poIds: [], evidenceIds: [], createdBy: "account", createdAt: "2026-10-15T00:00:00.000Z" }],
+    revisions: [{ id: "revision-1", number: 1, requestId: "request-1", effective: false, lines: [], poIds: [], createdBy: "account" }],
+  };
+
+  assert.throws(() => deleteOwnedQuotationDraft(data, "foreign", "account"), /Không tìm thấy bản nháp của bạn/);
+  assert.throws(() => deleteOwnedQuotationDraft(data, "ic-only", "account"), /không còn được phép xóa/);
+  assert.equal(deleteOwnedQuotationDraft(data, "owned", "account").draftId, "owned");
+  assert.deepEqual(data.quotationDrafts?.map(draft => draft.id), ["foreign", "ic-only"]);
+  assert.equal(data.quotations?.[0].id, "quote-1");
+  assert.equal(data.revisions[0].id, "revision-1");
 });
 
 test("legacy hierarchy gains explicit roles and document-style numbering", () => {

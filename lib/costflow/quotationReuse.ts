@@ -160,7 +160,6 @@ export async function initializeQuotationReuseDraft(
     totalLayout: normalizeQuotationTotalLayout(snapshot.totalLines, structuredClone(snapshot.totalLayout)),
     globalEvidenceIds: [],
     reuseSource: { kind, label, sourceDate },
-    priceReviewRequired: true,
   };
   data.quotationDrafts = [...(data.quotationDrafts ?? []), draft];
   return draft;

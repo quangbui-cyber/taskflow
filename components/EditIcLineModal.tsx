@@ -4,12 +4,12 @@ import { useState, useMemo } from "react";
 import {
   Building2,
   Calculator,
+  ChevronLeft,
+  ChevronRight,
   Trash2,
   FileSpreadsheet,
   CreditCard,
   Plus,
-  TrendingUp,
-  Layers3,
   Copy,
   Info,
   ExternalLink,
@@ -35,6 +35,7 @@ type Props = {
   finance: Finance;
   isEditableDraft: boolean;
   worksheetHref: string;
+  onSelectLine?: (line: IcLine) => void;
 };
 
 export default function EditIcLineModal({
@@ -46,6 +47,7 @@ export default function EditIcLineModal({
   finance,
   isEditableDraft,
   worksheetHref,
+  onSelectLine,
 }: Props) {
   const isCreateMode = !line;
   const quotations = useMemo(() => finance.data.quotations || [], [finance.data.quotations]);
@@ -83,6 +85,37 @@ export default function EditIcLineModal({
   const [evidenceReason] = useState(line?.evidenceReason ?? "");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [copyNotice, setCopyNotice] = useState(false);
+
+  const currentLineIndex = line ? revision.lines.findIndex((candidate) => candidate.id === line.id) : -1;
+  const previousLine = currentLineIndex > 0 ? revision.lines[currentLineIndex - 1] : null;
+  const nextLine = currentLineIndex >= 0 && currentLineIndex < revision.lines.length - 1
+    ? revision.lines[currentLineIndex + 1]
+    : null;
+
+  const hasUnsavedChanges = Boolean(
+    description !== (line?.description ?? "")
+      || unit !== (line?.unit?.trim() ? line.unit : (initialQuoteUnit || "Gói"))
+      || quantity !== (line?.quantity?.trim() ? line.quantity : (initialQuoteQty || "1"))
+      || days !== (line?.days ?? "")
+      || unitPrice !== (line?.unitPrice ?? "")
+      || basis !== ((line?.basis as "NET" | "GROSS") || "NET")
+      || vatPercent !== (line?.vatPercent ?? "8")
+      || vendorId !== (line?.vendorId ?? "")
+      || internalNotes !== (line?.internalNotes ?? "")
+      || selectedQuotationId !== (line?.quotationId ?? initialMatch?.quotation.id ?? (quotations.slice(-1)[0]?.id ?? ""))
+      || selectedQuotationLineId !== (line?.quotationLineId ?? initialMatch?.line.id ?? "")
+  );
+
+  const requestClose = () => {
+    if (hasUnsavedChanges && !window.confirm("Bạn có thay đổi chưa lưu. Đóng trình chỉnh sửa?")) return;
+    onClose();
+  };
+
+  const navigateToLine = (target: IcLine | null) => {
+    if (!target || !onSelectLine) return;
+    if (hasUnsavedChanges && !window.confirm("Bạn có thay đổi chưa lưu. Chuyển sang hạng mục khác?")) return;
+    onSelectLine(target);
+  };
 
   // Find active matched quotation and quotation line
   const activeQuote = useMemo(() => {
@@ -157,6 +190,27 @@ export default function EditIcLineModal({
     if (!activeQuoteLine?.cost || !liveCost) return null;
     return calculateMargin(activeQuoteLine.cost, liveCost);
   }, [activeQuoteLine, liveCost]);
+
+  const icCompletion = [
+    description.trim(),
+    unit.trim(),
+    quantity.trim(),
+    days.trim(),
+    unitPrice.trim(),
+    vendorId,
+    (line?.evidenceIds?.length ?? 0) > 0 || evidenceReason.trim(),
+  ].filter(Boolean).length;
+
+  const quotationCompletion = activeQuoteLine
+    ? [
+        activeQuoteLine.description?.trim(),
+        activeQuoteLine.unit?.trim(),
+        activeQuoteLine.quantity?.trim(),
+        activeQuoteLine.days?.trim(),
+        activeQuoteLine.unitPrice?.trim(),
+        activeQuoteLine.cost,
+      ].filter(Boolean).length
+    : 0;
 
   // Prepared Lines for Save
   const preparedLines = useMemo(() => {
@@ -265,16 +319,16 @@ export default function EditIcLineModal({
   return (
     <Dialog
       open={open}
-      onClose={onClose}
-      className="tf-dialog-wide"
+      onClose={requestClose}
+      className="tf-ic-line-drawer"
       title={
         isCreateMode
-          ? `Thêm Hạng Mục Mới vào IC-R${revision.number}`
-          : `Chỉnh Sửa Hạng Mục: ${line?.description || description}`
+          ? `Thêm hạng mục vào IC-R${revision.number}`
+          : line?.description || description || "Chỉnh sửa hạng mục IC"
       }
       description={
         isEditableDraft
-          ? "Chỉnh sửa số lượng, đơn giá mua, đối chiếu Báo giá bán song song, chỉ định Nhà Cung Cấp và tính toán lợi nhuận."
+          ? `IC-R${revision.number}${currentLineIndex >= 0 ? ` · Dòng ${currentLineIndex + 1}/${revision.lines.length}` : " · Hạng mục mới"}`
           : `Bản IC-R${revision.number} là Baseline hiệu lực hoặc đã gửi duyệt; không thể sửa trực tiếp số liệu tại đây.`
       }
     >
@@ -321,54 +375,64 @@ export default function EditIcLineModal({
             </div>
           </div>
         ) : (
-          <div className="space-y-5">
-            {/* ═══════════ TOP HELPER: LIÊN KẾT TRÌNH CHỈNH SỬA SONG SONG ═══════════ */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-gradient-to-r from-[var(--surface-soft)] to-[var(--surface)] border border-[var(--border)] shadow-xs">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-[#587216]/10 text-[#587216] flex items-center justify-center shrink-0">
-                  <Layers3 size={18} />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-[var(--foreground)]">
-                      Trình Chỉnh Sửa Song Song (Paired Worksheet)
-                    </span>
-                    {activeQuoteLine ? (
-                      <Badge tone="success" className="text-[11px] py-0 px-2">
-                        Đã khớp BG-{activeQuote?.number}
-                      </Badge>
-                    ) : (
-                      <Badge tone="neutral" className="text-[11px] py-0 px-2">
-                        Chi phí nội bộ độc lập
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
-                    Quản lý song song Báo giá (bán cho khách) và Dự toán IC (mua nội bộ) trên cùng một bảng tính toàn diện.
-                  </p>
-                </div>
+          <div className="tf-edit-ic-line-modal tf-edit-ic-line-drawer">
+            <div className="tf-ic-drawer-toolbar">
+              <div className="tf-ic-drawer-status">
+                <Badge tone={activeQuoteLine ? "info" : "neutral"}>
+                  {activeQuoteLine ? `BG ${quotationCompletion}/6` : "Không có BG"}
+                </Badge>
+                <Badge tone={icCompletion === 7 ? "success" : "warning"}>IC {icCompletion}/7</Badge>
               </div>
-
+              {!isCreateMode && (
+                <div className="tf-ic-drawer-navigation" aria-label="Điều hướng hạng mục IC">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={!previousLine}
+                    onClick={() => navigateToLine(previousLine)}
+                    aria-label="Hạng mục trước"
+                  >
+                    <ChevronLeft size={15} />
+                    <span>Dòng trước</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={!nextLine}
+                    onClick={() => navigateToLine(nextLine)}
+                    aria-label="Hạng mục sau"
+                  >
+                    <span>Dòng sau</span>
+                    <ChevronRight size={15} />
+                  </Button>
+                </div>
+              )}
               <Link
-                className="tf-button-secondary text-xs flex items-center gap-1.5 py-1.5 px-3 shrink-0 font-medium hover:border-[#587216] hover:text-[#587216] transition-colors"
+                className="tf-button-secondary tf-button-size-sm tf-ic-drawer-worksheet-link"
                 href={worksheetHref}
                 target="_blank"
                 rel="noopener noreferrer"
-                title="Mở Bảng tính toàn màn hình để chỉnh sửa song song cả 2 bảng Báo giá và IC"
+                title="Mở Worksheet toàn màn hình"
               >
-                <FileSpreadsheet size={14} className="text-[#587216]" />
-                <span>Mở Worksheet toàn màn hình</span>
-                <ExternalLink size={12} className="opacity-60" />
+                <FileSpreadsheet size={14} />
+                <span>Mở Worksheet</span>
+                <ExternalLink size={12} aria-hidden="true" />
               </Link>
             </div>
 
             {/* ═══════════ MAIN FORM (ACTIONFORM) ═══════════ */}
             <ActionForm
+              className="tf-ic-drawer-form"
               finance={finance}
               command="SAVE_IC"
               requestId={revision.requestId}
-              label={isCreateMode ? "Thêm vào dự toán IC" : "Lưu thay đổi hạng mục"}
-              onSuccess={onClose}
+              label={isCreateMode ? "Thêm vào dự toán IC" : nextLine ? "Lưu & sang dòng tiếp" : "Lưu thay đổi"}
+              onSuccess={() => {
+                if (nextLine && onSelectLine) onSelectLine(nextLine);
+                else onClose();
+              }}
             >
               {/* Hidden required inputs for SAVE_IC */}
               <input type="hidden" name="requestId" value={revision.requestId} />
@@ -384,169 +448,19 @@ export default function EditIcLineModal({
                 <input key={`ev-${id}`} type="hidden" name="evidenceIds" value={id} />
               ))}
 
-              <div className="space-y-5 max-h-[65vh] overflow-y-auto pr-1">
+              <div className="tf-ic-drawer-scroll">
                 {/* ═══════════ 2-COLUMN PARALLEL LAYOUT: BÁO GIÁ (SELL) vs IC (BUY) ═══════════ */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-                  {/* ────────────────── CỘT TRÁI: BÁO GIÁ BÁN CHO KHÁCH HÀNG ────────────────── */}
-                  <div className="lg:col-span-5 flex flex-col justify-between p-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)]/60 space-y-4">
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between pb-2 border-b border-[var(--border)]">
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--foreground)]">
-                            Báo Giá Bán (Khách hàng)
-                          </h4>
-                        </div>
-                        <Badge tone="info" className="text-[10px]">
-                          Sell Side
-                        </Badge>
-                      </div>
-
-                      {/* Dropdown mapping to quotation line */}
-                      <div>
-                        <label className="text-xs font-medium text-[var(--text-secondary)] block mb-1">
-                          Liên kết dòng Báo giá song song:
-                        </label>
-                        <Select
-                          value={
-                            selectedQuotationLineId
-                              ? `${selectedQuotationId}::${selectedQuotationLineId}`
-                              : ""
-                          }
-                          onChange={(e) => handleQuotationLineSelect(e.target.value)}
-                          className="w-full text-xs"
-                        >
-                          <option value="">-- Chi phí nội bộ độc lập (Không qua Báo giá) --</option>
-                          {quotations.map((q) => (
-                            <optgroup key={q.id} label={`BG-${q.number}: ${q.title || "Báo giá"}`}>
-                              {q.lines.map((ql, idx) => (
-                                <option key={ql.id} value={`${q.id}::${ql.id}`}>
-                                  #{idx + 1}: {ql.description} ({displayMoney(ql.unitPrice)})
-                                </option>
-                              ))}
-                            </optgroup>
-                          ))}
-                        </Select>
-                      </div>
-
-                      {/* Thông tin chi tiết của dòng Báo giá khách */}
-                      {activeQuoteLine ? (
-                        <div className="p-3.5 rounded-xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/40 dark:bg-blue-950/20 space-y-3">
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-300 block">
-                                BG-{activeQuote?.number} · {activeQuote?.customer || "Khách hàng"}
-                              </span>
-                              <p className="text-xs font-medium text-[var(--foreground)] mt-0.5">
-                                {activeQuoteLine.description}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-blue-100 dark:border-blue-900/40">
-                            <div>
-                              <span className="text-[var(--text-secondary)] block text-[11px]">
-                                Khối lượng bán:
-                              </span>
-                              <strong className="text-[var(--foreground)]">
-                                {activeQuoteLine.quantity} {activeQuoteLine.unit}
-                              </strong>
-                            </div>
-
-                            <div>
-                              <span className="text-[var(--text-secondary)] block text-[11px]">
-                                Đơn giá bán ({activeQuoteLine.basis}):
-                              </span>
-                              <strong className="text-[var(--foreground)]">
-                                {displayMoney(activeQuoteLine.unitPrice)}
-                              </strong>
-                            </div>
-
-                            <div>
-                              <span className="text-[var(--text-secondary)] block text-[11px]">
-                                Thuế VAT bán:
-                              </span>
-                              <span className="font-mono">{activeQuoteLine.vatPercent}%</span>
-                            </div>
-
-                            <div>
-                              <span className="text-[var(--text-secondary)] block text-[11px]">
-                                Doanh thu Net (chưa VAT):
-                              </span>
-                              <strong className="text-blue-700 dark:text-blue-300 font-mono">
-                                {activeQuoteLine.cost ? displayMoney(activeQuoteLine.cost.net) : "—"}
-                              </strong>
-                            </div>
-                          </div>
-
-                          <div className="pt-2 border-t border-blue-100 dark:border-blue-900/40 flex items-center justify-between text-xs">
-                            <span className="text-[var(--text-secondary)]">Tổng giá bán khách (Gross):</span>
-                            <strong className="text-sm font-bold font-mono text-blue-800 dark:text-blue-200">
-                              {activeQuoteLine.cost ? displayMoney(activeQuoteLine.cost.gross) : "—"}
-                            </strong>
-                          </div>
-
-                          {/* Auto sync notice */}
-                          <div className="rounded-lg bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 p-2.5 text-xs text-blue-900 dark:text-blue-200 flex items-start gap-2">
-                            <Sparkles size={14} className="text-blue-600 mt-0.5 shrink-0" />
-                            <div>
-                              <p className="font-semibold text-blue-800 dark:text-blue-300">Tự động đồng bộ số liệu sang IC</p>
-                              <p className="text-[11px] text-blue-700/90 dark:text-blue-300/80 mt-0.5">
-                                Số lượng (<strong>{activeQuoteLine.quantity}</strong>) và ĐVT (<strong>{activeQuoteLine.unit}</strong>) đã được chuyển tự động sang form mua IC bên phải mà không cần nhập lại.
-                              </p>
-                            </div>
-                          </div>
-
-                          {/* Button sync quantity and unit as fallback override */}
-                          <div className="pt-0.5">
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="sm"
-                              onClick={handleSyncFromQuotation}
-                              className="w-full text-xs flex items-center justify-center gap-1.5 py-1.5 border-blue-300 hover:bg-blue-100/50 dark:hover:bg-blue-900/40 text-[var(--text-secondary)]"
-                              title="Lấy lại Số lượng và Đơn vị tính từ Báo giá khách"
-                            >
-                              <Copy size={12} className="text-blue-600 dark:text-blue-400" />
-                              <span>Gán lại SL ({activeQuoteLine.quantity}) & ĐVT ({activeQuoteLine.unit})</span>
-                            </Button>
-                            {copyNotice && (
-                              <p className="text-[11px] text-emerald-600 font-medium text-center mt-1">
-                                Đã đồng bộ lại số lượng & ĐVT vào form IC!
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="p-4 rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)] text-center space-y-2">
-                          <Info size={20} className="mx-auto text-[var(--text-secondary)] opacity-60" />
-                          <p className="text-xs text-[var(--text-secondary)]">
-                            Dòng chi phí này chưa liên kết với mục nào trong Báo giá bán khách hàng.
-                          </p>
-                          <p className="text-[11px] text-[var(--text-secondary)] italic">
-                            Chọn dòng tương ứng từ menu trên nếu bạn muốn theo dõi biên lợi nhuận (Margin) theo thời gian thực.
-                          </p>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="text-[11px] text-[var(--text-secondary)] pt-2 border-t border-[var(--border)]">
-                      Dữ liệu Báo giá bán được bảo toàn tính toàn vẹn (Read-only từ phiên bản Báo giá đã tạo).
-                    </div>
-                  </div>
-
+                <div className="tf-ic-drawer-content">
                   {/* ────────────────── CỘT PHẢI: DỰ TOÁN MUA NỘI BỘ (IC & NCC) ────────────────── */}
-                  <div className="lg:col-span-7 p-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] space-y-4 shadow-xs">
+                  <section className="tf-ic-primary-card">
                     <div className="flex items-center justify-between pb-2 border-b border-[var(--border)]">
                       <div className="flex items-center gap-1.5">
                         <span className="w-2.5 h-2.5 rounded-full bg-[#587216]"></span>
                         <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--foreground)]">
-                          Dự Toán Chi Phí Mua IC (Nội bộ)
+                          Thông tin IC nội bộ
                         </h4>
                       </div>
-                      <Badge tone="success" className="text-[10px]">
-                        Buy Side
-                      </Badge>
+                      <Badge tone="success" className="text-[10px]">Đang chỉnh</Badge>
                     </div>
 
                     {/* 1. TÊN HẠNG MỤC & ĐVT */}
@@ -649,7 +563,7 @@ export default function EditIcLineModal({
                     </div>
 
                     {/* 3. TẠM TÍNH THÀNH TIỀN MUA IC */}
-                    <div className="p-3 rounded-xl border border-[#587216]/30 bg-[#587216]/5 flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div className="tf-ic-cost-summary">
                       <div className="flex items-center gap-1.5 font-semibold text-[var(--foreground)]">
                         <Calculator size={15} className="text-[#587216]" />
                         <span>Tạm tính chi phí mua:</span>
@@ -678,7 +592,7 @@ export default function EditIcLineModal({
                     </div>
 
                     {/* 4. NHÀ CUNG CẤP (NCC) */}
-                    <div className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] space-y-2.5">
+                    <div className="tf-ic-vendor-section">
                       <div className="flex items-center justify-between">
                         <label className="text-xs font-bold text-[var(--foreground)] flex items-center gap-1.5">
                           <Building2 size={15} className="text-[#587216]" />
@@ -737,106 +651,87 @@ export default function EditIcLineModal({
                       rows={2}
                       className="text-xs"
                     />
-                  </div>
-                </div>
+                  </section>
 
-                {/* ═══════════ THƯỚC ĐO HIỆU QUẢ SONG SONG & BIÊN LỢI NHUẬN (LIVE MARGIN) ═══════════ */}
-                {activeQuoteLine && liveCost ? (
-                  <div
-                    className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors ${
-                      liveMargin && !liveMargin.isPositive
-                        ? "border-rose-300 bg-rose-50/50 dark:border-rose-900/60 dark:bg-rose-950/20"
-                        : liveMargin && liveMargin.percentNum < 30
-                        ? "border-amber-300 bg-amber-50/50 dark:border-amber-900/60 dark:bg-amber-950/20"
-                        : "border-[#587216]/40 bg-[#587216]/10"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                          liveMargin && !liveMargin.isPositive
-                            ? "bg-rose-500/20 text-rose-600"
-                            : liveMargin && liveMargin.percentNum < 30
-                            ? "bg-amber-500/20 text-amber-600"
-                            : "bg-[#587216]/20 text-[#587216]"
-                        }`}
+                  {/* Báo giá là nguồn tham chiếu chỉ đọc, đặt sau vùng nhập IC. */}
+                  <details className="tf-ic-reference-card">
+                    <summary>
+                      <span className="tf-ic-reference-heading">
+                        <span className="tf-ic-reference-dot" aria-hidden="true" />
+                        <span>
+                          <strong>Báo giá tham chiếu</strong>
+                          <small>
+                            {activeQuoteLine
+                              ? `BG-${activeQuote?.number} · ${activeQuoteLine.description}`
+                              : "Chưa liên kết dòng Báo giá"}
+                          </small>
+                        </span>
+                      </span>
+                      <span className="tf-ic-reference-summary">
+                        <span>
+                          <small>Bán Net</small>
+                          <strong>{activeQuoteLine?.cost ? displayMoney(activeQuoteLine.cost.net) : "—"}</strong>
+                        </span>
+                        <span>
+                          <small>Margin</small>
+                          <strong className={liveMargin && !liveMargin.isPositive ? "is-negative" : ""}>
+                            {liveMargin ? liveMargin.percentDisplay : "—"}
+                          </strong>
+                        </span>
+                      </span>
+                    </summary>
+
+                    <div className="tf-ic-reference-body">
+                      <Select
+                        label="Liên kết dòng Báo giá"
+                        value={selectedQuotationLineId ? `${selectedQuotationId}::${selectedQuotationLineId}` : ""}
+                        onChange={(e) => handleQuotationLineSelect(e.target.value)}
                       >
-                        <TrendingUp size={20} />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-[var(--foreground)]">
-                            Đối Chiếu Biên Lợi Nhuận Song Song (Live Margin)
-                          </span>
-                          {liveMargin && !liveMargin.isPositive ? (
-                            <Badge tone="danger">Cảnh báo: Bán dưới giá vốn (Lỗ)!</Badge>
-                          ) : liveMargin && liveMargin.percentNum < 30 ? (
-                            <Badge tone="warning">Biên lợi nhuận mỏng (&lt;30%)</Badge>
-                          ) : (
-                            <Badge tone="success">Biên lợi nhuận tốt (&ge;30%)</Badge>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
-                          {liveMargin && !liveMargin.isPositive
-                            ? "Chi phí mua IC hiện đang cao hơn doanh thu bán khách hàng. Cần đàm phán lại với NCC hoặc điều chỉnh giá bán."
-                            : "Tự động so sánh giữa Doanh thu Net (Báo giá bán) và Chi phí Net (Dự toán mua IC)."}
+                        <option value="">Chi phí nội bộ độc lập</option>
+                        {quotations.map((q) => (
+                          <optgroup key={q.id} label={`BG-${q.number}: ${q.title || "Báo giá"}`}>
+                            {q.lines.map((ql, idx) => (
+                              <option key={ql.id} value={`${q.id}::${ql.id}`}>
+                                #{idx + 1}: {ql.description} ({displayMoney(ql.unitPrice)})
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </Select>
+
+                      {activeQuoteLine ? (
+                        <>
+                          <dl className="tf-ic-reference-metrics">
+                            <div><dt>SL / ĐVT bán</dt><dd>{activeQuoteLine.quantity} {activeQuoteLine.unit}</dd></div>
+                            <div><dt>Số ngày bán</dt><dd>{activeQuoteLine.days || "1"}</dd></div>
+                            <div><dt>Đơn giá bán ({activeQuoteLine.basis})</dt><dd>{displayMoney(activeQuoteLine.unitPrice)}</dd></div>
+                            <div><dt>VAT bán</dt><dd>{activeQuoteLine.vatPercent}%</dd></div>
+                            <div><dt>Bán Gross</dt><dd>{activeQuoteLine.cost ? displayMoney(activeQuoteLine.cost.gross) : "—"}</dd></div>
+                            <div><dt>Lãi gộp</dt><dd>{liveMargin ? liveMargin.marginDisplay : "—"}</dd></div>
+                          </dl>
+                          <div className="tf-ic-reference-actions">
+                            <span><Sparkles size={13} /> SL và ĐVT được kế thừa từ Báo giá.</span>
+                            <Button type="button" variant="secondary" size="sm" onClick={handleSyncFromQuotation}>
+                              <Copy size={13} /> Gán lại SL & ĐVT
+                            </Button>
+                          </div>
+                          {copyNotice && <p className="tf-ic-inline-success">Đã đồng bộ lại SL và ĐVT.</p>}
+                        </>
+                      ) : (
+                        <p className="tf-ui-help tf-ic-reference-empty">
+                          <Info size={15} /> Chọn một dòng Báo giá nếu cần theo dõi lãi gộp và margin.
                         </p>
-                      </div>
+                      )}
+                      <p className="tf-ui-help">Dữ liệu Báo giá chỉ dùng để tham chiếu và không bị sửa tại đây.</p>
                     </div>
-
-                    <div className="flex flex-wrap items-center gap-5 text-xs font-mono shrink-0">
-                      <div>
-                        <span className="text-[var(--text-secondary)] block text-[11px]">Bán Net (Khách):</span>
-                        <strong className="text-blue-700 dark:text-blue-300 text-sm">
-                          {displayMoney(activeQuoteLine.cost.net)}
-                        </strong>
-                      </div>
-
-                      <div>
-                        <span className="text-[var(--text-secondary)] block text-[11px]">Mua Net (IC):</span>
-                        <strong className="text-[var(--foreground)] text-sm">
-                          {displayMoney(liveCost.net)}
-                        </strong>
-                      </div>
-
-                      <div className="border-l border-[var(--border)] pl-4">
-                        <span className="text-[var(--text-secondary)] block text-[11px]">Lãi gộp (VND):</span>
-                        <strong
-                          className={`text-base font-bold ${
-                            liveMargin && !liveMargin.isPositive
-                              ? "text-rose-600"
-                              : liveMargin && liveMargin.percentNum < 30
-                              ? "text-amber-600"
-                              : "text-[#587216]"
-                          }`}
-                        >
-                          {liveMargin ? liveMargin.marginDisplay : "—"}
-                        </strong>
-                      </div>
-
-                      <div>
-                        <span className="text-[var(--text-secondary)] block text-[11px]">Tỷ suất Margin:</span>
-                        <strong
-                          className={`text-base font-bold ${
-                            liveMargin && !liveMargin.isPositive
-                              ? "text-rose-600"
-                              : liveMargin && liveMargin.percentNum < 30
-                              ? "text-amber-600"
-                              : "text-[#587216]"
-                          }`}
-                        >
-                          {liveMargin ? liveMargin.percentDisplay : "—"}
-                        </strong>
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
+                  </details>
+                </div>
               </div>
             </ActionForm>
 
             {/* ═══════════ DELETE LINE ACTION (IF EDITING EXISTING) ═══════════ */}
             {!isCreateMode && (
-              <div className="pt-3 border-t border-[var(--border)] flex items-center justify-between">
+              <div className="tf-ic-drawer-delete">
                 {!confirmDelete ? (
                   <Button
                     type="button"

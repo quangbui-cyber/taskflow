@@ -34,13 +34,14 @@ const phase12Suites = [
 const unitSuites = [
   "tests/costflow.test.ts", "tests/budget.test.ts", "tests/ic-effectiveness.test.ts", "tests/payment-policy.test.ts",
   "tests/payment-diff.test.ts", "tests/payment-read-model.test.ts", "tests/payment-security.test.ts", "tests/payment-ui-contract.test.ts",
-  "tests/paired.test.ts", "tests/paired-ui-contract.test.ts", "tests/excel-intake-contract.test.ts", "tests/excel-intake-template.test.ts",
+  "tests/paired.test.ts", "tests/paired-ui-contract.test.ts", "tests/paired-performance.test.ts", "tests/excel-intake-contract.test.ts", "tests/excel-intake-template.test.ts",
   "tests/excel-intake-parser.test.ts", "tests/excel-intake-ui-contract.test.ts", "tests/excel-round-trip.test.ts",
   "tests/excel-round-trip-ui-contract.test.ts", "tests/quotation-parameters.test.ts", "tests/quotation-totals.test.ts",
   "tests/quotation-template-seed.test.ts", "tests/workspace-flow.test.ts", "tests/workflow-documents.test.ts",
   "tests/workflow-approval.test.ts", "tests/workflow-routes.test.ts",
   "tests/workflow-print-layout.test.ts",
   "tests/session-secret-build.test.ts",
+  "tests/cloudflare-free-evidence-router.test.ts", "tests/cloudflare-paired-save.test.ts",
   ...(phase8 ? ["tests/actual-cost.test.ts", "tests/actual-cost-control-center.test.ts", "tests/actual-cost-security.test.ts", "tests/actual-cost-ui-contract.test.ts", "tests/customer-liquidation.test.ts", "tests/customer-acceptance-export.test.ts"] : []),
 ];
 const integrationSuites = integration ? [
@@ -54,7 +55,6 @@ const files = [...phase10GapSuites, ...unitSuites, ...integrationSuites];
 const env = { ...process.env };
 if (integration) env.DATABASE_URL = env.COSTFLOW_TEST_DATABASE_URL;
 else delete env.COSTFLOW_TEST_DATABASE_URL;
-const result = spawnSync(process.execPath, ["--conditions=react-server", "--import=tsx", "--test", "--test-concurrency=1", ...files], { stdio: "inherit", env });
 const phase12Result = spawnSync(
   process.execPath,
   ["--conditions=react-server", "--import=tsx", "--test", "--test-concurrency=1", ...phase12Suites],
@@ -64,4 +64,5 @@ const phase12Result = spawnSync(
   },
 );
 if ((phase12Result.status ?? 1) !== 0) process.exit(phase12Result.status ?? 1);
+const result = spawnSync(process.execPath, ["--conditions=react-server", "--import=tsx", "--test", "--test-concurrency=1", ...files], { stdio: "inherit", env });
 process.exit(result.status ?? 1);

@@ -61,8 +61,27 @@ export function normalizePairedRows(input: unknown): PairedRow[] {
   }
   return rows;
 }
+
+export function hydratePairedEditorDefaults(rows: PairedRow[]): PairedRow[] {
+  return rows.map(row => {
+    const unit = row.buy.unit || row.sell.unit;
+    const quantity = row.buy.quantity || row.sell.quantity;
+    const days = row.buy.days || row.sell.days;
+    if (unit === row.buy.unit && quantity === row.buy.quantity && days === row.buy.days) return row;
+    return { ...row, buy: { ...row.buy, unit, quantity, days } };
+  });
+}
 export function pairedDraftMetadata(draft: PairedDraft) {
   return { id: draft.id, version: draft.version, icRevisionId: draft.icRevisionId };
+}
+
+export function deleteOwnedQuotationDraft(data: FinanceData, draftId: string, actorId: string) {
+  const draft = data.quotationDrafts?.find(candidate => candidate.id === draftId);
+  if (!draft || draft.createdBy !== actorId || !["quote", "paired"].includes(draft.workspaceMode ?? "paired")) {
+    throw new Error("Không tìm thấy bản nháp của bạn hoặc bản này không còn được phép xóa.");
+  }
+  data.quotationDrafts = (data.quotationDrafts ?? []).filter(candidate => candidate.id !== draft.id);
+  return { draftId: draft.id, title: draft.title };
 }
 
 export function hydrateLegacyPairedDraft(draft: PairedDraft): PairedDraft {

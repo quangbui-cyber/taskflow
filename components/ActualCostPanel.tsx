@@ -363,18 +363,33 @@ export default function ActualCostPanel({ finance, user, canCreate, onSelectTab 
           </div>
 
           {/* Quy định đối soát & hiệu lực phiếu */}
-          <div className="p-3.5 rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50/60 dark:bg-blue-950/30 text-xs text-blue-950 dark:text-blue-200 flex items-start gap-2.5">
-            <AlertCircle size={16} className="text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <p className="font-semibold text-[var(--foreground)]">Quy định Đối soát & Hiệu lực Phiếu thanh toán:</p>
-              <ul className="list-disc list-inside space-y-0.5 text-[11px] text-[var(--text-secondary)]">
-                <li><strong>Nhân sự tự ứng tiền túi (OUT_OF_POCKET):</strong> Thu hồi qua <strong>Phiếu Đề Nghị Hoàn Tạm Ứng (ĐNHTU)</strong>.</li>
-                <li><strong>Chi trả trực tiếp NCC (VENDOR_DIRECT):</strong> Thanh toán qua <strong>Phiếu Đề Nghị Thanh Toán (ĐNTT)</strong>.</li>
-                <li><strong>Hiệu lực phiếu:</strong> Có thể lập ĐNHTU / ĐNTT trước trong quá trình thực hiện, nhưng <strong>chỉ có hiệu lực giải ngân thanh toán khi AC tương ứng được phê duyệt</strong>.</li>
-                <li><strong>Phân định vai trò:</strong> <em>Account (Quản lý dự án)</em> lập và điều phối hồ sơ; <em>Kế toán (Accountant)</em> rà soát chứng từ, phê duyệt ngoại lệ và thực hiện chi tiền.</li>
-              </ul>
+          <section className="tf-ac-policy" aria-labelledby="ac-payment-policy-heading">
+            <div className="tf-ac-policy-heading">
+              <span className="tf-ac-policy-icon" aria-hidden="true"><AlertCircle size={18} /></span>
+              <div>
+                <h3 id="ac-payment-policy-heading">Nguyên tắc đối soát & hiệu lực thanh toán</h3>
+                <p>Chọn đúng loại phiếu theo nguồn chi; phê duyệt AC và giải ngân vẫn là hai bước riêng.</p>
+              </div>
             </div>
-          </div>
+            <dl className="tf-ac-policy-grid">
+              <div>
+                <dt>Nhân sự tự ứng tiền túi</dt>
+                <dd><span>OUT_OF_POCKET</span> Thu hồi qua Phiếu Đề Nghị Hoàn Tạm Ứng (ĐNHTU).</dd>
+              </div>
+              <div>
+                <dt>Chi trả trực tiếp NCC</dt>
+                <dd><span>VENDOR_DIRECT</span> Thanh toán qua Phiếu Đề Nghị Thanh Toán (ĐNTT).</dd>
+              </div>
+              <div>
+                <dt>Khi nào phiếu có hiệu lực?</dt>
+                <dd>Có thể lập trước, nhưng chỉ được giải ngân khi AC tương ứng đã được phê duyệt.</dd>
+              </div>
+              <div>
+                <dt>Ai chịu trách nhiệm?</dt>
+                <dd>Account lập và điều phối hồ sơ; Kế toán rà soát chứng từ, duyệt ngoại lệ và thực hiện chi tiền.</dd>
+              </div>
+            </dl>
+          </section>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {memberSummaries.map(member => {

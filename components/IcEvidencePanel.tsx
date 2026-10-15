@@ -3,15 +3,15 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useState, type ReactNode } from "react";
-import type { Finance } from "./CostFlowPanel";
 import { Dialog } from "./ui/Dialog";
 import { Button } from "./ui/Button";
 import { Select, Input, Textarea } from "./ui/Field";
 import { Alert } from "./ui/Presentation";
 
-export type EvidenceFile = Finance["evidence"][number];
+export type EvidenceFile = { id: string; name: string; requestId: string | null; kind: string; mimeType?: string; sha256?: string };
+type EvidenceFinance = { project: { id: string }; files: { id: string; name: string }[] };
 export default function IcEvidencePanel({ finance, open, onClose, targets, ids, reason, files, onFiles, onChange, readOnly = false, footer }: {
-  finance: Finance; open: boolean; onClose: () => void; targets: string[]; ids: string[]; reason: string; files: EvidenceFile[];
+  finance: EvidenceFinance; open: boolean; onClose: () => void; targets: string[]; ids: string[]; reason: string; files: EvidenceFile[];
   onFiles: (file: EvidenceFile) => void; onChange: (ids: string[], reason: string) => void; readOnly?: boolean; footer?: ReactNode;
 }) {
   const [error, setError] = useState(""); const [busy, setBusy] = useState(false); const [source, setSource] = useState(""); const [preview, setPreview] = useState<EvidenceFile | null>(null);

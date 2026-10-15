@@ -10,7 +10,6 @@ import { rowCompletion } from "@/lib/costflow/workspaceFlow";
 import { childrenOf, orderedRows, groupAmount } from "@/lib/costflow/pairedPricing";
 import { displayMoney } from "@/lib/costflow/money";
 import type { PairedRow } from "@/lib/costflow/types";
-import type { QuotationParameterSnapshot } from "@/lib/costflow/quotationParameters";
 
 export interface WorksheetDetailDrawerProps {
   open: boolean;
@@ -29,15 +28,14 @@ export interface WorksheetDetailDrawerProps {
   detailBuyDisabled: boolean;
   detailSellDisabled: boolean;
   beneficiaryOptions: { id: string; name: string }[];
-  parameterConfig?: QuotationParameterSnapshot;
   onAdjacentDetail: (delta: number) => void;
   onUpdate: (id: string, value: Partial<PairedRow>) => void;
   onSide: (row: PairedRow, scope: "sell" | "buy", field: string, value: string) => void;
-  onReuseFormula: (row: PairedRow, scope: "sell" | "buy") => void;
   onAdd: (rowType: "GROUP" | "ITEM", parent?: string | null, after?: string) => void;
   onMove: (id: string, delta: number) => void;
   onChangeParent: (row: PairedRow, parentItemId: string | null) => void;
   onRemoveFromQuote: (detailId: string) => void;
+  onRequestDelete: (detailId: string) => void;
   onOpenEvidence: (targets: string[]) => void;
   onCreateBeneficiaryClick: (itemId: string) => void;
   onModeChangePrompt: (change: { id: string; mode: "PACKAGE" | "DETAIL" }) => void;
@@ -60,15 +58,14 @@ export default function WorksheetDetailDrawer({
   detailBuyDisabled,
   detailSellDisabled,
   beneficiaryOptions,
-  parameterConfig,
   onAdjacentDetail,
   onUpdate,
   onSide,
-  onReuseFormula,
   onAdd,
   onMove,
   onChangeParent,
   onRemoveFromQuote,
+  onRequestDelete,
   onOpenEvidence,
   onCreateBeneficiaryClick,
   onModeChangePrompt,
@@ -165,7 +162,6 @@ export default function WorksheetDetailDrawer({
             {((mode === "quote" ? ["sell"] : mode === "ic" ? ["buy"] : ["sell", "buy"]) as ("sell" | "buy")[]).map(
               scope => {
                 const completion = rowCompletion(detail)[scope];
-                const binding = detail[scope].parameterBinding;
                 return (
                   <section
                     key={scope}
@@ -180,20 +176,7 @@ export default function WorksheetDetailDrawer({
                       >
                         {completion.complete}/{completion.total}
                       </span>
-                      {binding?.mode === "OVERRIDDEN" && (
-                        <span className="tf-parameter-override-badge">Đã ghi đè</span>
-                      )}
                     </h3>
-                    {binding?.mode === "OVERRIDDEN" && (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        disabled={!parameterConfig || (scope === "buy" && locked)}
-                        onClick={() => onReuseFormula(detail, scope)}
-                      >
-                        Dùng lại công thức
-                      </Button>
-                    )}
                     <div className="grid grid-cols-2 gap-3">
                       <Input
                         label={"ĐVT " + (scope === "sell" ? "bán" : "mua")}
@@ -430,7 +413,7 @@ export default function WorksheetDetailDrawer({
             </Button>
             {!detail.saleRemoved ? (
               <Button
-                variant="danger"
+                variant="secondary"
                 size="sm"
                 onClick={() => {
                   if (typeof window !== "undefined" && !window.confirm("Bạn có chắc chắn muốn bỏ dòng này khỏi báo giá?")) return;
@@ -445,6 +428,16 @@ export default function WorksheetDetailDrawer({
                 Khôi phục dòng vào báo giá
               </Button>
             )}
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => {
+                onRequestDelete(detail.itemId);
+                onClose();
+              }}
+            >
+              Xóa hẳn
+            </Button>
           </div>
         )}
       </fieldset>

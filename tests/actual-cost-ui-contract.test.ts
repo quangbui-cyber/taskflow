@@ -121,3 +121,25 @@ test("actual cost control center exposes the complete IC-AC worksheet and four c
   assert.match(css, /\.tf-ac-control-mobile/);
   assert.match(css, /min-height: 44px/);
 });
+
+test("costflow visual polish hides redundant captions and keeps accessible table names", () => {
+  const presentation = source("components/ui/Presentation.tsx");
+  const overview = source("components/CostFlowPanel.tsx");
+  const internal = source("components/InternalCostPanel.tsx");
+  const worksheet = source("components/costflow/actual-cost/IcAcReconciliationWorksheet.tsx");
+  const actualCost = source("components/ActualCostPanel.tsx");
+  const css = source("app/modules.css");
+
+  assert.match(presentation, /hideCaption/);
+  assert.match(presentation, /aria-label=\{caption\}/);
+  assert.match(overview, /caption="Các hồ sơ cập nhật gần đây" hideCaption className="tf-overview-request-table"/);
+  assert.match(css, /\.tf-overview-request-table thead th \{ background: var\(--primary\)/);
+  assert.match(internal, /Internal Cost & Ngân sách dự toán/);
+  assert.doesNotMatch(internal, /<Layers3 size=\{22\}/);
+  assert.doesNotMatch(internal, /Các dòng hạng mục IC-R\{visibleRevision\.number\}/);
+  assert.match(internal, /caption=\{`Các dòng chi phí và NCC[^`]+`\} hideCaption/);
+  assert.match(worksheet, /caption="Worksheet IC và Actual Cost theo từng lần phát sinh" hideCaption/);
+  assert.match(actualCost, /className="tf-ac-policy"/);
+  assert.match(actualCost, /phê duyệt AC và giải ngân vẫn là hai bước riêng/);
+  assert.match(css, /\.tf-ac-policy-grid/);
+});

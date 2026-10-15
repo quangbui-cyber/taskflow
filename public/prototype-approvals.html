@@ -1,0 +1,1409 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TaskFlow — Prototype Trình ký số & Phê duyệt nội bộ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --surface-soft: #f1f5f9;
+      --border: #e2e8f0;
+      --border-dark: #cbd5e1;
+      --foreground: #0f172a;
+      --text-secondary: #64748b;
+      --primary: #4f46e5;
+      --primary-hover: #4338ca;
+      --primary-soft: #eef2ff;
+      --success: #16a34a;
+      --success-soft: #dcfce7;
+      --warning: #d97706;
+      --warning-soft: #fef3c7;
+      --danger: #dc2626;
+      --danger-soft: #fee2e2;
+      --radius: 12px;
+      --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+      --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+      --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+      --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.15), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg);
+      color: var(--foreground);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      padding-bottom: 80px;
+    }
+
+    /* APP TOPBAR */
+    header.topbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 40;
+    }
+    .brand-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 16px;
+      color: var(--foreground);
+    }
+    .brand-badge {
+      font-size: 11px;
+      background: var(--primary-soft);
+      color: var(--primary);
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-weight: 600;
+    }
+    .user-pill {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      background: var(--surface-soft);
+      padding: 6px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+    }
+
+    /* CONTAINER */
+    .container {
+      max-width: 1180px;
+      margin: 24px auto;
+      padding: 0 20px;
+    }
+
+    /* PROJECT HERO & TABS */
+    .project-header {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin-bottom: 20px;
+      box-shadow: var(--shadow-sm);
+    }
+    .project-title {
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--foreground);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .project-meta {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+      display: flex;
+      gap: 16px;
+    }
+    .nav-tabs {
+      display: flex;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+      margin-top: 20px;
+      overflow-x: auto;
+    }
+    .tab-item {
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+    .tab-item.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+      background: var(--primary-soft);
+      border-radius: 8px 8px 0 0;
+    }
+
+    /* TOOLBAR & CONTROLS */
+    .action-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .filter-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .pill-btn {
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .pill-btn.active {
+      background: var(--foreground);
+      color: #fff;
+      border-color: var(--foreground);
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.15s;
+    }
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+    .btn-primary:hover {
+      background: var(--primary-hover);
+    }
+    .btn-secondary {
+      background: var(--surface);
+      border-color: var(--border-dark);
+      color: var(--foreground);
+    }
+    .btn-secondary:hover {
+      background: var(--surface-soft);
+    }
+    .btn-sm {
+      padding: 5px 10px;
+      font-size: 12px;
+    }
+
+    /* QUEUE LIST & COMPACT CARDS */
+    .queue-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .compact-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: var(--shadow-sm);
+    }
+    .compact-card:hover {
+      border-color: var(--primary);
+      box-shadow: var(--shadow-md);
+      transform: translateY(-1px);
+    }
+    .compact-card.my-turn {
+      border-color: var(--warning);
+      background: #fffdfa;
+      box-shadow: 0 0 0 1px var(--warning);
+    }
+    .card-left {
+      flex: 1;
+      min-width: 0;
+    }
+    .card-badge-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+    }
+    .badge-primary { background: var(--primary-soft); color: var(--primary); }
+    .badge-success { background: var(--success-soft); color: var(--success); }
+    .badge-warning { background: var(--warning-soft); color: var(--warning); }
+    .badge-danger { background: var(--danger-soft); color: var(--danger); }
+    .badge-neutral { background: var(--surface-soft); color: var(--text-secondary); }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--foreground);
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .card-meta {
+      font-size: 12px;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .card-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+    .card-amount-block {
+      text-align: right;
+    }
+    .card-amount-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+    }
+    .card-amount {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--success);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .my-turn-badge {
+      background: var(--warning);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.75; }
+    }
+
+    /* MODAL SYSTEM */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(4px);
+      z-index: 50;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal-backdrop.open {
+      display: flex;
+    }
+    .modal-box {
+      background: var(--surface);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 900px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: var(--shadow-xl);
+      border: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      animation: slideUp 0.25s ease-out;
+    }
+    .modal-box.wide {
+      max-width: 1040px;
+    }
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .modal-header {
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      background: var(--surface);
+      z-index: 10;
+    }
+    .modal-title {
+      font-size: 17px;
+      font-weight: 800;
+      color: var(--foreground);
+    }
+    .modal-subtitle {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+    .btn-close {
+      background: none;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+    .btn-close:hover { background: var(--surface-soft); color: var(--foreground); }
+    .modal-body {
+      padding: 24px;
+      space-y: 20px;
+    }
+    .modal-footer {
+      padding: 16px 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 12px;
+      background: var(--surface-soft);
+      border-radius: 0 0 16px 16px;
+    }
+
+    /* COMPOSER FORM ELEMENTS */
+    .kind-selector {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .kind-card {
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      cursor: pointer;
+      transition: all 0.15s;
+      background: var(--surface);
+    }
+    .kind-card.active {
+      border-color: var(--primary);
+      background: var(--primary-soft);
+    }
+    .kind-card h4 {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--foreground);
+      margin-bottom: 2px;
+    }
+    .kind-card p {
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    /* DATA TABLE */
+    .table-wrapper {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      margin: 16px 0;
+    }
+    table.data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+    }
+    table.data-table th {
+      background: var(--surface-soft);
+      padding: 10px 12px;
+      font-weight: 700;
+      color: var(--foreground);
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+    table.data-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      color: var(--foreground);
+    }
+    table.data-table tr:last-child td { border-bottom: none; }
+    .table-input {
+      width: 100%;
+      padding: 6px 10px;
+      border: 1px solid var(--border-dark);
+      border-radius: 6px;
+      font-size: 12px;
+      font-family: inherit;
+    }
+
+    /* SIGNATURE PAD & STUDIO */
+    .sign-studio {
+      background: #faf5ff;
+      border: 2px dashed #c084fc;
+      border-radius: 14px;
+      padding: 18px;
+      margin-top: 20px;
+    }
+    .sign-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .sign-tabs {
+      display: flex;
+      gap: 6px;
+      background: #f3e8ff;
+      padding: 4px;
+      border-radius: 8px;
+    }
+    .sign-tab-btn {
+      padding: 5px 12px;
+      border-radius: 6px;
+      border: none;
+      background: none;
+      font-size: 12px;
+      font-weight: 600;
+      color: #7e22ce;
+      cursor: pointer;
+    }
+    .sign-tab-btn.active {
+      background: #fff;
+      box-shadow: var(--shadow-sm);
+    }
+    .canvas-container {
+      background: #fff;
+      border: 1px solid #d8b4fe;
+      border-radius: 10px;
+      position: relative;
+      height: 140px;
+      overflow: hidden;
+      box-shadow: inset 0 2px 4px rgb(0 0 0 / 0.02);
+    }
+    canvas#signature-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: crosshair;
+    }
+    .canvas-watermark {
+      position: absolute;
+      bottom: 8px;
+      right: 12px;
+      font-size: 11px;
+      color: #c084fc;
+      pointer-events: none;
+      user-select: none;
+    }
+    .canvas-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 8px;
+    }
+
+    /* MỘC ĐỎ NỘI BỘ VÀ CALLIGRAPHY */
+    .stamp-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 3px double #dc2626;
+      color: #dc2626;
+      border-radius: 10px;
+      padding: 6px 12px;
+      font-weight: 800;
+      font-size: 12px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      transform: rotate(-3deg);
+      background: rgba(254, 226, 226, 0.2);
+    }
+    .font-signature {
+      font-family: 'Dancing Script', cursive;
+      font-size: 38px;
+      color: #1e3a8a;
+      line-height: 1;
+    }
+
+    /* PRINT PREVIEW PAPER */
+    .print-paper {
+      background: #fff;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 32px 36px;
+      box-shadow: var(--shadow-md);
+      font-size: 13px;
+      color: #1e293b;
+      margin-bottom: 16px;
+    }
+    .paper-header {
+      text-align: center;
+      border-bottom: 2px solid #0f172a;
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+    }
+    .paper-title {
+      font-size: 18px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: 6px;
+    }
+    .paper-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      text-align: center;
+      margin-top: 36px;
+      padding-top: 16px;
+      border-top: 1px dashed #cbd5e1;
+    }
+    .paper-sign-slot {
+      min-height: 100px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+    }
+
+    /* TOAST NOTIFICATION */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #0f172a;
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: var(--shadow-xl);
+      z-index: 100;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      animation: fadeIn 0.2s;
+    }
+    .toast.show { display: flex; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body>
+
+  <!-- APP TOPBAR -->
+  <header class="topbar">
+    <div class="brand-logo">
+      <span style="font-size: 22px;">⚡</span>
+      <span>TaskFlow</span>
+      <span class="brand-badge">CostFlow & Approvals</span>
+    </div>
+    <div class="user-pill">
+      <span>👤 Đang đăng nhập: <strong>Lê Thị Mai (Kế toán trưởng)</strong></span>
+      <span style="color: var(--border-dark)">|</span>
+      <span style="color: var(--success); font-weight: 700;">● Online</span>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- PROJECT HERO -->
+    <div class="project-header">
+      <div class="project-title">
+        <span>Tái định vị thương hiệu Nova Bank</span>
+        <span class="badge badge-primary">BIDDING / ON_PROCESS</span>
+      </div>
+      <div class="project-meta">
+        <span>Mã DA: <strong>#NOVA-2026</strong></span>
+        <span>Ngân sách dự toán IC: <strong>1.200.000.000 ₫</strong></span>
+        <span>Account phụ trách: <strong>Nguyễn Thị Lan</strong></span>
+      </div>
+
+      <!-- TABS -->
+      <div class="nav-tabs">
+        <div class="tab-item">Dự toán IC (Internal Cost)</div>
+        <div class="tab-item">Báo giá khách hàng</div>
+        <div class="tab-item">Thực chi (Actual Cost)</div>
+        <div class="tab-item active">Hồ sơ & Trình duyệt (CostFlow Approvals)</div>
+        <div class="tab-item">Đối soát & Sổ quỹ</div>
+      </div>
+    </div>
+
+    <!-- TOOLBAR -->
+    <div class="action-toolbar">
+      <div class="filter-group">
+        <button class="pill-btn active" onclick="filterQueue('ALL')">Tất cả (3)</button>
+        <button class="pill-btn" onclick="filterQueue('MY_TURN')">🔔 Cần tôi duyệt (1)</button>
+        <button class="pill-btn" onclick="filterQueue('SUBMITTED')">⏳ Đang chờ cấp khác (1)</button>
+        <button class="pill-btn" onclick="filterQueue('APPROVED')">✅ Đã phê duyệt (1)</button>
+      </div>
+      <div>
+        <button class="btn btn-primary" onclick="openComposerModal()">
+          <span>+</span> Lập hồ sơ đề nghị chi
+        </button>
+      </div>
+    </div>
+
+    <!-- HÀNG CHỜ DANH SÁCH (QUEUE LIST) -->
+    <div class="queue-list" id="queue-container">
+
+      <!-- CARD 1: CẦN BẠN DUYỆT -->
+      <div class="compact-card my-turn" data-state="MY_TURN" onclick="openInspectionModal('REQ-4821')">
+        <div class="card-left">
+          <div class="card-badge-row">
+            <span class="badge badge-warning">ĐNTU</span>
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-secondary);">#REQ-4821</span>
+            <span style="color: var(--text-secondary);">· v2 · IC-R2 (Hiệu lực) · 3 khoản chi</span>
+          </div>
+          <div class="card-title">Tạm ứng chi phí thi công dàn dựng gian hàng triển lãm Nova Bank</div>
+          <div class="card-meta">
+            <span>👤 Người lập: <strong>Lan Account</strong></span>
+            <span>· 08/10/2026</span>
+            <span>· ⏳ Đang chờ: <strong style="color: var(--warning);">Kế toán trưởng (Bạn)</strong></span>
+          </div>
+        </div>
+        <div class="card-right">
+          <div class="card-amount-block">
+            <div class="card-amount-label">Tổng đề nghị</div>
+            <div class="card-amount">52.500.000 ₫</div>
+          </div>
+          <span class="my-turn-badge">🔔 Cần bạn duyệt</span>
+          <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); openInspectionModal('REQ-4821');">
+            Xử lý duyệt
+          </button>
+        </div>
+      </div>
+
+      <!-- CARD 2: ĐANG CHỜ CẤP KHÁC -->
+      <div class="compact-card" data-state="SUBMITTED" onclick="openInspectionModal('REQ-4819')">
+        <div class="card-left">
+          <div class="card-badge-row">
+            <span class="badge badge-primary">ĐNTT</span>
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-secondary);">#REQ-4819</span>
+            <span style="color: var(--text-secondary);">· v1 · 1 khoản chi đối tác</span>
+          </div>
+          <div class="card-title">Thanh toán đợt 1 cho Nhà cung cấp Âm thanh Ánh sáng Pro Stage</div>
+          <div class="card-meta">
+            <span>👤 Người lập: <strong>Minh Account</strong></span>
+            <span>· 07/10/2026</span>
+            <span>· ⏳ Đang chờ: <strong style="color: var(--primary);">CEO (Anh Tuấn)</strong></span>
+          </div>
+        </div>
+        <div class="card-right">
+          <div class="card-amount-block">
+            <div class="card-amount-label">Tổng đề nghị</div>
+            <div class="card-amount">45.000.000 ₫</div>
+          </div>
+          <span class="badge badge-primary">Đã gửi CEO</span>
+          <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); openInspectionModal('REQ-4819');">
+            Mở hồ sơ
+          </button>
+        </div>
+      </div>
+
+      <!-- CARD 3: ĐÃ PHÊ DUYỆT -->
+      <div class="compact-card" data-state="APPROVED" onclick="openInspectionModal('REQ-4802')">
+        <div class="card-left">
+          <div class="card-badge-row">
+            <span class="badge badge-success">IC</span>
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-secondary);">#REQ-4802</span>
+            <span style="color: var(--text-secondary);">· v1 · IC-R1 (Hiệu lực ngân sách)</span>
+          </div>
+          <div class="card-title">Dự toán chi phí nội bộ ban đầu cho toàn bộ hạng mục Creative & Media</div>
+          <div class="card-meta">
+            <span>👤 Người lập: <strong>Hà Account</strong></span>
+            <span>· 02/10/2026</span>
+            <span>· ✅ Đã hoàn tất phê duyệt</span>
+          </div>
+        </div>
+        <div class="card-right">
+          <div class="card-amount-block">
+            <div class="card-amount-label">Ngân sách chốt</div>
+            <div class="card-amount">180.000.000 ₫</div>
+          </div>
+          <span class="badge badge-success">Đã duyệt</span>
+          <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); openInspectionModal('REQ-4802');">
+            Xem hồ sơ
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================== -->
+  <!-- MODAL 1: TRÌNH TẠO LẬP HỒ SƠ CHI (DOCUMENT COMPOSER DIALOG)    -->
+  <!-- ============================================================== -->
+  <div class="modal-backdrop" id="composer-modal">
+    <div class="modal-box wide">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title">Lập hồ sơ đề nghị chi mới (Document Composer)</div>
+          <div class="modal-subtitle">Tạo phiếu đề nghị tạm ứng / thanh toán và đưa vào chuỗi trình duyệt</div>
+        </div>
+        <button class="btn-close" onclick="closeModal('composer-modal')">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- CHỌN LOẠI HỒ SƠ -->
+        <label style="font-size: 12px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; display: block; margin-bottom: 8px;">
+          1. Chọn loại hồ sơ đề nghị
+        </label>
+        <div class="kind-selector">
+          <div class="kind-card active" onclick="selectKind(this, 'ADVANCE')">
+            <h4>Đề nghị tạm ứng (ĐNTU)</h4>
+            <p>Tạm ứng quỹ công việc cho nhân sự hoặc đối tác</p>
+          </div>
+          <div class="kind-card" onclick="selectKind(this, 'VENDOR_PAYMENT')">
+            <h4>Đề nghị thanh toán (ĐNTT)</h4>
+            <p>Chi trả hóa đơn nhà cung cấp / đối tác trực tiếp</p>
+          </div>
+          <div class="kind-card" onclick="selectKind(this, 'REIMBURSEMENT')">
+            <h4>Hoàn tạm ứng / Quyết toán</h4>
+            <p>Quyết toán chi phí & hoàn tiền túi nhân sự</p>
+          </div>
+        </div>
+
+        <!-- HÌNH THỨC TẠM ỨNG -->
+        <div style="background: var(--surface-soft); padding: 12px 16px; border-radius: 10px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+          <div style="font-size: 13px; font-weight: 600;">Hình thức lập đề nghị:</div>
+          <div style="display: flex; gap: 8px;">
+            <button class="pill-btn active">ĐNTU Đa khoản (Nhiều mục/NCC theo IC)</button>
+            <button class="pill-btn">Tạm ứng đơn khoản (Nhanh)</button>
+          </div>
+        </div>
+
+        <!-- BẢNG CÁC DÒNG CHI (MULTI-LINE TABLE) -->
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <label style="font-size: 12px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">
+            2. Chi tiết các dòng chi và tài khoản thụ hưởng
+          </label>
+          <button class="btn btn-secondary btn-sm" onclick="addComposerRow()">+ Thêm dòng chi</button>
+        </div>
+
+        <div class="table-wrapper">
+          <table class="data-table" id="composer-table">
+            <thead>
+              <tr>
+                <th style="width: 40px;">STT</th>
+                <th>Nội dung chi</th>
+                <th style="width: 160px;">Mục IC nguồn</th>
+                <th style="width: 180px;">Người thụ hưởng / NCC</th>
+                <th style="width: 140px;">Số tiền (₫)</th>
+                <th style="width: 40px;">Xóa</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>1</td>
+                <td><input type="text" class="table-input" value="Thuê màn hình LED P3 và kỹ thuật trực sàn"></td>
+                <td>
+                  <select class="table-input">
+                    <option>1.2 Màn hình LED</option>
+                    <option>2.1 POSM & In ấn</option>
+                  </select>
+                </td>
+                <td><input type="text" class="table-input" value="Cty Viễn Thông A - STK: 1902837492801"></td>
+                <td><input type="text" class="table-input composer-amount" value="35.000.000" oninput="calcComposerTotal()"></td>
+                <td><button style="border: none; background: none; cursor: pointer; color: var(--danger);" onclick="removeComposerRow(this)">🗑️</button></td>
+              </tr>
+              <tr>
+                <td>2</td>
+                <td><input type="text" class="table-input" value="In ấn backdrop và standee check-in"></td>
+                <td>
+                  <select class="table-input">
+                    <option>2.1 POSM & In ấn</option>
+                    <option>1.2 Màn hình LED</option>
+                  </select>
+                </td>
+                <td><input type="text" class="table-input" value="Xưởng in 24h - STK: 0491000182749"></td>
+                <td><input type="text" class="table-input composer-amount" value="12.500.000" oninput="calcComposerTotal()"></td>
+                <td><button style="border: none; background: none; cursor: pointer; color: var(--danger);" onclick="removeComposerRow(this)">🗑️</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 12px 16px; border-radius: 10px; display: flex; align-items: center; justify-content: space-between;">
+          <span style="font-size: 13px; font-weight: 600; color: #166534;">TỔNG CỘNG ĐỀ NGHỊ:</span>
+          <span style="font-size: 16px; font-weight: 800; color: #166534; font-family: 'JetBrains Mono', monospace;" id="composer-total-display">47.500.000 ₫</span>
+        </div>
+
+        <!-- GIẢI TRÌNH -->
+        <div style="margin-top: 16px;">
+          <label style="font-size: 12px; font-weight: 600; margin-bottom: 4px; display: block;">Lý do / Giải trình đề nghị:</label>
+          <textarea class="table-input" rows="2" placeholder="Nhập lý do tạm ứng hoặc giải trình tiến độ theo hợp đồng...">Tạm ứng đợt 1 phục vụ thi công dàn dựng gian hàng Nova Bank theo tiến độ nghiệm thu...</textarea>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('composer-modal')">Hủy bỏ</button>
+        <button class="btn btn-primary" onclick="submitComposer()">🚀 Gửi duyệt hồ sơ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================== -->
+  <!-- MODAL 2: TRÌNH THẨM ĐỊNH & KÝ SỐ NỘI BỘ (INSPECTION & SIGN)   -->
+  <!-- ============================================================== -->
+  <div class="modal-backdrop" id="inspection-modal">
+    <div class="modal-box wide">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title" id="insp-title">Tạm ứng chi phí thi công dàn dựng gian hàng triển lãm Nova Bank</div>
+          <div class="modal-subtitle">Mã hồ sơ: <span style="font-family: 'JetBrains Mono'; font-weight: 700;">#REQ-4821</span> · Phiên bản v2 · Tạo lúc: 08/10/2026 09:30</div>
+        </div>
+        <button class="btn-close" onclick="closeModal('inspection-modal')">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- BANNER BƯỚC DUYỆT -->
+        <div style="background: var(--surface-soft); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span class="badge badge-warning" style="font-size: 13px;">ĐNTU</span>
+            <span style="font-size: 13px;">Người lập: <strong>Lan Account</strong></span>
+            <span style="color: var(--text-secondary);">·</span>
+            <span style="font-size: 13px;">Tiến trình: <strong>2/3 bước duyệt</strong></span>
+          </div>
+          <span class="my-turn-badge" style="font-size: 12px;">🔔 ĐẾN LƯỢT BẠN XỬ LÝ (KẾ TOÁN TRƯỞNG)</span>
+        </div>
+
+        <!-- 2 TRỤC IC -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px;">
+          <div style="background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 12px;">
+            <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Trục 1: Hiệu lực ngân sách</div>
+            <div style="font-size: 14px; font-weight: 700; color: var(--foreground); margin-top: 2px;">
+              IC-R2 <span class="badge badge-success">HIỆU LỰC TỪ QUẢN LÝ</span>
+            </div>
+          </div>
+          <div style="background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 12px;">
+            <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Trục 2: Trình duyệt IC</div>
+            <div style="font-size: 14px; font-weight: 700; color: var(--foreground); margin-top: 2px;">
+              Đang trình bổ sung lên CEO (Không ảnh hưởng ngân sách hiện hành)
+            </div>
+          </div>
+        </div>
+
+        <!-- BẢNG CHI TIẾT KHOẢN CHI -->
+        <div style="margin-top: 16px;">
+          <div style="font-size: 13px; font-weight: 700; margin-bottom: 8px;">Chi tiết các khoản đề nghị:</div>
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Hạng mục</th>
+                  <th>Mục IC</th>
+                  <th>Người thụ hưởng / STK</th>
+                  <th style="text-align: right;">Số tiền</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Thuê màn hình LED P3 và kỹ thuật trực sàn</td>
+                  <td>1.2 Màn LED</td>
+                  <td>Cty Viễn Thông A — STK: 1902837492801 (Techcombank)</td>
+                  <td style="text-align: right; font-weight: 700; font-family: 'JetBrains Mono';">35.000.000 ₫</td>
+                </tr>
+                <tr>
+                  <td>In ấn backdrop và standee check-in</td>
+                  <td>2.1 POSM</td>
+                  <td>Xưởng in 24h — STK: 0491000182749 (Vietcombank)</td>
+                  <td style="text-align: right; font-weight: 700; font-family: 'JetBrains Mono';">12.500.000 ₫</td>
+                </tr>
+                <tr>
+                  <td>Bồi dưỡng hậu cần và bốc vác sự kiện</td>
+                  <td>3.4 Nhân sự</td>
+                  <td>Lê Văn C (Thủ quỹ) — Tiền mặt</td>
+                  <td style="text-align: right; font-weight: 700; font-family: 'JetBrains Mono';">5.000.000 ₫</td>
+                </tr>
+                <tr style="background: var(--surface-soft); font-weight: 800;">
+                  <td colspan="3">TỔNG CỘNG ĐỀ NGHỊ (Bằng chữ: Năm mươi hai triệu năm trăm nghìn đồng):</td>
+                  <td style="text-align: right; color: var(--success); font-family: 'JetBrains Mono'; font-size: 15px;">52.500.000 ₫</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ======================================================= -->
+        <!-- STUDIO KÝ SỐ NỘI BỘ (INTERNAL SIGNATURE STUDIO)         -->
+        <!-- ======================================================= -->
+        <div class="sign-studio">
+          <div class="sign-header">
+            <div>
+              <div style="font-size: 14px; font-weight: 800; color: #581c87; display: flex; align-items: center; gap: 8px;">
+                <span>🖋️</span> TRÌNH KÝ SỐ NỘI BỘ (XÁC NHẬN BƯỚC DUYỆT)
+              </div>
+              <div style="font-size: 11px; color: #7e22ce;">Áp dụng chữ ký điện tử có xác thực để đóng tem bất biến lên phiếu chi</div>
+            </div>
+            <!-- TABS HÌNH THỨC CHỮ KÝ -->
+            <div class="sign-tabs">
+              <button class="sign-tab-btn active" id="tab-draw" onclick="switchSignTab('DRAW')">✍️ Vẽ chữ ký tay</button>
+              <button class="sign-tab-btn" id="tab-saved" onclick="switchSignTab('SAVED')">⭐ Chữ ký lưu sẵn</button>
+              <button class="sign-tab-btn" id="tab-type" onclick="switchSignTab('TYPE')">⌨️ Gõ họ tên</button>
+            </div>
+          </div>
+
+          <!-- KHUNG VẼ TAY (HTML5 CANVAS) -->
+          <div id="sign-draw-view">
+            <div class="canvas-container">
+              <canvas id="signature-canvas"></canvas>
+              <div class="canvas-watermark">Ký tại đây bằng chuột hoặc ngón tay</div>
+            </div>
+            <div class="canvas-actions">
+              <span style="font-size: 11px; color: #7e22ce;">Chữ ký sẽ được nhúng trực tiếp vào phiếu khi xuất bản in</span>
+              <button class="btn btn-secondary btn-sm" onclick="clearCanvas()">Xóa và ký lại</button>
+            </div>
+          </div>
+
+          <!-- KHUNG CHỮ KÝ LƯU SẴN -->
+          <div id="sign-saved-view" style="display: none; background: #fff; border: 1px solid #d8b4fe; border-radius: 10px; padding: 16px; text-align: center;">
+            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Chữ ký cá nhân lưu sẵn của: <strong>Lê Thị Mai (Kế toán trưởng)</strong></div>
+            <div class="font-signature">Le Thi Mai</div>
+            <span class="badge badge-success" style="margin-top: 8px;">Đã xác minh tài khoản</span>
+          </div>
+
+          <!-- KHUNG GÕ HỌ TÊN SỐ HÓA -->
+          <div id="sign-type-view" style="display: none; background: #fff; border: 1px solid #d8b4fe; border-radius: 10px; padding: 16px;">
+            <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;">Nhập họ tên để tự động chuyển thành chữ ký viết tay:</label>
+            <input type="text" id="type-name-input" class="table-input" value="Lê Thị Mai" oninput="updateTypeName(this.value)">
+            <div class="font-signature" id="type-signature-preview" style="text-align: center; margin-top: 10px;">Lê Thị Mai</div>
+          </div>
+
+          <!-- MÃ PIN BẢO MẬT & CHECKBOX -->
+          <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed #d8b4fe; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #581c87; font-weight: 600; cursor: pointer;">
+              <input type="checkbox" id="check-confirm" checked>
+              <span>Đã kiểm tra đối chiếu hạn mức IC và thông tin tài khoản thụ hưởng.</span>
+            </label>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 12px; font-weight: 600; color: #581c87;">Mã PIN duyệt (Mặc định 1234):</span>
+              <input type="password" id="sign-pin" value="1234" maxlength="6" style="width: 70px; padding: 4px 8px; border-radius: 6px; border: 1px solid #c084fc; font-family: monospace; text-align: center; font-weight: 700;">
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="openPrintModal()">🖨️ Xem trước phiếu in</button>
+        <button class="btn btn-secondary" onclick="closeModal('inspection-modal')">Đóng</button>
+        <button class="btn btn-primary" onclick="confirmSignAndApprove()" style="background: #7e22ce;">
+          <span>🖋️</span> KÝ VÀ PHÊ DUYỆT NGAY
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================== -->
+  <!-- MODAL 3: PHIẾU IN HOÀN TẤT CÓ CHỮ KÝ & QR CODE (PRINT VIEW)   -->
+  <!-- ============================================================== -->
+  <div class="modal-backdrop" id="print-modal">
+    <div class="modal-box" style="max-width: 800px;">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title">Xem trước bản in phiếu (Print Format & Certified PDF)</div>
+          <div class="modal-subtitle">Phiếu chuẩn hóa nội bộ có đầy đủ chữ ký điện tử và mã tra cứu chống giả mạo</div>
+        </div>
+        <button class="btn-close" onclick="closeModal('print-modal')">&times;</button>
+      </div>
+
+      <div class="modal-body" style="background: #f1f5f9; padding: 20px;">
+        <div class="print-paper" id="paper-content">
+          <div class="paper-header">
+            <div style="font-weight: 800; font-size: 14px;">CÔNG TY TNHH CREATIVE STATION</div>
+            <div style="font-size: 11px; color: #64748b;">Dự án: Tái định vị thương hiệu Nova Bank (Mã: #NOVA-2026)</div>
+            <div class="paper-title">GIẤY ĐỀ NGHỊ TẠM ỨNG</div>
+            <div style="font-size: 11px; color: #64748b; font-family: monospace;">Số: 4821/2026/ĐNTU-CREATIVE · Ngày 08/10/2026</div>
+          </div>
+
+          <div style="font-size: 12px; line-height: 1.8;">
+            <div>- Người đề nghị: <strong>Nguyễn Thị Lan</strong> (Bộ phận Account)</div>
+            <div>- Lý do đề nghị: Tạm ứng đợt 1 phục vụ thi công dàn dựng gian hàng triển lãm Nova Bank</div>
+            <div>- Tổng số tiền: <strong>52.500.000 ₫</strong> (Bằng chữ: <em>Năm mươi hai triệu năm trăm nghìn đồng</em>)</div>
+          </div>
+
+          <table style="width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 11px;">
+            <thead>
+              <tr style="background: #f8fafc; border-top: 1px solid #000; border-bottom: 1px solid #000;">
+                <th style="padding: 6px; text-align: left;">STT</th>
+                <th style="padding: 6px; text-align: left;">Nội dung chi</th>
+                <th style="padding: 6px; text-align: left;">Mục IC</th>
+                <th style="padding: 6px; text-align: left;">Đối tượng thụ hưởng</th>
+                <th style="padding: 6px; text-align: right;">Số tiền</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 6px;">1</td>
+                <td style="padding: 6px;">Thuê màn hình LED P3 và kỹ thuật</td>
+                <td style="padding: 6px;">1.2 Màn LED</td>
+                <td style="padding: 6px;">Cty Viễn Thông A</td>
+                <td style="padding: 6px; text-align: right; font-weight: 600;">35.000.000 ₫</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 6px;">2</td>
+                <td style="padding: 6px;">In ấn backdrop và standee</td>
+                <td style="padding: 6px;">2.1 POSM</td>
+                <td style="padding: 6px;">Xưởng in 24h</td>
+                <td style="padding: 6px; text-align: right; font-weight: 600;">12.500.000 ₫</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 6px;">3</td>
+                <td style="padding: 6px;">Bồi dưỡng hậu cần</td>
+                <td style="padding: 6px;">3.4 Nhân sự</td>
+                <td style="padding: 6px;">Lê Văn C (Thủ quỹ)</td>
+                <td style="padding: 6px; text-align: right; font-weight: 600;">5.000.000 ₫</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- 3 Ô CHỮ KÝ TRÊN PHIẾU -->
+          <div class="paper-grid">
+            <div class="paper-sign-slot">
+              <div style="font-weight: 700; font-size: 12px;">NGƯỜI ĐỀ NGHỊ</div>
+              <div style="font-size: 10px; color: #64748b;">(Ký, ghi rõ họ tên)</div>
+              <div class="font-signature" style="font-size: 30px; margin: 6px 0;">Nguyen Lan</div>
+              <div style="font-size: 11px; font-weight: 700;">Nguyễn Thị Lan</div>
+              <div style="font-size: 9px; color: #64748b;">08/10/2026 09:30</div>
+            </div>
+
+            <div class="paper-sign-slot">
+              <div style="font-weight: 700; font-size: 12px;">KẾ TOÁN TRƯỞNG</div>
+              <div style="font-size: 10px; color: #64748b;">(Ký duyệt nội bộ)</div>
+              <div id="print-accountant-signature" style="margin: 4px 0; min-height: 40px; display: flex; align-items: center; justify-content: center;">
+                <div class="font-signature" style="font-size: 30px;">Le Thi Mai</div>
+              </div>
+              <div style="font-size: 11px; font-weight: 700;">Lê Thị Mai</div>
+              <div style="font-size: 9px; color: #64748b;" id="print-accountant-time">08/10/2026 14:15</div>
+            </div>
+
+            <div class="paper-sign-slot">
+              <div style="font-weight: 700; font-size: 12px;">GIÁM ĐỐC ĐIỀU HÀNH</div>
+              <div style="font-size: 10px; color: #64748b;">(Phê duyệt & Đóng dấu)</div>
+              <div style="position: relative; margin: 4px 0;">
+                <div class="font-signature" style="font-size: 30px;">Nguyen Tuan</div>
+                <div class="stamp-badge" style="position: absolute; top: -5px; right: -25px; opacity: 0.9;">
+                  ĐÃ DUYỆT<br><span style="font-size: 9px;">CREATIVE STN</span>
+                </div>
+              </div>
+              <div style="font-size: 11px; font-weight: 700;">Nguyễn Văn Tuấn</div>
+              <div style="font-size: 9px; color: #64748b;">09/10/2026 10:00</div>
+            </div>
+          </div>
+
+          <!-- MÃ QR VÀ AUDIT VERIFICATION -->
+          <div style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #e2e8f0; margin-top: 24px; padding-top: 12px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <!-- QR Code mô phỏng SVG -->
+              <svg width="44" height="44" viewBox="0 0 44 44" fill="none">
+                <rect width="44" height="44" fill="#f8fafc" rx="4"/>
+                <rect x="4" y="4" width="14" height="14" fill="#0f172a" rx="2"/>
+                <rect x="7" y="7" width="8" height="8" fill="#fff"/>
+                <rect x="9" y="9" width="4" height="4" fill="#0f172a"/>
+                <rect x="26" y="4" width="14" height="14" fill="#0f172a" rx="2"/>
+                <rect x="29" y="7" width="8" height="8" fill="#fff"/>
+                <rect x="31" y="9" width="4" height="4" fill="#0f172a"/>
+                <rect x="4" y="26" width="14" height="14" fill="#0f172a" rx="2"/>
+                <rect x="7" y="29" width="8" height="8" fill="#fff"/>
+                <rect x="9" y="31" width="4" height="4" fill="#0f172a"/>
+                <rect x="22" y="22" width="6" height="6" fill="#0f172a"/>
+                <rect x="32" y="26" width="8" height="4" fill="#0f172a"/>
+                <rect x="26" y="34" width="4" height="6" fill="#0f172a"/>
+                <rect x="34" y="34" width="6" height="6" fill="#0f172a"/>
+              </svg>
+              <div style="font-size: 10px; color: #64748b; line-height: 1.4;">
+                <div>Mã chứng thực nội bộ: <strong style="font-family: monospace; color: #0f172a;" id="print-verify-code">TF-VERIFY-4821-X9K2</strong></div>
+                <div>Trạng thái: <strong>ĐÃ KHÓA BẤT BIẾN (IMMUTABLE AUDIT TRAIL)</strong></div>
+                <div>Xác thực tại: <em>http://localhost:3017/verify?req=REQ-4821</em></div>
+              </div>
+            </div>
+            <div style="font-size: 10px; color: #94a3b8; text-align: right;">
+              Hệ thống TaskFlow ERP<br>Phát hành lúc 08/10/2026
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('print-modal')">Đóng</button>
+        <button class="btn btn-primary" onclick="window.print()">🖨️ In ra giấy / Xuất PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div class="toast" id="toast-msg">
+    <span id="toast-icon">✅</span>
+    <span id="toast-text">Đã phê duyệt và ký số nội bộ thành công!</span>
+  </div>
+
+  <!-- SCRIPT LOGIC -->
+  <script>
+    // 1. CANVAS DRAWING LOGIC (SIGNATURE PAD)
+    const canvas = document.getElementById('signature-canvas');
+    const ctx = canvas.getContext('2d');
+    let isDrawing = false;
+    let hasDrawn = false;
+    let activeSignMode = 'DRAW'; // 'DRAW' | 'SAVED' | 'TYPE'
+
+    function resizeCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * 2;
+      canvas.height = rect.height * 2;
+      ctx.scale(2, 2);
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = '#1e3a8a'; // Xanh mực bút ký cao cấp
+    }
+
+    window.addEventListener('load', () => {
+      resizeCanvas();
+    });
+
+    canvas.addEventListener('mousedown', (e) => {
+      isDrawing = true;
+      hasDrawn = true;
+      const rect = canvas.getBoundingClientRect();
+      ctx.beginPath();
+      ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (!isDrawing) return;
+      const rect = canvas.getBoundingClientRect();
+      ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+      ctx.stroke();
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (isDrawing) {
+        isDrawing = false;
+      }
+    });
+
+    // Touch support for iPad / Tablets
+    canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      isDrawing = true;
+      hasDrawn = true;
+      const rect = canvas.getBoundingClientRect();
+      const touch = e.touches[0];
+      ctx.beginPath();
+      ctx.moveTo(touch.clientX - rect.left, touch.clientY - rect.top);
+    });
+    canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      if (!isDrawing) return;
+      const rect = canvas.getBoundingClientRect();
+      const touch = e.touches[0];
+      ctx.lineTo(touch.clientX - rect.left, touch.clientY - rect.top);
+      ctx.stroke();
+    });
+    canvas.addEventListener('touchend', () => {
+      isDrawing = false;
+    });
+
+    function clearCanvas() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      hasDrawn = false;
+    }
+
+    // 2. SWITCH SIGNATURE TABS
+    function switchSignTab(mode) {
+      activeSignMode = mode;
+      document.getElementById('tab-draw').classList.toggle('active', mode === 'DRAW');
+      document.getElementById('tab-saved').classList.toggle('active', mode === 'SAVED');
+      document.getElementById('tab-type').classList.toggle('active', mode === 'TYPE');
+
+      document.getElementById('sign-draw-view').style.display = mode === 'DRAW' ? 'block' : 'none';
+      document.getElementById('sign-saved-view').style.display = mode === 'SAVED' ? 'block' : 'none';
+      document.getElementById('sign-type-view').style.display = mode === 'TYPE' ? 'block' : 'none';
+
+      if (mode === 'DRAW') {
+        setTimeout(resizeCanvas, 50);
+      }
+    }
+
+    function updateTypeName(val) {
+      document.getElementById('type-signature-preview').innerText = val || 'Chữ ký';
+    }
+
+    // 3. MODAL CONTROLS
+    function openComposerModal() {
+      document.getElementById('composer-modal').classList.add('open');
+    }
+
+    function openInspectionModal(reqId) {
+      document.getElementById('inspection-modal').classList.add('open');
+      setTimeout(resizeCanvas, 100);
+    }
+
+    function openPrintModal() {
+      document.getElementById('print-modal').classList.add('open');
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('open');
+    }
+
+    // Close on backdrop click
+    document.querySelectorAll('.modal-backdrop').forEach(modal => {
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.classList.remove('open');
+      });
+    });
+
+    // 4. KÝ VÀ PHÊ DUYỆT NGAY (SIGN & APPROVE ACTION)
+    function confirmSignAndApprove() {
+      const pin = document.getElementById('sign-pin').value;
+      if (!pin) {
+        alert('Vui lòng nhập mã PIN bảo mật để hoàn tất ký.');
+        return;
+      }
+
+      // Render chữ ký vào bản in
+      const printSlot = document.getElementById('print-accountant-signature');
+      if (activeSignMode === 'DRAW' && hasDrawn) {
+        const dataUrl = canvas.toDataURL();
+        printSlot.innerHTML = `<img src="${dataUrl}" style="max-height: 48px; object-fit: contain;">`;
+      } else if (activeSignMode === 'TYPE') {
+        const name = document.getElementById('type-name-input').value || 'Le Thi Mai';
+        printSlot.innerHTML = `<div class="font-signature" style="font-size: 30px;">${name}</div>`;
+      } else {
+        printSlot.innerHTML = `<div class="font-signature" style="font-size: 30px;">Le Thi Mai</div>`;
+      }
+
+      const now = new Date();
+      const timeStr = now.toLocaleDateString('vi-VN') + ' ' + now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      document.getElementById('print-accountant-time').innerText = timeStr;
+
+      // Sinh mã băm ngẫu nhiên
+      const randomCode = 'TF-' + Math.floor(1000 + Math.random() * 9000) + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+      document.getElementById('print-verify-code').innerText = randomCode;
+
+      // Đóng modal và cập nhật trạng thái card
+      closeModal('inspection-modal');
+
+      const firstCard = document.querySelector('.compact-card.my-turn');
+      if (firstCard) {
+        firstCard.classList.remove('my-turn');
+        firstCard.style.borderColor = 'var(--success)';
+        firstCard.style.background = '#f0fdf4';
+        firstCard.querySelector('.my-turn-badge').remove();
+        firstCard.querySelector('.btn-primary').className = 'btn btn-secondary btn-sm';
+        firstCard.querySelector('.btn-sm').innerText = 'Xem phiếu đã ký';
+        firstCard.querySelector('.card-meta strong').innerText = 'Đã ký duyệt xong (Kế toán)';
+      }
+
+      showToast('Đã ký số nội bộ & phê duyệt thành công! Mã chứng thực: ' + randomCode);
+    }
+
+    // 5. COMPOSER DYNAMIC ROWS
+    function addComposerRow() {
+      const tbody = document.querySelector('#composer-table tbody');
+      const count = tbody.querySelectorAll('tr').length + 1;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${count}</td>
+        <td><input type="text" class="table-input" placeholder="Nhập hạng mục..."></td>
+        <td>
+          <select class="table-input">
+            <option>1.2 Màn hình LED</option>
+            <option>2.1 POSM & In ấn</option>
+            <option>3.4 Nhân sự & Hậu cần</option>
+          </select>
+        </td>
+        <td><input type="text" class="table-input" placeholder="Người thụ hưởng / STK..."></td>
+        <td><input type="text" class="table-input composer-amount" value="5.000.000" oninput="calcComposerTotal()"></td>
+        <td><button style="border: none; background: none; cursor: pointer; color: var(--danger);" onclick="removeComposerRow(this)">🗑️</button></td>
+      `;
+      tbody.appendChild(tr);
+      calcComposerTotal();
+    }
+
+    function removeComposerRow(btn) {
+      const tbody = document.querySelector('#composer-table tbody');
+      if (tbody.querySelectorAll('tr').length <= 1) {
+        alert('Cần ít nhất một dòng chi!');
+        return;
+      }
+      btn.closest('tr').remove();
+      // Re-index
+      tbody.querySelectorAll('tr').forEach((tr, i) => {
+        tr.cells[0].innerText = i + 1;
+      });
+      calcComposerTotal();
+    }
+
+    function calcComposerTotal() {
+      const inputs = document.querySelectorAll('.composer-amount');
+      let total = 0;
+      inputs.forEach(input => {
+        const clean = input.value.replace(/[^0-9]/g, '');
+        total += parseInt(clean || 0, 10);
+      });
+      document.getElementById('composer-total-display').innerText = total.toLocaleString('vi-VN') + ' ₫';
+    }
+
+    function selectKind(card, kind) {
+      document.querySelectorAll('.kind-card').forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+    }
+
+    function submitComposer() {
+      closeModal('composer-modal');
+      showToast('Đã tạo đề nghị chi mới và gửi vào hàng chờ duyệt!');
+    }
+
+    // 6. FILTER QUEUE
+    function filterQueue(type) {
+      document.querySelectorAll('.pill-btn').forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
+
+      const cards = document.querySelectorAll('.compact-card');
+      cards.forEach(card => {
+        if (type === 'ALL') {
+          card.style.display = 'flex';
+        } else if (type === 'MY_TURN') {
+          card.style.display = card.getAttribute('data-state') === 'MY_TURN' ? 'flex' : 'none';
+        } else if (type === 'SUBMITTED') {
+          card.style.display = card.getAttribute('data-state') === 'SUBMITTED' ? 'flex' : 'none';
+        } else if (type === 'APPROVED') {
+          card.style.display = card.getAttribute('data-state') === 'APPROVED' ? 'flex' : 'none';
+        }
+      });
+    }
+
+    // 7. TOAST NOTIFICATION
+    function showToast(msg) {
+      const toast = document.getElementById('toast-msg');
+      document.getElementById('toast-text').innerText = msg;
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 4000);
+    }
+  </script>
+</body>
+</html>

@@ -5,6 +5,7 @@ import ExcelJS from "exceljs";
 import JSZip from "jszip";
 import { previewPastedIntake, previewWorkbookIntake } from "../lib/costflow/excelIntakeParser";
 import { preflightExcelWorkbook } from "../lib/costflow/excelIntakeSecurity";
+import { createExcelIntakeTemplate } from "../lib/costflow/quotationExcel";
 
 const canonicalUrl = "postgresql://postgres@127.0.0.1:55439/costflow_test";
 
@@ -29,6 +30,44 @@ test("paste and workbook adapters converge on the same v4 primitives and coordin
   assert.equal(parsed.rows[1].sell.days, pasted.rows[1].sell.days);
   assert.equal(parsed.rows[1].buy.unitPrice, pasted.rows[1].buy.unitPrice);
   assert.equal(parsed.source.sheet, "BAO_GIA_IC");
+});
+
+test("standard v4 workbook accepts preview formulas without executing them", async () => {
+  const bytes = Buffer.from(await createExcelIntakeTemplate({ projectName: "Sự kiện thử nghiệm" }));
+  const parsed = await previewWorkbookIntake(bytes);
+
+  assert.equal(parsed.adapter, "STANDARD_V4");
+  assert.equal(parsed.rows.length, 4, "blank template rows with preview formulas are not imported");
+  assert.equal(parsed.rows[1].name, "Điều phối");
+  assert.equal(parsed.rows[1].sell.quantity, "2");
+  assert.equal(parsed.rows[1].sell.days, "1.5");
+  assert.equal(parsed.errors.length, 0);
+  assert.equal(parsed.observations.length, 18);
+  assert.ok(parsed.warnings.every(warning => warning.code === "FORMULA_IGNORED" && !warning.blocking));
+});
+
+test("standard v4 workbook infers familiar hierarchy and ignores default-only rows", async () => {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(await createExcelIntakeTemplate());
+  const sheet = workbook.getWorksheet("BAO_GIA_IC")!;
+  sheet.getCell("C11").value = "Chi tiết Booth";
+  sheet.getCell("I11").value = "NET";
+  sheet.getCell("J11").value = 8;
+  sheet.getCell("O11").value = "người";
+  sheet.getCell("S11").value = "NET";
+  sheet.getCell("T11").value = 8;
+  sheet.getCell("I12").value = "NET";
+  sheet.getCell("J12").value = 8;
+  sheet.getCell("O12").value = "người";
+  sheet.getCell("S12").value = "NET";
+  sheet.getCell("T12").value = 8;
+
+  const parsed = await previewWorkbookIntake(Buffer.from(await workbook.xlsx.writeBuffer()));
+
+  assert.equal(parsed.rows.length, 5, "a row with only spreadsheet defaults is not an intake row");
+  assert.equal(parsed.rows[4].level, 3);
+  assert.equal(parsed.rows[4].parentCandidateKey, parsed.rows[3].candidateKey);
+  assert.equal(parsed.errors.length, 0);
 });
 
 test("preflight rejects active content, formulas, traversal and resource-limit violations", async () => {

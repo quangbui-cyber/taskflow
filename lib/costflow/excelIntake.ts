@@ -36,6 +36,9 @@ export type ExcelIntakeRowInput = {
   previewNet?: ExcelIntakePrimitiveCell;
   previewVat?: ExcelIntakePrimitiveCell;
   previewGross?: ExcelIntakePrimitiveCell;
+  previewBuyNet?: ExcelIntakePrimitiveCell;
+  previewBuyVat?: ExcelIntakePrimitiveCell;
+  previewBuyGross?: ExcelIntakePrimitiveCell;
 };
 export type ExcelIntakeInput = {
   schemaVersion: number;
@@ -139,7 +142,14 @@ export function normalizeExcelIntake(input: ExcelIntakeInput): NormalizedExcelIn
     if (!validStructure) issue(errors, "INVALID_HIERARCHY", "parentRow", row.parentRow.source, "Cấp và dòng cha không tạo thành cấu trúc ba cấp hợp lệ.");
     const sell = sideValue(row.sell, "sell", rowType, errors);
     const buyBase = sideValue(row.buy, "buy", rowType, errors);
-    for (const [field, primitive] of [["previewNet", row.previewNet], ["previewVat", row.previewVat], ["previewGross", row.previewGross]] as const) {
+    for (const [field, primitive] of [
+      ["previewNet", row.previewNet],
+      ["previewVat", row.previewVat],
+      ["previewGross", row.previewGross],
+      ["previewBuyNet", row.previewBuyNet],
+      ["previewBuyVat", row.previewBuyVat],
+      ["previewBuyGross", row.previewBuyGross],
+    ] as const) {
       if (!primitive?.observation) continue;
       observations.push({ ...primitive.observation, field, source: primitive.source });
       warnings.push({ code: "FORMULA_IGNORED", field, source: primitive.source, message: "Công thức và giá trị cache chỉ dùng xem trước; máy chủ tính lại từ dữ liệu nguyên thủy.", blocking: false });

@@ -1,7 +1,4 @@
-import "server-only";
-
-import { createHash } from "node:crypto";
-import { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { projectQuotation } from "./quotationProjection";
 import type { FinanceData, Quotation } from "./types";
 
@@ -28,6 +25,24 @@ export type ExportSourceSealInput = {
   payload: unknown;
   lines: ExportLine[];
   authoritativeTotals?: { net: string; vat: string; gross: string };
+};
+
+export type BuiltExportSourceSeal = Awaited<ReturnType<typeof buildExportSourceSeal>>;
+export type ExportSourceSealRecord = {
+  dossierVersionId: string | null;
+  authoritativeNet: string;
+  authoritativeVat: string;
+  authoritativeGross: string;
+  roundingAdjustment: number;
+  vatLineAssignment: unknown;
+  projectionHash: string;
+  approvalAttemptId: string | null;
+  approvedSnapshotId: string | null;
+  signingState: string | null;
+  canonicalPayload: unknown;
+};
+export type ExportSourceSealStore = {
+  upsertExact(input: ExportSourceSealInput, seal: BuiltExportSourceSeal): Promise<ExportSourceSealRecord>;
 };
 
 const PUBLIC_PAYLOAD_KEYS = new Set(["title", "customer", "project", "document", "rows"]);
@@ -128,7 +143,12 @@ function vatAssignment(lines: ExportLine[], adjustment: bigint) {
   return { lineId: requiredText(ranked[0].line.id, "VAT line ID"), adjustment: Number(adjustment) };
 }
 
-export function buildExportSourceSeal(input: ExportSourceSealInput) {
+async function sha256(value: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export async function buildExportSourceSeal(input: ExportSourceSealInput) {
   const projectId = requiredText(input.projectId, "Project ID");
   if (!EXPORT_SOURCE_FAMILIES.includes(input.family)) throw new Error("Loại projection xuất phiếu không hợp lệ.");
   const sourceKind = requiredText(input.sourceKind, "source kind");
@@ -177,7 +197,7 @@ export function buildExportSourceSeal(input: ExportSourceSealInput) {
     totals: { net: totals.net.toString(), vat: totals.vat.toString(), gross: totals.gross.toString() },
     roundingAdjustment: Number(roundingAdjustment),
     vatLineAssignment: assignment,
-    projectionHash: createHash("sha256").update(JSON.stringify(canonicalPayload), "utf8").digest("hex"),
+    projectionHash: await sha256(JSON.stringify(canonicalPayload)),
   };
 }
 
@@ -185,37 +205,9 @@ function sameJson(left: unknown, right: unknown) {
   return JSON.stringify(stable(left)) === JSON.stringify(stable(right));
 }
 
-export async function sealExportSourceProjection(tx: Prisma.TransactionClient, input: ExportSourceSealInput) {
-  const seal = buildExportSourceSeal(input);
-  const exact = {
-    projectId: input.projectId,
-    family: input.family,
-    sourceKind: input.sourceKind,
-    sourceId: input.sourceId,
-    sourceVersion: input.sourceVersion,
-  };
-  const row = await tx.settlementExportSourceProjection.upsert({
-    where: { projectId_family_sourceKind_sourceId_sourceVersion: exact },
-    create: {
-      project: { connect: { id: input.projectId } },
-      ...(input.dossierVersionId ? { dossierVersion: { connect: { id: input.dossierVersionId } } } : {}),
-      family: input.family,
-      sourceKind: input.sourceKind,
-      sourceId: input.sourceId,
-      sourceVersion: input.sourceVersion,
-      authoritativeNet: seal.totals.net,
-      authoritativeVat: seal.totals.vat,
-      authoritativeGross: seal.totals.gross,
-      roundingAdjustment: seal.roundingAdjustment,
-      vatLineAssignment: seal.vatLineAssignment,
-      projectionHash: seal.projectionHash,
-      approvalAttemptId: input.approvalAttemptId,
-      approvedSnapshotId: input.approvedSnapshotId,
-      signingState: input.signingState,
-      canonicalPayload: seal.canonicalPayload as Prisma.InputJsonValue,
-    },
-    update: {},
-  });
+export async function persistExportSourceSeal(store: ExportSourceSealStore, input: ExportSourceSealInput) {
+  const seal = await buildExportSourceSeal(input);
+  const row = await store.upsertExact(input, seal);
   const identical = row.dossierVersionId === (input.dossierVersionId ?? null)
     && row.authoritativeNet === seal.totals.net
     && row.authoritativeVat === seal.totals.vat
@@ -229,6 +221,42 @@ export async function sealExportSourceProjection(tx: Prisma.TransactionClient, i
     && sameJson(row.canonicalPayload, seal.canonicalPayload);
   if (!identical) throw new Error(`Projection nguồn ${input.family}/${input.sourceId}/v${input.sourceVersion} xung đột với seal đã tồn tại.`);
   return row;
+}
+
+export async function sealExportSourceProjection(tx: Prisma.TransactionClient, input: ExportSourceSealInput) {
+  return persistExportSourceSeal({
+    async upsertExact(source, seal) {
+  const exact = {
+        projectId: source.projectId,
+        family: source.family,
+        sourceKind: source.sourceKind,
+        sourceId: source.sourceId,
+        sourceVersion: source.sourceVersion,
+  };
+      return tx.settlementExportSourceProjection.upsert({
+    where: { projectId_family_sourceKind_sourceId_sourceVersion: exact },
+    create: {
+          project: { connect: { id: source.projectId } },
+          ...(source.dossierVersionId ? { dossierVersion: { connect: { id: source.dossierVersionId } } } : {}),
+          family: source.family,
+          sourceKind: source.sourceKind,
+          sourceId: source.sourceId,
+          sourceVersion: source.sourceVersion,
+      authoritativeNet: seal.totals.net,
+      authoritativeVat: seal.totals.vat,
+      authoritativeGross: seal.totals.gross,
+      roundingAdjustment: seal.roundingAdjustment,
+      vatLineAssignment: seal.vatLineAssignment,
+      projectionHash: seal.projectionHash,
+          approvalAttemptId: source.approvalAttemptId,
+          approvedSnapshotId: source.approvedSnapshotId,
+          signingState: source.signingState,
+      canonicalPayload: seal.canonicalPayload as Prisma.InputJsonValue,
+    },
+    update: {},
+  });
+    },
+  }, input);
 }
 
 export type LegacyExportSourceTuple = Pick<ExportSourceSealInput, "projectId" | "family" | "sourceKind" | "sourceId" | "sourceVersion">;

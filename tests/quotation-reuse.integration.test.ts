@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import type { FinanceData, Quotation } from "../lib/costflow/types";
 
-test("quotation reuse catalog, independent drafts, review gate and template lifecycle", { skip: !process.env.COSTFLOW_TEST_DATABASE_URL }, async () => {
+test("quotation reuse catalog, independent drafts and template lifecycle", { skip: !process.env.COSTFLOW_TEST_DATABASE_URL }, async () => {
   const url = new URL(process.env.COSTFLOW_TEST_DATABASE_URL!);
   assert.ok(["localhost", "127.0.0.1"].includes(url.hostname) && url.pathname === "/costflow_test");
   process.env.DATABASE_URL = process.env.COSTFLOW_TEST_DATABASE_URL;
@@ -57,11 +57,8 @@ test("quotation reuse catalog, independent drafts, review gate and template life
     assert.equal(draft.rows[0].sell.unitPrice, "1000");
     assert.equal(draft.rows[0].buy.unitPrice, "");
     assert.deepEqual(draft.globalEvidenceIds, []);
-    assert.equal(draft.priceReviewRequired, true);
-
     const saveFields = { command: "FINALIZE_PAIRED_QUOTATION", draftId: draft.id, workspaceMode: "quote", saveIc: "no", globalEvidenceIds: "[]", rows: JSON.stringify(draft.rows), title: draft.title, clientId: draft.clientId, notes: draft.notes, totalLines: JSON.stringify(draft.totalLines ?? []), totalLayout: JSON.stringify(draft.totalLayout ?? []) };
-    await assert.rejects(() => act(saveFields, 1), /Xác nhận đã rà soát/);
-    const finalized = await act({ ...saveFields, priceReviewConfirmed: "yes" }, 1);
+    const finalized = await act(saveFields, 1);
     const finalData = (await prisma.costFlowWorkspace.findUniqueOrThrow({ where: { projectId: destination.id } })).data as unknown as FinanceData;
     const quote = finalData.quotations!.find(item => item.id === finalized.quotationId)!;
     assert.equal(quote.parentId, null);

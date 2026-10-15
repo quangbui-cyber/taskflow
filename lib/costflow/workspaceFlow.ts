@@ -1,6 +1,7 @@
 import type { PairedRow, Quotation } from "./types";
 
 export type CostFlowWorkspaceMode = "quote" | "paired" | "ic";
+export type PairedSaveScope = "BOTH" | "QUOTE" | "IC";
 
 export const WORKSPACE_CAPABILITIES = {
   quote: {
@@ -32,9 +33,10 @@ export const WORKSPACE_CAPABILITIES = {
   },
 } as const satisfies Record<CostFlowWorkspaceMode, Record<string, boolean>>;
 
-export function workspaceSaveLabel(mode: CostFlowWorkspaceMode, saveIc: boolean) {
+export function workspaceSaveLabel(mode: CostFlowWorkspaceMode, scope: PairedSaveScope) {
   if (mode === "ic") return "Lưu nháp IC";
-  if (mode === "quote" || !saveIc) return "Chỉ lưu Báo giá";
+  if (mode === "quote" || scope === "QUOTE") return "Chỉ lưu Báo giá";
+  if (scope === "IC") return "Chỉ lưu IC";
   return "Lưu Báo giá & IC";
 }
 

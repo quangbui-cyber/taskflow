@@ -13,11 +13,11 @@ import { workingIcRevision } from "./budgetRevisions";
 import { validateIcLineOrigins } from "./budgetLineage";
 import { quotationLineAncestors } from "./budgetQuotation";
 import { validateIcEvidence, requestEvidenceIds } from "./icEvidence";
-import { createPairedFromQuoteDraft, savePairedDraft, finalizePairedQuotation } from "./pairedService";
+import { applyPairedCommand, createPairedFromQuoteDraft } from "./pairedService";
 import { assertApprovalToken, correctionItems, recordApprovalEvent } from "@/lib/workflow/approvalEvents";
 import { assertEligibleApprovalReceiver } from "@/lib/workflow/permissions";
 import { initializeQuotationReuseDraft } from "./quotationReuse";
-import { blankPairedRow, hydrateLinePricingData } from "./pairedDraft";
+import { blankPairedRow, deleteOwnedQuotationDraft, hydrateLinePricingData } from "./pairedDraft";
 import { normalizeParameterBinding, parameterFinalizationIssues } from "./quotationParameters";
 import { effectiveBaseline, icDecisionPolicy } from "./icEffectiveness";
 import { normalizePaymentDraft } from "./paymentPolicy";
@@ -556,6 +556,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
     let savedScopes: string[] | undefined;
     let customerCashFingerprint: string | undefined;
     let customerCashIdempotencyKey: string | undefined;
+    let successMessage: string | undefined;
     const request = requests.find(r => r.id === text(form, "requestId"));
     let affectedRequestId = request?.id;
     const payload = request?.payload as RequestPayload | undefined;
@@ -1148,33 +1149,24 @@ export async function executeFinance(projectId: string, expectedVersion: number,
       case "FINALIZE_PAIRED_QUOTATION":
       case "SAVE_PAIRED_DRAFT": {
         needCreator();
-        const result = await savePairedDraft(tx, projectId, actor.id, data, requests, form);
+        const result = await applyPairedCommand({
+          async findClientName(clientId) {
+            return (await tx.client.findUnique({ where: { id: clientId }, select: { name: true } }))?.name ?? null;
+          },
+          async countProjectEvidence(targetProjectId, evidenceIds) {
+            return tx.costFlowEvidence.count({ where: { projectId: targetProjectId, id: { in: evidenceIds } } });
+          },
+          async createIcWorkflowRequest(input) {
+            return tx.workflowRequest.create({ data: { projectId: input.projectId, module: "COSTFLOW", kind: "IC", title: input.title, creatorId: input.actorId, cashAssigneeId: input.actorId, state: "DRAFT", steps: [], payload: {} }, select: { id: true } });
+          },
+          async updateIcWorkflowRequest(requestId, payload, incrementVersion) {
+            await tx.workflowRequest.update({ where: { id: requestId }, data: { payload: json(payload), ...(incrementVersion ? { version: { increment: 1 } } : {}) } });
+          },
+        }, projectId, actor.id, data, requests, form);
         savedDraftId = result.draftId; savedRevisionId = result.revisionId; savedScopes = result.savedScopes;
-        affectedRequestId = result.revisionId ? data.revisions.find(revision => revision.id === result.revisionId)?.requestId : affectedRequestId;
-        if (command === "FINALIZE_PAIRED_QUOTATION") {
-          savedQuotationId = finalizePairedQuotation(data, result.draftId, actor.id, text(form, "priceReviewConfirmed") === "yes");
-          const quotation = data.quotations?.find(item => item.id === savedQuotationId);
-          if (!quotation) throw new Error("Không tìm thấy báo giá vừa chốt để seal nguồn xuất phiếu.");
-          const publicProjection = projectQuotation(quotation);
-          await sealExportSourceProjection(tx, {
-            projectId,
-            family: "QUOTATION",
-            sourceKind: "QUOTATION",
-            sourceId: quotation.id,
-            sourceVersion: quotation.number,
-            approvalAttemptId: `FINALIZE_PAIRED_QUOTATION:${quotation.id}`,
-            approvedSnapshotId: null,
-            signingState: "UNSIGNED",
-            payload: publicProjection,
-            lines: quotation.lines.map(line => ({ id: line.id, rawNet: line.cost.rawNet, rawVat: line.cost.rawVat, rawGross: line.cost.rawGross, vatPercent: line.vatPercent })),
-            authoritativeTotals: { net: publicProjection.amount.net, vat: publicProjection.amount.vat, gross: publicProjection.amount.gross },
-          });
-          if (result.savedScopes.includes("IC nháp")) {
-            const linked = data.revisions.find(r=>r.id===result.revisionId)!;
-            linked.quotationId = savedQuotationId;
-            await tx.workflowRequest.update({where:{id:linked.requestId},data:{payload:json(linked)}});
-          }
-        }
+        affectedRequestId = result.requestId ?? affectedRequestId;
+        savedQuotationId = result.quotationId;
+        if (result.exportSeal) await sealExportSourceProjection(tx, result.exportSeal);
         break;
       }
       case "CREATE_PAIRED_FROM_QUOTE_DRAFT": {
@@ -1182,6 +1174,12 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         const draft = createPairedFromQuoteDraft(data, requireValue(text(form, "draftId"), "nháp Báo giá"), actor.id);
         savedDraftId = draft.id;
         savedScopes = ["nháp Báo giá & IC"];
+        break;
+      }
+      case "DELETE_QUOTATION_DRAFT": {
+        needCreator();
+        deleteOwnedQuotationDraft(data, requireValue(text(form, "draftId"), "bản nháp"), actor.id);
+        successMessage = "Đã xóa bản nháp.";
         break;
       }
       case "CONFIGURE": {
@@ -1478,7 +1476,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         const proofId = upload
           ? (await tx.costFlowEvidence.create({ data: { projectId, sourceFileId: "uploaded-beneficiary-proof", kind: "BENEFICIARY", name: upload.name, mimeType: upload.mimeType, data: upload.data, sha256: createHash("sha256").update(upload.data).digest("hex"), createdBy: actor.id } })).id
           : await snapshotFile(text(form, "sourceFileId"), "BENEFICIARY");
-        if (!proofId) throw new Error("Cần tài liệu căn cứ tên người nhận và số tài khoản.");
+        if (!proofId) throw new Error("Chọn file xác minh đã có hoặc tải file xác minh mới.");
         const updated = { id: existing?.id ?? randomUUID(), name: requireValue(text(form, "name"), "tên người nhận"), bank: requireValue(text(form, "bank"), "ngân hàng"), account: requireValue(text(form, "account"), "số tài khoản"), version: (existing?.version ?? 0) + 1, verifiedVersion: null, proofId: proofId! };
         if (existing) Object.assign(existing, updated); else data.beneficiaries.push(updated);
         savedBeneficiaryId = updated.id;
@@ -1830,7 +1828,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
     const updated = await tx.costFlowWorkspace.updateMany({ where: { projectId, version: expectedVersion }, data: { version: { increment: 1 }, data: json(data) } });
     if (updated.count !== 1) throw new Error("Dữ liệu đã thay đổi. Tải lại để tránh ghi trùng.");
     await tx.costFlowHistory.create({ data: { projectId, version: expectedVersion + 1, actorId: actor.id, action: command, snapshot: json(data) } });
-    return { success: savedCloseRequestId ? financialCloseState ? `Đã lưu quyết định; tài chính hiện ${financialCloseState === "CLOSED" ? "đóng" : "mở"}.` : "Đã gửi yêu cầu đóng/mở tài chính." : savedCustomerAcceptanceId ? `Đã lưu snapshot nghiệm thu khách hàng v${savedCustomerAcceptanceVersion}.` : savedScopes ? `Đã lưu ${savedScopes.join(" và ")}.` : "Đã lưu hồ sơ và lịch sử.", requestId: affectedRequestId, closeRequestId: savedCloseRequestId, financialCloseState, revisionId: savedRevisionId, quotationId: savedQuotationId, draftId: savedDraftId, beneficiaryId: savedBeneficiaryId, customerAcceptanceId: savedCustomerAcceptanceId, customerAcceptanceVersion: savedCustomerAcceptanceVersion, savedScopes, version: expectedVersion + 1 };
+    return { success: successMessage ?? (savedCloseRequestId ? financialCloseState ? `Đã lưu quyết định; tài chính hiện ${financialCloseState === "CLOSED" ? "đóng" : "mở"}.` : "Đã gửi yêu cầu đóng/mở tài chính." : savedCustomerAcceptanceId ? `Đã lưu snapshot nghiệm thu khách hàng v${savedCustomerAcceptanceVersion}.` : savedScopes ? `Đã lưu ${savedScopes.join(" và ")}.` : "Đã lưu hồ sơ và lịch sử."), requestId: affectedRequestId, closeRequestId: savedCloseRequestId, financialCloseState, revisionId: savedRevisionId, quotationId: savedQuotationId, draftId: savedDraftId, beneficiaryId: savedBeneficiaryId, customerAcceptanceId: savedCustomerAcceptanceId, customerAcceptanceVersion: savedCustomerAcceptanceVersion, savedScopes, version: expectedVersion + 1 };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15000 });
 }
 

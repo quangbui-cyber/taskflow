@@ -17,6 +17,7 @@ export interface WorksheetHeaderProps {
   targetRevenue?: number;
   embedded?: boolean;
   versionAction?: ReactNode;
+  roundTripAction?: ReactNode;
   pending: boolean;
   locked: boolean;
   viewFilter: "ALL" | "SELL" | "BUY";
@@ -45,6 +46,7 @@ export default function WorksheetHeader({
   targetRevenue,
   embedded = false,
   versionAction,
+  roundTripAction,
   pending,
   locked,
   viewFilter,
@@ -104,9 +106,12 @@ export default function WorksheetHeader({
             </Button>
           </div>
         ) : !embedded && (
-          <Button variant="secondary" size="sm" disabled={pending} onClick={onBack}>
-            Quay lại
-          </Button>
+          <div className="tf-scope-version-actions" aria-label="Thao tác worksheet">
+            {roundTripAction}
+            <Button variant="secondary" size="sm" disabled={pending} onClick={onBack}>
+              Quay lại
+            </Button>
+          </div>
         )}
       </div>
 

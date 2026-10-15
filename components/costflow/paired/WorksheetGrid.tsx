@@ -7,7 +7,6 @@ import {
   ChevronRight,
   Paperclip,
   GripVertical,
-  RotateCcw,
   Settings2
 } from "lucide-react";
 import { displayMoney } from "@/lib/costflow/money";
@@ -29,7 +28,6 @@ export interface WorksheetGridProps {
   onToggleCollapse: (id: string) => void;
   onOpenDetail: (id: string, target?: "general" | "buy") => void;
   onSide: (row: PairedRow, scope: "sell" | "buy", field: string, value: string) => void;
-  onReuseFormula: (row: PairedRow, scope: "sell" | "buy") => void;
   onAdd: (rowType: "GROUP" | "ITEM", parent?: string | null, after?: string) => void;
   onOpenEvidence: (targets: string[]) => void;
   displayedTotals: {
@@ -66,7 +64,6 @@ export default function WorksheetGrid({
   onToggleCollapse,
   onOpenDetail,
   onSide,
-  onReuseFormula,
   onAdd,
   onOpenEvidence,
   displayedTotals,
@@ -157,7 +154,6 @@ export default function WorksheetGrid({
             const outlineEntry = outlineById.get(row.itemId);
             const numberLabel = outlineEntry?.numberLabel ?? "";
             const role = outlineEntry?.role ?? (structuralGroup ? "GROUP" : "ITEM");
-            const childCount = childrenOf(rows, row.itemId).length;
             const sellAmount = groupAmount(rows, row, "sell")?.net;
             const buyAmount = groupAmount(rows, row, "buy")?.net;
             const collapsedRow = collapsed.includes(row.itemId);
@@ -265,9 +261,6 @@ export default function WorksheetGrid({
                           ({row.description})
                         </span>
                       )}
-                      <span className="text-xs text-[var(--text-secondary)] bg-[var(--surface-muted)] rounded px-1.5 py-0.5 ml-1">
-                        {childCount} hạng mục
-                      </span>
                     </div>
                   </td>
 
@@ -277,7 +270,7 @@ export default function WorksheetGrid({
                       <td className="p-2 text-center text-xs text-[var(--muted)] border-l border-[var(--border)]">—</td>
                       <td className="p-2 text-center text-xs text-[var(--muted)]">—</td>
                       <td className="p-2 text-right text-xs text-[var(--muted)]">—</td>
-                      <td className="p-2 text-right font-mono font-bold text-[var(--foreground)]">
+                      <td className="p-2 text-right font-bold text-[var(--foreground)]">
                         {sellAmount === undefined ? "—" : displayMoney(sellAmount)}
                       </td>
                     </>
@@ -287,7 +280,7 @@ export default function WorksheetGrid({
                   {viewFilter !== "SELL" && (
                     <>
                       <td className="p-2 text-right text-xs text-[var(--muted)] border-l border-[var(--border)]">—</td>
-                      <td className="p-2 text-right font-mono font-bold text-[var(--foreground)]">
+                      <td className="p-2 text-right font-bold text-[var(--foreground)]">
                         {buyAmount === undefined ? "—" : displayMoney(buyAmount)}
                       </td>
                       {mode === "ic" && <td className="p-2 text-center text-xs text-[var(--muted)]">—</td>}
@@ -451,7 +444,7 @@ export default function WorksheetGrid({
                       <td className="p-2 text-center text-xs text-[var(--muted)] border-l border-[var(--border)]">—</td>
                       <td className="p-2 text-center text-xs text-[var(--muted)]">—</td>
                       <td className="p-2 text-right text-xs text-[var(--muted)]">—</td>
-                      <td className="p-2 text-right font-mono font-semibold text-[var(--foreground)]">
+                      <td className="p-2 text-right font-bold text-[var(--foreground)]">
                         {sellAmount === undefined ? "—" : displayMoney(sellAmount)}
                       </td>
                     </>
@@ -461,7 +454,7 @@ export default function WorksheetGrid({
                   {viewFilter !== "SELL" && (
                     <>
                       <td className="p-2 text-right text-xs text-[var(--muted)] border-l border-[var(--border)]">—</td>
-                      <td className="p-2 text-right font-mono font-semibold text-[var(--foreground)]">
+                      <td className="p-2 text-right font-bold text-[var(--foreground)]">
                         {buyAmount === undefined ? "—" : displayMoney(buyAmount)}
                       </td>
                       {mode === "ic" && <td className="p-2 text-center text-xs text-[var(--muted)]">—</td>}
@@ -508,6 +501,9 @@ export default function WorksheetGrid({
             // CASE 3: LEAF DETAIL ITEM (LEVEL 3 OR STANDALONE)
             // ==========================================
             const indentPx = role === "DETAIL" ? "36px" : "16px";
+            const usesParameterBinding =
+              (!!row.sell.parameterBinding && row.sell.parameterBinding.mode !== "MANUAL") ||
+              (!!row.buy.parameterBinding && row.buy.parameterBinding.mode !== "MANUAL");
             return (
               <tr
                 key={row.itemId}
@@ -603,25 +599,6 @@ export default function WorksheetGrid({
                         Đã bỏ khỏi báo giá
                       </span>
                     )}
-                    {/* Parameter / Formula Status Badges */}
-                    {row.sell.parameterBinding?.mode === "OVERRIDDEN" || row.buy.parameterBinding?.mode === "OVERRIDDEN" ? (
-                      <span
-                        className="text-xs font-medium text-[var(--warning)] bg-[var(--warning-soft)] rounded px-1.5 py-0.5 border border-[var(--warning)] inline-flex items-center gap-1 ml-1"
-                        title="Đã sửa tay đè lên công thức tham số. Bấm nút hoàn tác tại ô đơn giá để khôi phục công thức"
-                      >
-                        <RotateCcw size={11} aria-hidden="true" /> Đã sửa tay
-                      </span>
-                    ) : row.sell.parameterBinding?.mode === "PARAMETER" ||
-                      row.sell.parameterBinding?.mode === "FORMULA" ||
-                      row.buy.parameterBinding?.mode === "PARAMETER" ||
-                      row.buy.parameterBinding?.mode === "FORMULA" ? (
-                      <span
-                        className="text-xs font-medium text-[var(--color-brand-800)] bg-[var(--primary-soft)] rounded px-1.5 py-0.5 border border-[var(--color-brand-300)] inline-flex items-center gap-1 ml-1"
-                        title="Được tính từ tham số cấu hình quy mô"
-                      >
-                        Tham số
-                      </span>
-                    ) : null}
                   </div>
                 </td>
 
@@ -645,24 +622,13 @@ export default function WorksheetGrid({
                         value={row.sell.quantity}
                         disabled={mode === "ic" || !!row.saleRemoved}
                         placeholder="—"
-                        className="w-full text-center text-xs py-1 px-1 rounded border border-transparent hover:border-[var(--border)] focus:border-[var(--focus-ring)] focus:bg-[var(--surface)] bg-transparent transition-colors tabular-nums"
+                        title={usesParameterBinding ? "Dòng dùng tham số cấu hình quy mô" : undefined}
+                        className={`w-full text-center text-xs py-1 px-1 rounded border border-transparent hover:border-[var(--border)] focus:border-[var(--focus-ring)] focus:bg-[var(--surface)] bg-transparent transition-colors tabular-nums ${usesParameterBinding ? "tf-worksheet-parameter-quantity" : ""}`}
                         onChange={e => onSide(row, "sell", "quantity", e.target.value)}
                       />
                     </td>
                     <td className="p-1 text-right">
                       <div className="w-28 ml-auto flex items-center justify-end gap-1">
-                        {row.sell.parameterBinding?.mode === "OVERRIDDEN" && (
-                          <button
-                            type="button"
-                            title="Đã sửa tay · Bấm để khôi phục công thức tham số"
-                            aria-label="Khôi phục công thức tham số cho đơn giá bán"
-                            disabled={mode === "ic"}
-                            onClick={() => onReuseFormula(row, "sell")}
-                            className="p-1 rounded text-[var(--warning)] hover:bg-[var(--warning-soft)] transition-colors flex-shrink-0"
-                          >
-                            <RotateCcw size={12} aria-hidden="true" />
-                          </button>
-                        )}
                         <PairedPriceInput
                           label={"Đơn giá bán " + (i + 1)}
                           value={row.sell.unitPrice}
@@ -674,7 +640,7 @@ export default function WorksheetGrid({
                         />
                       </div>
                     </td>
-                    <td className="p-2 text-right font-mono text-xs font-semibold text-[var(--color-brand-800)]">
+                    <td className="p-2 text-right text-xs font-bold text-[var(--color-brand-800)]">
                       {sellAmount === undefined ? "—" : displayMoney(sellAmount)}
                     </td>
                   </>
@@ -685,18 +651,6 @@ export default function WorksheetGrid({
                   <>
                     <td className="p-1 text-right border-l border-[var(--border)]">
                       <div className="w-32 ml-auto flex items-center justify-end gap-1">
-                        {row.buy.parameterBinding?.mode === "OVERRIDDEN" && (
-                          <button
-                            type="button"
-                            title="Đã sửa tay · Bấm để khôi phục công thức tham số"
-                            aria-label="Khôi phục công thức tham số cho giá vốn"
-                            disabled={locked}
-                            onClick={() => onReuseFormula(row, "buy")}
-                            className="p-1 rounded text-[var(--warning)] hover:bg-[var(--warning-soft)] transition-colors flex-shrink-0"
-                          >
-                            <RotateCcw size={12} aria-hidden="true" />
-                          </button>
-                        )}
                         <PairedPriceInput
                           label={"Giá vốn " + (i + 1)}
                           value={row.buy.unitPrice}
@@ -708,7 +662,7 @@ export default function WorksheetGrid({
                         />
                       </div>
                     </td>
-                    <td className="p-2 text-right font-mono text-xs font-semibold text-[var(--info)]">
+                    <td className="p-2 text-right text-xs font-bold text-[var(--info)]">
                       {buyAmount === undefined ? "—" : displayMoney(buyAmount)}
                     </td>
                     {mode === "ic" && (
@@ -800,7 +754,7 @@ export default function WorksheetGrid({
                 {viewFilter !== "BUY" && (
                   <>
                     <td colSpan={3} className="border-l border-[var(--border)]" />
-                    <td className="text-right font-mono font-bold text-xs py-2.5 px-3 text-[var(--color-brand-900)]">
+                    <td className="text-right font-bold text-xs py-2.5 px-3 text-[var(--color-brand-900)]">
                       {row.incompleteSell || row.sell === undefined ? (
                         <span className="text-[var(--warning)] text-xs font-normal">Chưa đủ dữ liệu</span>
                       ) : (
@@ -812,7 +766,7 @@ export default function WorksheetGrid({
                 {viewFilter !== "SELL" && (
                   <>
                     <td className="border-l border-[var(--border)]" />
-                    <td className="text-right font-mono font-bold text-xs py-2.5 px-3 text-[var(--info)]">
+                    <td className="text-right font-bold text-xs py-2.5 px-3 text-[var(--info)]">
                       {row.buy === undefined ? (
                         "—"
                       ) : row.incompleteBuy ? (

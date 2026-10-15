@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import QuotationTotalsEditor from "./QuotationTotalsEditor";
-import QuotationIcLineage from "./QuotationIcLineage";
 import {
   calculateQuotationTotals,
   normalizeQuotationTotalLayout,
@@ -20,9 +19,14 @@ import {
   type DragEvent,
   type ReactNode
 } from "react";
-import type { Finance } from "./CostFlowPanel";
+import type { PairedFinance } from "@/lib/costflow/pairedReadModel";
 import { costFlowAction, type CostFlowActionState } from "@/app/actions/costflow";
-import { blankPairedRow, pairedFromLegacy, normalizePairedRows } from "@/lib/costflow/pairedDraft";
+import {
+  blankPairedRow,
+  hydratePairedEditorDefaults,
+  pairedFromLegacy,
+  normalizePairedRows
+} from "@/lib/costflow/pairedDraft";
 import {
   displayMoney,
   exact,
@@ -48,9 +52,9 @@ import { Button } from "./ui/Button";
 import { Input, Select } from "./ui/Field";
 import { Alert } from "./ui/Presentation";
 import { moveQuotationTree, quotationOutline } from "@/lib/costflow/quotationHierarchy";
-import { WORKSPACE_CAPABILITIES } from "@/lib/costflow/workspaceFlow";
+import { WORKSPACE_CAPABILITIES, type PairedSaveScope } from "@/lib/costflow/workspaceFlow";
 import QuotationSettingsDrawer from "./QuotationSettingsDrawer";
-import { evaluateFormula, type QuotationParameterSnapshot } from "@/lib/costflow/quotationParameters";
+import type { QuotationParameterSnapshot } from "@/lib/costflow/quotationParameters";
 
 import WorksheetHeader from "./costflow/paired/WorksheetHeader";
 import WorksheetGrid from "./costflow/paired/WorksheetGrid";
@@ -71,7 +75,7 @@ export default function PairedQuotationIcEditor({
   revisionId
 }: {
   mode?: "quote" | "paired" | "ic";
-  finance: Finance;
+  finance: PairedFinance;
   initial?: PairedDraft;
   source?: Quotation;
   onClose?: () => void;
@@ -96,7 +100,7 @@ export default function PairedQuotationIcEditor({
   const request = finance.requests.find(r => r.id === revision?.requestId);
   const locked = !!revision && (request?.state !== "DRAFT" || revision.effective);
   const [rows, setRows] = useState<PairedRow[]>(() =>
-    normalizePairedRows(initial?.rows ?? pairedFromLegacy(source, revision))
+    hydratePairedEditorDefaults(normalizePairedRows(initial?.rows ?? pairedFromLegacy(source, revision)))
   );
   const [draftId, setDraftId] = useState(initial?.id ?? "");
   const [version, setVersion] = useState(finance.version);
@@ -121,7 +125,6 @@ export default function PairedQuotationIcEditor({
   const [selected, setSelected] = useState<string[]>([]);
   const [files, setFiles] = useState(finance.evidence);
   const [globalIds, setGlobalIds] = useState(initial?.globalEvidenceIds ?? []);
-  const [saveIc, setSaveIc] = useState(mode !== "quote");
   const [totalLines, setTotalLines] = useState<QuotationTotalLine[]>(
     initial?.totalLines ?? source?.totalLines ?? []
   );
@@ -136,9 +139,9 @@ export default function PairedQuotationIcEditor({
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detailTarget, setDetailTarget] = useState<"general" | "buy">("general");
   const [confirmExit, setConfirmExit] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [preflightOpen, setPreflightOpen] = useState(false);
   const [totalsOpen, setTotalsOpen] = useState(false);
-  const [priceReviewed, setPriceReviewed] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
   const [drop, setDrop] = useState<{ id: string; position: "before" | "inside" | "after" } | null>(null);
   const [createdBeneficiaries, setCreatedBeneficiaries] = useState<{ id: string; name: string }[]>([]);
@@ -164,15 +167,21 @@ export default function PairedQuotationIcEditor({
         notes,
         parameterConfig,
         globalIds,
-        saveIc,
         totalLines,
         totalLayout
       }),
-    [clientId, globalIds, notes, parameterConfig, rows, saveIc, title, totalLayout, totalLines]
+    [clientId, globalIds, notes, parameterConfig, rows, title, totalLayout, totalLines]
   );
   const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
   const dirty = snapshot !== savedSnapshot;
   const detail = rows.find(row => row.itemId === detailId);
+  const deleteTarget = rows.find(row => row.itemId === deleteTargetId);
+  const deleteBranch = deleteTarget
+    ? [deleteTarget, ...orderedRows(rows, deleteTarget.itemId).map(entry => entry.row)]
+    : [];
+  const deleteKeepsHistory = deleteBranch.some(
+    row => row.quotationLineId || row.icLineId || row.buy.evidenceIds.length > 0
+  );
   const outline = useMemo(() => quotationOutline(rows), [rows]);
   const outlineById = useMemo(() => new Map(outline.map(entry => [entry.row.itemId, entry])), [outline]);
   const customerName =
@@ -246,44 +255,7 @@ export default function PairedQuotationIcEditor({
 
   const side = (row: PairedRow, scope: "sell" | "buy", field: string, value: string) => {
     const current = row[scope];
-    const computedField = field === "quantity" || field === "days" || field === "unitPrice";
-    const parameterBinding =
-      computedField && current.parameterBinding && current.parameterBinding.mode !== "MANUAL"
-        ? { ...current.parameterBinding, mode: "OVERRIDDEN" as const }
-        : current.parameterBinding;
-    update(row.itemId, { [scope]: { ...current, [field]: value, parameterBinding } });
-  };
-
-  const reuseFormula = (row: PairedRow, scope: "sell" | "buy") => {
-    const binding = row[scope].parameterBinding;
-    if (!binding || !parameterConfig) return;
-    const next = {
-      ...row[scope],
-      parameterBinding: {
-        ...binding,
-        mode:
-          binding.quantityFormula?.op === "PARAM" &&
-          (!binding.daysFormula || binding.daysFormula.op === "PARAM") &&
-          (!binding.unitPriceFormula || binding.unitPriceFormula.op === "PARAM")
-            ? ("PARAMETER" as const)
-            : ("FORMULA" as const)
-      }
-    };
-    for (const field of ["quantity", "days", "unitPrice"] as const) {
-      const formula = field === "quantity" ? binding.quantityFormula : field === "days" ? binding.daysFormula : binding.unitPriceFormula;
-      if (!formula) continue;
-      const result = evaluateFormula(formula, parameterConfig, binding.moduleId);
-      if (result.issue) {
-        setState({ error: `${row.name || row.itemId}: ${result.issue.message}` });
-        return;
-      }
-      next[field] = result.value;
-      next.parameterBinding.lastCalculated = {
-        ...(next.parameterBinding.lastCalculated ?? {}),
-        [field]: result.value
-      };
-    }
-    update(row.itemId, { [scope]: next });
+    update(row.itemId, { [scope]: { ...current, [field]: value } });
   };
 
   const add = (rowType: "GROUP" | "ITEM" = "ITEM", parent: string | null = null, after?: string) => {
@@ -504,6 +476,20 @@ export default function PairedQuotationIcEditor({
     setDetailId(null);
   };
 
+  const confirmPermanentDelete = () => {
+    if (!deleteTargetId) return;
+    const removedIds = new Set([
+      deleteTargetId,
+      ...orderedRows(rows, deleteTargetId).map(entry => entry.row.itemId)
+    ]);
+    setRows(current => current.filter(row => !removedIds.has(row.itemId)));
+    setSelected(current => current.filter(itemId => !removedIds.has(itemId)));
+    setCollapsed(current => current.filter(itemId => !removedIds.has(itemId)));
+    if (evidenceTargets?.some(itemId => removedIds.has(itemId))) setEvidenceTargets(null);
+    setDeleteTargetId(null);
+    setState({ success: `Đã xóa hẳn ${removedIds.size} dòng khỏi bản đang chỉnh. Bấm Lưu để ghi thay đổi.` });
+  };
+
   const focusNextPrice = (rowId: string, scope: "sell" | "buy") => {
     const inputs = Array.from(
       wrapper.current?.querySelectorAll<HTMLInputElement>(`input[data-price-scope="${scope}"]:not(:disabled)`) ?? []
@@ -516,12 +502,12 @@ export default function PairedQuotationIcEditor({
   const targetIds = [...new Set(targetRows.flatMap(r => r.buy.evidenceIds))];
   const targetReason = targetRows.length === 1 ? targetRows[0].buy.evidenceReason : "";
 
-  const save = (command = "SAVE_PAIRED_DRAFT") => {
+  const save = (command = "SAVE_PAIRED_DRAFT", saveScope: PairedSaveScope = mode === "quote" || locked ? "QUOTE" : mode === "ic" ? "IC" : "BOTH") => {
     const form = new FormData();
     form.set("projectId", finance.project.id);
     form.set("version", String(version));
     form.set("command", command);
-    form.set("saveIc", saveIc && !locked ? "yes" : "no");
+    form.set("saveScope", saveScope);
     form.set("globalEvidenceIds", JSON.stringify(globalIds));
     form.set("rows", JSON.stringify(rows));
     form.set("draftId", draftId);
@@ -533,15 +519,19 @@ export default function PairedQuotationIcEditor({
     form.set("workspaceMode", mode);
     form.set("totalLines", JSON.stringify(totalLines));
     form.set("totalLayout", JSON.stringify(totalLayout));
-    form.set("priceReviewConfirmed", priceReviewed ? "yes" : "no");
     startTransition(async () => {
       try {
-        const result = await costFlowAction({}, form);
+        const response = await fetch(`/api/projects/${encodeURIComponent(finance.project.id)}/costflow/paired-save`, {
+          method: "POST",
+          body: form,
+          credentials: "same-origin",
+        });
+        const result = await response.json() as CostFlowActionState;
+        if (!response.ok && !result.error) result.error = "Chưa lưu được hồ sơ.";
         setState(result);
         if (result.success) {
-          if (saveIc && !locked) setSavedSnapshot(snapshot);
-          else if (mode === "quote") setSavedSnapshot(snapshot);
-          else {
+          if (mode !== "paired" || saveScope === "BOTH") setSavedSnapshot(snapshot);
+          else if (saveScope === "QUOTE") {
             const saved = JSON.parse(savedSnapshot) as { rows: PairedRow[]; globalIds: string[] };
             const persisted = JSON.parse(snapshot) as { rows: PairedRow[]; globalIds: string[] };
             persisted.globalIds = saved.globalIds;
@@ -550,6 +540,15 @@ export default function PairedQuotationIcEditor({
               buy: saved.rows.find(old => old.itemId === row.itemId)?.buy ?? blankPairedRow(row.itemId, row.parentItemId).buy
             }));
             setSavedSnapshot(JSON.stringify(persisted));
+          } else {
+            const saved = JSON.parse(savedSnapshot) as { rows: PairedRow[]; globalIds: string[] };
+            const current = JSON.parse(snapshot) as { rows: PairedRow[]; globalIds: string[] };
+            saved.globalIds = current.globalIds;
+            saved.rows = saved.rows.map(row => ({
+              ...row,
+              buy: current.rows.find(value => value.itemId === row.itemId)?.buy ?? row.buy
+            }));
+            setSavedSnapshot(JSON.stringify(saved));
           }
           if (result.draftId) setDraftId(result.draftId);
           if (result.version !== undefined) setVersion(result.version);
@@ -571,11 +570,9 @@ export default function PairedQuotationIcEditor({
 
   const requestFinalize = () => {
     if (readinessIssues.length) setPreflightOpen(true);
-    else if (initial?.priceReviewRequired && !priceReviewed)
-      setState({ error: "Xác nhận đã rà soát giá bán, VAT và các dòng phí từ nguồn dùng lại trước khi chốt." });
     else {
       if (typeof window !== "undefined" && !window.confirm("Bạn có chắc chắn muốn chốt phiên bản báo giá này? Sau khi chốt, phiên bản báo giá sẽ trở thành chính thức.")) return;
-      save("FINALIZE_PAIRED_QUOTATION");
+      save("FINALIZE_PAIRED_QUOTATION", mode === "paired" && !locked ? "BOTH" : "QUOTE");
     }
   };
 
@@ -613,6 +610,22 @@ export default function PairedQuotationIcEditor({
         targetRevenue={targetRevenue}
         embedded={embedded}
         versionAction={versionAction}
+        roundTripAction={
+          mode === "paired" && draftId && !locked ? (
+            <ExcelRoundTripDialog
+              projectId={finance.project.id}
+              draftId={draftId}
+              dirty={dirty}
+              onApplied={result => {
+                setRows(result.rows);
+                setVersion(result.version);
+                setSavedSnapshot(JSON.stringify({ rows: result.rows, title, clientId, notes, parameterConfig, globalIds, totalLines, totalLayout }));
+                setState({ success: `Đã áp dụng Excel round-trip vào nháp v${result.draftVersion}.` });
+                router.refresh();
+              }}
+            />
+          ) : undefined
+        }
         pending={pending}
         locked={locked}
         viewFilter={viewFilter}
@@ -633,15 +646,11 @@ export default function PairedQuotationIcEditor({
         onBack={() => (dirty ? setConfirmExit(true) : onClose())}
       />
 
-      {mode === "quote" && initial?.priceReviewRequired && initial.reuseSource && (
+      {mode === "quote" && initial?.reuseSource && (
         <Alert tone="warning" title="Nội dung được sao chép từ nguồn cũ">
           <p>
             {initial.reuseSource.label} · {new Intl.DateTimeFormat("vi-VN").format(new Date(initial.reuseSource.sourceDate))}. Giá bán, VAT và phí có thể đã thay đổi.
           </p>
-          <label className="tf-paired-save-scope mt-3">
-            <input type="checkbox" checked={priceReviewed} onChange={event => setPriceReviewed(event.target.checked)} />
-            Tôi đã rà soát giá bán, VAT và các dòng phí trước khi chốt
-          </label>
         </Alert>
       )}
 
@@ -654,33 +663,6 @@ export default function PairedQuotationIcEditor({
         <Alert tone="warning" title="Dữ liệu cũ có hơn ba cấp">
           Các dòng hiện có vẫn được giữ nguyên để tránh mất dữ liệu. Khi sắp xếp hoặc thêm mới, hệ thống chỉ cho phép tối đa ba cấp.
         </Alert>
-      )}
-
-      <QuotationIcLineage
-        projectId={finance.project.id}
-        mode={mode}
-        source={source}
-        quotations={finance.data.quotations}
-        revisionNumber={revision?.number}
-        requestState={request?.state}
-        draftSaved={!!draftId}
-        saveIc={saveIc}
-        locked={locked}
-      />
-
-      {mode === "paired" && draftId && !locked && (
-        <ExcelRoundTripDialog
-          projectId={finance.project.id}
-          draftId={draftId}
-          dirty={dirty}
-          onApplied={result => {
-            setRows(result.rows);
-            setVersion(result.version);
-            setSavedSnapshot(JSON.stringify({ rows: result.rows, title, clientId, notes, parameterConfig, globalIds, saveIc, totalLines, totalLayout }));
-            setState({ success: `Đã áp dụng Excel round-trip vào nháp v${result.draftVersion}.` });
-            router.refresh();
-          }}
-        />
       )}
 
       {locked && revision && (
@@ -729,7 +711,6 @@ export default function PairedQuotationIcEditor({
           }
           onOpenDetail={openDetail}
           onSide={side}
-          onReuseFormula={reuseFormula}
           onAdd={add}
           onOpenEvidence={targets => setEvidenceTargets(targets)}
           displayedTotals={displayedTotals}
@@ -775,8 +756,6 @@ export default function PairedQuotationIcEditor({
       <WorksheetSaveBar
         mode={mode}
         locked={locked}
-        saveIc={saveIc}
-        onSaveIcChange={setSaveIc}
         saleTotal={saleTotal}
         buyTotal={buyTotal}
         marginReady={marginReady}
@@ -787,18 +766,15 @@ export default function PairedQuotationIcEditor({
         pending={pending}
         draftId={draftId}
         quotationId={quotationId}
-        uncompletedRowCount={readinessIssues.length}
-        initial={initial}
-        priceReviewed={priceReviewed}
-        onPriceReviewedChange={setPriceReviewed}
         state={state}
         capabilities={capabilities}
         embedded={embedded}
         projectId={finance.project.id}
-        onSave={save}
+        onSave={scope => save("SAVE_PAIRED_DRAFT", scope)}
         onPreview={() => setPreview(true)}
         onFinalize={requestFinalize}
         onStartPairedFromQuote={startPairedFromQuote}
+        onDismissSuccess={() => setState(current => ({ ...current, success: undefined }))}
       />
 
       <Dialog
@@ -839,7 +815,6 @@ export default function PairedQuotationIcEditor({
         notes={notes}
         onNotes={setNotes}
         rows={rows}
-        parameterConfig={parameterConfig}
         disabled={pending}
         onApply={(nextRows, nextConfig) => {
           setRows(nextRows);
@@ -864,15 +839,14 @@ export default function PairedQuotationIcEditor({
         detailBuyDisabled={detailBuyDisabled}
         detailSellDisabled={detailSellDisabled}
         beneficiaryOptions={beneficiaryOptions}
-        parameterConfig={parameterConfig}
         onAdjacentDetail={openAdjacentDetail}
         onUpdate={update}
         onSide={side}
-        onReuseFormula={reuseFormula}
         onAdd={add}
         onMove={move}
         onChangeParent={changeParent}
         onRemoveFromQuote={handleRemoveFromQuote}
+        onRequestDelete={setDeleteTargetId}
         onOpenEvidence={targets => setEvidenceTargets(targets)}
         onCreateBeneficiaryClick={itemId =>
           setNewBeneficiary({
@@ -886,6 +860,39 @@ export default function PairedQuotationIcEditor({
         onModeChangePrompt={setModeChange}
         onError={msg => setState({ error: msg })}
       />
+
+      <Dialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTargetId(null)}
+        title="Xóa hẳn hạng mục?"
+        description="Hạng mục sẽ biến mất khỏi Báo giá và IC trong bản đang chỉnh sau khi bạn xác nhận."
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDeleteTargetId(null)}>
+              Hủy
+            </Button>
+            <Button variant="danger" onClick={confirmPermanentDelete}>
+              {deleteBranch.length > 1 ? `Xóa hẳn ${deleteBranch.length} dòng` : "Xóa hẳn"}
+            </Button>
+          </>
+        }
+      >
+        {deleteTarget && (
+          <div className="space-y-3">
+            <Alert tone="danger" title={`Sắp xóa “${deleteTarget.name || "Hạng mục chưa đặt tên"}”`}>
+              {deleteBranch.length > 1
+                ? `Thao tác này xóa cả ${deleteBranch.length - 1} dòng con thuộc hạng mục.`
+                : "Thao tác này xóa dòng khỏi cấu trúc hiện tại."}
+            </Alert>
+            <p className="tf-ui-help">Thay đổi chỉ được ghi vào hệ thống khi bạn bấm Lưu.</p>
+            {deleteKeepsHistory && (
+              <p className="tf-ui-help">
+                Báo giá nguồn, chứng từ và lịch sử tài chính đã phát sinh vẫn được hệ thống bảo toàn; thao tác này chỉ loại dòng khỏi bản đang chỉnh.
+              </p>
+            )}
+          </div>
+        )}
+      </Dialog>
 
       <Dialog
         open={!!newBeneficiary}
@@ -948,11 +955,11 @@ export default function PairedQuotationIcEditor({
               />
               <Select
                 name="sourceFileId"
-                label="Dùng tài liệu đã có trong project"
+                label="Chọn file xác minh đã có (nếu có)"
                 value={newBeneficiary.sourceFileId}
                 onChange={event => setNewBeneficiary(current => current ? { ...current, sourceFileId: event.target.value } : current)}
               >
-                <option value="">Không chọn tài liệu có sẵn</option>
+                <option value="">Không dùng file có sẵn</option>
                 {finance.files.map(file => (
                   <option key={file.id} value={file.id}>{file.name}</option>
                 ))}
@@ -960,14 +967,13 @@ export default function PairedQuotationIcEditor({
               <Input
                 type="file"
                 name="proof"
-                label="Hoặc tải tài liệu căn cứ mới"
-                required={!newBeneficiary.sourceFileId}
+                label="Hoặc tải file xác minh mới"
                 accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
-                hint="Chọn một trong hai nguồn · tối đa 4 MiB. File chỉ được lưu sau khi tạo NCC thành công."
+                hint="Chỉ cần chọn một trong hai cách: dùng file có sẵn hoặc tải file mới · tối đa 4 MiB."
               />
             </div>
             <p className="tf-ui-help">
-              Căn cứ có thể là hợp đồng, hóa đơn VAT, báo giá chính thức hoặc email xác nhận từ đối tác.
+              File xác minh là hợp đồng, hóa đơn VAT, báo giá chính thức hoặc email có tên nhà cung cấp và thông tin thanh toán.
             </p>
           </ActionForm>
         )}

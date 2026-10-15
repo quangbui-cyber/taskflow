@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { costFlowAction, type CostFlowActionState } from "@/app/actions/costflow";
 import {
   Plus,
   ArrowRight,
@@ -13,16 +15,17 @@ import {
   ExternalLink,
   Copy,
   LayoutTemplate,
-  Download
+  Download,
+  Trash2
 } from "lucide-react";
 import type { Finance } from "@/components/CostFlowPanel";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Field";
-import { Badge, EmptyState, Panel, Table } from "@/components/ui/Presentation";
+import { Alert, Badge, EmptyState, Panel, Table } from "@/components/ui/Presentation";
 import { Dialog } from "@/components/ui/Dialog";
 import { displayMoney, totals } from "@/lib/costflow/money";
 import { projectQuotation } from "@/lib/costflow/quotationProjection";
-import type { Quotation } from "@/lib/costflow/types";
+import type { PairedDraft, Quotation } from "@/lib/costflow/types";
 import CustomerQuotationView from "./CustomerQuotationView";
 import QuotationTemplateProposalButton from "./QuotationTemplateProposalButton";
 import ExcelIntakeDialog from "./ExcelIntakeDialog";
@@ -34,6 +37,50 @@ type Props = {
   createDialogOpen?: boolean;
   onOpenCreateChange?: (open: boolean) => void;
 };
+
+function DraftDeleteButton({ finance, draft }: { finance: Finance; draft: PairedDraft }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [state, action, pending] = useActionState(async (previous: CostFlowActionState, form: FormData) => {
+    const result = await costFlowAction(previous, form);
+    if (result.success) {
+      setOpen(false);
+      router.refresh();
+    }
+    return result;
+  }, {});
+
+  return <>
+    <Button variant="ghost" size="sm" onClick={() => setOpen(true)} aria-label={`Xóa bản nháp ${draft.title || "chưa đặt tên"}`}>
+      <Trash2 size={14} aria-hidden="true" />
+      Xóa
+    </Button>
+    <Dialog
+      open={open}
+      onClose={() => { if (!pending) setOpen(false); }}
+      title="Xóa bản nháp?"
+      description="Thao tác này không thể hoàn tác."
+    >
+      <form action={action} className="space-y-4">
+        <input type="hidden" name="projectId" value={finance.project.id} />
+        <input type="hidden" name="version" value={finance.version} />
+        <input type="hidden" name="command" value="DELETE_QUOTATION_DRAFT" />
+        <input type="hidden" name="draftId" value={draft.id} />
+        <p className="text-sm text-[var(--foreground)]">
+          Bạn sắp xóa bản nháp <strong>{draft.title || "Báo giá chưa đặt tên"}</strong>.
+        </p>
+        <p className="tf-ui-help">
+          Chỉ workspace nháp đang soạn bị xóa. Báo giá đã chốt, hồ sơ IC và lịch sử tài chính đã lưu vẫn được giữ nguyên.
+        </p>
+        {state.error && <Alert tone="danger" title={state.error} />}
+        <div className="tf-ui-actions">
+          <Button variant="secondary" size="sm" onClick={() => setOpen(false)} disabled={pending}>Giữ lại</Button>
+          <Button type="submit" variant="danger" size="sm" loading={pending} loadingLabel="Đang xóa…">Xóa bản nháp</Button>
+        </div>
+      </form>
+    </Dialog>
+  </>;
+}
 
 export default function QuotationPanel({
   finance,
@@ -348,7 +395,7 @@ export default function QuotationPanel({
                 return (
                   <div
                     key={draft.id}
-                    className="flex items-center justify-between gap-3 p-3 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)]"
+                    className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)]"
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
@@ -364,13 +411,16 @@ export default function QuotationPanel({
                         {draft.customer || "Chưa chọn khách"} · {draft.rows.length} dòng
                       </p>
                     </div>
-                    <Link
-                      className="tf-button-primary tf-button-size-sm text-xs font-semibold whitespace-nowrap"
-                      href={draftRoute}
-                    >
-                      Tiếp tục nháp
-                      <ArrowRight size={13} className="ml-1" aria-hidden="true" />
-                    </Link>
+                    <div className="flex shrink-0 items-center gap-1">
+                      {canCreate && <DraftDeleteButton finance={finance} draft={draft} />}
+                      <Link
+                        className="tf-button-primary tf-button-size-sm text-xs font-semibold whitespace-nowrap"
+                        href={draftRoute}
+                      >
+                        Tiếp tục nháp
+                        <ArrowRight size={13} className="ml-1" aria-hidden="true" />
+                      </Link>
+                    </div>
                   </div>
                 );
               })}

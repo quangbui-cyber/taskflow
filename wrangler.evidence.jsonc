@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "taskflow-evidence",
+  "main": "cloudflare/evidence-object.ts",
+  "compatibility_date": "2026-10-13",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "EVIDENCE_OBJECTS",
+        "class_name": "EvidenceObject"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "free-evidence-v1",
+      "new_sqlite_classes": ["EvidenceObject"]
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
