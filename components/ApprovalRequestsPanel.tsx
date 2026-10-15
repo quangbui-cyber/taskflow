@@ -25,7 +25,7 @@ import { Alert, Badge, EmptyState, Panel } from "@/components/ui/Presentation";
 import { Dialog } from "@/components/ui/Dialog";
 import ActionForm from "@/components/CostFlowActionForm";
 import ApprovalTimeline from "@/components/ApprovalTimeline";
-import IcRequestEvidence from "@/components/IcRequestEvidence";
+import IcApprovalReviewDashboard from "@/components/IcApprovalReviewDashboard";
 import ExpenseRequestModal from "@/components/ExpenseRequestModal";
 import { displayMoney } from "@/lib/costflow/money";
 import { ordinaryApprovalSteps } from "@/lib/costflow/approvalChain";
@@ -840,6 +840,44 @@ function RequestInspectionModal({
           </div>
         </div>
 
+      {request.kind === "IC" && (
+        <IcApprovalReviewDashboard
+          finance={finance}
+          request={request}
+          canSupplement={
+            request.creatorId === user.id &&
+            finance.fullAccess &&
+            ["ACCOUNT", "ADMIN"].includes(user.role) &&
+            !finance.data.closed
+          }
+        />
+      )}
+
+      {request.kind === "IC" && isMyTurn && (
+        <div className="tf-approval-sticky-actionbar" aria-label="Chọn hướng xử lý hồ sơ IC">
+          <div><strong>Đến lượt bạn xử lý</strong><span>Chọn hướng, sau đó ghi ý kiến và xác nhận ở biểu mẫu quyết định.</span></div>
+          <div className="flex flex-wrap gap-2">
+            {[
+              ["APPROVE", current?.role === "MANAGER" && revision ? `Duyệt IC-R${revision.number}` : "Phê duyệt"],
+              ["RETURN", "Trả chỉnh sửa"],
+              ["REJECT", "Từ chối"],
+            ].map(([value, label]) => (
+              <Button
+                key={value}
+                size="sm"
+                variant={decision === value ? (value === "REJECT" ? "danger" : "primary") : "secondary"}
+                onClick={() => {
+                  setDecision(value);
+                  requestAnimationFrame(() => document.getElementById(`request-decision-${request.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+                }}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* B. VISUAL APPROVAL TIMELINE */}
       <ApprovalTimeline
         request={request}
@@ -1063,22 +1101,6 @@ function RequestInspectionModal({
           </div>
         )}
 
-        {/* IC Request Evidence */}
-        {request.kind === "IC" && (
-          <div className="pt-2">
-            <IcRequestEvidence
-              finance={finance}
-              request={request}
-              canSupplement={
-                request.creatorId === user.id &&
-                finance.fullAccess &&
-                ["ACCOUNT", "ADMIN"].includes(user.role) &&
-                !finance.data.closed
-              }
-            />
-          </div>
-        )}
-
         {/* Evidence files */}
         {finance.evidence.filter(e => e.requestId === request.id).length > 0 && (
           <div className="pt-2 border-t border-[var(--border)]">
@@ -1115,7 +1137,7 @@ function RequestInspectionModal({
       {/* E. ACTION AREA: DECISION / SUBMISSION / WITHDRAW */}
       {/* 1. ĐẾN LƯỢT DUYỆT (DECIDE) */}
       {request.state === "SUBMITTED" && current?.assigneeId === user.id && (
-        <div className="p-4 rounded-xl border-2 border-[var(--info)] bg-[var(--info-soft)] space-y-4">
+        <div id={`request-decision-${request.id}`} className="p-4 rounded-xl border-2 border-[var(--info)] bg-[var(--info-soft)] space-y-4 scroll-mt-4">
           <div className="flex items-center gap-2 text-sm font-bold text-[var(--info)]">
             <UserCheck size={18} aria-hidden="true" />
             <span>Đến lượt bạn đưa ra quyết định với vai trò: {ROLE_LABEL[current.role] ?? current.role}</span>

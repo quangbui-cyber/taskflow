@@ -105,3 +105,25 @@ test("payment UI: workspace keeps shared approval and money surfaces distinct", 
   assert.doesNotMatch(css, /:has\(\.tf-ic-evidence-panel\)/);
   assert.match(css, /:has\(> \.my-5 > \.tf-ic-evidence-panel\)/);
 });
+
+test("IC approval modal leads with financial review, coverage and compact responsive rows", () => {
+  const approval = source("components/ApprovalRequestsPanel.tsx");
+  const review = source("components/IcApprovalReviewDashboard.tsx");
+  const projection = source("lib/costflow/icApprovalReview.ts");
+  const css = source("app/modules.css");
+
+  assert.match(approval, /IcApprovalReviewDashboard/);
+  assert.match(approval, /tf-approval-sticky-actionbar/);
+  assert.match(approval, /request-decision-/);
+  for (const fact of ["Báo giá Net", "Tổng IC Net", "Biên dự kiến", "Minh chứng file", "Nhà cung cấp"]) {
+    assert.match(review, new RegExp(fact));
+  }
+  assert.match(review, /Cảnh báo hỗ trợ thẩm định/);
+  assert.match(review, /tf-ic-review-table/);
+  assert.match(review, /tf-ic-review-cards/);
+  assert.match(projection, /projectQuotation/);
+  assert.match(projection, /calculateMargin/);
+  assert.doesNotMatch(review, /Margin thực tế/);
+  assert.match(css, /\.tf-ic-review-table[\s\S]*min-width:930px/);
+  assert.match(css, /@media \(max-width: 767px\)[\s\S]*\.tf-ic-review-table \{ display:none; \}[\s\S]*\.tf-ic-review-cards \{ display:grid/);
+});
