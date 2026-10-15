@@ -901,7 +901,7 @@ export default function InternalCostPanel({
                 </div>
               )}
 
-              {/* 12-COLUMN TABLE WITH PARALLEL QUOTATION & LIVE MARGIN */}
+              {/* COMPACT TABLE WITH PARALLEL QUOTATION & LIVE MARGIN */}
               <Table caption={`Các dòng chi phí và NCC của IC revision ${visibleRevision.number}`} hideCaption>
                 <thead>
                   <tr>
@@ -919,7 +919,6 @@ export default function InternalCostPanel({
                     <th scope="col">Nội dung chi phí & Ghi chú</th>
                     <th scope="col" className="w-16">ĐVT</th>
                     <th scope="col" className="w-14 text-right">SL</th>
-                    <th scope="col" className="w-24 text-right">Đơn giá mua</th>
                     <th scope="col" className="w-28 text-right">Chi phí Net</th>
                     <th scope="col" className="w-28 text-right">Chi phí Gross</th>
                     <th scope="col" className="w-36 text-right">Báo giá song song (Net)</th>
@@ -984,10 +983,6 @@ export default function InternalCostPanel({
                                 BG
                               </span>
                             )}
-                          </td>
-                          <td className="text-right tabular-nums text-sm">
-                            <span>{line.unitPrice}</span>{" "}
-                            <span className="text-[11px] text-[var(--text-secondary)]">({line.basis})</span>
                           </td>
                           <td className="text-right tabular-nums font-mono text-sm font-medium">
                             {line.cost ? displayMoney(line.cost.net) : "—"}

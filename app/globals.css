@@ -123,6 +123,24 @@ textarea:focus-visible {
   overflow-y: auto;
 }
 
+/* Module pages own their desktop scroll inside .tf-main. Keeping the document
+   fixed prevents browser/document overscroll from moving the full-height
+   sidebar and exposing a blank strip below the shell. */
+@media (min-width: 768px) {
+  html:has(.tf-module-main),
+  body:has(.tf-module-main) {
+    height: 100dvh;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  .tf-shell:has(.tf-module-main) {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+
 .tf-page {
   width: 100%;
   max-width: var(--page-width);
