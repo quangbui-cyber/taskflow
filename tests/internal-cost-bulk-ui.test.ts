@@ -18,3 +18,14 @@ test("bulk save retains unrelated IC fields and merges evidence instead of repla
   assert.match(source, /command="SAVE_IC"/);
   assert.match(source, /NCC đã chọn sẽ thay thế NCC hiện tại trên các dòng được chọn\. Các số liệu và Minh chứng khác được giữ nguyên\./);
 });
+
+test("bulk vendor dialog can create a verified supplier and select it without losing the current version", () => {
+  assert.match(source, /<option value="__CREATE_BENEFICIARY__">＋ Tạo nhà cung cấp mới…<\/option>/);
+  assert.match(source, /title="Tạo nhà cung cấp mới"/);
+  assert.match(source, /command="BENEFICIARY"/);
+  assert.match(source, /name="sourceFileId"/);
+  assert.match(source, /name="proof"/);
+  assert.match(source, /setBulkVendorId\(beneficiaryId\)/);
+  assert.match(source, /setActionVersion\(result\.version\)/);
+  assert.match(source, /finance=\{\{ project: finance\.project, version: currentActionVersion \}\}/);
+});

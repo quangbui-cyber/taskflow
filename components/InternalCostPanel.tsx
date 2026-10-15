@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import type { Finance } from "@/components/CostFlowPanel";
 import { Button } from "@/components/ui/Button";
-import { Select, Textarea } from "@/components/ui/Field";
+import { Input, Select, Textarea } from "@/components/ui/Field";
 import { Alert, Badge, EmptyState, Panel, Table } from "@/components/ui/Presentation";
 import { Dialog } from "@/components/ui/Dialog";
 import ActionForm from "@/components/CostFlowActionForm";
@@ -101,6 +101,14 @@ export default function InternalCostPanel({
   const [selectedLineIds, setSelectedLineIds] = useState<string[]>([]);
   const [bulkVendorOpen, setBulkVendorOpen] = useState(false);
   const [bulkVendorId, setBulkVendorId] = useState("");
+  const [createdBeneficiaries, setCreatedBeneficiaries] = useState<{ id: string; name: string }[]>([]);
+  const [newBeneficiary, setNewBeneficiary] = useState<{
+    name: string;
+    bank: string;
+    account: string;
+    sourceFileId: string;
+  } | null>(null);
+  const [actionVersion, setActionVersion] = useState(finance.version);
   const [bulkEvidenceOpen, setBulkEvidenceOpen] = useState(false);
   const [bulkEvidenceIds, setBulkEvidenceIds] = useState<string[]>([]);
   const [bulkEvidenceReason, setBulkEvidenceReason] = useState("");
@@ -136,6 +144,14 @@ export default function InternalCostPanel({
   // Users map for displaying names
   const users = useMemo(() => new Map(finance.users.map(u => [u.id, u.name])), [finance.users]);
   const beneficiariesMap = useMemo(() => new Map(finance.data.beneficiaries.map(b => [b.id, b])), [finance.data.beneficiaries]);
+  const beneficiaryOptions = useMemo(() => {
+    const merged = new Map(
+      finance.data.beneficiaries.map(beneficiary => [beneficiary.id, { id: beneficiary.id, name: beneficiary.name }])
+    );
+    for (const beneficiary of createdBeneficiaries) merged.set(beneficiary.id, beneficiary);
+    return [...merged.values()];
+  }, [createdBeneficiaries, finance.data.beneficiaries]);
+  const currentActionVersion = Math.max(actionVersion, finance.version);
 
   // Check if current user can edit visible revision
   const isEditableDraft = Boolean(
@@ -1442,7 +1458,7 @@ export default function InternalCostPanel({
           description="NCC đã chọn sẽ thay thế NCC hiện tại trên các dòng được chọn. Các số liệu và Minh chứng khác được giữ nguyên."
         >
           <ActionForm
-            finance={finance}
+            finance={{ project: finance.project, version: currentActionVersion }}
             command="SAVE_IC"
             requestId={visibleRevision.requestId}
             label={`Gắn NCC cho ${selectedLines.length} dòng`}
@@ -1457,16 +1473,108 @@ export default function InternalCostPanel({
               title={visibleRequest?.title ?? `IC-R${visibleRevision.number}`}
               lines={bulkVendorLines}
             />
-            <Select label="Nhà cung cấp áp dụng" value={bulkVendorId} onChange={event => setBulkVendorId(event.target.value)} required>
+            <Select
+              label="Nhà cung cấp áp dụng"
+              value={bulkVendorId}
+              onChange={event => {
+                if (event.target.value === "__CREATE_BENEFICIARY__") {
+                  setBulkVendorOpen(false);
+                  setNewBeneficiary({ name: "", bank: "", account: "", sourceFileId: "" });
+                  return;
+                }
+                setBulkVendorId(event.target.value);
+              }}
+              required
+            >
               <option value="">Chọn Nhà cung cấp</option>
-              {finance.data.beneficiaries.map(beneficiary => (
+              {beneficiaryOptions.map(beneficiary => (
                 <option key={beneficiary.id} value={beneficiary.id}>{beneficiary.name}</option>
               ))}
+              <option value="__CREATE_BENEFICIARY__">＋ Tạo nhà cung cấp mới…</option>
             </Select>
             <p className="tf-ui-help">Chỉ áp dụng cho {selectedLines.length} dòng đã chọn trong IC-R{visibleRevision.number}.</p>
           </ActionForm>
         </Dialog>
       )}
+
+      <Dialog
+        open={!!newBeneficiary}
+        onClose={() => {
+          setNewBeneficiary(null);
+          setBulkVendorOpen(true);
+        }}
+        title="Tạo nhà cung cấp mới"
+        description="Nhà cung cấp được lưu vào danh bạ của project và tự chọn cho các dòng IC đang chọn. Kế toán vẫn cần xác minh thông tin trước khi thanh toán."
+      >
+        {newBeneficiary && (
+          <ActionForm
+            finance={{ project: finance.project, version: currentActionVersion }}
+            command="BENEFICIARY"
+            label="Tạo và chọn nhà cung cấp"
+            onSuccess={result => {
+              if (!result.beneficiaryId) return;
+              const beneficiaryId = result.beneficiaryId;
+              const beneficiaryName = newBeneficiary.name.trim();
+              setCreatedBeneficiaries(current => [
+                ...current.filter(beneficiary => beneficiary.id !== beneficiaryId),
+                { id: beneficiaryId, name: beneficiaryName }
+              ]);
+              setBulkVendorId(beneficiaryId);
+              if (result.version !== undefined) setActionVersion(result.version);
+              setNewBeneficiary(null);
+              setBulkVendorOpen(true);
+            }}
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                name="name"
+                label="Tên người nhận / Tên NCC"
+                placeholder="Công ty TNHH..."
+                required
+                value={newBeneficiary.name}
+                onChange={event => setNewBeneficiary(current => current ? { ...current, name: event.target.value } : current)}
+              />
+              <Input
+                name="bank"
+                label="Ngân hàng"
+                placeholder="Vietcombank, MB, ACB..."
+                required
+                value={newBeneficiary.bank}
+                onChange={event => setNewBeneficiary(current => current ? { ...current, bank: event.target.value } : current)}
+              />
+              <Input
+                name="account"
+                label="Số tài khoản"
+                placeholder="0123456789..."
+                required
+                value={newBeneficiary.account}
+                onChange={event => setNewBeneficiary(current => current ? { ...current, account: event.target.value } : current)}
+              />
+              <Select
+                name="sourceFileId"
+                label="Chọn file xác minh đã có (nếu có)"
+                value={newBeneficiary.sourceFileId}
+                onChange={event => setNewBeneficiary(current => current ? { ...current, sourceFileId: event.target.value } : current)}
+              >
+                <option value="">Không dùng file có sẵn</option>
+                {finance.files.map(file => (
+                  <option key={file.id} value={file.id}>{file.name}</option>
+                ))}
+              </Select>
+              <Input
+                type="file"
+                name="proof"
+                label="Hoặc tải file xác minh mới"
+                accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
+                hint="Chỉ cần chọn một trong hai cách: dùng file có sẵn hoặc tải file mới · tối đa 4 MiB."
+              />
+            </div>
+            <p className="tf-ui-help">
+              File xác minh là hợp đồng, hóa đơn VAT, báo giá chính thức hoặc email có tên nhà cung cấp và thông tin thanh toán.
+            </p>
+          </ActionForm>
+        )}
+      </Dialog>
 
       {visibleRevision && (
         <IcEvidencePanel
