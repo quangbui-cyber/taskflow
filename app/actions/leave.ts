@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin, requireUser } from "@/lib/auth";
 import {
   MAX_ANNUAL_LEAVE_DAYS,
+  MAX_USED_LEAVE_DAYS,
   canCancelLeave,
   canDecideLeave,
   countLeaveDays,
@@ -312,6 +313,63 @@ export async function setAnnualLeaveDays(
   if (updated.count === 0) return { error: "Tài khoản không tồn tại." };
   revalidatePath("/leave");
   return { success: "Đã lưu số ngày phép năm." };
+}
+
+/** Admin đặt tổng số ngày đã dùng của một người trong năm, không sửa đơn nghỉ. */
+export async function setUsedLeaveDays(
+  userId: string,
+  year: number,
+  days: number
+): Promise<LeaveState> {
+  await requireAdmin();
+  if (
+    typeof userId !== "string" ||
+    !userId ||
+    !Number.isInteger(year) ||
+    year < 2000 ||
+    year > 2100 ||
+    typeof days !== "number" ||
+    !Number.isFinite(days) ||
+    days < 0 ||
+    days > MAX_USED_LEAVE_DAYS ||
+    !Number.isInteger(days * 2)
+  ) {
+    return {
+      error: `Số ngày đã dùng phải từ 0 đến ${MAX_USED_LEAVE_DAYS}, bước 0,5.`,
+    };
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const person = await tx.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+    if (!person) return false;
+
+    const approved = await tx.leaveRequest.aggregate({
+      where: {
+        userId,
+        type: "ANNUAL",
+        status: "APPROVED",
+        startDate: {
+          gte: new Date(Date.UTC(year, 0, 1)),
+          lt: new Date(Date.UTC(year + 1, 0, 1)),
+        },
+      },
+      _sum: { days: true },
+    });
+    const adjustmentDays = days - (approved._sum.days ?? 0);
+    await tx.leaveUsageAdjustment.upsert({
+      where: { userId_year: { userId, year } },
+      create: { userId, year, adjustmentDays },
+      update: { adjustmentDays },
+    });
+    return true;
+  });
+  if (!result) return { error: "Tài khoản không tồn tại." };
+
+  revalidatePath("/leave");
+  return { success: "Đã lưu số ngày phép đã dùng." };
 }
 
 /** Admin đặt lại toàn bộ danh sách quản lý nghỉ phép. */

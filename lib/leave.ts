@@ -20,6 +20,7 @@ export const HALF_DAY_OPTIONS = [
 
 export const DEFAULT_ANNUAL_LEAVE_DAYS = 12;
 export const MAX_ANNUAL_LEAVE_DAYS = 60;
+export const MAX_USED_LEAVE_DAYS = 365;
 /** Một đơn tối đa bao nhiêu ngày lịch, và được báo lùi tối đa bao nhiêu ngày. */
 export const MAX_LEAVE_SPAN_DAYS = 60;
 export const MAX_LEAVE_BACKDATE_DAYS = 30;
@@ -181,7 +182,8 @@ export function canCancelLeave(
 /** Quỹ phép năm: chỉ đơn nghỉ phép năm mới trừ quỹ. */
 export function summarizeLeave(
   requests: Array<{ type: string; status: string; days: number }>,
-  quota: number
+  quota: number,
+  adjustmentDays = 0
 ) {
   let used = 0;
   let pending = 0;
@@ -190,6 +192,7 @@ export function summarizeLeave(
     if (request.status === "APPROVED") used += request.days;
     if (request.status === "PENDING") pending += request.days;
   }
+  used = Math.max(0, used + adjustmentDays);
   return { quota, used, pending, remaining: quota - used };
 }
 
