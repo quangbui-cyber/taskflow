@@ -815,7 +815,7 @@ function RequestInspectionModal({
     <Dialog
       open={open}
       onClose={onClose}
-      className="tf-dialog-wide max-w-4xl w-full"
+      className="tf-dialog-wide tf-approval-inspection-modal"
       title={request.title}
       description={`Mã hồ sơ: #${request.id.slice(-8)} · Phiên bản v${request.version}`}
     >

@@ -88,6 +88,7 @@ test("payment UI: ledger has complete desktop and mobile state axes", () => {
 test("payment UI: workspace keeps shared approval and money surfaces distinct", () => {
   const workspace = source("components/CostFlowPanel.tsx");
   const approval = source("components/ApprovalRequestsPanel.tsx");
+  const css = source("app/modules.css");
 
   assert.match(workspace, /ApprovalRequestsPanel/);
   assert.match(workspace, /SettlementPanel/);
@@ -98,4 +99,8 @@ test("payment UI: workspace keeps shared approval and money surfaces distinct", 
   assert.doesNotMatch(`${workspace}\n${approval}`, /PAY-06/);
   assert.doesNotMatch(workspace, /PaymentCashPanel/);
   assert.doesNotMatch(approval, /PRE_APPROVAL|APPROVE_EXCEPTION|chi trước/i);
+  assert.match(approval, /className="tf-dialog-wide tf-approval-inspection-modal"/);
+  assert.match(css, /dialog\.tf-ui-dialog\.tf-approval-inspection-modal\[open\][\s\S]*inset: 0;[\s\S]*margin: auto;[\s\S]*width: min\(1120px, calc\(100vw - 48px\)\)/);
+  assert.doesNotMatch(css, /:has\(\.tf-ic-evidence-panel\)/);
+  assert.match(css, /:has\(> \.my-5 > \.tf-ic-evidence-panel\)/);
 });
