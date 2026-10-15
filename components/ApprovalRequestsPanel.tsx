@@ -27,7 +27,6 @@ import ActionForm from "@/components/CostFlowActionForm";
 import ApprovalTimeline from "@/components/ApprovalTimeline";
 import IcRequestEvidence from "@/components/IcRequestEvidence";
 import ExpenseRequestModal from "@/components/ExpenseRequestModal";
-import { icStatusProjection } from "@/lib/costflow/icEffectiveness";
 import { displayMoney } from "@/lib/costflow/money";
 import { ordinaryApprovalSteps } from "@/lib/costflow/approvalChain";
 import { FilePlus2, Building2, Search, X } from "lucide-react";
@@ -742,10 +741,6 @@ function RequestInspectionModal({
     : undefined;
   const paymentDossier = finance.paymentDossiers?.find(item => item.requestId === request.id);
 
-  const status = revision
-    ? icStatusProjection(revision, request, finance.data.revisions)
-    : undefined;
-
   const ceoOptional = request.kind === "IC" && current?.role === "CEO";
   const managerId = request.steps.find(step => step.role === "MANAGER")?.assigneeId;
   const draftApprovalSteps = request.steps.length ? request.steps : projectedSteps;
@@ -845,58 +840,14 @@ function RequestInspectionModal({
           </div>
         </div>
 
-      {/* B. IC TWO-AXIS PROJECTION (NẾU LÀ HỒ SƠ IC) */}
-      {revision && status && (
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-              <span className="text-xs text-[var(--text-secondary)] block">
-                Trục 1: Hiệu lực ngân sách
-              </span>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-sm font-bold text-[var(--foreground)]">
-                  IC-R{revision.number}
-                </span>
-                <Badge tone={revision.effective ? "success" : "warning"}>
-                  {status.budgetLabel}
-                </Badge>
-              </div>
-            </div>
-
-            <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-              <span className="text-xs text-[var(--text-secondary)] block">
-                Trục 2: Kết quả trình duyệt
-              </span>
-              <div className="flex items-center gap-2 mt-1">
-                <Badge tone={request.state === "APPROVED" ? "success" : request.state === "REJECTED" ? "danger" : "neutral"}>
-                  {status.approvalLabel}
-                </Badge>
-              </div>
-            </div>
-          </div>
-
-          <Alert tone={revision.effective ? "info" : "warning"} title={`Trạng thái IC-R${revision.number}`}>
-            {status.message}
-            {status.baselineRevisionId && status.baselineRevisionId !== revision.id && (
-              <div className="mt-1">
-                <a className="tf-link text-xs inline-flex items-center gap-1" href={`#ic-revision-${status.baselineRevisionId}`}>
-                  <span>Mở baseline ngân sách hiện hành (IC-R{finance.data.revisions.find(r => r.id === status.baselineRevisionId)?.number})</span>
-                  <ExternalLink size={12} aria-hidden="true" />
-                </a>
-              </div>
-            )}
-          </Alert>
-        </div>
-      )}
-
-      {/* C. VISUAL APPROVAL TIMELINE */}
+      {/* B. VISUAL APPROVAL TIMELINE */}
       <ApprovalTimeline
         request={request}
         users={usersMap}
         projectedSteps={projectedSteps}
       />
 
-      {/* D. NỘI DUNG VÀ THÔNG SỐ HỒ SƠ */}
+      {/* C. NỘI DUNG VÀ THÔNG SỐ HỒ SƠ */}
       <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 space-y-3">
         <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
           Chi tiết nội dung hồ sơ
