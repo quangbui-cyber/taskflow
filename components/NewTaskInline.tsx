@@ -132,6 +132,7 @@ export default function NewTaskInline({
   return (
     <form
       ref={formRef}
+      data-task-composer=""
       onSubmit={(event) => {
         event.preventDefault();
         if (pending) return;
