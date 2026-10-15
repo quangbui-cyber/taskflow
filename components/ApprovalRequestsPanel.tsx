@@ -29,6 +29,7 @@ import IcRequestEvidence from "@/components/IcRequestEvidence";
 import ExpenseRequestModal from "@/components/ExpenseRequestModal";
 import { icStatusProjection } from "@/lib/costflow/icEffectiveness";
 import { displayMoney } from "@/lib/costflow/money";
+import { ordinaryApprovalSteps } from "@/lib/costflow/approvalChain";
 import { FilePlus2, Building2, Search, X } from "lucide-react";
 import { PaymentRequestEditor } from "@/components/costflow/payments/PaymentRequestEditor";
 import { PaymentRequestPreview } from "@/components/costflow/payments/PaymentRequestPreview";
@@ -125,12 +126,13 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
 
   const usersMap = useMemo(() => new Map(finance.users.map(u => [u.id, u.name])), [finance.users]);
 
-  // Projected approval steps fallback
-  const defaultSteps = useMemo(() => [
-    { role: "MANAGER", assigneeId: finance.data.config.managerId },
-    { role: "ACCOUNTANT", assigneeId: finance.data.config.accountantId },
-    { role: "CEO", assigneeId: finance.data.config.ceoId }
-  ], [finance.data.config]);
+  // Drafts have no frozen steps yet. Project exactly the chain the server will
+  // validate: the creator's direct manager, then the project Accountant and CEO.
+  const defaultSteps = useMemo(() => ordinaryApprovalSteps({
+    directManagerId: finance.users.find(person => person.id === selectedRequest?.creatorId)?.managerId,
+    accountantId: finance.data.config.accountantId,
+    ceoId: finance.data.config.ceoId,
+  }), [finance.data.config.accountantId, finance.data.config.ceoId, finance.users, selectedRequest?.creatorId]);
 
   // Statistics counters
   const stats = useMemo(() => {
@@ -746,6 +748,8 @@ function RequestInspectionModal({
 
   const ceoOptional = request.kind === "IC" && current?.role === "CEO";
   const managerId = request.steps.find(step => step.role === "MANAGER")?.assigneeId;
+  const draftApprovalSteps = request.steps.length ? request.steps : projectedSteps;
+  const missingDraftApprover = draftApprovalSteps.find(step => !step.assigneeId);
 
   const kindMeta = KIND_INFO[request.kind] ?? { label: request.kind, tone: "neutral" as const };
   const stateMeta = STATE_INFO[request.state] ?? { label: request.state, tone: "neutral" as const };
@@ -1409,6 +1413,7 @@ function RequestInspectionModal({
             command="SUBMIT"
             requestId={request.id}
             label={revision ? `Gửi IC-R${revision.number} tới Quản lý` : "Gửi duyệt hồ sơ"}
+            showSubmit={!missingDraftApprover}
           >
             {revision && (
               <Textarea
@@ -1417,6 +1422,22 @@ function RequestInspectionModal({
                 hint="Bắt buộc cho mỗi lần gửi IC; giải thích riêng từng dòng là không bắt buộc."
                 required
               />
+            )}
+            {missingDraftApprover && (
+              <Alert tone="danger" title="Chưa đủ người duyệt để gửi hồ sơ">
+                {missingDraftApprover.role === "MANAGER" ? (
+                  <>
+                    Tài khoản người lập chưa có Quản lý trực tiếp. Phân công “Quản lý phụ trách project” chỉ dùng cho đóng/mở tài chính.
+                    {user.role === "ADMIN" && (
+                      <span className="mt-2 block">
+                        <Link className="tf-link" href="/admin?tab=users">Mở Quản lý tài khoản để bổ sung Quản lý trực tiếp</Link>
+                      </span>
+                    )}
+                  </>
+                ) : missingDraftApprover.role === "ACCOUNTANT"
+                  ? "Project chưa được phân công Kế toán trong tab Phân công."
+                  : "Project chưa được phân công CEO trong tab Phân công."}
+              </Alert>
             )}
           </ActionForm>
         </div>

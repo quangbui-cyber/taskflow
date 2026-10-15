@@ -6,6 +6,7 @@ import { calculateCost, calculateLineCost, compare, decimal, round, sum } from "
 import { closeProjectRequest, decideFinancialClose, planReopenedDossierDelta, twoWayCloseBlockers, type FinancialCloseRequestRecord, type ReopenedDossierSource, type TwoWayCloseInput } from "./reconciliation";
 import { emptyFinance, type FinanceData, type IcLine, type QuotationLine, type RequestPayload } from "./types";
 import { decide, validateSteps, type ApprovalStep, type Decision } from "@/lib/workflow/approval";
+import { ordinaryApprovalSteps } from "./approvalChain";
 import type { ProjectUpload } from "@/lib/projectFiles";
 import { currentPurchaseOrders } from "./budgetSources";
 import { completeIcLines, draftLineIssues } from "./budgetDraft";
@@ -226,7 +227,7 @@ export async function loadFinance(projectId: string, actor: Actor) {
   const linkedIds = requestEvidenceIds(visible, supplements);
   const evidence = await prisma.costFlowEvidence.findMany({ where: { projectId, ...(!fullAccess ? { OR: [{ requestId: { in: visible.map(r => r.id) } }, { id: { in: linkedIds } }] } : {}) }, select: { id: true, name: true, kind: true, requestId: true, sha256: true, mimeType: true } });
   const visibleActors = new Set(visible.flatMap(r => [r.creatorId, r.cashAssigneeId, ...(r.steps as ApprovalStep[]).map(s => s.assigneeId), ...r.decisions.map(d => d.actorId)]));
-  const users = await prisma.user.findMany({ where: fullAccess ? { isActive: true } : { id: { in: [...visibleActors] } }, select: { id: true, name: true, role: true }, orderBy: { name: "asc" } });
+  const users = await prisma.user.findMany({ where: fullAccess ? { isActive: true } : { id: { in: [...visibleActors] } }, select: { id: true, name: true, role: true, managerId: true }, orderBy: { name: "asc" } });
   const files = fullAccess ? await prisma.projectFile.findMany({ where: { projectId }, select: { id: true, name: true }, orderBy: { createdAt: "desc" } }) : [];
   const history = fullAccess ? await prisma.costFlowHistory.findMany({ where: { projectId }, select: { id: true, actorId: true, action: true, version: true, createdAt: true }, orderBy: { version: "desc" }, take: 50 }) : [];
   const clients = fullAccess ? await prisma.client.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }) : [];
@@ -611,7 +612,11 @@ export async function executeFinance(projectId: string, expectedVersion: number,
       return tx.costFlowEvidence.create({ data: { projectId, sourceFileId: `UPLOAD:${randomUUID()}`, kind, name: upload.name, mimeType: upload.mimeType, data: upload.data, sha256: createHash("sha256").update(upload.data).digest("hex"), createdBy: actor.id } });
     };
     const ordinarySteps = async (): Promise<ApprovalStep[]> => {
-      const chain = validateSteps([{ role: "MANAGER", assigneeId: currentActor.managerId ?? "" }, { role: "ACCOUNTANT", assigneeId: data.config.accountantId }, { role: "CEO", assigneeId: data.config.ceoId }]);
+      const chain = validateSteps(ordinaryApprovalSteps({
+        directManagerId: currentActor.managerId,
+        accountantId: data.config.accountantId,
+        ceoId: data.config.ceoId,
+      }));
       for (const step of chain) await activeUser(step.assigneeId);
       return chain;
     };

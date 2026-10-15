@@ -53,7 +53,7 @@ export type Finance = {
   data: FinanceData;
   requests: Request[];
   cash: CashRow[];
-  users: { id: string; name: string; role: string }[];
+  users: { id: string; name: string; role: string; managerId: string | null }[];
   files: { id: string; name: string }[];
   evidence: { id: string; name: string; requestId: string | null; kind: string; mimeType?: string; sha256?: string }[];
   supplements?: import("@/lib/costflow/types").IcEvidenceSupplement[];
