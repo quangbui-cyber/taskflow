@@ -44,7 +44,7 @@ import {
   type SettlementCorrectionCapability,
 } from "./settlementService";
 import { sealExportSourceProjection } from "./exportSourceProjection";
-import { listCompanySuppliers, resolveSupplierId } from "./supplierReadModel";
+import { listCompanySuppliers, parseSupplierRecipientKey, resolveSupplierId, resolveSupplierRecipient } from "./supplierReadModel";
 
 type Actor = { id: string; role: string };
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -57,6 +57,42 @@ function calendarDate(value: string, label: string) {
   const result = new Date(`${value}T00:00:00.000Z`);
   if (!Number.isFinite(result.getTime()) || result.toISOString().slice(0, 10) !== value) throw new Error(`${label} không hợp lệ.`);
   return result;
+}
+
+type FrozenSupplierTuple = {
+  recipientKey: string;
+  supplierId: string;
+  frozenSupplierVersionId: string;
+  frozenSupplierVersion: number;
+  bankAccountId: string;
+  frozenBankVersionId: string;
+  frozenBankVersion: number;
+  accountFingerprint: string;
+};
+
+function frozenSupplierTuple(value: unknown): FrozenSupplierTuple | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const item = value as Record<string, unknown>;
+  const tuple = {
+    recipientKey: String(item.recipientKey ?? ""),
+    supplierId: String(item.supplierId ?? ""),
+    frozenSupplierVersionId: String(item.frozenSupplierVersionId ?? ""),
+    frozenSupplierVersion: Number(item.frozenSupplierVersion),
+    bankAccountId: String(item.bankAccountId ?? ""),
+    frozenBankVersionId: String(item.frozenBankVersionId ?? ""),
+    frozenBankVersion: Number(item.frozenBankVersion),
+    accountFingerprint: String(item.accountFingerprint ?? ""),
+  };
+  return tuple.recipientKey.startsWith("SUPPLIER:")
+    && tuple.supplierId
+    && tuple.frozenSupplierVersionId
+    && Number.isSafeInteger(tuple.frozenSupplierVersion)
+    && tuple.bankAccountId
+    && tuple.frozenBankVersionId
+    && Number.isSafeInteger(tuple.frozenBankVersion)
+    && tuple.accountFingerprint
+    ? tuple
+    : null;
 }
 
 const FINANCIAL_CLOSE_COMMANDS = new Set(["REQUEST_CLOSE_PROJECT", "REQUEST_REOPEN_PROJECT", "DECIDE_FINANCIAL_CLOSE", "CREATE_REOPENED_SETTLEMENT_VERSION"]);
@@ -233,6 +269,7 @@ export async function loadFinance(projectId: string, actor: Actor) {
   const files = fullAccess ? await prisma.projectFile.findMany({ where: { projectId }, select: { id: true, name: true }, orderBy: { createdAt: "desc" } }) : [];
   const history = fullAccess ? await prisma.costFlowHistory.findMany({ where: { projectId }, select: { id: true, actorId: true, action: true, version: true, createdAt: true }, orderBy: { version: "desc" }, take: 50 }) : [];
   const clients = fullAccess ? await prisma.client.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }) : [];
+  const suppliers = fullAccess ? await listCompanySuppliers(prisma) : [];
   const normalizedById = new Map(normalizedPaymentRequests.map(request => [request.id, request]));
   const paymentSnapshot = (request: typeof normalizedPaymentRequests[number]): PaymentDossierSnapshot => {
     const paymentPayload = request.payload && typeof request.payload === "object" ? request.payload as Record<string, unknown> : {};
@@ -254,6 +291,9 @@ export async function loadFinance(projectId: string, actor: Actor) {
   };
   const paymentDossiers = normalizedPaymentRequests.map(request => {
     const paymentPayload = request.payload && typeof request.payload === "object" ? request.payload as Record<string, unknown> : {};
+    const submittedSupplierTuples = Array.isArray(paymentPayload.vendorSnapshots)
+      ? paymentPayload.vendorSnapshots.map(frozenSupplierTuple).filter((item): item is FrozenSupplierTuple => !!item)
+      : [];
     const parent = request.parentId ? normalizedById.get(request.parentId) : undefined;
     return {
       requestId: request.id,
@@ -268,6 +308,22 @@ export async function loadFinance(projectId: string, actor: Actor) {
           .filter(item => item.requestId === request.id && item.recipientKey === recipient.recipientKey && item.direction === "OUT" && item.normalizedAllocations.length > 0)
           .reduce((total, item) => total + BigInt(item.amount), BigInt(0));
         return { ...recipient, ...derivePaymentProgress(recipient.totalAmount, paidOut.toString()) };
+      }),
+      supplierSnapshots: submittedSupplierTuples.map(snapshot => {
+        const currentSupplier = suppliers.find(supplier => supplier.id === snapshot.supplierId);
+        const currentAccount = currentSupplier?.accounts.find(account => account.id === snapshot.bankAccountId);
+        const currentSupplierVersionId = currentSupplier?.version.id ?? null;
+        const currentBankVersionId = currentAccount?.bankVersionId ?? null;
+        const stale = currentSupplierVersionId !== snapshot.frozenSupplierVersionId || currentBankVersionId !== snapshot.frozenBankVersionId;
+        return {
+          ...snapshot,
+          currentSupplierVersionId,
+          currentSupplierVersion: currentSupplier?.version.version ?? null,
+          currentBankVersionId,
+          currentBankVersion: currentAccount?.version ?? null,
+          verificationStatus: stale ? "STALE" as const : currentAccount?.verificationStatus ?? "UNVERIFIED" as const,
+          verificationReason: currentAccount?.verificationReason ?? "",
+        };
       }),
       discussions: request.paymentDiscussions.map(discussion => ({ ...discussion, createdAt: discussion.createdAt.toISOString() })),
       diff: parent ? diffPaymentDossiers(paymentSnapshot(parent), paymentSnapshot(request)) : null,
@@ -517,7 +573,6 @@ export async function loadFinance(projectId: string, actor: Actor) {
     signingState: correction.correctionVersion?.request.signingLifecycle?.evidenceState ?? "NOT_CREATED",
     baseObligations: correction.baseVersion.obligations.map(obligation => ({ id: obligation.id, recipientKey: obligation.recipientKey, amountDue: obligation.amountDue, paidAmount: obligation.cashAllocations.reduce((total, row) => total + BigInt(row.amount), BigInt(0)).toString() })),
   } : null;
-  const suppliers = fullAccess ? await listCompanySuppliers(prisma) : [];
   return { project: { ...project, members: fullAccess ? project.members : [], client: fullAccess ? project.client : null }, clients, suppliers, fullAccess, canManageCustomerAccounting, canManageSettlementCash, settlementObligationProgress, version: workspace?.version ?? 0, data: fullAccess && savedData ? savedData : { ...emptyFinance(), closed: savedData?.closed ?? false }, requests: visible.map(({ signingLifecycle, ...request }) => ({ ...request, signingMode: signingLifecycle?.mode ?? null, signingEvidenceState: signingLifecycle?.evidenceState ?? null })), cash, users, files, evidence, supplements, history, paymentDossiers, paymentLedger, actualCosts, customerAccounting, customerAcceptanceSnapshots, exportSources, settlementDossier, settlementCorrection };
 }
 
@@ -644,8 +699,10 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         const id = key.slice(5);
         if (!project.members.some(m => m.userId === id)) throw new Error("Nhân viên nhận tạm ứng phải thuộc project.");
         await activeUser(id);
-      } else if (key.startsWith("VENDOR:")) {
-        if (!data.beneficiaries.some(b => `VENDOR:${b.id}` === key)) throw new Error("Chưa có thông tin người thụ hưởng NCC.");
+      } else if (key.startsWith("VENDOR:") || key.startsWith("SUPPLIER:")) {
+        const normalized = await resolveSupplierRecipient(tx, projectId, key);
+        if (normalized) return normalized.recipientKey;
+        if (!key.startsWith("VENDOR:") || !data.beneficiaries.some(b => `VENDOR:${b.id}` === key)) throw new Error("Chưa có thông tin người thụ hưởng NCC.");
       } else throw new Error("Chọn người nhận/NCC.");
       return key;
     };
@@ -673,19 +730,26 @@ export async function executeFinance(projectId: string, expectedVersion: number,
       if (evidenceRows.length !== sourceEvidenceIds.length) throw new Error("Minh chứng của khoản đề nghị phải thuộc đúng Project.");
       const evidenceById = new Map(evidenceRows.map(row => [row.id, row]));
       const resolvedLines: PaymentDraftLineInput[] = [];
+      const normalizedSupplierRecipients = new Map<string, NonNullable<Awaited<ReturnType<typeof resolveSupplierRecipient>>>>();
       for (const rawLine of parsedLines) {
         const revisionId = String(rawLine.revisionId ?? "").trim();
         const lineId = String(rawLine.lineId ?? "").trim();
         const revision = requireEffectiveIc(revisionId);
         const sourceLine = revision.lines.find(line => line.id === lineId);
         if (!sourceLine) throw new Error("Mỗi khoản phải truy được một dòng thuộc IC hiệu lực của Project.");
-        const recipientKey = await recipient(String(rawLine.recipientKey ?? "").trim());
+        const requestedRecipientKey = String(rawLine.recipientKey ?? "").trim();
+        const recipientKey = await recipient(requestedRecipientKey);
         let recipientInput: PaymentDraftLineInput["recipient"];
         if (recipientKey.startsWith("USER:")) {
           const userId = recipientKey.slice(5);
           const savedUser = await tx.user.findFirst({ where: { id: userId, isActive: true }, select: { name: true } });
           if (!savedUser) throw new Error("Người nhận nội bộ không còn hoạt động.");
           recipientInput = { projectId, key: recipientKey, type: "EMPLOYEE", name: savedUser.name };
+        } else if (recipientKey.startsWith("SUPPLIER:")) {
+          const supplier = await resolveSupplierRecipient(tx, projectId, recipientKey);
+          if (!supplier) throw new Error("Không tìm thấy phiên bản NCC hoặc tài khoản hiện hành.");
+          normalizedSupplierRecipients.set(supplier.recipientKey, supplier);
+          recipientInput = { projectId, key: supplier.recipientKey, type: "VENDOR", name: supplier.displayName, bankName: supplier.bankName, accountLast4: supplier.accountLast4, sourceVersion: supplier.frozenSupplierVersion };
         } else {
           const beneficiary = data.beneficiaries.find(item => `VENDOR:${item.id}` === recipientKey);
           if (!beneficiary) throw new Error("Không tìm thấy người thụ hưởng NCC trong Project.");
@@ -702,17 +766,30 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         });
       }
       const projection = normalizePaymentDraft({ projectId, kind: "ADVANCE", budgetEffectStatus: "EFFECTIVE", milestone: text(form, "milestone"), explanation: text(form, "explanation"), clientTotal: text(form, "clientTotal"), lines: resolvedLines });
-      const vendorIds = [...new Set(projection.lines.filter(line => line.recipient.type === "VENDOR").map(line => line.recipient.key.slice("VENDOR:".length)))];
+      const vendorRecipientKeys = [...new Set(projection.lines.filter(line => line.recipient.type === "VENDOR").map(line => line.recipient.key))];
+      const vendorIds = vendorRecipientKeys.filter(key => key.startsWith("VENDOR:")).map(key => key.slice("VENDOR:".length));
       const vendorProofIds = vendorIds.map(id => data.beneficiaries.find(beneficiary => beneficiary.id === id)?.proofId).filter((id): id is string => !!id);
       const vendorProofs = vendorProofIds.length ? await tx.costFlowEvidence.findMany({ where: { projectId, id: { in: vendorProofIds } }, select: { id: true, sha256: true } }) : [];
       const vendorProofById = new Map(vendorProofs.map(proof => [proof.id, proof]));
-      const vendorSnapshots = vendorIds.map(id => {
+      const vendorSnapshots = vendorRecipientKeys.map(recipientKey => {
+        const normalized = normalizedSupplierRecipients.get(recipientKey);
+        if (normalized) return {
+          recipientKey: normalized.recipientKey,
+          supplierId: normalized.supplierId,
+          frozenSupplierVersionId: normalized.frozenSupplierVersionId,
+          frozenSupplierVersion: normalized.frozenSupplierVersion,
+          bankAccountId: normalized.bankAccountId,
+          frozenBankVersionId: normalized.frozenBankVersionId,
+          frozenBankVersion: normalized.frozenBankVersion,
+          accountFingerprint: normalized.accountFingerprint,
+        };
+        const id = recipientKey.slice("VENDOR:".length);
         const beneficiary = data.beneficiaries.find(item => item.id === id);
         if (!beneficiary) throw new Error("Mỗi NCC cần thông tin người thụ hưởng hiện hành trước khi gửi.");
         const proof = beneficiary.proofId ? vendorProofById.get(beneficiary.proofId) : undefined;
         if (beneficiary.proofId && !proof) throw new Error("File tham chiếu NCC đã thay đổi hoặc không còn thuộc Project.");
         return {
-          recipientKey: `VENDOR:${id}`,
+          recipientKey,
           sourceVersion: beneficiary.version,
           accountFingerprint: createHash("sha256").update(`${beneficiary.name}\u0000${beneficiary.bank}\u0000${beneficiary.account}`).digest("hex"),
           ...(proof ? { proofId: proof.id, proofSha256: proof.sha256 } : {}),
@@ -1042,10 +1119,15 @@ export async function executeFinance(projectId: string, expectedVersion: number,
           if (scheduleMilestone.linkedRequestId) throw new Error("Đợt lịch thanh toán đã liên kết một hồ sơ ĐNTU.");
           const scheduleRevision = data.revisions.find(item => item.id === scheduleMilestone.revisionId && item.effective);
           if (!scheduleRevision || scheduleMilestone.paymentMethod !== "ADVANCE") throw new Error("Đợt lịch thanh toán không còn thuộc IC hiệu lực hoặc không phải ĐNTU.");
+          const scheduleSupplierId = await resolveSupplierId(tx, projectId, scheduleMilestone.vendorId);
           const expected = new Map((scheduleMilestone.lineAllocations ?? []).map(item => [item.lineId, item.amount]));
           const actual = new Map<string, bigint>();
           for (const line of projection.lines) {
-            if (line.recipient.key !== `VENDOR:${scheduleMilestone.vendorId}` || line.source.revisionId !== scheduleRevision.id) throw new Error("Khoản ĐNTU không khớp NCC hoặc IC của lịch thanh toán.");
+            const normalizedRecipient = parseSupplierRecipientKey(line.recipient.key);
+            const matchesSupplier = normalizedRecipient
+              ? normalizedRecipient.supplierId === (scheduleSupplierId ?? scheduleMilestone.vendorId)
+              : line.recipient.key === `VENDOR:${scheduleMilestone.vendorId}`;
+            if (!matchesSupplier || line.source.revisionId !== scheduleRevision.id) throw new Error("Khoản ĐNTU không khớp NCC hoặc IC của lịch thanh toán.");
             actual.set(line.source.lineId, (actual.get(line.source.lineId) ?? BigInt(0)) + BigInt(line.amount));
           }
           if (expected.size !== actual.size || [...expected].some(([lineId, amount]) => actual.get(lineId)?.toString() !== amount)) throw new Error("Phân bổ ĐNTU đã khác lịch thanh toán; quay lại lịch để điều chỉnh trước khi gửi.");
@@ -1649,7 +1731,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         const corrections = correctionItems(form, action, { optional: policy.correctionsOptional });
         const next = decide({ ...request, steps }, actor.id, action, text(form, "reason"), { reasonOptional: policy.reasonOptional });
         const normalizedPayload = request.payload && typeof request.payload === "object" ? request.payload as Record<string, unknown> : {};
-        let vendorChecks: Array<{ recipientSnapshotId: string; recipientKey: string; sourceVersion: number; proofId: string; proofSha256: string }> = [];
+        const vendorChecks: Array<{ recipientSnapshotId: string; recipientKey: string; sourceVersion: number; proofId?: string; proofSha256?: string; supplierVersionId?: string; bankAccountVersionId?: string; verificationId?: string }> = [];
         if (action === "APPROVE" && role === "ACCOUNTANT" && text(form, "reviewConfirmed") !== "yes") throw new Error("Kế toán cần xác nhận đã kiểm tra thông tin, chứng từ và phiên bản trước khi chuyển CEO.");
         if (action === "APPROVE" && role === "ACCOUNTANT" && normalizedPayload.normalizedPayment === true) {
           const submittedVendors = Array.isArray(normalizedPayload.vendorSnapshots) ? normalizedPayload.vendorSnapshots : [];
@@ -1658,8 +1740,33 @@ export async function executeFinance(projectId: string, expectedVersion: number,
           const proofIds = submittedVendors.map(snapshot => snapshot && typeof snapshot === "object" && "proofId" in snapshot ? String(snapshot.proofId) : "").filter(Boolean);
           const proofs = await tx.costFlowEvidence.findMany({ where: { projectId, id: { in: proofIds } }, select: { id: true, sha256: true } });
           const proofById = new Map(proofs.map(proof => [proof.id, proof]));
-          vendorChecks = recipientSnapshots.map(recipientSnapshot => {
+          for (const recipientSnapshot of recipientSnapshots) {
             const submitted = submittedVendors.find(snapshot => snapshot && typeof snapshot === "object" && "recipientKey" in snapshot && String(snapshot.recipientKey) === recipientSnapshot.recipientKey);
+            const exactTuple = frozenSupplierTuple(submitted);
+            if (exactTuple) {
+              const current = await resolveSupplierRecipient(tx, projectId, exactTuple.recipientKey);
+              const unchanged = current
+                && current.supplierId === exactTuple.supplierId
+                && current.frozenSupplierVersionId === exactTuple.frozenSupplierVersionId
+                && current.bankAccountId === exactTuple.bankAccountId
+                && current.frozenBankVersionId === exactTuple.frozenBankVersionId
+                && current.accountFingerprint === exactTuple.accountFingerprint
+                && recipientSnapshot.sourceVersion === exactTuple.frozenSupplierVersion;
+              if (!unchanged) throw new Error("Có NCC đã đổi phiên bản pháp lý hoặc tài khoản. Trả toàn bộ hồ sơ để lập lại theo phiên bản hiện hành.");
+              const verification = await tx.supplierVerification.findFirst({
+                where: {
+                  supplierId: exactTuple.supplierId,
+                  supplierVersionId: exactTuple.frozenSupplierVersionId,
+                  bankAccountId: exactTuple.bankAccountId,
+                  bankAccountVersionId: exactTuple.frozenBankVersionId,
+                },
+                orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+                select: { id: true, decision: true },
+              });
+              if (verification?.decision !== "VERIFIED") throw new Error("Xác minh đúng phiên bản NCC và tài khoản trước khi Kế toán duyệt hồ sơ.");
+              vendorChecks.push({ recipientSnapshotId: recipientSnapshot.id, recipientKey: recipientSnapshot.recipientKey, sourceVersion: exactTuple.frozenSupplierVersion, supplierVersionId: exactTuple.frozenSupplierVersionId, bankAccountVersionId: exactTuple.frozenBankVersionId, verificationId: verification.id });
+              continue;
+            }
             const beneficiary = data.beneficiaries.find(item => `VENDOR:${item.id}` === recipientSnapshot.recipientKey);
             const sourceVersion = submitted && typeof submitted === "object" && "sourceVersion" in submitted ? Number(submitted.sourceVersion) : Number.NaN;
             const proofId = submitted && typeof submitted === "object" && "proofId" in submitted ? String(submitted.proofId) : "";
@@ -1672,8 +1779,8 @@ export async function executeFinance(projectId: string, expectedVersion: number,
               : !beneficiary?.proofId;
             if (!beneficiary || recipientSnapshot.sourceVersion !== sourceVersion || beneficiary.version !== sourceVersion || currentFingerprint !== accountFingerprint || !proofMatches) throw new Error("Có NCC đã đổi thông tin hoặc căn cứ tham chiếu. Không ghi quyết định; trả toàn bộ hồ sơ để sửa và gửi lại.");
             beneficiary.verifiedVersion = beneficiary.version;
-            return { recipientSnapshotId: recipientSnapshot.id, recipientKey: recipientSnapshot.recipientKey, sourceVersion, proofId, proofSha256 };
-          });
+            vendorChecks.push({ recipientSnapshotId: recipientSnapshot.id, recipientKey: recipientSnapshot.recipientKey, sourceVersion, proofId, proofSha256 });
+          }
         } else if (action === "APPROVE" && role === "ACCOUNTANT" && payload?.recipientKey?.startsWith("VENDOR:")) {
           const beneficiary = data.beneficiaries.find(b => `VENDOR:${b.id}` === payload.recipientKey);
           if (!beneficiary || beneficiary.version !== payload.beneficiaryVersion) throw new Error("Thông tin người nhận đã đổi. Trả hồ sơ để lập lại và xác minh bản mới.");

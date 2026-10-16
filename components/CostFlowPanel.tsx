@@ -68,6 +68,22 @@ export type Finance = {
     totalAmount: string;
     lines: { id: string; stableKey: string; position: number; description: string; amount: string; icRevisionId: string; icLineId: string; recipientKey: string; sourceSnapshot: unknown; evidenceManifest: { id?: string; name: string; sha256?: string }[] }[];
     recipients: { recipientKey: string; recipientType: string; displayName: string; bankName?: string | null; accountLast4?: string | null; sourceVersion?: number | null; totalAmount: string; progress: import("@/lib/costflow/paymentCash").PaymentProgress; paidOutAmount: string; remainingAmount: string }[];
+    supplierSnapshots: {
+      recipientKey: string;
+      supplierId: string;
+      frozenSupplierVersionId: string;
+      frozenSupplierVersion: number;
+      bankAccountId: string;
+      frozenBankVersionId: string;
+      frozenBankVersion: number;
+      accountFingerprint: string;
+      currentSupplierVersionId: string | null;
+      currentSupplierVersion: number | null;
+      currentBankVersionId: string | null;
+      currentBankVersion: number | null;
+      verificationStatus: "UNVERIFIED" | "VERIFIED" | "REJECTED" | "STALE";
+      verificationReason: string;
+    }[];
     discussions: { id: string; lineId: string; authorId: string; body: string; createdAt: string; author: { name: string } }[];
     diff: import("@/lib/costflow/paymentDiff").PaymentDossierDiff | null;
   }[];

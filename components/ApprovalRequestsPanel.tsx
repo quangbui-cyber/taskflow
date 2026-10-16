@@ -890,7 +890,7 @@ function RequestInspectionModal({
           Chi tiết nội dung hồ sơ
         </h4>
 
-        {paymentDossier && <PaymentRequestReview finance={finance} request={request} dossier={paymentDossier} />}
+        {paymentDossier && <PaymentRequestReview finance={finance} request={request} dossier={paymentDossier} user={user} />}
 
         {/* Số tiền đề nghị (nếu có) */}
         {request.payload.amount && (
