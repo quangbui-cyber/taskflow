@@ -29,6 +29,20 @@ function run(label, executable, args, env = process.env) {
   return { label, command: [executable, ...args].join(" "), startedAt, finishedAt: new Date().toISOString(), outputHash: createHash("sha256").update(output).digest("hex") };
 }
 
+function runPrismaGenerate(env) {
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return run("prisma-generate", process.execPath, [path.join(root, "node_modules/prisma/build/index.js"), "generate"], env);
+    } catch (error) {
+      lastError = error;
+      if (!(error instanceof Error) || !error.message.includes("EPERM") || attempt === 3) throw error;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 750);
+    }
+  }
+  throw lastError;
+}
+
 async function publicFingerprint(client) {
   const tables = await client.$queryRawUnsafe(`SELECT table_name AS name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name`);
   const rows = [];
@@ -83,7 +97,7 @@ try {
     "lib/costflow/supplierService.ts", "lib/costflow/supplierReadModel.ts", "lib/costflow/vendorInvoice.ts",
     "lib/costflow/vendorPaymentService.ts", "lib/costflow/actualCostReadModel.ts", "lib/costflow/settlementService.ts",
   ]));
-  commands.push(run("prisma-generate", process.execPath, [path.join(root, "node_modules/prisma/build/index.js"), "generate"], { ...process.env, DATABASE_URL: PINNED_DATABASE, NODE_ENV: "production" }));
+  commands.push(runPrismaGenerate({ ...process.env, DATABASE_URL: PINNED_DATABASE, NODE_ENV: "production" }));
   commands.push(run("build", process.execPath, [path.join(root, "node_modules/next/dist/bin/next"), "build", "--webpack"], { ...process.env, DATABASE_URL: PINNED_DATABASE, NODE_ENV: "production" }));
   const after = await publicFingerprint(client);
   assert.equal(after, before, "Phase 14 verifier changed the public costflow_test schema/data; only disposable schemas are allowed.");
