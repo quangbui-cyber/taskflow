@@ -15,6 +15,7 @@ export type PairedPersistence = {
   countProjectEvidence(projectId: string, evidenceIds: string[]): Promise<number>;
   createIcWorkflowRequest(input: { projectId: string; title: string; actorId: string }): Promise<{ id: string }>;
   updateIcWorkflowRequest(requestId: string, payload: unknown, incrementVersion: boolean): Promise<void>;
+  resolveSupplierId?(projectId: string, supplierOrLegacyId: string): Promise<string | null>;
 };
 
 export type PairedExportSeal = {
@@ -136,7 +137,12 @@ export async function savePairedDraft(store: PairedPersistence, projectId: strin
   assertCalculatedValues(rows, parameterConfig);
   const evidenceIds = [...new Set([...globalIds, ...rows.flatMap(r => r.buy.evidenceIds)])];
   if (evidenceIds.length && await store.countProjectEvidence(projectId, evidenceIds) !== evidenceIds.length) throw new Error("Minh chứng không thuộc project.");
-  if (rows.some(row => row.buy.vendorId && !data.beneficiaries.some(b => b.id === row.buy.vendorId))) throw new Error("NCC không thuộc project.");
+  for (const row of rows) {
+    if (!row.buy.vendorId) continue;
+    const normalizedId = store.resolveSupplierId ? await store.resolveSupplierId(projectId, row.buy.vendorId) : data.beneficiaries.some(item => item.id === row.buy.vendorId) ? row.buy.vendorId : null;
+    if (!normalizedId) throw new Error("NCC không còn trong danh bạ công ty hoặc alias Project không hợp lệ.");
+    row.buy.vendorId = normalizedId;
+  }
   for (const row of rows) if (row.icLineId && !revision?.lines.some(line => line.id === row.icLineId)) throw new Error("Dòng IC không thuộc phiên bản đang làm.");
   const title = icOnlyPaired ? previous!.title : String(form.get("title") ?? "").trim().slice(0, 500);
   const notes = icOnlyPaired ? previous!.notes : String(form.get("notes") ?? "").slice(0, 5000);

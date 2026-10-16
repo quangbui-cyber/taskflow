@@ -44,6 +44,7 @@ import {
   type SettlementCorrectionCapability,
 } from "./settlementService";
 import { sealExportSourceProjection } from "./exportSourceProjection";
+import { resolveSupplierId } from "./supplierReadModel";
 
 type Actor = { id: string; role: string };
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -1192,6 +1193,9 @@ export async function executeFinance(projectId: string, expectedVersion: number,
           },
           async updateIcWorkflowRequest(requestId, payload, incrementVersion) {
             await tx.workflowRequest.update({ where: { id: requestId }, data: { payload: json(payload), ...(incrementVersion ? { version: { increment: 1 } } : {}) } });
+          },
+          async resolveSupplierId(targetProjectId, supplierOrLegacyId) {
+            return resolveSupplierId(tx, targetProjectId, supplierOrLegacyId);
           },
         }, projectId, actor.id, data, requests, form);
         savedDraftId = result.draftId; savedRevisionId = result.revisionId; savedScopes = result.savedScopes;

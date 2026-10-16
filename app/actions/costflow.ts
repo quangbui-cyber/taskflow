@@ -11,10 +11,41 @@ import { publicPaymentErrorMessage } from "@/lib/costflow/paymentPolicy";
 import { dispatchWorkflowNotifications } from "@/lib/workflow/notifications";
 import { executeActualCostBulkDecision, executeActualCostCommand, type ActualCostBulkSelection, type ActualCostCommand } from "@/lib/costflow/actualCostService";
 import { executeSettlementCommand, isSettlementCommand } from "@/lib/costflow/settlementService";
+import { addSupplierBankAccount, archiveSupplierBankAccount, createSupplier, publishSupplierBankVersion, publishSupplierLegalVersion, setPrimarySupplierBankAccount, verifySupplierTuple } from "@/lib/costflow/supplierService";
 
 export type CostFlowActionState = { error?: string; success?: string; requestId?: string; closeRequestId?: string; financialCloseState?: "OPEN" | "CLOSED"; revisionId?: string; quotationId?: string; draftId?: string; beneficiaryId?: string; cashId?: string; customerAcceptanceId?: string; customerAcceptanceVersion?: number; settlementVersion?: number; idempotent?: boolean; savedScopes?: string[]; version?: number; lineErrors?: { lineId: string; message: string }[] };
 
 export type ActualCostActionState = { error?: string; success?: string; lineId?: string; version?: number };
+export type SupplierActionState = { error?: string; success?: string; supplierId?: string; bankAccountId?: string; version?: number };
+
+const supplierText = (form: FormData, key: string) => String(form.get(key) ?? "").trim();
+
+export async function supplierAction(_previous: SupplierActionState, form: FormData): Promise<SupplierActionState> {
+  const actor = await requireUser();
+  const command = supplierText(form, "supplierCommand");
+  const legal = { legalName: supplierText(form, "legalName"), taxCode: supplierText(form, "taxCode"), address: supplierText(form, "address"), contactName: supplierText(form, "contactName"), contactEmail: supplierText(form, "contactEmail"), contactPhone: supplierText(form, "contactPhone") };
+  const bank = { bankName: supplierText(form, "bankName"), bankCode: supplierText(form, "bankCode"), accountHolder: supplierText(form, "accountHolder"), accountNumber: supplierText(form, "accountNumber") };
+  try {
+    let result: { supplierId: string; bankAccountId?: string; version?: number };
+    if (command === "CREATE") result = await createSupplier(actor, { ...legal, ...bank });
+    else if (command === "UPDATE_LEGAL") result = await publishSupplierLegalVersion(actor, { ...legal, supplierId: supplierText(form, "supplierId"), expectedVersion: Number(form.get("expectedVersion")), reason: supplierText(form, "reason") });
+    else if (command === "ADD_BANK") result = await addSupplierBankAccount(actor, { ...bank, supplierId: supplierText(form, "supplierId"), makePrimary: form.get("makePrimary") === "yes", reason: supplierText(form, "reason") });
+    else if (command === "UPDATE_BANK") result = await publishSupplierBankVersion(actor, { ...bank, supplierId: supplierText(form, "supplierId"), bankAccountId: supplierText(form, "bankAccountId"), expectedVersion: Number(form.get("expectedVersion")), reason: supplierText(form, "reason") });
+    else if (command === "SET_PRIMARY") result = await setPrimarySupplierBankAccount(actor, { supplierId: supplierText(form, "supplierId"), bankAccountId: supplierText(form, "bankAccountId") });
+    else if (command === "ARCHIVE_BANK") result = await archiveSupplierBankAccount(actor, { supplierId: supplierText(form, "supplierId"), bankAccountId: supplierText(form, "bankAccountId"), reason: supplierText(form, "reason") });
+    else if (command === "VERIFY") {
+      const proof = await readProjectUpload(form.get("proof"));
+      result = await verifySupplierTuple(actor, { projectId: supplierText(form, "projectId"), supplierId: supplierText(form, "supplierId"), supplierVersionId: supplierText(form, "supplierVersionId"), bankAccountId: supplierText(form, "bankAccountId"), bankAccountVersionId: supplierText(form, "bankAccountVersionId"), decision: supplierText(form, "decision") === "REJECTED" ? "REJECTED" : "VERIFIED", reason: supplierText(form, "reason"), proof: proof ?? undefined });
+    } else return { error: "Thao tác NCC không hợp lệ." };
+    revalidatePath("/suppliers");
+    const projectId = supplierText(form, "projectId");
+    if (projectId) revalidatePath(`/projects/${projectId}/costflow`);
+    return { success: command === "VERIFY" ? "Đã lưu xác minh NCC." : "Đã cập nhật danh bạ NCC.", supplierId: result.supplierId, bankAccountId: result.bankAccountId, version: result.version };
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return { error: "Mã số thuế hoặc tài khoản NCC đã tồn tại." };
+    return { error: publicPaymentErrorMessage(error) };
+  }
+}
 
 export async function actualCostAction(_previous: ActualCostActionState, form: FormData): Promise<ActualCostActionState> {
   const actor = await requireUser();

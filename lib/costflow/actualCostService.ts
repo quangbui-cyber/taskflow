@@ -17,6 +17,7 @@ import {
   type ActualCostSourceKind,
 } from "./actualCost";
 import type { FinanceData } from "./types";
+import { resolveSupplierRecipient } from "./supplierReadModel";
 
 export type ActualCostActor = { id: string; role: string };
 export type ActualCostBulkSelection = { lineId: string; version: number; reviewToken: string };
@@ -114,10 +115,14 @@ async function assertRecipient(tx: Prisma.TransactionClient, projectId: string, 
     return recipientKey;
   }
   if (recipientKey.startsWith("VENDOR:")) {
-    const workspace = await tx.costFlowWorkspace.findUnique({ where: { projectId }, select: { data: true } });
-    const data = workspace?.data as unknown as FinanceData | undefined;
-    if (!data?.beneficiaries.some(item => `VENDOR:${item.id}` === recipientKey)) throw new Error("NCC phải thuộc đúng Project.");
-    return recipientKey;
+    const supplier = await resolveSupplierRecipient(tx, projectId, recipientKey);
+    if (!supplier) throw new Error("Không tìm thấy NCC legacy hoặc NCC không còn hoạt động.");
+    return supplier.recipientKey;
+  }
+  if (recipientKey.startsWith("SUPPLIER:")) {
+    const supplier = await resolveSupplierRecipient(tx, projectId, recipientKey);
+    if (!supplier) throw new Error("NCC hoặc tài khoản ngân hàng không còn hoạt động.");
+    return supplier.recipientKey;
   }
   throw new Error("Chọn người nhận hoặc NCC hợp lệ.");
 }
