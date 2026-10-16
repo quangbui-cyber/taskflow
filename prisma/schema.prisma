@@ -987,6 +987,100 @@ model SupplierVerification {
   @@index([evidenceId])
 }
 
+// One payable identity per real electronic VAT invoice. XML/PDF are formats
+// on the same root, while AC allocations and payment applications retain the
+// exact immutable approval lineage.
+model VendorInvoice {
+  id                   String   @id @default(cuid())
+  projectId            String
+  supplierId           String
+  supplierVersionId    String
+  bankAccountId        String
+  bankAccountVersionId String
+  businessKey          String   @unique
+  invoiceNumber        String
+  symbol               String
+  issuedAt             DateTime
+  sellerTaxCode        String
+  netAmount            String
+  vatAmount            String
+  grossAmount          String
+  state                String   @default("DRAFT")
+  sourceSnapshot       Json
+  createdById          String
+  createdAt            DateTime @default(now())
+  submittedAt          DateTime?
+  files                VendorInvoiceFile[]
+  actualCosts          VendorInvoiceActualCost[]
+  applications         VendorInvoiceApplication[]
+
+  @@index([projectId, state, createdAt])
+  @@index([supplierId, supplierVersionId, bankAccountVersionId])
+}
+
+model VendorInvoiceFile {
+  id           String        @id @default(cuid())
+  invoiceId    String
+  invoice      VendorInvoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  format       String
+  name         String
+  mimeType     String
+  byteLength   Int
+  data         Bytes
+  sha256       String
+  metadataHash String
+  createdById  String
+  createdAt    DateTime      @default(now())
+
+  @@unique([invoiceId, format])
+  @@index([sha256])
+}
+
+model VendorInvoiceActualCost {
+  id                String        @id @default(cuid())
+  invoiceId         String
+  invoice           VendorInvoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  projectId         String
+  actualCostLineId  String
+  actualCostVersionId String
+  approvalId        String
+  approvalAttemptId String
+  stableLineId      String
+  icRevisionId      String?
+  icLineId          String?
+  recipientKey      String
+  approvedAmount    String
+  allocatedAmount   String
+  sourceSnapshot    Json
+  createdAt         DateTime      @default(now())
+  applications      VendorInvoiceApplication[]
+
+  @@unique([invoiceId, actualCostVersionId, approvalId])
+  @@index([projectId, actualCostVersionId, approvalId])
+  @@index([icRevisionId, icLineId])
+}
+
+model VendorInvoiceApplication {
+  id                  String                  @id @default(cuid())
+  invoiceId           String
+  invoice             VendorInvoice           @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  invoiceActualCostId String
+  invoiceActualCost   VendorInvoiceActualCost @relation(fields: [invoiceActualCostId], references: [id], onDelete: Restrict)
+  projectId           String
+  requestId           String
+  paymentLineId       String?
+  amount              String
+  state               String                  @default("ACTIVE")
+  idempotencyKey      String                  @unique
+  sourceSnapshot      Json
+  createdAt           DateTime                @default(now())
+  releasedAt          DateTime?
+
+  @@unique([requestId, invoiceActualCostId])
+  @@index([projectId, requestId, state])
+  @@index([invoiceId, state])
+}
+
 model LegacySupplierAlias {
   id                   String                     @id @default(cuid())
   projectId            String
