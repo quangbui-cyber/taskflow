@@ -22,6 +22,7 @@ test("post-AC DNTT persists one invoice, exact AC lineage and idempotent applica
     const supplierService = await import(`../lib/costflow/supplierService.ts?vp=${schema}`);
     const supplierRead = await import(`../lib/costflow/supplierReadModel.ts?vp=${schema}`);
     const paymentService = await import(`../lib/costflow/vendorPaymentService.ts?vp=${schema}`);
+    const financeService = await import(`../lib/costflow/service.ts?vp=${schema}`);
     client = new PrismaClient({ datasources: { db: { url } } });
     const pinHash = await bcrypt.hash("123456", 4);
     const manager = await client.user.create({ data: { email: `${schema}-manager@test`, name: "Manager", passwordHash: "x" } });
@@ -51,6 +52,28 @@ test("post-AC DNTT persists one invoice, exact AC lineage and idempotent applica
     const retried = await paymentService.createVendorPaymentDossier({ id: account.id, role: "ACCOUNT" }, input);
     assert.deepEqual(retried, { requestId: created.requestId, idempotent: true });
     await assert.rejects(paymentService.createVendorPaymentDossier({ id: account.id, role: "ACCOUNT" }, { ...input, idempotencyKey: "invoice-command-2" }), /vượt phần AC|Unique constraint|đã tồn tại|businessKey/i);
+
+    const returnForm = new FormData();
+    returnForm.set("command", "DECIDE");
+    returnForm.set("requestId", created.requestId);
+    returnForm.set("module", "COSTFLOW");
+    returnForm.set("attemptId", request.currentAttemptId);
+    returnForm.set("stepIndex", "0");
+    returnForm.set("submittedVersion", String(request.version));
+    returnForm.set("decision", "RETURN");
+    returnForm.set("reason", "Cần lập lại hồ sơ VAT");
+    returnForm.append("correctionItems", "Đổi hóa đơn");
+    await financeService.executeFinance(project.id, 0, { id: manager.id, role: manager.role }, returnForm, null);
+    assert.equal((await client.vendorInvoiceApplication.findFirstOrThrow({ where: { requestId: created.requestId } })).state, "RELEASED");
+
+    const replacement = await paymentService.createVendorPaymentDossier({ id: account.id, role: "ACCOUNT" }, {
+      ...input,
+      invoice: { ...input.invoice, invoiceNumber: "0002" },
+      idempotencyKey: "invoice-command-replacement",
+    });
+    assert.equal(replacement.idempotent, false, "released allocation does not double count or block the replacement dossier");
+    assert.equal(await client.vendorInvoiceApplication.count({ where: { state: "ACTIVE" } }), 1);
+    assert.equal(await client.vendorInvoiceApplication.count({ where: { state: "RELEASED" } }), 1);
   } finally {
     await client?.$disconnect();
     await admin.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);

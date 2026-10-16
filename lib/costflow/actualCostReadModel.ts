@@ -82,7 +82,10 @@ export async function loadActualCosts(projectId: string, actor: Actor, paymentLe
       orderBy: { createdAt: "asc" },
     }),
     prisma.costFlowWorkspace.findUnique({ where: { projectId }, select: { data: true } }),
-    prisma.vendorInvoiceActualCost.findMany({ where: { projectId }, select: { actualCostVersionId: true, allocatedAmount: true } }),
+    prisma.vendorInvoiceActualCost.findMany({
+      where: { projectId, applications: { some: { state: "ACTIVE" } } },
+      select: { actualCostVersionId: true, allocatedAmount: true },
+    }),
   ]);
   if (!project) return null;
   const data = workspace?.data as unknown as FinanceData | undefined;

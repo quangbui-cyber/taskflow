@@ -47,10 +47,17 @@ test("two projects can share one supplier while each normalized obligation is co
 
 test("pre-AC supplier installment remains DNTU and legacy Expense cannot become post-AC DNTT", () => {
   const [installment] = normalizeVendorPaymentSchedule({
-    revisionId: "ic-1",
+    revision: {
+      id: "ic-1",
+      number: 1,
+      requestId: "request-ic-1",
+      effective: true,
+      lines: [{ id: "ic-line-1", description: "Đặt cọc NCC", unit: "gói", quantity: "1", days: "1", unitPrice: "3300", basis: "GROSS", vatPercent: "0", cost: { rawNet: "3300/1", rawVat: "0/1", rawGross: "3300/1", net: "3300", vat: "0", gross: "3300" }, vendorId: "shared" }],
+      poIds: [],
+      createdBy: "account-a",
+    },
     vendorId: "shared",
-    lineAmounts: [{ lineId: "ic-line-1", amount: "3300" }],
-    milestones: [{ id: "milestone-1", installmentNumber: 1, title: "Đặt cọc", percentage: 100, amount: "3300", dueDate: "2026-10-20", paymentMethod: "ADVANCE", lineAllocations: [{ lineId: "ic-line-1", amount: "3300" }] }],
+    milestones: [{ id: "milestone-1", vendorId: "shared", revisionId: "ic-1", installmentNumber: 1, title: "Đặt cọc", percentage: 100, amount: "3300", dueDate: "2026-10-20", paymentMethod: "ADVANCE", lineAllocations: [{ lineId: "ic-line-1", amount: "3300" }] }],
   });
   assert.equal(installment.paymentMethod, "ADVANCE");
   assert.throws(() => validateVendorPaymentSelection({

@@ -7,6 +7,15 @@ import { readOwnSignatureAsset } from "@/lib/workflow/signatureAssets";
 import type { DetailedFinanceLine, WorkflowPrintDocument } from "@/components/WorkflowPrintView";
 import { approvedSnapshotPrintDocument } from "@/lib/workflow/printDocument";
 
+function authoritativePaymentLines<T extends { stableKey: string }>(lines: readonly T[]) {
+  const seen = new Set<string>();
+  return lines.filter(line => {
+    if (seen.has(line.stableKey)) return false;
+    seen.add(line.stableKey);
+    return true;
+  });
+}
+
 export async function getCostFlowPrintDocument(
   projectId: string,
   requestId: string,
@@ -20,7 +29,7 @@ export async function getCostFlowPrintDocument(
 
   // Build detailed itemized lines from payment dossier or payload
   const dossier = finance.paymentDossiers?.find(d => d.requestId === request.id);
-  const detailedLines: DetailedFinanceLine[] = (dossier?.lines || []).map((line, idx) => {
+  const detailedLines: DetailedFinanceLine[] = authoritativePaymentLines(dossier?.lines || []).map((line, idx) => {
     const recipient = dossier?.recipients?.find(r => r.recipientKey === line.recipientKey);
     const beneficiary = finance.data.beneficiaries?.find(
       b => b.id === line.recipientKey || `BENEFICIARY:${b.id}` === line.recipientKey

@@ -712,6 +712,12 @@ type ProjectionSources = {
   advanceApplications: Array<{ id: string; recipientKey: string; cashAllocationId: string; amount: string }>;
 };
 
+function assertNormalizedSettlementSource(line: { sourceKind: string; stableLineId: string }) {
+  if (!(["IC_LINKED", "UNBUDGETED"] as const).includes(line.sourceKind as "IC_LINKED" | "UNBUDGETED")) {
+    throw new SettlementDomainError(`Dòng ${line.stableLineId}: legacy Expense chỉ đọc và không được tạo nghĩa vụ quyết toán mới.`);
+  }
+}
+
 async function deriveSourcesForCreate(tx: Prisma.TransactionClient, projectId: string, requestId: string, actorId: string): Promise<ProjectionSources> {
   const lines = await tx.actualCostLine.findMany({
     where: { projectId },
@@ -723,6 +729,7 @@ async function deriveSourcesForCreate(tx: Prisma.TransactionClient, projectId: s
   const actualCostLines: ProjectSettlementDraftInput["actualCostLines"] = [];
   const actualApplications: ProjectionSources["actualApplications"] = [];
   for (const line of lines) {
+    assertNormalizedSettlementSource(line);
     const version = line.versions[0];
     const approval = version?.approvals[0];
     if (!version) continue;

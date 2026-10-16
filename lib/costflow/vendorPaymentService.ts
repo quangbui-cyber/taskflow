@@ -89,7 +89,13 @@ export async function createVendorPaymentDossier(actor: { id: string; role: stri
       where: { id: { in: input.selections.map(item => item.versionId) } },
       include: { line: true, approvals: true },
     });
-    const existingAllocations = await tx.vendorInvoiceActualCost.findMany({ where: { actualCostVersionId: { in: input.selections.map(item => item.versionId) } }, select: { actualCostVersionId: true, allocatedAmount: true } });
+    const existingAllocations = await tx.vendorInvoiceActualCost.findMany({
+      where: {
+        actualCostVersionId: { in: input.selections.map(item => item.versionId) },
+        applications: { some: { state: "ACTIVE" } },
+      },
+      select: { actualCostVersionId: true, allocatedAmount: true },
+    });
     const selectionRows: VendorPaymentSelection[] = input.selections.map(selected => {
       const version = versions.find(item => item.id === selected.versionId);
       const approval = version?.approvals.find(item => item.id === selected.approvalId && item.action === "APPROVED" && item.attemptId === selected.approvalAttemptId);

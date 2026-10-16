@@ -104,6 +104,18 @@ function assertLegacyExpenseReadOnly(command: string) {
   }
 }
 
+async function releaseVendorInvoiceApplications(tx: Prisma.TransactionClient, requestId: string, terminalState: "RETURNED" | "REJECTED" | "WITHDRAWN" | "CANCELLED") {
+  const releasedAt = new Date();
+  await tx.vendorInvoiceApplication.updateMany({
+    where: { requestId, state: "ACTIVE" },
+    data: { state: "RELEASED", releasedAt },
+  });
+  await tx.vendorInvoice.updateMany({
+    where: { applications: { some: { requestId } } },
+    data: { state: terminalState },
+  });
+}
+
 export async function assertCostFlowMutationAllowed(projectId: string, command: string) {
   const workspace = await prisma.costFlowWorkspace.findUnique({ where: { projectId }, select: { data: true } });
   const data = workspace?.data && typeof workspace.data === "object" && !Array.isArray(workspace.data) ? workspace.data as Record<string, unknown> : null;
@@ -1716,10 +1728,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         }
         if (["CLOSE", "REOPEN"].includes(request.kind)) throw new Error("Yêu cầu đóng/mở cũ không được đổi trạng thái tài chính; hãy lập yêu cầu bất biến mới.");
         if (action === "APPROVE" && request.kind === "AC_REVISION" && next.state === "APPROVED") {
-          const change = payload?.expenseRevision;
-          const previous = data.expenses.find(e => e.id === change?.proposed.id);
-          if (!change || !previous || (previous.version ?? 1) !== change.previousVersion) throw new Error("Chi phí nguồn đã thay đổi. Trả hồ sơ và lập lại bản sửa.");
-          Object.assign(previous, change.proposed);
+          throw new Error("Expense legacy chỉ đọc. Không thể duyệt bản sửa; hãy ghi nhận lại bằng AC chuẩn hóa.");
         }
         if (action === "APPROVE" && request.kind === "CANCEL") {
           const target = requests.find(r => r.id === payload?.targetRequestId);
@@ -1729,6 +1738,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
           if (revision && cash.some(c => (requests.find(r => r.id === c.requestId)?.payload as RequestPayload)?.revisionId === revision.id)) throw new Error("Đã chi theo IC này, không được hủy theo nhánh chưa chi.");
           if (revision) revision.effective = false;
           await tx.workflowRequest.update({ where: { id: target.id }, data: { state: "CANCELLED", version: { increment: 1 } } });
+          await releaseVendorInvoiceApplications(tx, target.id, "CANCELLED");
           await tx.actualCostApplication.updateMany({ where: { requestId: target.id, state: "ACTIVE" }, data: { state: "RELEASED", releasedAt: new Date() } });
           await tx.advanceApplication.deleteMany({ where: { expenseId: `AC_SET:${target.id}` } });
           const targetActuals = await tx.actualCostApplication.findMany({ where: { requestId: target.id }, select: { line: { select: { stableLineId: true } } } });
@@ -1762,6 +1772,9 @@ export async function executeFinance(projectId: string, expectedVersion: number,
           });
         }
         if ((await tx.workflowRequest.updateMany({ where: { id: request.id, version: request.version }, data: { ...next, currentStepArrivedAt: next.state === "SUBMITTED" && action === "APPROVE" ? new Date() : next.state === "SUBMITTED" ? request.currentStepArrivedAt : null, version: { increment: 1 } } })).count !== 1) throw new Error("Dữ liệu đã thay đổi. Tải lại trang trước khi thao tác.");
+        if (["RETURNED", "REJECTED", "WITHDRAWN", "CANCELLED"].includes(next.state)) {
+          await releaseVendorInvoiceApplications(tx, request.id, next.state as "RETURNED" | "REJECTED" | "WITHDRAWN" | "CANCELLED");
+        }
         if (action === "WITHDRAW" && next.state === "WITHDRAWN") {
           const requestActuals = await tx.actualCostApplication.findMany({ where: { requestId: request.id }, select: { line: { select: { stableLineId: true } } } });
           await tx.actualCostApplication.updateMany({ where: { requestId: request.id, state: "ACTIVE" }, data: { state: "RELEASED", releasedAt: new Date() } });

@@ -18,6 +18,7 @@ test("terminal payment decisions release VAT applications without deleting histo
   assert.match(service, /releaseVendorInvoiceApplications/);
   assert.match(service, /vendorInvoiceApplication\.updateMany[\s\S]*state:\s*"RELEASED"[\s\S]*releasedAt/);
   assert.match(service, /\["RETURNED", "REJECTED", "WITHDRAWN", "CANCELLED"\]/);
+  assert.match(service, /request\.kind === "AC_REVISION"[\s\S]*Expense legacy chỉ đọc/);
   assert.doesNotMatch(service, /vendorInvoice(?:Application|ActualCost)\.delete/);
 });
 
