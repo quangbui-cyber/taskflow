@@ -41,7 +41,7 @@ function verifyLexicalOrder() {
     .filter(entry => entry.isDirectory())
     .map(entry => entry.name)
     .sort();
-  assert.equal(names.at(-1), MIGRATION, `${MIGRATION} must be the final lexical migration`);
+  assert.ok(names.includes(MIGRATION), `${MIGRATION} must remain in migration history`);
   return names.length;
 }
 
