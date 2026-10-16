@@ -16,8 +16,8 @@ test("legacy Expense commands fail before the finance transaction can mutate dat
   const guardStart = service.indexOf("assertLegacyExpenseReadOnly", functionStart);
 
   assert.ok(functionStart >= 0 && guardStart > functionStart && guardStart < transactionStart);
-  assert.doesNotMatch(service, /case "(?:EXPENSE|EXPENSE_EVIDENCE|REVISE_EXPENSE)"/);
-  assert.match(service, /LEGACY_EXPENSE_WRITE_COMMANDS/);
+  assert.doesNotMatch(service, /case "(?:BENEFICIARY|EXPENSE|EXPENSE_EVIDENCE|REVISE_EXPENSE)"/);
+  assert.match(service, /LEGACY_COSTFLOW_WRITE_COMMANDS/);
   assert.match(service, /Expense legacy chỉ đọc/);
 });
 
@@ -29,6 +29,14 @@ test("legacy expense UI is historical inspection and download only", () => {
   assert.match(drawer, /chỉ đọc/i);
   assert.doesNotMatch(uploadModal, /form\.append\("command", "EXPENSE"\)|costFlowAction/);
   assert.match(uploadModal, /AC chuẩn hóa/i);
+  for (const relativePath of [
+    "components/ExpenseRequestModal.tsx",
+    "components/InternalCostPanel.tsx",
+    "components/PairedQuotationIcEditor.tsx",
+    "components/PaymentCashPanel.tsx",
+  ]) {
+    assert.doesNotMatch(source(relativePath), /command="BENEFICIARY"/);
+  }
 });
 
 test("historical Expense fixtures remain readable with their immutable evidence aliases", () => {
