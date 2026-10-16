@@ -47,6 +47,7 @@ export type Request = {
 export type Finance = {
   project: { id: string; name: string; ownerId?: string; client?: { id: string; name: string } | null; members: { userId: string }[] };
   clients?: { id: string; name: string }[];
+  suppliers: import("@/lib/costflow/supplierReadModel").CompanySupplier[];
   fullAccess: boolean;
   canManageCustomerAccounting: boolean;
   version: number;

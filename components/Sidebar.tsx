@@ -52,6 +52,7 @@ type ActiveSection =
   | "team"
   | "revenue"
   | "workflow"
+  | "suppliers"
   | "kpi"
   | "documents"
   | "leave"
@@ -412,6 +413,7 @@ export default async function Sidebar({
               <MenuLink href="/" label="Công việc" icon={CheckCircle2} active={activeSection === "home" && !activeProjectId} />
               <MenuLink href="/notifications" label="Thông báo" icon={Bell} active={activeSection === "notifications"} badge={unreadCount} />
               <MenuLink href="/workflow" label="Hồ sơ & Trình duyệt" icon={FileCheck2} active={activeSection === "workflow"} />
+              <MenuLink href="/suppliers" label="Danh bạ NCC" icon={Building2} active={activeSection === "suppliers"} />
               {showMeetings && <MenuLink href="/meetings" label="Lịch họp" icon={CalendarClock} active={activeSection === "meetings"} />}
               <MenuLink href="/recognition" label="Góc cảm ơn" icon={Star} active={activeSection === "recognition"} />
               <MenuLink href="/team" label="Hiệu suất" icon={UsersRound} active={activeSection === "team"} />
@@ -490,6 +492,7 @@ export default async function Sidebar({
               <MenuLink href="/" label="Công việc" icon={CheckCircle2} active={activeSection === "home" && !activeProjectId} />
               <MenuLink href="/notifications" label="Thông báo" icon={Bell} active={activeSection === "notifications"} badge={unreadCount} />
               <MenuLink href="/workflow" label="Hồ sơ & Trình duyệt" icon={FileCheck2} active={activeSection === "workflow"} />
+              <MenuLink href="/suppliers" label="Danh bạ NCC" icon={Building2} active={activeSection === "suppliers"} />
               {showMeetings && <MenuLink href="/meetings" label="Lịch họp" icon={CalendarClock} active={activeSection === "meetings"} />}
               <MenuLink href="/recognition" label="Góc cảm ơn" icon={Star} active={activeSection === "recognition"} />
               <MenuLink href="/team" label="Hiệu suất" icon={UsersRound} active={activeSection === "team"} />

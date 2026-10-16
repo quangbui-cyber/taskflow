@@ -190,9 +190,10 @@ export default function PairedQuotationIcEditor({
     const merged = new Map(
       finance.data.beneficiaries.map(beneficiary => [beneficiary.id, { id: beneficiary.id, name: beneficiary.name }])
     );
+    for (const supplier of finance.suppliers) merged.set(supplier.id, { id: supplier.id, name: supplier.version.legalName });
     for (const beneficiary of createdBeneficiaries) merged.set(beneficiary.id, beneficiary);
     return [...merged.values()];
-  }, [createdBeneficiaries, finance.data.beneficiaries]);
+  }, [createdBeneficiaries, finance.data.beneficiaries, finance.suppliers]);
   const readinessIssues = mode === "ic" ? [] : quotationReadinessIssues(rows, title, customerName, totalLines);
   const ordered = useMemo(() => orderedRows(rows), [rows]);
   const hasLegacyDeepRows = ordered.some(entry => entry.depth > 2);

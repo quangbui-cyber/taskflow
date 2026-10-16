@@ -7,6 +7,7 @@ import {
   type PairedFinance,
   type PairedRouteParams,
 } from "./pairedReadModel";
+import { listCompanySuppliers } from "./supplierReadModel";
 
 type Actor = { id: string; role: string };
 
@@ -49,11 +50,12 @@ export async function loadPairedFinance(
   const selection = selectPairedWorkspace(source, actor.id, params);
   if (!selection) return null;
 
-  const [clients, files, evidence, requests] = await Promise.all([
+  const [clients, suppliers, files, evidence, requests] = await Promise.all([
     prisma.client.findMany({
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
+    listCompanySuppliers(prisma),
     prisma.projectFile.findMany({
       where: { projectId },
       select: { id: true, name: true },
@@ -82,6 +84,7 @@ export async function loadPairedFinance(
     finance: {
       project,
       clients,
+      suppliers,
       fullAccess: true,
       version: workspace?.version ?? 0,
       data: selection.data,

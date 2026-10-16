@@ -202,17 +202,10 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
         <div className="flex flex-wrap items-center gap-2">
           {canCreate && !finance.data.closed && (
             <>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  setModalInitialTab("beneficiary");
-                  setCreateModalOpen(true);
-                }}
-              >
+              <Link href="/suppliers" className="tf-button-secondary tf-button-size-sm inline-flex items-center">
                 <Building2 size={14} className="mr-1" aria-hidden="true" />
-                Danh bạ NCC ({finance.data.beneficiaries.length})
-              </Button>
+                Danh bạ NCC
+              </Link>
 
               <Button
                 size="sm"

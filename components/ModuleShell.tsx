@@ -5,10 +5,11 @@ import { prisma } from "@/lib/prisma";
 import type { requireUser } from "@/lib/auth";
 
 /** Same membership-scoped navigation as the existing project/task screens. */
-export default async function ModuleShell({ user, projectId, workflow = false, children }: {
+export default async function ModuleShell({ user, projectId, workflow = false, suppliers = false, children }: {
   user: Awaited<ReturnType<typeof requireUser>>;
   projectId?: string;
   workflow?: boolean;
+  suppliers?: boolean;
   children: ReactNode;
 }) {
   const projects = await prisma.project.findMany({
@@ -26,7 +27,7 @@ export default async function ModuleShell({ user, projectId, workflow = false, c
     orderBy: { createdAt: "desc" },
   });
   return <div className="tf-shell">
-    <Sidebar user={user} projects={projects} activeProjectId={projectId} activeSection={workflow ? "workflow" : "home"} />
+    <Sidebar user={user} projects={projects} activeProjectId={projectId} activeSection={suppliers ? "suppliers" : workflow ? "workflow" : "home"} />
     <main className="tf-main tf-module-main">{children}</main>
   </div>;
 }

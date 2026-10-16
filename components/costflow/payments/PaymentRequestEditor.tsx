@@ -30,8 +30,8 @@ export function PaymentRequestEditor({ finance, onCreated, draft, initialSchedul
     ? finance.data.vendorPaymentMilestones?.find(item => item.id === initialScheduleMilestoneId && item.revisionId === revision?.id)
     : undefined;
   const draftRequest = draft ? finance.requests.find(request => request.id === draft.requestId) : undefined;
-  const scheduledVendor = scheduleMilestone ? finance.data.beneficiaries.find(item => item.id === scheduleMilestone.vendorId) : undefined;
-  const [title, setTitle] = useState(draft?.title ?? (scheduleMilestone ? `Tạm ứng ${scheduleMilestone.title} - ${scheduledVendor?.name ?? "NCC"}` : ""));
+  const scheduledVendor = scheduleMilestone ? finance.suppliers.find(item => item.id === scheduleMilestone.vendorId) : undefined;
+  const [title, setTitle] = useState(draft?.title ?? (scheduleMilestone ? `Tạm ứng ${scheduleMilestone.title} - ${scheduledVendor?.version.legalName ?? "NCC"}` : ""));
   const [milestone, setMilestone] = useState(draft?.milestone ?? scheduleMilestone?.title ?? "");
   const [explanation, setExplanation] = useState(typeof draftRequest?.payload.explanation === "string" ? draftRequest.payload.explanation : "");
   const [expectedSettlementDate, setExpectedSettlementDate] = useState(draftRequest?.payload.expectedSettlementDate ?? "");
@@ -46,14 +46,15 @@ export function PaymentRequestEditor({ finance, onCreated, draft, initialSchedul
       description: revision?.lines.find(line => line.id === allocation.lineId)?.description ?? scheduleMilestone.title,
       amount: allocation.amount,
       lineId: allocation.lineId,
-      recipientKey: `VENDOR:${scheduleMilestone.vendorId}`,
+      recipientKey: finance.suppliers.find(item => item.id === scheduleMilestone.vendorId)?.accounts.find(item => item.isPrimary)?.recipientKey ?? `VENDOR:${scheduleMilestone.vendorId}`,
     }));
     return [newLine()];
   });
   const recipients = useMemo(() => [
     ...finance.project.members.map(member => ({ key: `USER:${member.userId}`, label: `${finance.users.find(user => user.id === member.userId)?.name ?? "Nhân viên"} (nội bộ)` })),
     ...finance.data.beneficiaries.map(beneficiary => ({ key: `VENDOR:${beneficiary.id}`, label: `${beneficiary.name} (NCC)` })),
-  ], [finance.data.beneficiaries, finance.project.members, finance.users]);
+    ...finance.suppliers.flatMap(supplier => supplier.accounts.map(account => ({ key: account.recipientKey, label: `${supplier.version.legalName} · ${account.bankName} •••• ${account.accountLast4}${account.isPrimary ? " (mặc định)" : ""}` }))),
+  ], [finance.data.beneficiaries, finance.project.members, finance.suppliers, finance.users]);
   const update = (stableKey: string, patch: Partial<EditableLine>) => setLines(current => current.map(line => line.stableKey === stableKey ? { ...line, ...patch } : line));
   const move = (index: number, delta: number) => setLines(current => {
     const target = index + delta;

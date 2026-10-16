@@ -52,7 +52,8 @@ export default function ActualCostEditor({ finance, currentUserId }: { finance: 
   const recipients = useMemo(() => [
     ...finance.project.members.map(member => ({ value: `USER:${member.userId}`, label: finance.users.find(user => user.id === member.userId)?.name ?? "Thành viên" })),
     ...finance.data.beneficiaries.map(vendor => ({ value: `VENDOR:${vendor.id}`, label: vendor.name })),
-  ], [finance.data.beneficiaries, finance.project.members, finance.users]);
+    ...finance.suppliers.flatMap(supplier => supplier.accounts.map(account => ({ value: account.recipientKey, label: `${supplier.version.legalName} · ${account.bankName} •••• ${account.accountLast4}` }))),
+  ], [finance.data.beneficiaries, finance.project.members, finance.suppliers, finance.users]);
 
   return (
     <Panel className="space-y-4">

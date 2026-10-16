@@ -67,13 +67,15 @@ export async function resolveSupplierRecipient(client: SupplierReadClient, proje
   };
 }
 
-export async function listCompanySuppliers(client: Prisma.TransactionClient) {
+type SupplierDirectoryClient = Pick<Prisma.TransactionClient, "supplier">;
+
+export async function listCompanySuppliers(client: SupplierDirectoryClient) {
   const suppliers = await client.supplier.findMany({
     where: { status: "ACTIVE" },
     orderBy: { createdAt: "desc" },
     include: {
-      versions: { orderBy: { version: "desc" }, take: 1 },
-      bankAccounts: { where: { status: "ACTIVE" }, orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }], include: { versions: { orderBy: { version: "desc" }, take: 1 } } },
+      versions: { orderBy: { version: "desc" } },
+      bankAccounts: { where: { status: "ACTIVE" }, orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }], include: { versions: { orderBy: { version: "desc" } } } },
       verifications: { orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { id: true, supplierVersionId: true, bankAccountVersionId: true, decision: true, reason: true, evidenceId: true, actorId: true, createdAt: true } },
     },
   });
@@ -84,14 +86,17 @@ export async function listCompanySuppliers(client: Prisma.TransactionClient) {
       id: supplier.id,
       status: supplier.status,
       version: { id: version.id, version: version.version, legalName: version.legalName, normalizedName: version.normalizedName, taxCode: version.taxCode, address: version.address, contactName: version.contactName, contactEmail: version.contactEmail, contactPhone: version.contactPhone, changeReason: version.changeReason, createdAt: version.createdAt.toISOString() },
+      versionHistory: supplier.versions.map(item => ({ id: item.id, version: item.version, legalName: item.legalName, taxCode: item.taxCode, changeReason: item.changeReason, createdAt: item.createdAt.toISOString() })),
       accounts: supplier.bankAccounts.flatMap(account => {
         const bank = account.versions[0];
         if (!bank) return [];
         const verification = supplier.verifications.find(item => item.supplierVersionId === version.id && item.bankAccountVersionId === bank.id);
-        return [{ id: account.id, isPrimary: account.isPrimary, version: bank.version, bankVersionId: bank.id, bankName: bank.bankName, bankCode: bank.bankCode, accountHolder: bank.accountHolder, accountLast4: bank.accountLast4, verificationStatus: verification?.decision === "VERIFIED" ? "VERIFIED" as const : verification?.decision === "REJECTED" ? "REJECTED" as const : "UNVERIFIED" as const, verificationReason: verification?.reason ?? "", recipientKey: supplierRecipientKey(supplier.id, account.id) }];
+        return [{ id: account.id, isPrimary: account.isPrimary, version: bank.version, bankVersionId: bank.id, bankName: bank.bankName, bankCode: bank.bankCode, accountHolder: bank.accountHolder, accountLast4: bank.accountLast4, verificationStatus: verification?.decision === "VERIFIED" ? "VERIFIED" as const : verification?.decision === "REJECTED" ? "REJECTED" as const : "UNVERIFIED" as const, verificationReason: verification?.reason ?? "", recipientKey: supplierRecipientKey(supplier.id, account.id), versionHistory: account.versions.map(item => ({ id: item.id, version: item.version, bankName: item.bankName, accountHolder: item.accountHolder, accountLast4: item.accountLast4, changeReason: item.changeReason, createdAt: item.createdAt.toISOString() })) }];
       }),
       bankLookupStatus: "PENDING_INTEGRATION" as const,
     }];
   });
 }
+
+export type CompanySupplier = Awaited<ReturnType<typeof listCompanySuppliers>>[number];
 

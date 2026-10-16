@@ -149,9 +149,10 @@ export default function InternalCostPanel({
     const merged = new Map(
       finance.data.beneficiaries.map(beneficiary => [beneficiary.id, { id: beneficiary.id, name: beneficiary.name }])
     );
+    for (const supplier of finance.suppliers) merged.set(supplier.id, { id: supplier.id, name: supplier.version.legalName });
     for (const beneficiary of createdBeneficiaries) merged.set(beneficiary.id, beneficiary);
     return [...merged.values()];
-  }, [createdBeneficiaries, finance.data.beneficiaries]);
+  }, [createdBeneficiaries, finance.data.beneficiaries, finance.suppliers]);
   const currentActionVersion = Math.max(actionVersion, finance.version);
 
   // Check if current user can edit visible revision

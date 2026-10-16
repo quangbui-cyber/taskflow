@@ -44,7 +44,7 @@ import {
   type SettlementCorrectionCapability,
 } from "./settlementService";
 import { sealExportSourceProjection } from "./exportSourceProjection";
-import { resolveSupplierId } from "./supplierReadModel";
+import { listCompanySuppliers, resolveSupplierId } from "./supplierReadModel";
 
 type Actor = { id: string; role: string };
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -517,7 +517,8 @@ export async function loadFinance(projectId: string, actor: Actor) {
     signingState: correction.correctionVersion?.request.signingLifecycle?.evidenceState ?? "NOT_CREATED",
     baseObligations: correction.baseVersion.obligations.map(obligation => ({ id: obligation.id, recipientKey: obligation.recipientKey, amountDue: obligation.amountDue, paidAmount: obligation.cashAllocations.reduce((total, row) => total + BigInt(row.amount), BigInt(0)).toString() })),
   } : null;
-  return { project: { ...project, members: fullAccess ? project.members : [], client: fullAccess ? project.client : null }, clients, fullAccess, canManageCustomerAccounting, canManageSettlementCash, settlementObligationProgress, version: workspace?.version ?? 0, data: fullAccess && savedData ? savedData : { ...emptyFinance(), closed: savedData?.closed ?? false }, requests: visible.map(({ signingLifecycle, ...request }) => ({ ...request, signingMode: signingLifecycle?.mode ?? null, signingEvidenceState: signingLifecycle?.evidenceState ?? null })), cash, users, files, evidence, supplements, history, paymentDossiers, paymentLedger, actualCosts, customerAccounting, customerAcceptanceSnapshots, exportSources, settlementDossier, settlementCorrection };
+  const suppliers = fullAccess ? await listCompanySuppliers(prisma) : [];
+  return { project: { ...project, members: fullAccess ? project.members : [], client: fullAccess ? project.client : null }, clients, suppliers, fullAccess, canManageCustomerAccounting, canManageSettlementCash, settlementObligationProgress, version: workspace?.version ?? 0, data: fullAccess && savedData ? savedData : { ...emptyFinance(), closed: savedData?.closed ?? false }, requests: visible.map(({ signingLifecycle, ...request }) => ({ ...request, signingMode: signingLifecycle?.mode ?? null, signingEvidenceState: signingLifecycle?.evidenceState ?? null })), cash, users, files, evidence, supplements, history, paymentDossiers, paymentLedger, actualCosts, customerAccounting, customerAcceptanceSnapshots, exportSources, settlementDossier, settlementCorrection };
 }
 
 function correctionScopesForRead(value: Prisma.JsonValue) {

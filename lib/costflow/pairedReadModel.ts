@@ -1,4 +1,5 @@
 import { hydrateLinePricingData } from "./pairedDraft";
+import type { CompanySupplier } from "./supplierReadModel";
 import { emptyFinance, type FinanceData, type IcRevision, type PairedDraft, type Quotation } from "./types";
 
 export type PairedRouteParams = {
@@ -16,6 +17,7 @@ export type PairedFinance = {
     members: { userId: string }[];
   };
   clients: { id: string; name: string }[];
+  suppliers: CompanySupplier[];
   fullAccess: true;
   version: number;
   data: FinanceData;
