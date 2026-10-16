@@ -57,6 +57,8 @@ function SupplierVerificationForm({ projectId, snapshot }: { projectId: string; 
 export function PaymentRequestReview({ finance, request, dossier, user }: { finance: Finance; request: Request; dossier: Dossier; user: { id: string; role: string } }) {
   const grouped = dossier.recipients.map(recipient => ({ recipient, lines: dossier.lines.filter(line => line.recipientKey === recipient.recipientKey) }));
   const warnings = request.payload && "warnings" in request.payload && Array.isArray(request.payload.warnings) ? request.payload.warnings : [];
+  const actualCostManifest = request.payload && "actualCostManifest" in request.payload && Array.isArray(request.payload.actualCostManifest) ? request.payload.actualCostManifest : [];
+  const invoice = request.payload && "invoice" in request.payload && request.payload.invoice && typeof request.payload.invoice === "object" ? request.payload.invoice as Record<string, unknown> : null;
   const revisionIds = [...new Set(dossier.lines.map(line => line.icRevisionId))];
   return <section className="tf-payment-review space-y-4" aria-label="Chi tiết ĐNTU đa khoản">
     <div><h3 className="font-bold text-[var(--foreground)]">{dossier.title}</h3><p className="tf-ui-help">Snapshot server bất biến · IC {revisionIds.join(", ")}</p></div>
@@ -64,6 +66,19 @@ export function PaymentRequestReview({ finance, request, dossier, user }: { fina
       <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] p-3"><p className="text-xs text-[var(--text-secondary)]">Mốc hồ sơ chung</p><p className="mt-1 font-semibold">{dossier.milestone}</p></div>
       <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] p-3"><p className="text-xs text-[var(--text-secondary)]">Tổng server</p><p className="mt-1 text-lg font-bold tabular-nums text-[var(--success)]">{displayMoney(dossier.totalAmount)}</p></div>
     </div>
+    {request.kind === "VENDOR_PAYMENT" && invoice && <section className="rounded-xl border border-[var(--info)] bg-[var(--info-soft)] p-3 space-y-2 text-sm">
+      <h4 className="font-semibold">ĐNTT → Hóa đơn VAT → AC đã duyệt → IC</h4>
+      <p>Hóa đơn {String(invoice.symbol ?? "")} / {String(invoice.invoiceNumber ?? "")} · MST {String(invoice.sellerTaxCode ?? "")} · gross {displayMoney(String(invoice.grossAmount ?? "0"))}</p>
+      <ul className="space-y-2">{actualCostManifest.map((raw, index) => {
+        const item = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+        const evidenceIds = Array.isArray(item.icEvidenceIds) ? item.icEvidenceIds.map(String) : [];
+        return <li key={String(item.actualCostVersionId ?? index)} className="rounded-lg bg-[var(--surface)] p-2">
+          <p>AC {String(item.actualCostVersionId ?? "")} · approval {String(item.approvalId ?? "")} → IC {String(item.icRevisionId ?? "phát sinh")}/{String(item.icLineId ?? "ngoài IC")}</p>
+          <p className="mt-1 text-xs font-semibold text-[var(--text-secondary)]">Minh chứng IC (lịch sử, không kế thừa)</p>
+          <ul className="text-xs">{evidenceIds.length ? evidenceIds.map(id => { const evidence = finance.evidence.find(file => file.id === id); return <li key={id}>{evidence ? <Link className="tf-link" href={`/api/projects/${finance.project.id}/costflow/evidence/${id}`}>{evidence.name}</Link> : id}</li>; }) : <li>Không có file IC liên kết.</li>}</ul>
+        </li>;
+      })}</ul>
+    </section>}
     {warnings.length > 0 && <div className="rounded-lg border border-[var(--warning)] bg-[var(--warning-soft)] p-3 text-xs"><strong>Cảnh báo tham chiếu IC</strong><ul className="mt-1 list-disc pl-4">{warnings.map((warning, index) => <li key={index}>{typeof warning === "object" && warning && "message" in warning ? String(warning.message) : String(warning)}</li>)}</ul></div>}
     <div className="space-y-3">
       {grouped.map(({ recipient, lines }) => {
