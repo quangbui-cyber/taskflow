@@ -20,7 +20,7 @@ export function SupplierDirectory({ suppliers, canEdit }: { suppliers: CompanySu
     return suppliers.filter(supplier => [supplier.version.legalName, supplier.version.taxCode ?? "", ...supplier.accounts.flatMap(account => [account.bankName, account.accountLast4])].some(value => value.toLocaleLowerCase("vi").includes(needle)));
   }, [query, suppliers]);
   return <div className="mx-auto w-full max-w-[1220px] space-y-6 px-4 py-6 md:px-6">
-    <header className="space-y-1"><p className="tf-module-eyebrow">CostFlow</p><h1 className="text-3xl font-bold tracking-tight">Danh bạ nhà cung cấp</h1><p className="text-[var(--text-secondary)]">Một danh bạ dùng chung toàn công ty; lịch sử Project và khóa NCC cũ vẫn được giữ để truy vết.</p></header>
+    <header className="space-y-1"><p className="tf-module-eyebrow">CostFlow</p><h1 className="text-3xl font-bold tracking-tight">Danh bạ NCC toàn công ty</h1><p className="text-[var(--text-secondary)]">Một danh bạ dùng chung toàn công ty; lịch sử Project và khóa NCC cũ vẫn được giữ để truy vết.</p></header>
     <Panel><p className="font-semibold">Tra cứu tài khoản ngân hàng</p><p className="tf-ui-help">API ngân hàng chưa tích hợp. Trạng thái hiện tại chỉ phản ánh quyết định thủ công của Kế toán trên đúng phiên bản NCC và tài khoản.</p></Panel>
     {canEdit && <details className="tf-panel tf-ui-panel"><summary className="cursor-pointer font-semibold">Thêm NCC vào danh bạ công ty</summary><div className="mt-4"><SupplierEditor /></div></details>}
     <Input type="search" label="Tìm nhà cung cấp" placeholder="Tên pháp lý, mã số thuế, ngân hàng hoặc 4 số cuối…" value={query} onChange={event => setQuery(event.target.value)} />

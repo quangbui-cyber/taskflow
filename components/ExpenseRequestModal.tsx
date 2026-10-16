@@ -562,7 +562,7 @@ export default function ExpenseRequestModal({
                 <h3 className="font-bold text-xs uppercase tracking-wider text-[var(--foreground)]">Danh bạ NCC toàn công ty</h3>
                 <Badge tone="info">Kế toán xác nhận theo phiên bản</Badge>
               </div>
-              <p className="text-xs text-[var(--text-secondary)]">Tạo và cập nhật NCC tại danh bạ dùng chung; hồ sơ cũ phía dưới chỉ để tra cứu.</p>
+              <p className="text-xs text-[var(--text-secondary)]">Tạo và cập nhật NCC tại danh bạ dùng chung; hồ sơ cũ phía dưới chỉ để tra cứu. File ngân hàng không bắt buộc; API ngân hàng đang để pending.</p>
               <Link href="/suppliers" className="tf-button-primary tf-button-size-md">Mở danh bạ NCC</Link>
             </div>
 

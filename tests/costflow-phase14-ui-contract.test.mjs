@@ -15,7 +15,8 @@ test("Phase 14 UI exposes shared supplier, pre-AC DNTU and post-AC VAT DNTT boun
   assert.match(payment, /ĐNTT sau AC/);
   assert.match(invoice, /XML/);
   assert.match(invoice, /PDF/);
-  assert.match(invoice, /accept=.*\.xml.*\.pdf/i);
+  assert.match(invoice, /name="invoiceXml" accept="[^"]*\.xml/i);
+  assert.match(invoice, /name="invoicePdf" accept="[^"]*\.pdf/i);
 });
 
 test("legacy surfaces stay readable without any project-local write command", () => {
