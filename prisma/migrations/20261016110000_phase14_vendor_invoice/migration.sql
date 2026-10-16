@@ -19,7 +19,7 @@ CREATE TABLE "VendorInvoice" (
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "submittedAt" TIMESTAMP(3),
   CONSTRAINT "VendorInvoice_pkey" PRIMARY KEY ("id"),
-  CONSTRAINT "VendorInvoice_amounts_check" CHECK ("netAmount" ~ '^\\d+$' AND "vatAmount" ~ '^\\d+$' AND "grossAmount" ~ '^\\d+$')
+  CONSTRAINT "VendorInvoice_amounts_check" CHECK ("netAmount" ~ '^[0-9]+$' AND "vatAmount" ~ '^[0-9]+$' AND "grossAmount" ~ '^[0-9]+$')
 );
 
 CREATE TABLE "VendorInvoiceFile" (
