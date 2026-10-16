@@ -42,7 +42,7 @@ test("reconciliation keeps employee and vendor balances separate; incomplete evi
   assert.deepEqual(rows.map(r => r.balance), ["-2000000", "3000000"]);
   assert.equal(settlement(data, cash, "USER:1").refund, "2000000");
   assert.equal(closeBlockers(data, cash).length, 1);
-  data.expenses[0].invoiceId = null;
+  data.expenses = data.expenses.map((expense, index) => index === 0 ? { ...expense, invoiceId: null } : expense);
   assert.throws(() => settlement(data, cash, "USER:1"), /đủ IC\/AC/);
   assert.equal(closeBlockers(data, cash).length, 2);
 });

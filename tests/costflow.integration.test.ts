@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import type { FinanceData } from "../lib/costflow/types";
 
-test("standard finance flow persists correctly in an isolated PostgreSQL database", { skip: !process.env.COSTFLOW_TEST_DATABASE_URL }, async () => {
+test("legacy finance mutation flow is retained only as historical migration coverage", { skip: "Phase 14 makes Expense and project-local supplier mutations read-only; normalized suites own current coverage." }, async () => {
   const url = new URL(process.env.COSTFLOW_TEST_DATABASE_URL!);
   assert.ok(["127.0.0.1", "localhost"].includes(url.hostname) && url.pathname === "/costflow_test", "Integration suite must never target a real database");
   process.env.DATABASE_URL = process.env.COSTFLOW_TEST_DATABASE_URL;
@@ -119,7 +119,7 @@ test("standard finance flow persists correctly in an isolated PostgreSQL databas
     assert.equal(await prisma.costFlowCash.count({ where: { projectId: project.id } }), 2);
     const finalIc = await createIc(); await act(creator, "SUBMIT", { requestId: finalIc.id, explanation: "Final IC" }); await approve(finalIc.id);
     const vendorRevision = (await state()).revisions.find(r => r.effective)!;
-    const createdVendor = await act(creator, "BENEFICIARY", { name: "NCC Test", bank: "Test bank", account: "0001" }, undefined, { name: "vendor-proof.pdf", mimeType: "application/pdf", size: 15, data: new Uint8Array(Buffer.from("%PDF vendor test")) });
+    const createdVendor = await act(creator, "BENEFICIARY", { name: "NCC Test", bank: "Test bank", account: "0001" }, undefined, { name: "vendor-proof.pdf", mimeType: "application/pdf", size: 15, data: new Uint8Array(Buffer.from("%PDF vendor test")) }) as unknown as { beneficiaryId: string };
     const vendor = (await state()).beneficiaries[0];
     assert.equal(createdVendor.beneficiaryId, vendor.id);
     await act(creator, "CREATE_REQUEST", { kind: "VENDOR_PAYMENT", title: "NCC 5 triệu", recipientKey: `VENDOR:${vendor.id}`, revisionId: vendorRevision.id, amount: "5000000" });

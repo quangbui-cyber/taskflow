@@ -736,8 +736,6 @@ export default function ActualCostPanel({ finance, user, canCreate, onSelectTab 
                         <Badge tone={hasFullEvidence ? "success" : exp.exceptionReason ? "warning" : "warning"}>
                           {hasFullEvidence
                             ? "Đủ chứng từ"
-                            : exp.exceptionStatus === "APPROVED"
-                            ? "Ngoại lệ duyệt"
                             : exp.exceptionReason
                             ? "Chờ duyệt ngoại lệ"
                             : "Chờ chứng từ"}
