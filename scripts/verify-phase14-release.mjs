@@ -63,8 +63,9 @@ async function browserResult() {
   }
 }
 
-const client = new PrismaClient({ datasources: { db: { url: PINNED_DATABASE } } });
 const commands = [];
+commands.push(runPrismaGenerate({ ...process.env, DATABASE_URL: PINNED_DATABASE, NODE_ENV: "production" }));
+const client = new PrismaClient({ datasources: { db: { url: PINNED_DATABASE } } });
 try {
   const before = await publicFingerprint(client);
   commands.push(run("phase14-static-and-ui", process.execPath, ["--conditions=react-server", "--import=tsx", "--test", "--test-concurrency=1",
@@ -97,7 +98,6 @@ try {
     "lib/costflow/supplierService.ts", "lib/costflow/supplierReadModel.ts", "lib/costflow/vendorInvoice.ts",
     "lib/costflow/vendorPaymentService.ts", "lib/costflow/actualCostReadModel.ts", "lib/costflow/settlementService.ts",
   ]));
-  commands.push(runPrismaGenerate({ ...process.env, DATABASE_URL: PINNED_DATABASE, NODE_ENV: "production" }));
   commands.push(run("build", process.execPath, [path.join(root, "node_modules/next/dist/bin/next"), "build", "--webpack"], { ...process.env, DATABASE_URL: PINNED_DATABASE, NODE_ENV: "production" }));
   const after = await publicFingerprint(client);
   assert.equal(after, before, "Phase 14 verifier changed the public costflow_test schema/data; only disposable schemas are allowed.");
