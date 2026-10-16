@@ -26,7 +26,8 @@ export type ActualCostFundingSource =
   | "EMPLOYEE_OUT_OF_POCKET"
   | "VENDOR_ADVANCE"
   | "VENDOR_PAYMENT";
-export type Expense = {
+/** Historical JSON Expense row. Phase 14 keeps this shape readable but never writes it. */
+export type LegacyExpense = Readonly<{
   id: string;
   revisionId: string;
   lineId: string;
@@ -42,7 +43,8 @@ export type Expense = {
   exceptionReason?: string;
   exceptionStatus?: "PENDING" | "APPROVED" | "REJECTED";
   spentAt?: string;
-};
+}>;
+export type Expense = LegacyExpense;
 export type PurchaseOrder = { id: string; number: string; net: string; sourceId: string; poKey?: string; version?: number; parentPoId?: string; replacesPoId?: string; confirmedBy?: string; confirmedAt?: string };
 export type ProjectBrief = { id: string; title: string; sourceId: string };
 export type VendorPaymentMilestone = {

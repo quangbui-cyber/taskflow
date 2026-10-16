@@ -2,7 +2,7 @@ import "server-only";
 import { randomUUID, createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { calculateCost, calculateLineCost, compare, decimal, round, sum } from "./money";
+import { calculateLineCost, compare, decimal, round, sum } from "./money";
 import { closeProjectRequest, decideFinancialClose, planReopenedDossierDelta, twoWayCloseBlockers, type FinancialCloseRequestRecord, type ReopenedDossierSource, type TwoWayCloseInput } from "./reconciliation";
 import { emptyFinance, type FinanceData, type IcLine, type QuotationLine, type RequestPayload } from "./types";
 import { decide, validateSteps, type ApprovalStep, type Decision } from "@/lib/workflow/approval";
@@ -96,6 +96,13 @@ function frozenSupplierTuple(value: unknown): FrozenSupplierTuple | null {
 }
 
 const FINANCIAL_CLOSE_COMMANDS = new Set(["REQUEST_CLOSE_PROJECT", "REQUEST_REOPEN_PROJECT", "DECIDE_FINANCIAL_CLOSE", "CREATE_REOPENED_SETTLEMENT_VERSION"]);
+const LEGACY_COSTFLOW_WRITE_COMMANDS = new Set(["BENEFICIARY", "EXPENSE", "EXPENSE_EVIDENCE", "REVISE_EXPENSE"]);
+
+function assertLegacyExpenseReadOnly(command: string) {
+  if (LEGACY_COSTFLOW_WRITE_COMMANDS.has(command)) {
+    throw new Error("Expense legacy chỉ đọc. Hãy dùng danh bạ NCC toàn công ty và AC chuẩn hóa.");
+  }
+}
 
 export async function assertCostFlowMutationAllowed(projectId: string, command: string) {
   const workspace = await prisma.costFlowWorkspace.findUnique({ where: { projectId }, select: { data: true } });
@@ -585,6 +592,8 @@ function correctionObligationIdsForRead(value: Prisma.JsonValue) {
 }
 
 export async function executeFinance(projectId: string, expectedVersion: number, actor: Actor, form: FormData, upload: ProjectUpload | null) {
+  const requestedCommand = requireValue(text(form, "command"), "thao tác");
+  assertLegacyExpenseReadOnly(requestedCommand);
   return prisma.$transaction(async tx => {
     const project = await tx.project.findUnique({ where: { id: projectId }, select: { ownerId: true, members: { select: { userId: true } } } });
     if (!project) throw new Error("Không tìm thấy project.");
@@ -602,11 +611,10 @@ export async function executeFinance(projectId: string, expectedVersion: number,
     const data = hydrateLinePricingData(workspace.data as unknown as FinanceData);
     const cash = await tx.costFlowCash.findMany({ where: { projectId } });
     const requests = await tx.workflowRequest.findMany({ where: { projectId, module: "COSTFLOW" } });
-    const command = requireValue(text(form, "command"), "thao tác");
+    const command = requestedCommand;
     let savedRevisionId: string | undefined;
     let savedQuotationId: string | undefined;
     let savedDraftId: string | undefined;
-    let savedBeneficiaryId: string | undefined;
     let savedCustomerAcceptanceId: string | undefined;
     let savedCustomerAcceptanceVersion: number | undefined;
     let savedCloseRequestId: string | undefined;
@@ -1563,86 +1571,6 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         savedRevisionId = revision.id;
         break;
       }
-      case "BENEFICIARY": {
-        needCreator();
-        const existing = data.beneficiaries.find(b => b.id === text(form, "beneficiaryId"));
-        const proofId = upload
-          ? (await tx.costFlowEvidence.create({ data: { projectId, sourceFileId: "uploaded-beneficiary-proof", kind: "BENEFICIARY", name: upload.name, mimeType: upload.mimeType, data: upload.data, sha256: createHash("sha256").update(upload.data).digest("hex"), createdBy: actor.id } })).id
-          : await snapshotFile(text(form, "sourceFileId"), "BENEFICIARY");
-        const updated = { id: existing?.id ?? randomUUID(), name: requireValue(text(form, "name"), "tên người nhận"), bank: requireValue(text(form, "bank"), "ngân hàng"), account: requireValue(text(form, "account"), "số tài khoản"), version: (existing?.version ?? 0) + 1, verifiedVersion: null, ...(proofId ? { proofId } : existing?.proofId ? { proofId: existing.proofId } : {}) };
-        if (existing) Object.assign(existing, updated); else data.beneficiaries.push(updated);
-        savedBeneficiaryId = updated.id;
-        break;
-      }
-      case "EXPENSE": {
-        if (!member && !isAdmin) throw new Error("Chỉ thành viên project hoặc Admin mới được ghi chi phí.");
-        const revision = requireEffectiveIc(text(form, "revisionId"));
-        const lineId = text(form, "lineId");
-        if (!revision.lines.some(line => line.id === lineId)) throw new Error("Chi phí phải truy được dòng IC.");
-        const input = { quantity: text(form, "quantity"), unitPrice: text(form, "unitPrice"), basis: text(form, "basis") as "NET" | "GROSS", vatPercent: text(form, "vatPercent") };
-        const invoiceId = await snapshotFile(text(form, "invoiceFileId"), "INVOICE");
-        const paymentProofId = await snapshotFile(text(form, "paymentFileId"), "EXPENSE_PAYMENT");
-        const fundingSource = (text(form, "fundingSource") as "ADVANCE" | "OUT_OF_POCKET" | "VENDOR_DIRECT") || undefined;
-        const exceptionReason = text(form, "exceptionReason") || undefined;
-        const exceptionStatus = exceptionReason ? "PENDING" : undefined;
-        const spentAt = text(form, "spentAt") || new Date().toISOString();
-        data.expenses.push({
-          id: randomUUID(),
-          revisionId: revision.id,
-          lineId,
-          recipientKey: await recipient(text(form, "recipientKey")),
-          description: requireValue(text(form, "description"), "nội dung chi phí"),
-          input,
-          cost: calculateCost(input),
-          invoiceId,
-          paymentProofId,
-          createdBy: actor.id,
-          fundingSource,
-          exceptionReason,
-          exceptionStatus,
-          spentAt,
-        });
-        break;
-      }
-      case "EXPENSE_EVIDENCE": {
-        if (!member && !isAdmin) throw new Error("Chỉ thành viên project hoặc Admin mới được bổ sung chứng từ.");
-        const expense = data.expenses.find(e => e.id === text(form, "expenseId"));
-        if (!expense) throw new Error("Không tìm thấy chi phí.");
-        const invoiceId = await snapshotFile(text(form, "invoiceFileId"), "INVOICE");
-        const paymentProofId = await snapshotFile(text(form, "paymentFileId"), "EXPENSE_PAYMENT");
-        const exceptionStatus = text(form, "exceptionStatus") as "PENDING" | "APPROVED" | "REJECTED" | undefined;
-        const exceptionReason = text(form, "exceptionReason") || undefined;
-        if (!invoiceId && !paymentProofId && !exceptionStatus && !exceptionReason) throw new Error("Chọn chứng từ cần bổ sung hoặc cập nhật ngoại lệ.");
-        expense.invoiceId = invoiceId ?? expense.invoiceId;
-        expense.paymentProofId = paymentProofId ?? expense.paymentProofId;
-        if (exceptionReason) expense.exceptionReason = exceptionReason;
-        if (exceptionStatus) {
-          const isAccountant = actor.id === data.config.accountantId;
-          const isProjectOwner = actor.id === project.ownerId;
-          const isManager = actor.id === data.config.managerId;
-          const isAdmin = currentActor.role === "ADMIN";
-          if (["APPROVED", "REJECTED"].includes(exceptionStatus) && !isAccountant && !isProjectOwner && !isManager && !isAdmin) {
-            throw new Error("Chỉ Kế toán phụ trách, Quản lý dự án hoặc Admin mới có quyền duyệt ngoại lệ chứng từ.");
-          }
-          expense.exceptionStatus = exceptionStatus;
-        }
-        break;
-      }
-      case "REVISE_EXPENSE": {
-        needCreator();
-        const expense = data.expenses.find(e => e.id === text(form, "expenseId"));
-        if (!expense) throw new Error("Không tìm thấy chi phí nguồn.");
-        const revision = requireEffectiveIc(text(form, "revisionId"));
-        const lineId = text(form, "lineId");
-        if (!revision.lines.some(l => l.id === lineId)) throw new Error("Chọn dòng IC nguồn hợp lệ.");
-        const input = { quantity: text(form, "quantity"), unitPrice: text(form, "unitPrice"), basis: text(form, "basis") as "NET" | "GROSS", vatPercent: text(form, "vatPercent") };
-        const invoiceId = await snapshotFile(requireValue(text(form, "invoiceFileId"), "chứng từ chi phí bản sửa"), "INVOICE");
-        const paymentProofId = await snapshotFile(requireValue(text(form, "paymentFileId"), "bằng chứng đã chi bản sửa"), "EXPENSE_PAYMENT");
-        const proposed = { ...expense, description: requireValue(text(form, "description"), "nội dung sửa"), input, cost: calculateCost(input), revisionId: revision.id, lineId, invoiceId, paymentProofId, version: (expense.version ?? 1) + 1 };
-        const saved = await createRequest("AC_REVISION", { expenseRevision: { previousVersion: expense.version ?? 1, proposed }, explanation: requireValue(text(form, "explanation"), "lý do sửa chi phí") }, await ordinarySteps());
-        await tx.costFlowEvidence.updateMany({ where: { id: { in: [invoiceId!, paymentProofId!] } }, data: { requestId: saved.id } });
-        break;
-      }
       case "PAYMENT":
       case "ADVANCE_SETTLEMENT": {
         await resolveApprovedActuals();
@@ -1950,7 +1878,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
     const updated = await tx.costFlowWorkspace.updateMany({ where: { projectId, version: expectedVersion }, data: { version: { increment: 1 }, data: json(data) } });
     if (updated.count !== 1) throw new Error("Dữ liệu đã thay đổi. Tải lại để tránh ghi trùng.");
     await tx.costFlowHistory.create({ data: { projectId, version: expectedVersion + 1, actorId: actor.id, action: command, snapshot: json(data) } });
-    return { success: successMessage ?? (savedCloseRequestId ? financialCloseState ? `Đã lưu quyết định; tài chính hiện ${financialCloseState === "CLOSED" ? "đóng" : "mở"}.` : "Đã gửi yêu cầu đóng/mở tài chính." : savedCustomerAcceptanceId ? `Đã lưu snapshot nghiệm thu khách hàng v${savedCustomerAcceptanceVersion}.` : savedScopes ? `Đã lưu ${savedScopes.join(" và ")}.` : "Đã lưu hồ sơ và lịch sử."), requestId: affectedRequestId, closeRequestId: savedCloseRequestId, financialCloseState, revisionId: savedRevisionId, quotationId: savedQuotationId, draftId: savedDraftId, beneficiaryId: savedBeneficiaryId, customerAcceptanceId: savedCustomerAcceptanceId, customerAcceptanceVersion: savedCustomerAcceptanceVersion, savedScopes, version: expectedVersion + 1 };
+    return { success: successMessage ?? (savedCloseRequestId ? financialCloseState ? `Đã lưu quyết định; tài chính hiện ${financialCloseState === "CLOSED" ? "đóng" : "mở"}.` : "Đã gửi yêu cầu đóng/mở tài chính." : savedCustomerAcceptanceId ? `Đã lưu snapshot nghiệm thu khách hàng v${savedCustomerAcceptanceVersion}.` : savedScopes ? `Đã lưu ${savedScopes.join(" và ")}.` : "Đã lưu hồ sơ và lịch sử."), requestId: affectedRequestId, closeRequestId: savedCloseRequestId, financialCloseState, revisionId: savedRevisionId, quotationId: savedQuotationId, draftId: savedDraftId, customerAcceptanceId: savedCustomerAcceptanceId, customerAcceptanceVersion: savedCustomerAcceptanceVersion, savedScopes, version: expectedVersion + 1 };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15000 });
 }
 

@@ -1500,77 +1500,13 @@ export default function InternalCostPanel({
           setNewBeneficiary(null);
           setBulkVendorOpen(true);
         }}
-        title="Tạo nhà cung cấp mới"
-        description="Nhà cung cấp được lưu vào danh bạ của project và tự chọn cho các dòng IC đang chọn. Kế toán vẫn cần xác minh thông tin trước khi thanh toán."
+        title="Tạo nhà cung cấp trong danh bạ chung"
+        description="Expense/NCC theo JSON project đã chuyển sang chỉ đọc. Tạo NCC tại danh bạ toàn công ty rồi quay lại chọn phiên bản hiện hành."
       >
-        {newBeneficiary && (
-          <ActionForm
-            finance={{ project: finance.project, version: currentActionVersion }}
-            command="BENEFICIARY"
-            label="Tạo và chọn nhà cung cấp"
-            onSuccess={result => {
-              if (!result.beneficiaryId) return;
-              const beneficiaryId = result.beneficiaryId;
-              const beneficiaryName = newBeneficiary.name.trim();
-              setCreatedBeneficiaries(current => [
-                ...current.filter(beneficiary => beneficiary.id !== beneficiaryId),
-                { id: beneficiaryId, name: beneficiaryName }
-              ]);
-              setBulkVendorId(beneficiaryId);
-              if (result.version !== undefined) setActionVersion(result.version);
-              setNewBeneficiary(null);
-              setBulkVendorOpen(true);
-            }}
-          >
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Input
-                name="name"
-                label="Tên người nhận / Tên NCC"
-                placeholder="Công ty TNHH..."
-                required
-                value={newBeneficiary.name}
-                onChange={event => setNewBeneficiary(current => current ? { ...current, name: event.target.value } : current)}
-              />
-              <Input
-                name="bank"
-                label="Ngân hàng"
-                placeholder="Vietcombank, MB, ACB..."
-                required
-                value={newBeneficiary.bank}
-                onChange={event => setNewBeneficiary(current => current ? { ...current, bank: event.target.value } : current)}
-              />
-              <Input
-                name="account"
-                label="Số tài khoản"
-                placeholder="0123456789..."
-                required
-                value={newBeneficiary.account}
-                onChange={event => setNewBeneficiary(current => current ? { ...current, account: event.target.value } : current)}
-              />
-              <Select
-                name="sourceFileId"
-                label="File tham chiếu NCC đã có (không bắt buộc)"
-                value={newBeneficiary.sourceFileId}
-                onChange={event => setNewBeneficiary(current => current ? { ...current, sourceFileId: event.target.value } : current)}
-              >
-                <option value="">Không dùng file có sẵn</option>
-                {finance.files.map(file => (
-                  <option key={file.id} value={file.id}>{file.name}</option>
-                ))}
-              </Select>
-              <Input
-                type="file"
-                name="proof"
-                label="Hoặc tải file tham chiếu mới (không bắt buộc)"
-                accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
-                hint="Có thể bỏ trống. Kế toán xác nhận tên NCC, ngân hàng và số tài khoản khi duyệt lần thanh toán đầu hoặc sau khi thông tin thay đổi."
-              />
-            </div>
-            <p className="tf-ui-help">
-              Chưa tích hợp API ngân hàng. File này chỉ là tài liệu tham chiếu, không thay thế bước Kế toán xác nhận phiên bản thông tin NCC.
-            </p>
-          </ActionForm>
-        )}
+        <div className="flex items-center justify-between gap-3">
+          <p className="tf-ui-help">File chứng minh ngân hàng không bắt buộc; Kế toán xác nhận đúng phiên bản ở lần thanh toán đầu hoặc sau thay đổi.</p>
+          <Link href="/suppliers" className="tf-button-primary tf-button-size-md shrink-0">Mở danh bạ NCC</Link>
+        </div>
       </Dialog>
 
       {visibleRevision && (

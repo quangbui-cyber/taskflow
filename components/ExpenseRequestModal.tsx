@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useId } from "react";
+import Link from "next/link";
 import {
   FileText,
   CreditCard,
@@ -556,51 +557,14 @@ export default function ExpenseRequestModal({
         {/* TAB 2: QUẢN LÝ NGƯỜI THỤ HƯỞNG NCC */}
         {activeTab === "beneficiary" && (
           <div className="space-y-5">
-            {canCreate && !finance.data.closed && (
-              <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] space-y-3">
-                <div className="flex items-center justify-between pb-2 border-b border-[var(--border)]">
-                  <h3 className="font-bold text-xs uppercase tracking-wider text-[var(--foreground)]">
-                    Đăng ký / Cập nhật người thụ hưởng NCC
-                  </h3>
-                  <Badge tone="info">Kế toán xác nhận theo phiên bản</Badge>
-                </div>
-
-                <ActionForm
-                  finance={finance}
-                  command="BENEFICIARY"
-                  label="Lưu thông tin thụ hưởng"
-                  onSuccess={() => setFeedbackNotice("Đã lưu thông tin người thụ hưởng thành công.")}
-                >
-                  <Select name="beneficiaryId" label="Thao tác: Thêm mới hoặc Cập nhật">
-                    <option value="">Thêm nhà cung cấp mới</option>
-                    {finance.data.beneficiaries.map(b => (
-                      <option key={b.id} value={b.id}>
-                        Cập nhật: {b.name} (Phiên bản v{b.version})
-                      </option>
-                    ))}
-                  </Select>
-
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <Input name="name" label="Tên người nhận / Tên NCC" placeholder="Công ty TNHH..." required />
-                    <Input name="bank" label="Ngân hàng" placeholder="Vietcombank, MB, ACB..." required />
-                    <Input name="account" label="Số tài khoản" placeholder="0123456789..." required />
-                  </div>
-
-                  <Select
-                    name="sourceFileId"
-                    label="Tài liệu tham chiếu tên người nhận & STK (không bắt buộc)"
-                  >
-                    <option value="">Không dùng file tham chiếu</option>
-                    {finance.files.map(file => (
-                      <option key={file.id} value={file.id}>{file.name}</option>
-                    ))}
-                  </Select>
-                  <p className="tf-ui-help">
-                    Kế toán kiểm tra tên NCC, ngân hàng và số tài khoản khi duyệt lần thanh toán đầu hoặc sau mỗi lần thay đổi. API ngân hàng đang để pending.
-                  </p>
-                </ActionForm>
+            <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-[var(--border)]">
+                <h3 className="font-bold text-xs uppercase tracking-wider text-[var(--foreground)]">Danh bạ NCC toàn công ty</h3>
+                <Badge tone="info">Kế toán xác nhận theo phiên bản</Badge>
               </div>
-            )}
+              <p className="text-xs text-[var(--text-secondary)]">Tạo và cập nhật NCC tại danh bạ dùng chung; hồ sơ cũ phía dưới chỉ để tra cứu.</p>
+              <Link href="/suppliers" className="tf-button-primary tf-button-size-md">Mở danh bạ NCC</Link>
+            </div>
 
             {/* Danh sách người thụ hưởng đã có */}
             <div className="space-y-3">

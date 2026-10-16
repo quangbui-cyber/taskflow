@@ -710,57 +710,16 @@ export default function PaymentCashPanel({
       {activeSubTab === "beneficiary" && (
         <div className="space-y-6">
           {/* A. THÊM / CẬP NHẬT NGƯỜI THỤ HƯỞNG */}
-          {canCreate && !finance.data.closed && (
-            <Panel className="space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
-                <div>
-                  <h3 className="font-bold text-base text-[var(--foreground)]">
-                    Đăng ký / Cập nhật người thụ hưởng NCC
-                  </h3>
-                  <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                    Kế toán xác minh thông tin tài khoản khi kiểm tra hồ sơ. Mỗi lần sửa thông tin sẽ tạo phiên bản mới cần xác minh lại.
-                  </p>
-                </div>
-                <Badge tone="info">Cần file căn cứ STK</Badge>
+          <Panel className="space-y-4">
+            <div className="flex items-center justify-between gap-4 pb-3 border-b border-[var(--border)]">
+              <div>
+                <h3 className="font-bold text-base text-[var(--foreground)]">Danh bạ NCC toàn công ty</h3>
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5">Tạo, đổi tài khoản và xác minh đúng phiên bản tại danh bạ dùng chung.</p>
               </div>
-
-              <ActionForm
-                finance={finance}
-                command="BENEFICIARY"
-                label="Lưu thông tin thụ hưởng"
-                onSuccess={() => setSavedNotice("Đã lưu thông tin người thụ hưởng thành công.")}
-              >
-                <Select name="beneficiaryId" label="Thao tác: Thêm mới hoặc Cập nhật">
-                  <option value="">Thêm nhà cung cấp mới</option>
-                  {finance.data.beneficiaries.map(b => (
-                    <option key={b.id} value={b.id}>
-                      Cập nhật: {b.name} (Phiên bản v{b.version})
-                    </option>
-                  ))}
-                </Select>
-
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <Input name="name" label="Tên người nhận / Tên NCC" placeholder="Công ty TNHH..." required />
-                  <Input name="bank" label="Ngân hàng" placeholder="Vietcombank, MB, ACB..." required />
-                  <Input name="account" label="Số tài khoản" placeholder="0123456789..." required />
-                </div>
-
-                <Select
-                  name="sourceFileId"
-                  label="Tài liệu căn cứ tên người nhận & STK"
-                  required
-                >
-                  <option value="">Chọn tệp căn cứ từ tài liệu dự án</option>
-                  {finance.files.map(file => (
-                    <option key={file.id} value={file.id}>{file.name}</option>
-                  ))}
-                </Select>
-                <p className="tf-ui-help">
-                  Căn cứ có thể là hợp đồng, hóa đơn VAT, báo giá chính thức hoặc email xác nhận từ đối tác.
-                </p>
-              </ActionForm>
-            </Panel>
-          )}
+              <Badge tone="info">File ngân hàng không bắt buộc</Badge>
+            </div>
+            <Link href="/suppliers" className="tf-button-primary tf-button-size-md">Mở danh bạ NCC</Link>
+          </Panel>
 
           {/* B. DANH SÁCH CÁC NGƯỜI THỤ HƯỞNG ĐÃ LƯU */}
           <Panel className="space-y-4">

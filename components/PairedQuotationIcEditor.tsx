@@ -898,86 +898,13 @@ export default function PairedQuotationIcEditor({
       <Dialog
         open={!!newBeneficiary}
         onClose={() => setNewBeneficiary(null)}
-        title="Tạo nhà cung cấp mới"
-        description="Nhà cung cấp được lưu vào danh bạ của project và tự chọn cho hạng mục đang sửa. Kế toán vẫn cần xác minh thông tin trước khi thanh toán."
+        title="Tạo nhà cung cấp trong danh bạ chung"
+        description="NCC theo JSON project đã chuyển sang chỉ đọc. Tạo NCC tại danh bạ toàn công ty rồi quay lại chọn phiên bản hiện hành."
       >
-        {newBeneficiary && (
-          <ActionForm
-            finance={{ project: finance.project, version }}
-            command="BENEFICIARY"
-            label="Tạo và chọn nhà cung cấp"
-            onSuccess={result => {
-              if (!result.beneficiaryId) {
-                setState({ error: "Đã lưu nhà cung cấp nhưng chưa nhận được mã để chọn cho hạng mục." });
-                return;
-              }
-              const beneficiaryId = result.beneficiaryId;
-              const beneficiaryName = newBeneficiary.name.trim();
-              setCreatedBeneficiaries(current => [
-                ...current.filter(beneficiary => beneficiary.id !== beneficiaryId),
-                { id: beneficiaryId, name: beneficiaryName }
-              ]);
-              setRows(current =>
-                current.map(row =>
-                  row.itemId === newBeneficiary.itemId
-                    ? { ...row, buy: { ...row.buy, vendorId: beneficiaryId } }
-                    : row
-                )
-              );
-              if (result.version !== undefined) setVersion(result.version);
-              setState({ success: `Đã tạo và chọn nhà cung cấp “${beneficiaryName}” cho hạng mục.` });
-              setNewBeneficiary(null);
-            }}
-          >
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Input
-                name="name"
-                label="Tên người nhận / Tên NCC"
-                placeholder="Công ty TNHH..."
-                required
-                value={newBeneficiary.name}
-                onChange={event => setNewBeneficiary(current => current ? { ...current, name: event.target.value } : current)}
-              />
-              <Input
-                name="bank"
-                label="Ngân hàng"
-                placeholder="Vietcombank, MB, ACB..."
-                required
-                value={newBeneficiary.bank}
-                onChange={event => setNewBeneficiary(current => current ? { ...current, bank: event.target.value } : current)}
-              />
-              <Input
-                name="account"
-                label="Số tài khoản"
-                placeholder="0123456789..."
-                required
-                value={newBeneficiary.account}
-                onChange={event => setNewBeneficiary(current => current ? { ...current, account: event.target.value } : current)}
-              />
-              <Select
-                name="sourceFileId"
-                label="File tham chiếu NCC đã có (không bắt buộc)"
-                value={newBeneficiary.sourceFileId}
-                onChange={event => setNewBeneficiary(current => current ? { ...current, sourceFileId: event.target.value } : current)}
-              >
-                <option value="">Không dùng file có sẵn</option>
-                {finance.files.map(file => (
-                  <option key={file.id} value={file.id}>{file.name}</option>
-                ))}
-              </Select>
-              <Input
-                type="file"
-                name="proof"
-                label="Hoặc tải file tham chiếu mới (không bắt buộc)"
-                accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
-                hint="Chỉ cần chọn một trong hai cách: dùng file có sẵn hoặc tải file mới · tối đa 4 MiB."
-              />
-            </div>
-            <p className="tf-ui-help">
-              File xác minh là hợp đồng, hóa đơn VAT, báo giá chính thức hoặc email có tên nhà cung cấp và thông tin thanh toán.
-            </p>
-          </ActionForm>
-        )}
+        <div className="flex items-center justify-between gap-3">
+          <p className="tf-ui-help">File chứng minh ngân hàng không bắt buộc; Kế toán xác nhận đúng phiên bản ở lần thanh toán đầu hoặc sau thay đổi.</p>
+          <Button variant="primary" onClick={() => router.push("/suppliers")}>Mở danh bạ NCC</Button>
+        </div>
       </Dialog>
 
       <Dialog
