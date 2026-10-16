@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 
 import {
   PHASE12_TEST_DATABASE_URL,
@@ -105,6 +106,20 @@ test("Phase 12 representative lifecycles use production boundaries and remain au
       const quotation = quoteData.quotations.find(item => item.id === quoteResult.quotationId);
       assert.ok(quotation);
 
+      const icEvidenceBytes = Buffer.from(`phase12:${kind}:ic-estimate`);
+      const icEvidence = await client.costFlowEvidence.create({
+        data: {
+          projectId: scenario.projectId,
+          sourceFileId: "",
+          kind: "IC_ESTIMATE",
+          name: `${kind}-ic-estimate.txt`,
+          mimeType: "text/plain",
+          data: icEvidenceBytes,
+          sha256: createHash("sha256").update(icEvidenceBytes).digest("hex"),
+          createdBy: ownerId,
+        },
+      });
+
       const icResult = await execute(scenario.projectId, owner, "SAVE_IC", {
         title: `${kind} IC`,
         lines: JSON.stringify([{
@@ -112,7 +127,7 @@ test("Phase 12 representative lifecycles use production boundaries and remain au
           unitPrice: kind === "TEAMBUILDING" ? "75000" : "3500000",
           quotationId: quotation.id,
           quotationLineId: quotation.lines[0].id,
-          evidenceReason: "Synthetic Phase 12 automation has no human source document.",
+          evidenceIds: [icEvidence.id],
         }]),
       });
       assert.ok(icResult.revisionId);
