@@ -52,6 +52,7 @@ type Props = {
     recipientKey: string;
     amount: string;
     title: string;
+    scheduleMilestoneId?: string;
   }) => void;
 };
 
@@ -1547,7 +1548,7 @@ export default function InternalCostPanel({
               />
               <Select
                 name="sourceFileId"
-                label="Chọn file xác minh đã có (nếu có)"
+                label="File tham chiếu NCC đã có (không bắt buộc)"
                 value={newBeneficiary.sourceFileId}
                 onChange={event => setNewBeneficiary(current => current ? { ...current, sourceFileId: event.target.value } : current)}
               >
@@ -1559,13 +1560,13 @@ export default function InternalCostPanel({
               <Input
                 type="file"
                 name="proof"
-                label="Hoặc tải file xác minh mới"
+                label="Hoặc tải file tham chiếu mới (không bắt buộc)"
                 accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
-                hint="Chỉ cần chọn một trong hai cách: dùng file có sẵn hoặc tải file mới · tối đa 4 MiB."
+                hint="Có thể bỏ trống. Kế toán xác nhận tên NCC, ngân hàng và số tài khoản khi duyệt lần thanh toán đầu hoặc sau khi thông tin thay đổi."
               />
             </div>
             <p className="tf-ui-help">
-              File xác minh là hợp đồng, hóa đơn VAT, báo giá chính thức hoặc email có tên nhà cung cấp và thông tin thanh toán.
+              Chưa tích hợp API ngân hàng. File này chỉ là tài liệu tham chiếu, không thay thế bước Kế toán xác nhận phiên bản thông tin NCC.
             </p>
           </ActionForm>
         )}

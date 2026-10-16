@@ -23,19 +23,33 @@ const newLine = (): EditableLine => ({
 
 type SavedDossier = NonNullable<Finance["paymentDossiers"]>[number];
 
-export function PaymentRequestEditor({ finance, onCreated, draft }:
-  { finance: Finance; onCreated: () => void; draft?: SavedDossier }) {
+export function PaymentRequestEditor({ finance, onCreated, draft, initialScheduleMilestoneId = "" }:
+  { finance: Finance; onCreated: () => void; draft?: SavedDossier; initialScheduleMilestoneId?: string }) {
   const revision = finance.data.revisions.find(item => item.effective);
+  const scheduleMilestone = initialScheduleMilestoneId
+    ? finance.data.vendorPaymentMilestones?.find(item => item.id === initialScheduleMilestoneId && item.revisionId === revision?.id)
+    : undefined;
   const draftRequest = draft ? finance.requests.find(request => request.id === draft.requestId) : undefined;
-  const [title, setTitle] = useState(draft?.title ?? "");
-  const [milestone, setMilestone] = useState(draft?.milestone ?? "");
+  const scheduledVendor = scheduleMilestone ? finance.data.beneficiaries.find(item => item.id === scheduleMilestone.vendorId) : undefined;
+  const [title, setTitle] = useState(draft?.title ?? (scheduleMilestone ? `Tạm ứng ${scheduleMilestone.title} - ${scheduledVendor?.name ?? "NCC"}` : ""));
+  const [milestone, setMilestone] = useState(draft?.milestone ?? scheduleMilestone?.title ?? "");
   const [explanation, setExplanation] = useState(typeof draftRequest?.payload.explanation === "string" ? draftRequest.payload.explanation : "");
   const [expectedSettlementDate, setExpectedSettlementDate] = useState(draftRequest?.payload.expectedSettlementDate ?? "");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [signPadOpen, setSignPadOpen] = useState(false);
   const [signatureData, setSignatureData] = useState<string | null>(null);
   const [signaturePin, setSignaturePin] = useState<string | null>(null);
-  const [lines, setLines] = useState<EditableLine[]>(() => draft?.lines.length ? draft.lines.map(line => ({ stableKey: line.stableKey, description: line.description, amount: line.amount, lineId: line.icLineId, recipientKey: line.recipientKey })) : [newLine()]);
+  const [lines, setLines] = useState<EditableLine[]>(() => {
+    if (draft?.lines.length) return draft.lines.map(line => ({ stableKey: line.stableKey, description: line.description, amount: line.amount, lineId: line.icLineId, recipientKey: line.recipientKey }));
+    if (scheduleMilestone?.lineAllocations?.length) return scheduleMilestone.lineAllocations.map(allocation => ({
+      stableKey: crypto.randomUUID(),
+      description: revision?.lines.find(line => line.id === allocation.lineId)?.description ?? scheduleMilestone.title,
+      amount: allocation.amount,
+      lineId: allocation.lineId,
+      recipientKey: `VENDOR:${scheduleMilestone.vendorId}`,
+    }));
+    return [newLine()];
+  });
   const recipients = useMemo(() => [
     ...finance.project.members.map(member => ({ key: `USER:${member.userId}`, label: `${finance.users.find(user => user.id === member.userId)?.name ?? "Nhân viên"} (nội bộ)` })),
     ...finance.data.beneficiaries.map(beneficiary => ({ key: `VENDOR:${beneficiary.id}`, label: `${beneficiary.name} (NCC)` })),
@@ -85,6 +99,7 @@ export function PaymentRequestEditor({ finance, onCreated, draft }:
     </div>
     <ActionForm finance={finance} command={draft ? "RESUBMIT_PAYMENT_DOSSIER" : "CREATE_PAYMENT_DOSSIER"} requestId={draft?.requestId} label={draft ? "Gửi lại toàn bộ ĐNTU" : "Gửi duyệt ĐNTU đa khoản"} showSubmit={false} onSuccess={onCreated}>
       <input type="hidden" name="kind" value="ADVANCE" />
+      <input type="hidden" name="scheduleMilestoneId" value={scheduleMilestone?.id ?? ""} />
       <input type="hidden" name="lines" value={JSON.stringify(submittedLines)} />
       <input type="hidden" name="clientTotal" value={clientTotal} />
       <input type="hidden" name="signatureData" value={signatureData ?? ""} />

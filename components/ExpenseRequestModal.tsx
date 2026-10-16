@@ -34,6 +34,7 @@ type Props = {
   initialAmount?: string;
   initialTitle?: string;
   initialExpenseIds?: string[];
+  initialScheduleMilestoneId?: string;
   initialTab?: "create" | "beneficiary";
   onSuccess?: () => void;
 };
@@ -49,6 +50,7 @@ export default function ExpenseRequestModal({
   initialAmount = "",
   initialTitle = "",
   initialExpenseIds = [],
+  initialScheduleMilestoneId = "",
   initialTab = "create",
   onSuccess,
 }: Props) {
@@ -248,6 +250,7 @@ export default function ExpenseRequestModal({
               <div className="pt-2">
                 <PaymentRequestEditor
                   finance={finance}
+                  initialScheduleMilestoneId={initialScheduleMilestoneId}
                   onCreated={() => {
                     setFeedbackNotice("Đề nghị tạm ứng đa khoản đã được gửi duyệt thành công.");
                     setTimeout(() => {
@@ -559,7 +562,7 @@ export default function ExpenseRequestModal({
                   <h3 className="font-bold text-xs uppercase tracking-wider text-[var(--foreground)]">
                     Đăng ký / Cập nhật người thụ hưởng NCC
                   </h3>
-                  <Badge tone="info">Cần file căn cứ STK</Badge>
+                  <Badge tone="info">Kế toán xác nhận theo phiên bản</Badge>
                 </div>
 
                 <ActionForm
@@ -585,16 +588,15 @@ export default function ExpenseRequestModal({
 
                   <Select
                     name="sourceFileId"
-                    label="Tài liệu căn cứ tên người nhận & STK"
-                    required
+                    label="Tài liệu tham chiếu tên người nhận & STK (không bắt buộc)"
                   >
-                    <option value="">Chọn tệp căn cứ từ tài liệu dự án</option>
+                    <option value="">Không dùng file tham chiếu</option>
                     {finance.files.map(file => (
                       <option key={file.id} value={file.id}>{file.name}</option>
                     ))}
                   </Select>
                   <p className="tf-ui-help">
-                    Căn cứ có thể là hợp đồng, hóa đơn VAT, báo giá chính thức hoặc email xác nhận từ đối tác.
+                    Kế toán kiểm tra tên NCC, ngân hàng và số tài khoản khi duyệt lần thanh toán đầu hoặc sau mỗi lần thay đổi. API ngân hàng đang để pending.
                   </p>
                 </ActionForm>
               </div>

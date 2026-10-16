@@ -172,10 +172,9 @@ test("scope quotation drafts expose an owner-scoped delete confirmation", () => 
   assert.match(service, /deleteOwnedQuotationDraft\(data, requireValue\(text\(form, "draftId"\), "bản nháp"\), actor\.id\)/);
 });
 
-test("paired UI contract: supplier verification copy explains the two file choices", () => {
+test("paired UI contract: supplier reference files are optional pending accountant verification", () => {
   const editor = source("components/PairedQuotationIcEditor.tsx");
-  assert.match(editor, /Chọn file xác minh đã có \(nếu có\)/);
-  assert.match(editor, /Hoặc tải file xác minh mới/);
-  assert.match(editor, /Chỉ cần chọn một trong hai cách/);
+  assert.match(editor, /File tham chiếu NCC đã có \(không bắt buộc\)/);
+  assert.match(editor, /Hoặc tải file tham chiếu mới \(không bắt buộc\)/);
   assert.doesNotMatch(editor, /Dùng tài liệu đã có trong project|tài liệu căn cứ mới/);
 });

@@ -13,7 +13,8 @@ import { completeIcLines, draftLineIssues } from "./budgetDraft";
 import { workingIcRevision } from "./budgetRevisions";
 import { validateIcLineOrigins } from "./budgetLineage";
 import { quotationLineAncestors } from "./budgetQuotation";
-import { validateIcEvidence, requestEvidenceIds } from "./icEvidence";
+import { validateIcSubmissionEvidence, requestEvidenceIds } from "./icEvidence";
+import { normalizeVendorPaymentSchedule } from "./vendorPaymentSchedule";
 import { applyPairedCommand, createPairedFromQuoteDraft } from "./pairedService";
 import { assertApprovalToken, correctionItems, recordApprovalEvent } from "@/lib/workflow/approvalEvents";
 import { assertEligibleApprovalReceiver } from "@/lib/workflow/permissions";
@@ -705,9 +706,15 @@ export async function executeFinance(projectId: string, expectedVersion: number,
       const vendorProofById = new Map(vendorProofs.map(proof => [proof.id, proof]));
       const vendorSnapshots = vendorIds.map(id => {
         const beneficiary = data.beneficiaries.find(item => item.id === id);
-        const proof = beneficiary ? vendorProofById.get(beneficiary.proofId) : undefined;
-        if (!beneficiary || !proof) throw new Error("Mỗi NCC cần thông tin người thụ hưởng và căn cứ xác minh hiện hành trước khi gửi.");
-        return { recipientKey: `VENDOR:${id}`, sourceVersion: beneficiary.version, proofId: beneficiary.proofId, proofSha256: proof.sha256 };
+        if (!beneficiary) throw new Error("Mỗi NCC cần thông tin người thụ hưởng hiện hành trước khi gửi.");
+        const proof = beneficiary.proofId ? vendorProofById.get(beneficiary.proofId) : undefined;
+        if (beneficiary.proofId && !proof) throw new Error("File tham chiếu NCC đã thay đổi hoặc không còn thuộc Project.");
+        return {
+          recipientKey: `VENDOR:${id}`,
+          sourceVersion: beneficiary.version,
+          accountFingerprint: createHash("sha256").update(`${beneficiary.name}\u0000${beneficiary.bank}\u0000${beneficiary.account}`).digest("hex"),
+          ...(proof ? { proofId: proof.id, proofSha256: proof.sha256 } : {}),
+        };
       });
       return { projection, evidenceById, vendorSnapshots };
     };
@@ -1024,6 +1031,24 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         const kind = text(form, "kind");
         if (kind !== "ADVANCE") throw new Error("Lát cắt đa khoản hiện chỉ hỗ trợ Đề nghị tạm ứng.");
         const { projection, evidenceById, vendorSnapshots } = await resolvePaymentDraft();
+        const scheduleMilestoneId = text(form, "scheduleMilestoneId");
+        const scheduleMilestone = scheduleMilestoneId
+          ? (data.vendorPaymentMilestones ?? []).find(item => item.id === scheduleMilestoneId)
+          : undefined;
+        if (scheduleMilestoneId) {
+          if (!scheduleMilestone) throw new Error("Đợt lịch thanh toán không còn tồn tại.");
+          if (scheduleMilestone.linkedRequestId) throw new Error("Đợt lịch thanh toán đã liên kết một hồ sơ ĐNTU.");
+          const scheduleRevision = data.revisions.find(item => item.id === scheduleMilestone.revisionId && item.effective);
+          if (!scheduleRevision || scheduleMilestone.paymentMethod !== "ADVANCE") throw new Error("Đợt lịch thanh toán không còn thuộc IC hiệu lực hoặc không phải ĐNTU.");
+          const expected = new Map((scheduleMilestone.lineAllocations ?? []).map(item => [item.lineId, item.amount]));
+          const actual = new Map<string, bigint>();
+          for (const line of projection.lines) {
+            if (line.recipient.key !== `VENDOR:${scheduleMilestone.vendorId}` || line.source.revisionId !== scheduleRevision.id) throw new Error("Khoản ĐNTU không khớp NCC hoặc IC của lịch thanh toán.");
+            actual.set(line.source.lineId, (actual.get(line.source.lineId) ?? BigInt(0)) + BigInt(line.amount));
+          }
+          if (expected.size !== actual.size || [...expected].some(([lineId, amount]) => actual.get(lineId)?.toString() !== amount)) throw new Error("Phân bổ ĐNTU đã khác lịch thanh toán; quay lại lịch để điều chỉnh trước khi gửi.");
+          if (projection.totalAmount !== scheduleMilestone.amount) throw new Error("Tổng ĐNTU đã khác số tiền của đợt lịch thanh toán.");
+        }
         const chain = await ordinarySteps();
         const expectedSettlementDate = calendarDate(text(form, "expectedSettlementDate"), "hạn hoàn ứng dự kiến").toISOString().slice(0, 10);
         const attemptId = randomUUID();
@@ -1052,6 +1077,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
           },
         });
         affectedRequestId = saved.id;
+        if (scheduleMilestone) scheduleMilestone.linkedRequestId = saved.id;
         await appendDigitalSigningEvent(tx, { requestId: saved.id, version: saved.version, kind: saved.kind, role: "CREATOR", actorId: actor.id, signatureData: form.get("signatureData"), signaturePin: form.get("signaturePin"), commandKey: `SUBMIT:${attemptId}:CREATOR` });
         await recordApprovalEvent(tx, { requestId: saved.id, module: saved.module, attemptId, submittedVersion: saved.version, mutationVersion: saved.version, stepIndex: 0, role: chain[0]?.role ?? "MANAGER", actorId: actor.id, action: "SUBMIT", recipients: chain[0]?.assigneeId ? [chain[0].assigneeId] : [] });
         for (const [recipientKey, totalAmount] of Object.entries(projection.recipientTotals)) {
@@ -1354,7 +1380,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
           throw new Error(`${issue.rowName || issue.rowId || "Hạng mục IC"}: ${issue.message}`);
         }
         revision.lines = completeIcLines(revision.lines);
-        validateIcEvidence(revision.lines);
+        validateIcSubmissionEvidence(revision.lines);
         const ids = [...new Set([...(revision.evidenceIds ?? []), ...revision.lines.flatMap(l => l.evidenceIds ?? [])])];
         const proofs = await tx.costFlowEvidence.findMany({ where: { projectId, id: { in: ids } }, select: { id: true, sha256: true } });
         if (proofs.length !== ids.length) throw new Error("Minh chứng đã thay đổi hoặc không thuộc project.");
@@ -1382,41 +1408,16 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         if (!rawMilestones) throw new Error("Dữ liệu lịch thanh toán không được rỗng.");
         const parsed = JSON.parse(rawMilestones) as import("./types").VendorPaymentMilestone[];
         if (!Array.isArray(parsed)) throw new Error("Danh sách đợt thanh toán không hợp lệ.");
-        const vendorId = text(form, "vendorId");
-        if (vendorId) {
-          data.vendorPaymentMilestones = [
-            ...(data.vendorPaymentMilestones ?? []).filter(m => m.vendorId !== vendorId),
-            ...parsed.map((m, idx) => ({
-              id: m.id || randomUUID(),
-              vendorId,
-              installmentNumber: m.installmentNumber || idx + 1,
-              title: String(m.title || `Đợt ${idx + 1}`).trim(),
-              percentage: Number(m.percentage) || 0,
-              amount: String(m.amount || "0"),
-              dueDate: String(m.dueDate || ""),
-              paymentMethod: (m.paymentMethod === "VENDOR_DIRECT" ? "VENDOR_DIRECT" : "ADVANCE") as "ADVANCE" | "VENDOR_DIRECT",
-              conditions: m.conditions ? String(m.conditions).trim() : undefined,
-              notes: m.notes ? String(m.notes).trim() : undefined,
-              linkedRequestId: m.linkedRequestId,
-              revisionId: m.revisionId,
-            }))
-          ];
-        } else {
-          data.vendorPaymentMilestones = parsed.map((m, idx) => ({
-            id: m.id || randomUUID(),
-            vendorId: m.vendorId,
-            installmentNumber: m.installmentNumber || idx + 1,
-            title: String(m.title || `Đợt ${idx + 1}`).trim(),
-            percentage: Number(m.percentage) || 0,
-            amount: String(m.amount || "0"),
-            dueDate: String(m.dueDate || ""),
-            paymentMethod: (m.paymentMethod === "VENDOR_DIRECT" ? "VENDOR_DIRECT" : "ADVANCE") as "ADVANCE" | "VENDOR_DIRECT",
-            conditions: m.conditions ? String(m.conditions).trim() : undefined,
-            notes: m.notes ? String(m.notes).trim() : undefined,
-            linkedRequestId: m.linkedRequestId,
-            revisionId: m.revisionId,
-          }));
-        }
+        const vendorId = requireValue(text(form, "vendorId"), "NCC");
+        const revisionId = requireValue(text(form, "revisionId"), "phiên bản IC");
+        const revision = data.revisions.find(item => item.id === revisionId);
+        if (!revision) throw new Error("Không tìm thấy IC của lịch thanh toán.");
+        const normalized = normalizeVendorPaymentSchedule({ revision, vendorId, milestones: parsed })
+          .map(item => ({ ...item, id: item.id && !item.id.startsWith("new-") ? item.id : randomUUID() }));
+        data.vendorPaymentMilestones = [
+          ...(data.vendorPaymentMilestones ?? []).filter(item => item.vendorId !== vendorId || item.revisionId !== revisionId),
+          ...normalized,
+        ];
         break;
       }
       case "SPLIT_IC_LINE":
@@ -1481,8 +1482,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         const proofId = upload
           ? (await tx.costFlowEvidence.create({ data: { projectId, sourceFileId: "uploaded-beneficiary-proof", kind: "BENEFICIARY", name: upload.name, mimeType: upload.mimeType, data: upload.data, sha256: createHash("sha256").update(upload.data).digest("hex"), createdBy: actor.id } })).id
           : await snapshotFile(text(form, "sourceFileId"), "BENEFICIARY");
-        if (!proofId) throw new Error("Chọn file xác minh đã có hoặc tải file xác minh mới.");
-        const updated = { id: existing?.id ?? randomUUID(), name: requireValue(text(form, "name"), "tên người nhận"), bank: requireValue(text(form, "bank"), "ngân hàng"), account: requireValue(text(form, "account"), "số tài khoản"), version: (existing?.version ?? 0) + 1, verifiedVersion: null, proofId: proofId! };
+        const updated = { id: existing?.id ?? randomUUID(), name: requireValue(text(form, "name"), "tên người nhận"), bank: requireValue(text(form, "bank"), "ngân hàng"), account: requireValue(text(form, "account"), "số tài khoản"), version: (existing?.version ?? 0) + 1, verifiedVersion: null, ...(proofId ? { proofId } : existing?.proofId ? { proofId: existing.proofId } : {}) };
         if (existing) Object.assign(existing, updated); else data.beneficiaries.push(updated);
         savedBeneficiaryId = updated.id;
         break;
@@ -1622,7 +1622,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
           const source = await tx.actualCostLine.findUniqueOrThrow({ where: { id: approvedActuals[0].lineId! }, select: { icRevisionId: true, icLineId: true } });
           await tx.paymentRequestLine.create({ data: { projectId, requestId: saved.id, stableKey: `settlement:${saved.id}`, position: 0, description: kind === "REIMBURSEMENT" ? "Đối soát AC đã duyệt" : "Thanh toán AC đã duyệt", amount: body.amount!, icRevisionId: source.icRevisionId ?? revision.id, icLineId: source.icLineId ?? revision.lines[0]?.id ?? "UNBUDGETED", sourceSnapshot: json({ approvedActualRefs: approvedActuals.map(line => ({ stableLineId: line.stableLineId, versionId: line.versionId, approvalEventId: line.approvalEventId, approvalAttemptId: line.approvalAttemptId })) }), recipientKey: key, evidenceManifest: json([]) } });
         }
-        if (beneficiary) {
+        if (beneficiary?.proofId) {
           const original = await tx.costFlowEvidence.findUnique({ where: { id: beneficiary.proofId } });
           if (!original) throw new Error("Thiếu căn cứ người thụ hưởng.");
           await tx.costFlowEvidence.create({ data: { projectId, requestId: saved.id, sourceFileId: original.sourceFileId, kind: original.kind, name: original.name, mimeType: original.mimeType, data: original.data, sha256: original.sha256, createdBy: actor.id } });
@@ -1659,8 +1659,13 @@ export async function executeFinance(projectId: string, expectedVersion: number,
             const sourceVersion = submitted && typeof submitted === "object" && "sourceVersion" in submitted ? Number(submitted.sourceVersion) : Number.NaN;
             const proofId = submitted && typeof submitted === "object" && "proofId" in submitted ? String(submitted.proofId) : "";
             const proofSha256 = submitted && typeof submitted === "object" && "proofSha256" in submitted ? String(submitted.proofSha256) : "";
+            const accountFingerprint = submitted && typeof submitted === "object" && "accountFingerprint" in submitted ? String(submitted.accountFingerprint) : "";
             const currentProof = proofById.get(proofId);
-            if (!beneficiary || recipientSnapshot.sourceVersion !== sourceVersion || beneficiary.version !== sourceVersion || beneficiary.proofId !== proofId || !currentProof || currentProof.sha256 !== proofSha256) throw new Error("Có NCC đã đổi thông tin hoặc căn cứ xác minh. Không ghi quyết định; trả toàn bộ hồ sơ để sửa và gửi lại.");
+            const currentFingerprint = beneficiary ? createHash("sha256").update(`${beneficiary.name}\u0000${beneficiary.bank}\u0000${beneficiary.account}`).digest("hex") : "";
+            const proofMatches = proofId
+              ? beneficiary?.proofId === proofId && currentProof?.sha256 === proofSha256
+              : !beneficiary?.proofId;
+            if (!beneficiary || recipientSnapshot.sourceVersion !== sourceVersion || beneficiary.version !== sourceVersion || currentFingerprint !== accountFingerprint || !proofMatches) throw new Error("Có NCC đã đổi thông tin hoặc căn cứ tham chiếu. Không ghi quyết định; trả toàn bộ hồ sơ để sửa và gửi lại.");
             beneficiary.verifiedVersion = beneficiary.version;
             return { recipientSnapshotId: recipientSnapshot.id, recipientKey: recipientSnapshot.recipientKey, sourceVersion, proofId, proofSha256 };
           });

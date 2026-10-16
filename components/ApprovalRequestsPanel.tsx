@@ -62,6 +62,7 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
   const [modalInitialAmount, setModalInitialAmount] = useState("");
   const [modalInitialTitle, setModalInitialTitle] = useState("");
   const [modalInitialExpenseIds, setModalInitialExpenseIds] = useState<string[]>([]);
+  const [modalInitialScheduleMilestoneId, setModalInitialScheduleMilestoneId] = useState("");
   const [modalInitialTab, setModalInitialTab] = useState<"create" | "beneficiary">("create");
 
   /* eslint-disable react-hooks/set-state-in-effect -- hydrate modal intent from the external URL once */
@@ -75,12 +76,14 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
       const urlExpenseIds = sp.get("expenseIds");
       const urlOpen = sp.get("openCreateRequest");
       const urlBeneficiary = sp.get("beneficiary");
+      const urlScheduleMilestoneId = sp.get("scheduleMilestoneId");
 
       if (urlKind && ["ADVANCE", "VENDOR_PAYMENT", "REIMBURSEMENT"].includes(urlKind)) {
         setModalInitialKind(urlKind);
         if (urlRecipientKey) setModalInitialRecipientKey(urlRecipientKey);
         if (urlAmount) setModalInitialAmount(urlAmount);
         if (urlTitle) setModalInitialTitle(urlTitle);
+        if (urlScheduleMilestoneId) setModalInitialScheduleMilestoneId(urlScheduleMilestoneId);
         if (urlExpenseIds) {
           try {
             const parsed = JSON.parse(urlExpenseIds);
@@ -502,6 +505,7 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
         open={createModalOpen}
         onClose={() => {
           setCreateModalOpen(false);
+          setModalInitialScheduleMilestoneId("");
           // Dọn dẹp query params trên URL nếu có
           if (typeof window !== "undefined") {
             const url = new URL(window.location.href);
@@ -512,6 +516,7 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
             url.searchParams.delete("expenseIds");
             url.searchParams.delete("openCreateRequest");
             url.searchParams.delete("beneficiary");
+            url.searchParams.delete("scheduleMilestoneId");
             window.history.replaceState(null, "", url.toString());
           }
         }}
@@ -523,6 +528,7 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
         initialAmount={modalInitialAmount}
         initialTitle={modalInitialTitle}
         initialExpenseIds={modalInitialExpenseIds}
+        initialScheduleMilestoneId={modalInitialScheduleMilestoneId}
         initialTab={modalInitialTab}
         onSuccess={() => {
           window.scrollTo({ top: 0, behavior: "smooth" });

@@ -31,6 +31,7 @@ type Props = {
     recipientKey: string;
     amount: string;
     title: string;
+    scheduleMilestoneId?: string;
   }) => void;
 };
 
@@ -41,11 +42,19 @@ type VendorGroup = {
   account: string;
   isVerified: boolean;
   itemCount: number;
+  items: IcRevision["lines"];
   totalGross: number;
   totalNet: number;
   milestones: VendorPaymentMilestone[];
   disbursedAmount: number;
 };
+
+const bangkokDate = () => new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Bangkok",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+}).format(new Date());
 
 export default function VendorPaymentScheduleTable({
   finance,
@@ -81,36 +90,7 @@ export default function VendorPaymentScheduleTable({
       if (vId === "UNASSIGNED") return;
 
       const ben = beneficiaries.find((b) => b.id === vId);
-      const customMilestones = storedMilestones.filter((m) => m.vendorId === vId);
-
-      // Default 2 installments (50% deposit, 50% settlement) if no custom milestones defined
-      const defaultMilestones: VendorPaymentMilestone[] =
-        customMilestones.length > 0
-          ? customMilestones
-          : [
-              {
-                id: `default-${vId}-1`,
-                vendorId: vId,
-                installmentNumber: 1,
-                title: "Tạm ứng cọc hợp đồng",
-                percentage: 50,
-                amount: Math.round(data.totalGross * 0.5).toString(),
-                dueDate: "",
-                paymentMethod: "ADVANCE",
-                conditions: "Ký hợp đồng hoặc xác nhận dịch vụ",
-              },
-              {
-                id: `default-${vId}-2`,
-                vendorId: vId,
-                installmentNumber: 2,
-                title: "Thanh toán hoàn tất sau nghiệm thu",
-                percentage: 50,
-                amount: (data.totalGross - Math.round(data.totalGross * 0.5)).toString(),
-                dueDate: "",
-                paymentMethod: "VENDOR_DIRECT",
-                conditions: "Có biên bản bàn giao & hóa đơn VAT",
-              },
-            ];
+      const customMilestones = storedMilestones.filter((m) => m.vendorId === vId && m.revisionId === revision.id);
 
       // Check disbursed cash for this vendor
       const vendorRecipientKey = `VENDOR:${vId}`;
@@ -123,11 +103,12 @@ export default function VendorPaymentScheduleTable({
         name: ben?.name || "Nhà cung cấp chưa đặt tên",
         bank: ben?.bank || "Chưa có ngân hàng",
         account: ben?.account || "Chưa có STK",
-        isVerified: Boolean(ben?.verifiedVersion),
+        isVerified: Boolean(ben && ben.verifiedVersion === ben.version),
         itemCount: data.items.length,
+        items: data.items,
         totalGross: data.totalGross,
         totalNet: data.totalNet,
-        milestones: defaultMilestones,
+        milestones: customMilestones,
         disbursedAmount: disbursed,
       });
     });
@@ -158,7 +139,7 @@ export default function VendorPaymentScheduleTable({
       result = result.filter((g) => g.vendorId === filterVendorId);
     }
     if (filterUrgentOnly) {
-      const now = new Date().toISOString().slice(0, 10);
+      const now = bangkokDate();
       result = result.filter((g) =>
         g.milestones.some((m) => m.dueDate && m.dueDate <= now)
       );
@@ -185,7 +166,10 @@ export default function VendorPaymentScheduleTable({
       percentage: 0,
       amount: "0",
       dueDate: "",
-      paymentMethod: "VENDOR_DIRECT",
+      paymentMethod: "ADVANCE",
+      kind: "PLANNED",
+      revisionId: revision.id,
+      lineAllocations: [],
       conditions: "",
     };
     setEditingMilestones([...editingMilestones, newMilestone]);
@@ -211,37 +195,42 @@ export default function VendorPaymentScheduleTable({
     setEditingMilestones(editingMilestones.filter((_, idx) => idx !== index));
   };
 
+  const handleAllocation = (milestoneIndex: number, lineId: string, rawAmount: string) => {
+    const copy = structuredClone(editingMilestones);
+    const allocations = (copy[milestoneIndex].lineAllocations ?? []).filter(item => item.lineId !== lineId);
+    const amount = rawAmount.replace(/\D/g, "");
+    if (amount) allocations.push({ lineId, amount });
+    copy[milestoneIndex].lineAllocations = allocations;
+    copy[milestoneIndex].amount = allocations
+      .reduce((total, item) => total + BigInt(item.amount || "0"), BigInt(0))
+      .toString();
+    setEditingMilestones(copy);
+  };
+
   // Helper to determine milestone status
   const getMilestoneStatus = (vendorId: string, milestone: VendorPaymentMilestone) => {
-    const targetKey = `VENDOR:${vendorId}`;
-    const amountNum = parseFloat(milestone.amount) || 0;
-
-    // Check if matching cash exists
-    const matchingCash = finance.cash.find(
-      (c) => c.recipientKey === targetKey && Math.abs(parseFloat(c.amount) - amountNum) < 1000
-    );
+    const linkedRequest = milestone.linkedRequestId
+      ? finance.requests.find(request => request.id === milestone.linkedRequestId)
+      : undefined;
+    const matchingCash = milestone.linkedRequestId
+      ? finance.cash.find(cash => cash.requestId === milestone.linkedRequestId && cash.direction === "OUT")
+      : undefined;
     if (matchingCash) {
       return { tone: "success" as const, label: "Đã chi tiền", isPaid: true };
     }
 
     // Check if in-flight request exists
-    const matchingRequest = finance.requests.find(
-      (r) =>
-        r.state === "SUBMITTED" &&
-        r.payload?.recipientKey === targetKey &&
-        Math.abs(parseFloat(r.payload?.amount || "0") - amountNum) < 1000
-    );
-    if (matchingRequest) {
+    if (linkedRequest) {
       return {
         tone: "info" as const,
-        label: `Đang duyệt (${matchingRequest.title.slice(0, 15)}...)`,
+        label: `${linkedRequest.state === "APPROVED" ? "Đã duyệt" : "Đang xử lý"} (${linkedRequest.title.slice(0, 15)}...)`,
         isRequested: true,
       };
     }
 
     // Check due date
     if (milestone.dueDate) {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = bangkokDate();
       if (milestone.dueDate < today) {
         return { tone: "danger" as const, label: "Quá hạn thanh toán ⚠️", isUrgent: true };
       }
@@ -336,7 +325,7 @@ export default function VendorPaymentScheduleTable({
 
         <div className="text-xs text-[var(--text-secondary)] flex items-center gap-1.5">
           <Clock size={14} />
-          Bấm <strong>Lập ĐNTU</strong> hoặc <strong>Lập ĐNTT</strong> để chuyển thẳng sang form chi tiền
+          Trước khi có AC, mọi đợt chi NCC được phát hành dưới <strong>ĐNTU</strong>
         </div>
       </div>
 
@@ -397,7 +386,7 @@ export default function VendorPaymentScheduleTable({
                   <thead>
                     <tr>
                       <th scope="col" className="w-16 text-center">Đợt</th>
-                      <th scope="col">Nội dung thanh toán & Điều kiện giải ngân</th>
+                      <th scope="col">Nội dung & Hạng mục từ IC</th>
                       <th scope="col" className="w-24 text-right">Tỷ lệ</th>
                       <th scope="col" className="w-36 text-right">Số tiền</th>
                       <th scope="col" className="w-32">Thời hạn (Due)</th>
@@ -407,6 +396,13 @@ export default function VendorPaymentScheduleTable({
                     </tr>
                   </thead>
                   <tbody>
+                    {vendor.milestones.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="py-6 text-center text-sm text-[var(--text-secondary)]">
+                          Chưa thiết lập đợt chi. Hệ thống không tự tạo lịch 50/50.
+                        </td>
+                      </tr>
+                    )}
                     {vendor.milestones.map((milestone, mIdx) => {
                       const status = getMilestoneStatus(vendor.vendorId, milestone);
 
@@ -424,6 +420,9 @@ export default function VendorPaymentScheduleTable({
                                 Điều kiện: {milestone.conditions}
                               </span>
                             )}
+                            <span className="text-xs text-[var(--text-secondary)] mt-1 block">
+                              {(milestone.lineAllocations ?? []).map(allocation => vendor.items.find(item => item.id === allocation.lineId)?.description).filter(Boolean).join(" · ") || "Chưa liên kết hạng mục IC"}
+                            </span>
                           </td>
                           <td className="text-right tabular-nums text-sm font-medium">
                             {milestone.percentage ? `${milestone.percentage}%` : "—"}
@@ -442,9 +441,7 @@ export default function VendorPaymentScheduleTable({
                             )}
                           </td>
                           <td className="text-center">
-                            <Badge tone={milestone.paymentMethod === "ADVANCE" ? "info" : "neutral"}>
-                              {milestone.paymentMethod === "ADVANCE" ? "ĐNTU (Tạm ứng)" : "ĐNTT (Chi NCC)"}
-                            </Badge>
+                            <Badge tone="info">ĐNTU (Tạm ứng NCC)</Badge>
                           </td>
                           <td className="text-center">
                             <Badge tone={status.tone}>{status.label}</Badge>
@@ -456,41 +453,23 @@ export default function VendorPaymentScheduleTable({
                               </span>
                             ) : canCreate && !finance.data.closed ? (
                               <div className="flex items-center justify-end gap-1">
-                                {milestone.paymentMethod === "ADVANCE" ? (
-                                  <Button
-                                    variant="primary"
-                                    size="sm"
-                                    onClick={() =>
-                                      onOpenAdvance({
-                                        kind: "ADVANCE",
-                                        recipientKey: `VENDOR:${vendor.vendorId}`,
-                                        amount: milestone.amount,
-                                        title: `Tạm ứng ${milestone.title} - ${vendor.name}`,
-                                      })
-                                    }
-                                    className="text-xs"
-                                  >
-                                    <Send size={12} className="mr-1" />
-                                    Lập ĐNTU
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={() =>
-                                      onOpenAdvance({
-                                        kind: "VENDOR_PAYMENT",
-                                        recipientKey: `VENDOR:${vendor.vendorId}`,
-                                        amount: milestone.amount,
-                                        title: `Thanh toán ${milestone.title} - ${vendor.name}`,
-                                      })
-                                    }
-                                    className="text-xs"
-                                  >
-                                    <Send size={12} className="mr-1" />
-                                    Lập ĐNTT
-                                  </Button>
-                                )}
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  onClick={() =>
+                                    onOpenAdvance({
+                                      kind: "ADVANCE",
+                                      recipientKey: `VENDOR:${vendor.vendorId}`,
+                                      amount: milestone.amount,
+                                      title: `Tạm ứng ${milestone.title} - ${vendor.name}`,
+                                      scheduleMilestoneId: milestone.id,
+                                    })
+                                  }
+                                  className="text-xs"
+                                >
+                                  <Send size={12} className="mr-1" />
+                                  Lập ĐNTU
+                                </Button>
                               </div>
                             ) : (
                               <span className="text-xs text-[var(--text-secondary)]">—</span>
@@ -527,6 +506,7 @@ export default function VendorPaymentScheduleTable({
             onSuccess={() => setEditingVendorId(null)}
           >
             <input type="hidden" name="vendorId" value={editingVendorId} />
+            <input type="hidden" name="revisionId" value={revision.id} />
             <input type="hidden" name="milestones" value={JSON.stringify(editingMilestones)} />
 
             <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
@@ -575,12 +555,12 @@ export default function VendorPaymentScheduleTable({
                     />
 
                     <Select
-                      label="Hình thức thanh toán"
-                      value={m.paymentMethod}
-                      onChange={(e) => handleUpdateMilestone(idx, "paymentMethod", e.target.value)}
+                      label="Loại đợt"
+                      value={m.kind ?? "PLANNED"}
+                      onChange={(e) => handleUpdateMilestone(idx, "kind", e.target.value)}
                     >
-                      <option value="ADVANCE">Đề nghị tạm ứng (ĐNTU)</option>
-                      <option value="VENDOR_DIRECT">Thanh toán trực tiếp NCC (ĐNTT)</option>
+                      <option value="PLANNED">Theo kế hoạch</option>
+                      <option value="AD_HOC">Phát sinh</option>
                     </Select>
                   </div>
 
@@ -592,12 +572,7 @@ export default function VendorPaymentScheduleTable({
                       onChange={(e) => handleUpdateMilestone(idx, "percentage", e.target.value)}
                     />
 
-                    <Input
-                      label="Số tiền (VND)"
-                      value={m.amount}
-                      onChange={(e) => handleUpdateMilestone(idx, "amount", e.target.value)}
-                      required
-                    />
+                    <Input label="Số tiền (tự cộng từ IC)" value={m.amount} readOnly />
 
                     <Input
                       label="Hạn thanh toán (YYYY-MM-DD)"
@@ -613,6 +588,28 @@ export default function VendorPaymentScheduleTable({
                     value={m.conditions || ""}
                     onChange={(e) => handleUpdateMilestone(idx, "conditions", e.target.value)}
                   />
+                  <div className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                    <p className="text-xs font-semibold text-[var(--foreground)]">Phân bổ theo hạng mục IC của NCC</p>
+                    {vendorBeingEdited.items.map(line => {
+                      const allocation = (m.lineAllocations ?? []).find(item => item.lineId === line.id);
+                      return (
+                        <div key={line.id} className="grid grid-cols-[minmax(0,1fr)_160px] items-end gap-3">
+                          <div>
+                            <span className="block text-xs font-medium text-[var(--foreground)]">{line.description}</span>
+                            <span className="text-[11px] text-[var(--text-secondary)]">Ngân sách GROSS {displayMoney(line.cost?.gross ?? "0")}</span>
+                          </div>
+                          <Input
+                            aria-label={`Phân bổ ${line.description}`}
+                            inputMode="numeric"
+                            placeholder="0"
+                            value={allocation?.amount ?? ""}
+                            onChange={event => handleAllocation(idx, line.id, event.target.value)}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-[var(--text-secondary)]">Hồ sơ phát hành: ĐNTU. ĐNTT chỉ lập sau khi có AC và hóa đơn VAT điện tử.</p>
                 </div>
               ))}
             </div>

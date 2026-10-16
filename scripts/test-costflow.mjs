@@ -34,6 +34,7 @@ const phase12Suites = [
 const unitSuites = [
   "tests/costflow.test.ts", "tests/budget.test.ts", "tests/ic-effectiveness.test.ts", "tests/payment-policy.test.ts",
   "tests/payment-diff.test.ts", "tests/payment-read-model.test.ts", "tests/payment-security.test.ts", "tests/payment-ui-contract.test.ts", "tests/ic-approval-review.test.ts",
+  "tests/vendor-payment-flow.test.ts", "tests/vendor-payment-ui-contract.test.ts",
   "tests/paired.test.ts", "tests/paired-ui-contract.test.ts", "tests/paired-performance.test.ts", "tests/excel-intake-contract.test.ts", "tests/excel-intake-template.test.ts",
   "tests/excel-intake-parser.test.ts", "tests/excel-intake-ui-contract.test.ts", "tests/excel-round-trip.test.ts",
   "tests/excel-round-trip-ui-contract.test.ts", "tests/quotation-parameters.test.ts", "tests/quotation-totals.test.ts",

@@ -955,7 +955,7 @@ export default function PairedQuotationIcEditor({
               />
               <Select
                 name="sourceFileId"
-                label="Chọn file xác minh đã có (nếu có)"
+                label="File tham chiếu NCC đã có (không bắt buộc)"
                 value={newBeneficiary.sourceFileId}
                 onChange={event => setNewBeneficiary(current => current ? { ...current, sourceFileId: event.target.value } : current)}
               >
@@ -967,7 +967,7 @@ export default function PairedQuotationIcEditor({
               <Input
                 type="file"
                 name="proof"
-                label="Hoặc tải file xác minh mới"
+                label="Hoặc tải file tham chiếu mới (không bắt buộc)"
                 accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
                 hint="Chỉ cần chọn một trong hai cách: dùng file có sẵn hoặc tải file mới · tối đa 4 MiB."
               />

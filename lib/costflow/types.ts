@@ -12,7 +12,7 @@ export type IcEvidenceSupplement = { evidenceHashes?: Record<string,string>; ope
 export type QuotationLine = LinePricingInput & { id: string; description: string; unit: string; cost: CalculatedCost; parentQuotationLineId?: string };
 export type Quotation = { linePricingSchemaVersion?: 2; parameterConfig?: QuotationParameterSnapshot; totalLines?: QuotationTotalLine[]; totalLayout?: QuotationTotalLayoutRow[]; id: string; number: number; parentId: string | null; title: string; customer: string; notes: string; lines: QuotationLine[]; poIds: string[]; briefIds?: string[]; evidenceIds: string[]; createdBy: string; createdAt: string; salesRows?: Omit<PairedRow, "buy" | "icLineId">[] };
 export type IcRevision = { linePricingSchemaVersion?: 2; parameterConfig?: QuotationParameterSnapshot; pairedDraftId?: string; quotationId?: string; tree?: { itemId: string; parentItemId: string | null; name: string; description: string }[]; evidenceHashes?: Record<string,string>; id: string; number: number; requestId: string; effective: boolean; lines: IcLine[]; poIds: string[]; briefIds?: string[]; evidenceIds?: string[]; createdBy: string; parentRevisionId?: string; supersededByRevisionId?: string; lineageReason?: string; internalNotes?: string; submissions?: { linePricingSchemaVersion?: 2; parameterConfig?: QuotationParameterSnapshot; tree?: { itemId: string; parentItemId: string | null; name: string; description: string }[]; evidenceHashes?: Record<string,string>; requestId: string; requestVersion: number; submittedAt: string | null; title: string; explanation?: string; baselineRevisionId?: string | null; lines: IcLine[]; poIds: string[]; briefIds: string[]; evidenceIds?: string[] }[] };
-export type Beneficiary = { id: string; name: string; bank: string; account: string; version: number; verifiedVersion: number | null; proofId: string };
+export type Beneficiary = { id: string; name: string; bank: string; account: string; version: number; verifiedVersion: number | null; proofId?: string };
 /**
  * Nguồn quỹ chi trả của khoản AC:
  * - ADVANCE: Trừ vào quỹ tạm ứng của nhân sự (liên kết ĐNTU).
@@ -55,6 +55,8 @@ export type VendorPaymentMilestone = {
   amount: string;
   dueDate: string;
   paymentMethod: "ADVANCE" | "VENDOR_DIRECT";
+  kind?: "PLANNED" | "AD_HOC";
+  lineAllocations?: { lineId: string; amount: string }[];
   conditions?: string;
   notes?: string;
   linkedRequestId?: string;

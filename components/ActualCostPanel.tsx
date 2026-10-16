@@ -3,7 +3,6 @@
 import { Fragment, useCallback, useMemo, useState } from "react";
 import {
   AlertCircle,
-  Plus,
   Layers3,
   Paperclip,
   Users,
@@ -21,7 +20,6 @@ import { displayMoney } from "@/lib/costflow/money";
 import { reconcile, margin } from "@/lib/costflow/reconciliation";
 import { recipientDisplayName } from "@/lib/costflow/labels";
 import type { Expense } from "@/lib/costflow/types";
-import ExpenseUploadModal from "@/components/ExpenseUploadModal";
 import ExpenseDetailDrawer from "@/components/ExpenseDetailDrawer";
 import ActualCostEditor from "@/components/costflow/actual-cost/ActualCostEditor";
 import ActualCostControlCenter from "@/components/costflow/actual-cost/ActualCostControlCenter";
@@ -45,17 +43,10 @@ export default function ActualCostPanel({ finance, user, canCreate, onSelectTab 
   const [expandedLines, setExpandedLines] = useState<Record<string, boolean>>({});
 
   // Modal & Drawer states
-  const [uploadModalOpen, setUploadModalOpen] = useState(false);
-  const [preselectedLineId, setPreselectedLineId] = useState<string | undefined>();
-  const [preselectedRecipientKey, setPreselectedRecipientKey] = useState<string | undefined>();
-
   const [selectedExpenseForDrawer, setSelectedExpenseForDrawer] = useState<Expense | null>(null);
 
   const effective = finance.data.revisions.find(r => r.effective);
   const usersMap = useMemo(() => new Map(finance.users.map(u => [u.id, u.name])), [finance.users]);
-
-  // Project members can report expenses
-  const isProjectMember = finance.fullAccess;
 
   const recipientName = useCallback((key: string) =>
     recipientDisplayName(key, usersMap, finance.data.beneficiaries),
@@ -219,11 +210,6 @@ export default function ActualCostPanel({ finance, user, canCreate, onSelectTab 
     setExpandedLines(prev => ({ ...prev, [lineId]: !prev[lineId] }));
   };
 
-  const openUploadModalWithDefaults = (lId?: string, rKey?: string) => {
-    setPreselectedLineId(lId);
-    setPreselectedRecipientKey(rKey);
-    setUploadModalOpen(true);
-  };
 
   const controlCenter = finance.actualCosts?.controlCenter;
   if (controlCenter && !controlCenter.capabilities.account && !controlCenter.capabilities.audit) {
@@ -246,16 +232,7 @@ export default function ActualCostPanel({ finance, user, canCreate, onSelectTab 
           </p>
         </div>
 
-        {isProjectMember && !finance.data.closed && (
-          <Button
-            size="sm"
-            onClick={() => openUploadModalWithDefaults()}
-            className="shadow-sm"
-          >
-            <Plus size={15} className="mr-1.5" aria-hidden="true" />
-            Ghi chi phí
-          </Button>
-        )}
+        <Badge tone="neutral">Expense cũ chỉ đọc · ghi nhận mới qua AC chuẩn hóa</Badge>
       </div>
 
       <ActualCostEditor finance={finance} currentUserId={user.id} />
@@ -463,16 +440,6 @@ export default function ActualCostPanel({ finance, user, canCreate, onSelectTab 
                   {/* Actions for this member */}
                   <div className="pt-3 border-t border-[var(--border)] flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => openUploadModalWithDefaults(undefined, member.key)}
-                        className="text-xs"
-                      >
-                        <Plus size={13} className="mr-1" />
-                        Báo chi
-                      </Button>
-
                       {canCreate && (isOverSpent || member.expensesCount > 0) && (
                         <Button
                           variant="secondary"
@@ -587,17 +554,7 @@ export default function ActualCostPanel({ finance, user, canCreate, onSelectTab 
                               {lineExpenses.length} khoản
                             </Badge>
                           </td>
-                          <td className="text-right" onClick={e => e.stopPropagation()}>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openUploadModalWithDefaults(line.id)}
-                              className="text-xs"
-                            >
-                              <Plus size={13} className="mr-1" />
-                              Thêm chi
-                            </Button>
-                          </td>
+                          <td className="text-right text-xs text-[var(--text-secondary)]">Chỉ đọc</td>
                         </tr>
 
                         {/* EXPANDED ACCORDION SUB-ROWS */}
@@ -809,28 +766,12 @@ export default function ActualCostPanel({ finance, user, canCreate, onSelectTab 
             <EmptyState
               title="Không tìm thấy khoản chi nào"
               description="Chưa có khoản chi nào phù hợp với bộ lọc đang chọn."
-              action={
-                <Button size="sm" onClick={() => openUploadModalWithDefaults()}>
-                  <Plus size={14} className="mr-1" />
-                  Báo chi phí mới
-                </Button>
-              }
             />
           )}
         </Panel>
       )}
 
-      {/* 6. UPLOAD MODAL */}
-      <ExpenseUploadModal
-        open={uploadModalOpen}
-        onClose={() => setUploadModalOpen(false)}
-        finance={finance}
-        currentUserId={user.id}
-        preselectedLineId={preselectedLineId}
-        preselectedRecipientKey={preselectedRecipientKey}
-      />
-
-      {/* 7. DETAIL & VERIFICATION DRAWER */}
+      {/* Legacy Expense remains available for historical inspection only. */}
       <ExpenseDetailDrawer
         expense={selectedExpenseForDrawer}
         onClose={() => setSelectedExpenseForDrawer(null)}

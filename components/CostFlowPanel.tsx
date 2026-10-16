@@ -186,7 +186,7 @@ export default function CostFlowPanel({ finance, user, projectHeading, initialTa
     window.dispatchEvent(new HashChangeEvent("hashchange"));
   };
 
-  const openAdvance = (params: { kind: "ADVANCE" | "VENDOR_PAYMENT"; recipientKey: string; amount: string; title: string }) => {
+  const openAdvance = (params: { kind: "ADVANCE" | "VENDOR_PAYMENT"; recipientKey: string; amount: string; title: string; scheduleMilestoneId?: string }) => {
     setTabState("approvals");
     const url = new URL(window.location.href);
     url.searchParams.set("tab", "approvals");
@@ -194,6 +194,7 @@ export default function CostFlowPanel({ finance, user, projectHeading, initialTa
     url.searchParams.set("recipientKey", params.recipientKey);
     url.searchParams.set("amount", params.amount);
     if (params.title) url.searchParams.set("title", params.title);
+    if (params.scheduleMilestoneId) url.searchParams.set("scheduleMilestoneId", params.scheduleMilestoneId);
     url.hash = "";
     window.history.pushState(null, "", `${url.pathname}${url.search}`);
     window.dispatchEvent(new Event("popstate"));
