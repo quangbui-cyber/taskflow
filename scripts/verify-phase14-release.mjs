@@ -76,14 +76,15 @@ try {
     "tests/costflow-phase12-pilot.integration.test.mjs",
     "tests/costflow-phase12-regression.test.mjs",
   ], { ...process.env, DATABASE_URL: PINNED_DATABASE }));
-  commands.push(run("typecheck", "npx.cmd", ["tsc", "--noEmit"]));
-  commands.push(run("scoped-lint", "npx.cmd", ["eslint",
+  commands.push(run("typecheck", process.execPath, [path.join(root, "node_modules/typescript/bin/tsc"), "--noEmit"]));
+  commands.push(run("scoped-lint", process.execPath, [path.join(root, "node_modules/eslint/bin/eslint.js"),
     "app/suppliers", "components/costflow/suppliers", "components/costflow/payments",
     "components/ExpenseDetailDrawer.tsx", "components/ExpenseRequestModal.tsx", "components/ExpenseUploadModal.tsx",
     "lib/costflow/supplierService.ts", "lib/costflow/supplierReadModel.ts", "lib/costflow/vendorInvoice.ts",
     "lib/costflow/vendorPaymentService.ts", "lib/costflow/actualCostReadModel.ts", "lib/costflow/settlementService.ts",
   ]));
-  commands.push(run("build", "npm.cmd", ["run", "build:app"], { ...process.env, DATABASE_URL: PINNED_DATABASE, NODE_ENV: "production" }));
+  commands.push(run("prisma-generate", process.execPath, [path.join(root, "node_modules/prisma/build/index.js"), "generate"], { ...process.env, DATABASE_URL: PINNED_DATABASE, NODE_ENV: "production" }));
+  commands.push(run("build", process.execPath, [path.join(root, "node_modules/next/dist/bin/next"), "build", "--webpack"], { ...process.env, DATABASE_URL: PINNED_DATABASE, NODE_ENV: "production" }));
   const after = await publicFingerprint(client);
   assert.equal(after, before, "Phase 14 verifier changed the public costflow_test schema/data; only disposable schemas are allowed.");
 
