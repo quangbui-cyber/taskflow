@@ -16,6 +16,8 @@ export type ActualCostReadLine = {
   source: "normalized" | "legacy";
   reviewState: "submitted" | "returned" | "approved" | "needsReview";
   approvalState: "APPROVED" | "RETURNED" | null;
+  approvalId: string | null;
+  approvalAttemptId: string | null;
   versionId: string | null;
   version: number | null;
   reviewToken: string | null;
@@ -35,6 +37,7 @@ export type ActualCostReadLine = {
   createdById: string | null;
   lockedByApplications: boolean;
   applications: { requestId: string; amount: string; state: string; title: string }[];
+  vendorInvoiceAppliedAmount: string;
   decisionReason: string;
   acknowledgedWarningCodes: string[];
   missingEvidenceWarnings: string[];
@@ -60,7 +63,7 @@ function object(value: unknown): Record<string, unknown> | null {
 export async function loadActualCosts(projectId: string, actor: Actor, paymentLedger: PaymentLedgerRow[] = []) {
   const activeActor = await prisma.user.findFirst({ where: { id: actor.id, isActive: true }, select: { id: true, role: true } });
   if (!activeActor) return null;
-  const [project, ddGrant, normalized, workspace] = await Promise.all([
+  const [project, ddGrant, normalized, workspace, vendorInvoiceAllocations] = await Promise.all([
     prisma.project.findUnique({ where: { id: projectId }, select: { id: true, members: { select: { userId: true, user: { select: { name: true, isActive: true } } } } } }),
     prisma.workflowRoleGrant.findFirst({ where: { userId: activeActor.id, role: "AC_DD", revokedAt: null }, select: { id: true } }),
     prisma.actualCostLine.findMany({
@@ -79,6 +82,7 @@ export async function loadActualCosts(projectId: string, actor: Actor, paymentLe
       orderBy: { createdAt: "asc" },
     }),
     prisma.costFlowWorkspace.findUnique({ where: { projectId }, select: { data: true } }),
+    prisma.vendorInvoiceActualCost.findMany({ where: { projectId }, select: { actualCostVersionId: true, allocatedAmount: true } }),
   ]);
   if (!project) return null;
   const data = workspace?.data as unknown as FinanceData | undefined;
@@ -104,6 +108,8 @@ export async function loadActualCosts(projectId: string, actor: Actor, paymentLe
       source: "normalized" as const,
       reviewState: version.state === "APPROVED" ? "approved" as const : version.state === "RETURNED" ? "returned" as const : "submitted" as const,
       approvalState: decision?.action === "APPROVED" || decision?.action === "RETURNED" ? decision.action : null,
+      approvalId: decision?.id ?? null,
+      approvalAttemptId: decision?.attemptId ?? null,
       versionId: version.id,
       version: version.version,
       reviewToken: `${version.id}:${version.version}`,
@@ -127,6 +133,7 @@ export async function loadActualCosts(projectId: string, actor: Actor, paymentLe
       createdById: line.createdById,
       lockedByApplications: line.applications.length > 0,
       applications: line.applications.map(application => ({ requestId: application.requestId, amount: application.amount, state: application.request.state, title: application.request.title })),
+      vendorInvoiceAppliedAmount: vendorInvoiceAllocations.filter(item => item.actualCostVersionId === version.id).reduce((sum, item) => sum + BigInt(item.allocatedAmount), BigInt(0)).toString(),
       decisionReason: decision?.reason ?? "",
       acknowledgedWarningCodes: Array.isArray(decision?.warningCodes) ? decision.warningCodes.filter((value): value is string => typeof value === "string") : [],
       missingEvidenceWarnings: actualCostEvidenceWarnings(version.evidenceLinks.map(link => link.kind)),
@@ -154,6 +161,8 @@ export async function loadActualCosts(projectId: string, actor: Actor, paymentLe
       versionId: null,
       version: null,
       reviewToken: null,
+      approvalId: null,
+      approvalAttemptId: null,
       fundingSource: null,
       quantity: null,
       days: null,
@@ -166,6 +175,7 @@ export async function loadActualCosts(projectId: string, actor: Actor, paymentLe
       createdById: null,
       lockedByApplications: false,
       applications: [],
+      vendorInvoiceAppliedAmount: "0",
       decisionReason: "",
       acknowledgedWarningCodes: [],
       missingEvidenceWarnings: [],

@@ -12,13 +12,47 @@ import { dispatchWorkflowNotifications } from "@/lib/workflow/notifications";
 import { executeActualCostBulkDecision, executeActualCostCommand, type ActualCostBulkSelection, type ActualCostCommand } from "@/lib/costflow/actualCostService";
 import { executeSettlementCommand, isSettlementCommand } from "@/lib/costflow/settlementService";
 import { addSupplierBankAccount, archiveSupplierBankAccount, createSupplier, publishSupplierBankVersion, publishSupplierLegalVersion, setPrimarySupplierBankAccount, verifySupplierTuple } from "@/lib/costflow/supplierService";
+import { createVendorPaymentDossier } from "@/lib/costflow/vendorPaymentService";
 
 export type CostFlowActionState = { error?: string; success?: string; requestId?: string; closeRequestId?: string; financialCloseState?: "OPEN" | "CLOSED"; revisionId?: string; quotationId?: string; draftId?: string; beneficiaryId?: string; cashId?: string; customerAcceptanceId?: string; customerAcceptanceVersion?: number; settlementVersion?: number; idempotent?: boolean; savedScopes?: string[]; version?: number; lineErrors?: { lineId: string; message: string }[] };
 
 export type ActualCostActionState = { error?: string; success?: string; lineId?: string; version?: number };
 export type SupplierActionState = { error?: string; success?: string; supplierId?: string; bankAccountId?: string; version?: number };
+export type VendorPaymentActionState = { error?: string; success?: string; requestId?: string; invoiceId?: string; idempotent?: boolean };
 
 const supplierText = (form: FormData, key: string) => String(form.get(key) ?? "").trim();
+
+async function readVendorInvoiceUpload(value: FormDataEntryValue | null) {
+  if (!(value instanceof File) || value.size === 0) return null;
+  if (value.size > 4 * 1024 * 1024) throw new Error("File hóa đơn phải nhỏ hơn 4 MB.");
+  return { name: value.name, mimeType: value.type, size: value.size, data: new Uint8Array(await value.arrayBuffer()) };
+}
+
+export async function vendorPaymentAction(_previous: VendorPaymentActionState, form: FormData): Promise<VendorPaymentActionState> {
+  const actor = await requireUser();
+  const projectId = supplierText(form, "projectId");
+  try {
+    const parsed = JSON.parse(supplierText(form, "acSelections") || "[]") as Array<Record<string, unknown>>;
+    if (!Array.isArray(parsed)) throw new Error("Danh sách AC không hợp lệ.");
+    const files = (await Promise.all([readVendorInvoiceUpload(form.get("invoiceXml")), readVendorInvoiceUpload(form.get("invoicePdf"))])).filter((file): file is NonNullable<typeof file> => !!file);
+    const result = await createVendorPaymentDossier(actor, {
+      projectId,
+      title: supplierText(form, "title"),
+      recipientKey: supplierText(form, "recipientKey"),
+      invoice: { invoiceNumber: supplierText(form, "invoiceNumber"), symbol: supplierText(form, "symbol"), issuedAt: supplierText(form, "issuedAt"), sellerTaxCode: supplierText(form, "sellerTaxCode"), netAmount: supplierText(form, "netAmount"), vatAmount: supplierText(form, "vatAmount"), grossAmount: supplierText(form, "grossAmount") },
+      files,
+      selections: parsed.map(item => ({ stableLineId: String(item.stableLineId ?? ""), versionId: String(item.versionId ?? ""), approvalId: String(item.approvalId ?? ""), approvalAttemptId: String(item.approvalAttemptId ?? ""), amount: String(item.amount ?? "") })),
+      idempotencyKey: supplierText(form, "idempotencyKey"),
+      signatureData: form.get("signatureData"),
+      signaturePin: form.get("signaturePin"),
+    });
+    revalidatePath(`/projects/${projectId}/costflow`);
+    revalidatePath("/workflow");
+    return { success: result.idempotent ? "Hồ sơ ĐNTT đã tồn tại." : "Đã trình ĐNTT sau AC.", ...result };
+  } catch (error) {
+    return { error: publicPaymentErrorMessage(error) };
+  }
+}
 
 export async function supplierAction(_previous: SupplierActionState, form: FormData): Promise<SupplierActionState> {
   const actor = await requireUser();
