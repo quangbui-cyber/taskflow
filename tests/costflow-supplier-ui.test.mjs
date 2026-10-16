@@ -37,3 +37,16 @@ test("approval workspace links to the shared directory instead of opening a proj
   const supplierLink = approvals.match(/<Link href="\/suppliers"[\s\S]{0,500}Danh bạ NCC[\s\S]{0,100}<\/Link>/);
   assert.ok(supplierLink, "shared supplier directory must be a link in the approval header");
 });
+
+test("payment review exposes frozen/current supplier tuple and exact-version verification", () => {
+  const review = source("components/costflow/payments/PaymentRequestReview.tsx");
+  const service = source("lib/costflow/service.ts");
+  assert.match(review, /Phiên bản trong hồ sơ/);
+  assert.match(review, /Phiên bản hiện hành/);
+  assert.match(review, /supplierAction/);
+  assert.match(review, /supplierVersionId/);
+  assert.match(review, /bankAccountVersionId/);
+  assert.match(service, /frozenSupplierVersionId/);
+  assert.match(service, /frozenBankVersionId/);
+  assert.match(service, /Xác minh đúng phiên bản NCC/);
+});
