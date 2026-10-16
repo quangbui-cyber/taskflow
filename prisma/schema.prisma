@@ -61,6 +61,10 @@ model User {
   financialCloseEventsActed          FinancialCloseEvent[]          @relation("FinancialCloseEventActor")
   settlementExportsCreated           SettlementExportAudit[]        @relation("SettlementExportActor")
   settlementCorrectionsRequested     SettlementCorrectionAttempt[]  @relation("SettlementCorrectionRequester")
+  supplierVersionsCreated            SupplierVersion[]              @relation("SupplierVersionCreator")
+  supplierBankVersionsCreated        SupplierBankAccountVersion[]   @relation("SupplierBankVersionCreator")
+  supplierEvidenceCreated            SupplierEvidence[]             @relation("SupplierEvidenceCreator")
+  supplierVerificationsActed         SupplierVerification[]         @relation("SupplierVerificationActor")
   organizedMeetings                  Meeting[]                      @relation("MeetingOrganizer")
   meetingInvites                     MeetingAttendee[]
   kpiPlanChanges                     KpiPlanChange[]
@@ -155,6 +159,7 @@ model Project {
   settlementAdvanceManifestRows SettlementAdvanceManifestRow[]
   settlementCorrectionPairs   SettlementCorrectionObligationPair[]
   settlementExportProjections SettlementExportSourceProjection[]
+  legacySupplierAliases       LegacySupplierAlias[]
 
   @@index([status, onProcessAt])
   @@index([status, completedAt])
@@ -848,6 +853,162 @@ model CostFlowWorkspace {
   version   Int      @default(0)
   data      Json
   updatedAt DateTime @updatedAt
+}
+
+// Company-wide supplier identity. Legal and bank details live in immutable
+// version rows so submitted payment snapshots never drift with later edits.
+model Supplier {
+  id                 String                    @id @default(cuid())
+  status             String                    @default("ACTIVE")
+  currentVersion     Int                       @default(1)
+  taxCodeKey         String?                   @unique
+  dedupeKey          String
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  archivedAt         DateTime?
+  versions           SupplierVersion[]
+  bankAccounts       SupplierBankAccount[]
+  evidence           SupplierEvidence[]
+  verifications      SupplierVerification[]
+  legacyAliases      LegacySupplierAlias[]
+
+  @@index([status, dedupeKey])
+}
+
+model SupplierVersion {
+  id                 String                    @id @default(cuid())
+  supplierId         String
+  supplier           Supplier                  @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  version            Int
+  legalName          String
+  normalizedName     String
+  taxCode            String?
+  normalizedTaxCode  String?
+  address            String                    @default("")
+  contactName        String                    @default("")
+  contactEmail       String                    @default("")
+  contactPhone       String                    @default("")
+  changeReason       String                    @default("")
+  createdById        String
+  createdBy          User                      @relation("SupplierVersionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt          DateTime                  @default(now())
+  verifications      SupplierVerification[]
+  legacyAliases      LegacySupplierAlias[]
+
+  @@unique([supplierId, version])
+  @@unique([id, supplierId])
+  @@index([normalizedName])
+  @@index([normalizedTaxCode])
+  @@index([createdById, createdAt])
+}
+
+model SupplierBankAccount {
+  id                 String                       @id @default(cuid())
+  supplierId         String
+  supplier           Supplier                     @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  status             String                       @default("ACTIVE")
+  isPrimary          Boolean                      @default(false)
+  currentVersion     Int                          @default(1)
+  createdAt          DateTime                     @default(now())
+  updatedAt          DateTime                     @updatedAt
+  archivedAt         DateTime?
+  versions           SupplierBankAccountVersion[]
+  verifications      SupplierVerification[]
+  legacyAliases      LegacySupplierAlias[]
+
+  @@unique([id, supplierId])
+  @@index([supplierId, status])
+}
+
+model SupplierBankAccountVersion {
+  id                 String                    @id @default(cuid())
+  supplierId         String
+  bankAccountId      String
+  bankAccount        SupplierBankAccount       @relation(fields: [bankAccountId, supplierId], references: [id, supplierId], onDelete: Restrict)
+  version            Int
+  bankName           String
+  bankCode           String                    @default("")
+  accountHolder      String
+  accountNumber      String
+  accountLast4       String
+  accountFingerprint String
+  changeReason       String                    @default("")
+  createdById        String
+  createdBy          User                      @relation("SupplierBankVersionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt          DateTime                  @default(now())
+  verifications      SupplierVerification[]
+  legacyAliases      LegacySupplierAlias[]
+
+  @@unique([bankAccountId, version])
+  @@unique([id, bankAccountId, supplierId])
+  @@index([supplierId, accountFingerprint])
+  @@index([createdById, createdAt])
+}
+
+model SupplierEvidence {
+  id            String                 @id @default(cuid())
+  supplierId    String
+  supplier      Supplier               @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  kind          String                 @default("BANK_ACCOUNT_PROOF")
+  name          String
+  mimeType      String
+  byteLength    Int
+  data          Bytes
+  sha256        String
+  createdById   String
+  createdBy     User                   @relation("SupplierEvidenceCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt     DateTime               @default(now())
+  verifications SupplierVerification[]
+
+  @@index([supplierId, createdAt])
+  @@index([sha256])
+}
+
+model SupplierVerification {
+  id                   String                     @id @default(cuid())
+  supplierId           String
+  supplier             Supplier                   @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  supplierVersionId    String
+  supplierVersion      SupplierVersion            @relation(fields: [supplierVersionId, supplierId], references: [id, supplierId], onDelete: Restrict)
+  bankAccountId        String
+  bankAccount          SupplierBankAccount        @relation(fields: [bankAccountId, supplierId], references: [id, supplierId], onDelete: Restrict)
+  bankAccountVersionId String
+  bankAccountVersion   SupplierBankAccountVersion @relation(fields: [bankAccountVersionId, bankAccountId, supplierId], references: [id, bankAccountId, supplierId], onDelete: Restrict)
+  decision             String
+  reason               String                     @default("")
+  evidenceId           String?
+  evidence             SupplierEvidence?          @relation(fields: [evidenceId], references: [id], onDelete: Restrict)
+  actorId              String
+  actor                User                       @relation("SupplierVerificationActor", fields: [actorId], references: [id], onDelete: Restrict)
+  createdAt            DateTime                   @default(now())
+
+  @@index([supplierId, supplierVersionId, bankAccountVersionId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([evidenceId])
+}
+
+model LegacySupplierAlias {
+  id                   String                     @id @default(cuid())
+  projectId            String
+  project              Project                    @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  legacyBeneficiaryId  String
+  legacyRecipientKey   String
+  supplierId           String
+  supplier             Supplier                   @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  supplierVersionId    String
+  supplierVersion      SupplierVersion            @relation(fields: [supplierVersionId, supplierId], references: [id, supplierId], onDelete: Restrict)
+  bankAccountId        String
+  bankAccount          SupplierBankAccount        @relation(fields: [bankAccountId, supplierId], references: [id, supplierId], onDelete: Restrict)
+  bankAccountVersionId String
+  bankAccountVersion   SupplierBankAccountVersion @relation(fields: [bankAccountVersionId, bankAccountId, supplierId], references: [id, bankAccountId, supplierId], onDelete: Restrict)
+  sourceProofId        String?
+  sourceSnapshot       Json
+  createdAt            DateTime                   @default(now())
+
+  @@unique([projectId, legacyBeneficiaryId])
+  @@unique([projectId, legacyRecipientKey])
+  @@index([supplierId, projectId])
+  @@index([bankAccountId])
 }
 
 // Standalone, immutable customer-safe quotation snapshots. Replacing content means
