@@ -98,6 +98,7 @@ export default function InternalCostPanel({
   const [selectedRevisionId, setSelectedRevisionId] = useState<string>("");
   const [searchFilter, setSearchFilter] = useState<string>("");
   const [quotationFilter, setQuotationFilter] = useState<"ALL" | "LINKED" | "UNLINKED" | "LOW_MARGIN">("ALL");
+  const [vendorFilter, setVendorFilter] = useState<{ revisionId: string; vendorId: string }>({ revisionId: "", vendorId: "ALL" });
   const [editingLine, setEditingLine] = useState<IcLine | null | undefined>(undefined);
   const [selectedLineIds, setSelectedLineIds] = useState<string[]>([]);
   const [bulkVendorOpen, setBulkVendorOpen] = useState(false);
@@ -153,6 +154,19 @@ export default function InternalCostPanel({
     for (const beneficiary of createdBeneficiaries) merged.set(beneficiary.id, beneficiary);
     return [...merged.values()];
   }, [createdBeneficiaries, finance.data.beneficiaries, finance.suppliers]);
+  const vendorFilterOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    let unassignedCount = 0;
+    for (const line of visibleRevision?.lines ?? []) {
+      if (line.vendorId) counts.set(line.vendorId, (counts.get(line.vendorId) ?? 0) + 1);
+      else unassignedCount++;
+    }
+    const names = new Map(beneficiaryOptions.map(beneficiary => [beneficiary.id, beneficiary.name]));
+    const vendors = [...counts].map(([id, count]) => ({ id, count, name: names.get(id) ?? "NCC không còn trong danh bạ" }));
+    vendors.sort((a, b) => a.name.localeCompare(b.name, "vi"));
+    return { vendors, unassignedCount };
+  }, [visibleRevision, beneficiaryOptions]);
+  const activeVendorFilter = vendorFilter.revisionId === visibleRevision?.id ? vendorFilter.vendorId : "ALL";
   const currentActionVersion = Math.max(actionVersion, finance.version);
 
   // Check if current user can edit visible revision
@@ -388,6 +402,12 @@ export default function InternalCostPanel({
     if (!visibleRevision) return [];
     let list = resolvedLines;
 
+    if (activeVendorFilter === "UNASSIGNED") {
+      list = list.filter(line => !line.vendorId);
+    } else if (activeVendorFilter !== "ALL") {
+      list = list.filter(line => line.vendorId === activeVendorFilter);
+    }
+
     if (quotationFilter === "LINKED") {
       list = list.filter(l => !!lineMatches.get(l.id));
     } else if (quotationFilter === "UNLINKED") {
@@ -412,7 +432,7 @@ export default function InternalCostPanel({
         qName.includes(q)
       );
     });
-  }, [visibleRevision, resolvedLines, searchFilter, quotationFilter, lineMatches, lineMargins, beneficiariesMap]);
+  }, [visibleRevision, resolvedLines, activeVendorFilter, searchFilter, quotationFilter, lineMatches, lineMargins, beneficiariesMap]);
 
   const selectedLineIdSet = useMemo(() => {
     const visibleIds = new Set(visibleRevision?.lines.map(line => line.id) ?? []);
@@ -786,6 +806,17 @@ export default function InternalCostPanel({
 
               {/* PARALLEL QUOTATION LINK FILTER PILLS */}
               <div className="flex flex-wrap items-center justify-between gap-3 p-2.5 rounded-lg bg-[var(--surface-soft)] border border-[var(--border)] text-xs">
+                <Select
+                  label="Lọc theo NCC"
+                  value={activeVendorFilter}
+                  onChange={event => setVendorFilter({ revisionId: visibleRevision.id, vendorId: event.target.value })}
+                >
+                  <option value="ALL">Tất cả NCC ({visibleRevision.lines.length})</option>
+                  <option value="UNASSIGNED">Chưa gắn NCC ({vendorFilterOptions.unassignedCount})</option>
+                  {vendorFilterOptions.vendors.map(vendor => (
+                    <option key={vendor.id} value={vendor.id}>{vendor.name} ({vendor.count})</option>
+                  ))}
+                </Select>
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="text-[var(--text-secondary)] font-medium mr-1 flex items-center gap-1">
                     <Layers3 size={13} className="text-[#587216]" /> Lọc liên kết:
@@ -1098,7 +1129,7 @@ export default function InternalCostPanel({
                   ) : (
                     <tr>
                       <td colSpan={isEditableDraft ? 13 : 12} className="py-6 text-center text-sm text-[var(--text-secondary)]">
-                        {searchFilter || quotationFilter !== "ALL"
+                        {searchFilter || quotationFilter !== "ALL" || activeVendorFilter !== "ALL"
                           ? "Không tìm thấy dòng nào khớp với tiêu chí lọc."
                           : "Chưa có dòng hạng mục."}
                       </td>
