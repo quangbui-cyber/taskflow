@@ -28,6 +28,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import ActionForm from "@/components/CostFlowActionForm";
 import IcRevisionDiff, { IcQuotationUpdates } from "@/components/IcRevisionDiff";
 import VendorPaymentScheduleTable from "@/components/VendorPaymentScheduleTable";
+import InternalCostVendorView from "@/components/InternalCostVendorView";
 import EditIcLineModal from "@/components/EditIcLineModal";
 import IcEvidencePanel from "@/components/IcEvidencePanel";
 import { workingIcRevision } from "@/lib/costflow/budgetRevisions";
@@ -82,8 +83,8 @@ export default function InternalCostPanel({
   const quotations = finance.data.quotations ?? [];
   const latestQuotation = quotations.at(-1);
 
-  // Sub-view switcher state: "items" (Bảng Hạng Mục & NCC) | "schedule" (Lịch Thanh Toán & Tạm Ứng) | "revisions" (So Sánh & Lịch Sử)
-  const [activeSubView, setActiveSubView] = useState<"items" | "schedule" | "revisions">("items");
+  // Sub-view switcher state: line items, vendor costs, payment schedule, and revision history.
+  const [activeSubView, setActiveSubView] = useState<"items" | "vendors" | "schedule" | "revisions">("items");
 
   // Effective baseline revision (if any)
   const effective = useMemo(() => {
@@ -685,7 +686,7 @@ export default function InternalCostPanel({
 
       {/* 5. SUB-VIEW SWITCHER (TÁI CẤU TRÚC: CHẤM DỨT TRANG CUỘN DÀI) */}
       {visibleRevision && (
-        <div className="flex border-b border-[var(--border)] gap-2 sm:gap-6 text-sm font-semibold">
+        <div className="flex flex-wrap border-b border-[var(--border)] gap-2 sm:gap-6 text-sm font-semibold">
           <button
             type="button"
             onClick={() => setActiveSubView("items")}
@@ -697,6 +698,19 @@ export default function InternalCostPanel({
           >
             <Layers3 size={16} aria-hidden="true" />
             <span>Bảng Hạng Mục & NCC ({visibleRevision.lines.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubView("vendors")}
+            className={`pb-3 transition-colors relative flex items-center gap-1.5 ${
+              activeSubView === "vendors"
+                ? "text-[#587216] border-b-2 border-[#587216] font-bold"
+                : "text-[var(--text-secondary)] hover:text-[var(--foreground)]"
+            }`}
+          >
+            <Building2 size={16} aria-hidden="true" />
+            <span>Chi phí theo NCC ({vendorStats.uniqueVendors})</span>
           </button>
 
           <button
@@ -1229,6 +1243,10 @@ export default function InternalCostPanel({
           )}
 
           {/* ═══════════ SUB-VIEW 2: LỊCH THANH TOÁN NCC & KẾ HOẠCH TẠM ỨNG ═══════════ */}
+          {activeSubView === "vendors" && (
+            <InternalCostVendorView revisionNumber={visibleRevision.number} lines={resolvedLines} vendors={beneficiaryOptions} />
+          )}
+
           {activeSubView === "schedule" && (
             <VendorPaymentScheduleTable
               finance={finance}
