@@ -18,6 +18,7 @@ const ROLE_INFO: Record<string, { label: string; icon: typeof User; color: strin
   MANAGER: { label: "Quản lý (Manager)", icon: ShieldCheck, color: "text-[var(--success)] bg-[var(--success-soft)]" },
   ACCOUNTANT: { label: "Kế toán (Accountant)", icon: Calculator, color: "text-[var(--warning)] bg-[var(--warning-soft)]" },
   CEO: { label: "CEO (Phê duyệt cấp chi)", icon: Crown, color: "text-[var(--color-brand-800)] bg-[var(--primary-soft)]" },
+  AC_DD: { label: "Phó Giám đốc (Duyệt AC)", icon: ShieldCheck, color: "text-[var(--info)] bg-[var(--info-soft)]" },
 };
 
 type TimelineStep = {
@@ -127,7 +128,7 @@ export default function ApprovalTimeline({ request, users, projectedSteps }: Pro
     <div className="py-2">
       <div className="flex items-center justify-between mb-4">
         <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-          Tiến trình phê duyệt ({steps.length} bước)
+          Tiến trình phê duyệt ({activeSteps.length} bước duyệt)
         </h4>
         <span className="text-xs text-[var(--text-secondary)]">
           {request.state === "APPROVED"

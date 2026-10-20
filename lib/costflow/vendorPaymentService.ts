@@ -41,7 +41,7 @@ export function validateVendorPaymentSelection(input: { projectId: string; recip
     if (seen.has(identity)) throw new Error("Nguồn AC được chọn bị trùng.");
     seen.add(identity);
     if (line.projectId !== input.projectId) throw new Error("AC phải thuộc đúng Project.");
-    if (line.sourceKind === "LEGACY_EXPENSE") throw new Error("legacy Expense chỉ đọc và không được tạo ĐNTT mới.");
+    if (line.sourceKind === "LEGACY_EXPENSE") throw new Error("Dữ liệu chi phí cũ chỉ để đối chiếu và không được tạo ĐNTT mới.");
     if (line.fundingSource !== "VENDOR_PAYMENT") throw new Error("ĐNTT sau AC chỉ nhận nguồn VENDOR_PAYMENT.");
     if (line.recipientKey !== input.recipientKey) throw new Error("Mọi dòng AC phải cùng NCC và tài khoản.");
     const approved = positiveVnd(line.approvedAmount, "AC đã duyệt");

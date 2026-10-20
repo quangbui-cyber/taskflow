@@ -34,27 +34,29 @@ test("document total sums original values, not rounded row totals", () => {
 
 test("reconciliation keeps employee and vendor balances separate; incomplete evidence blocks reimbursement", () => {
   const data = emptyFinance();
+  let expenses = [] as import("../lib/costflow/reconciliation").ReconciliationCost[];
   const cost = (gross: string) => calculateCost({ quantity: "1", unitPrice: gross, basis: "GROSS", vatPercent: "0" });
   const input = { quantity: "1", unitPrice: "0", basis: "NET" as const, vatPercent: "0" };
-  data.expenses = [{ id: "e1", revisionId: "ic1", lineId: "l1", recipientKey: "USER:1", description: "NV", input, cost: cost("8000000"), invoiceId: "i1", paymentProofId: "p1", createdBy: "1" }, { id: "e2", revisionId: "ic1", lineId: "l2", recipientKey: "VENDOR:1", description: "NCC", input, cost: cost("8000000"), invoiceId: "i2", paymentProofId: "p2", createdBy: "1" }];
+  expenses = [{ id: "e1", recipientKey: "USER:1", cost: cost("8000000"), invoiceId: "i1", paymentProofId: "p1" }, { id: "e2", recipientKey: "VENDOR:1", cost: cost("8000000"), invoiceId: "i2", paymentProofId: "p2" }];
   const cash = [{ id: "c1", requestId: "r1", recipientKey: "USER:1", direction: "OUT", amount: "10000000", reference: "bank1", evidenceId: "proof1" }, { id: "c2", requestId: "r2", recipientKey: "VENDOR:1", direction: "OUT", amount: "5000000", reference: "bank2", evidenceId: "proof2" }];
-  const rows = reconcile(data, cash);
+  const rows = reconcile(expenses, cash);
   assert.deepEqual(rows.map(r => r.balance), ["-2000000", "3000000"]);
-  assert.equal(settlement(data, cash, "USER:1").refund, "2000000");
-  assert.equal(closeBlockers(data, cash).length, 1);
-  data.expenses = data.expenses.map((expense, index) => index === 0 ? { ...expense, invoiceId: null } : expense);
-  assert.throws(() => settlement(data, cash, "USER:1"), /đủ IC\/AC/);
-  assert.equal(closeBlockers(data, cash).length, 2);
+  assert.equal(settlement(expenses, cash, "USER:1").refund, "2000000");
+  assert.equal(closeBlockers(expenses, cash).length, 1);
+  expenses = expenses.map((expense, index) => index === 0 ? { ...expense, invoiceId: null } : expense);
+  assert.throws(() => settlement(expenses, cash, "USER:1"), /đủ IC\/AC/);
+  assert.equal(closeBlockers(expenses, cash).length, 2);
 });
 
 test("rounded monetary obligations settle without a hidden fractional remainder", () => {
   const data = emptyFinance();
+  const expenses: import("../lib/costflow/reconciliation").ReconciliationCost[] = [];
   const input = { quantity: "1", unitPrice: "100.49", basis: "NET" as const, vatPercent: "8" };
-  data.expenses.push({ id: "e", revisionId: "r", lineId: "l", recipientKey: "USER:1", description: "Chi phí", input, cost: calculateCost(input), invoiceId: "i", paymentProofId: "p", createdBy: "1" });
-  assert.equal(data.expenses[0].cost.gross, "109");
+  expenses.push({ id: "e", recipientKey: "USER:1", cost: calculateCost(input), invoiceId: "i", paymentProofId: "p" });
+  assert.equal(expenses[0].cost.gross, "109");
   const cash = [{ id: "c", requestId: "r", recipientKey: "USER:1", direction: "OUT", amount: "109", reference: "b", evidenceId: "p" }];
-  assert.equal(reconcile(data, cash)[0].rawBalance, "0/1");
-  assert.deepEqual(closeBlockers(data, cash), []);
+  assert.equal(reconcile(expenses, cash)[0].rawBalance, "0/1");
+  assert.deepEqual(closeBlockers(expenses, cash), []);
 });
 
 test("shared workflow never skips a step for the same actor or grants Admin an approval bypass", () => {

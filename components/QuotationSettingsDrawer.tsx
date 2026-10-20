@@ -312,7 +312,7 @@ export default function QuotationSettingsDrawer({
                 <div className="max-h-48 overflow-y-auto border border-[var(--border)] rounded bg-[var(--surface)] text-xs">
                   <table className="w-full border-collapse">
                     <caption className="sr-only">Chi tiết các dòng bị tác động bởi thay đổi tham số</caption>
-                    <thead className="bg-[var(--surface-soft)] border-b border-[var(--border)] text-[var(--text-secondary)]">
+                    <thead className="bg-[var(--primary)] border-b border-[var(--border)] text-[var(--color-brand-900)]">
                       <tr>
                         <th className="p-1.5 text-left font-semibold">Hạng mục</th>
                         <th className="p-1.5 text-center font-semibold">Phía</th>

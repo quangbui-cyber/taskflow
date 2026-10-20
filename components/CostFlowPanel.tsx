@@ -92,10 +92,13 @@ export type Finance = {
   paymentLedger?: import("@/lib/costflow/paymentReadModel").PaymentLedgerRow[];
   actualCosts?: {
     lines: import("@/lib/costflow/actualCostReadModel").ActualCostReadLine[];
+    removedLines: { id: string; description: string; createdById: string }[];
+    evidenceVault: { id: string; name: string; kind: string; sha256: string }[];
     comparisons: import("@/lib/costflow/actualCostReadModel").ActualCostComparison[];
     summary: ReturnType<typeof import("@/lib/costflow/actualCost").actualCostVariance>;
     canDecide: boolean;
     controlCenter: import("@/lib/costflow/actualCostControlCenter").ActualCostControlCenter;
+    sheet?: import("@/lib/costflow/actualCostReadModel").ActualCostSheet;
   } | null;
   customerAccounting: CustomerAccountingReadModel;
   customerAcceptanceSnapshots: {
@@ -317,7 +320,7 @@ export default function CostFlowPanel({ finance, user, projectHeading, initialTa
           <SummaryItem
             label="Chi phí thực tế AC (Phát sinh)"
             value={displayMoney(metrics.incurredNet)}
-            hint={`${finance.data.expenses.length} khoản chi · net`}
+            hint={`${finance.actualCosts?.lines.length ?? 0} khoản thực chi · net`}
           />
           <SummaryItem
             label="Dòng tiền thực tế (Thu / Chi)"

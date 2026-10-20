@@ -1402,7 +1402,7 @@ export default function InternalCostPanel({
                           </span>
                           <span>{snapshot.submittedAt ?? "Thời gian gửi trước đây"}</span>
                         </div>
-                        <Table caption="Nội dung IC snapshot đã gửi">
+                        <Table caption="Nội dung IC snapshot đã gửi" hideCaption>
                           <thead>
                             <tr>
                               <th scope="col">Nội dung</th>
@@ -1554,7 +1554,7 @@ export default function InternalCostPanel({
           setBulkVendorOpen(true);
         }}
         title="Tạo nhà cung cấp trong danh bạ chung"
-        description="Expense/NCC theo JSON project đã chuyển sang chỉ đọc. Tạo NCC tại danh bạ toàn công ty rồi quay lại chọn phiên bản hiện hành."
+        description="Dữ liệu chi phí cũ theo Project chỉ còn để đối chiếu. Tạo NCC tại danh bạ toàn công ty rồi quay lại chọn phiên bản hiện hành."
       >
         <div className="flex items-center justify-between gap-3">
           <p className="tf-ui-help">File chứng minh ngân hàng không bắt buộc; Kế toán xác nhận đúng phiên bản ở lần thanh toán đầu hoặc sau thay đổi.</p>

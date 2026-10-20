@@ -138,7 +138,7 @@ export default function InternalCostVendorView({ revisionNumber, lines, vendors 
           </div>
           {selectedGroup.missingCostCount > 0 && <p className="text-xs text-[var(--text-secondary)]">Tổng chỉ cộng các dòng đã đủ dữ liệu giá.</p>}
 
-          <Table caption={`Hạng mục mua từ ${selectedGroup.name} trong IC-R${revisionNumber}`}>
+          <Table caption={`Hạng mục mua từ ${selectedGroup.name} trong IC-R${revisionNumber}`} hideCaption>
             <thead><tr>
               <th scope="col">Hạng mục mua</th>
               <th scope="col">Khối lượng</th>

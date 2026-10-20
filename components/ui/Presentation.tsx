@@ -29,7 +29,7 @@ export function EmptyState({ title, description, action }:
   </div>;
 }
 
-export function Table({ caption, hideCaption = false, children, className = "", ...props }:
+export function Table({ caption, hideCaption = true, children, className = "", ...props }:
   ComponentPropsWithRef<"table"> & { caption: string; hideCaption?: boolean }) {
   return <div className="tf-ui-table-scroll" tabIndex={0} role="region" aria-label={caption}>
     <table {...props} className={`tf-ui-table ${className}`}>

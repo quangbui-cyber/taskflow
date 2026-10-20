@@ -47,7 +47,16 @@ export async function resolveProductionApprovedActualCost(query: ApprovedActualC
   }
   const rows = await prisma.actualCostLine.findMany({
     where: { projectId: query.projectId, stableLineId: { in: refs.map(ref => ref.stableLineId) } },
-    include: { versions: { where: { id: { in: refs.map(ref => ref.versionId) }, state: "APPROVED" }, include: { approvals: true } } },
+    include: {
+      versions: {
+        where: {
+          id: { in: refs.map(ref => ref.versionId) },
+          state: "APPROVED",
+          revisionLines: { some: { projectId: query.projectId, revision: { projectId: query.projectId, state: "APPROVED" } } },
+        },
+        include: { approvals: true },
+      },
+    },
   });
   const lines = rows.flatMap(line => line.versions.flatMap(version => version.approvals
     .filter(approval => approval.action === "APPROVED")

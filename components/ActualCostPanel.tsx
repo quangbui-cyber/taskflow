@@ -1,27 +1,21 @@
 "use client";
 
-import { Fragment, useCallback, useMemo, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
+import { actualCostAction, type ActualCostActionState } from "@/app/actions/costflow";
 import {
-  AlertCircle,
+  FileSpreadsheet,
   Layers3,
-  Paperclip,
-  Users,
-  Receipt,
-  ArrowRight,
-  Search,
-  ChevronDown,
-  ChevronRight,
-  RotateCcw,
+  Send,
+  ShieldCheck,
 } from "lucide-react";
 import type { Finance } from "@/components/CostFlowPanel";
 import { Button } from "@/components/ui/Button";
-import { Alert, Badge, EmptyState, Panel, Table } from "@/components/ui/Presentation";
+import { Alert, Badge } from "@/components/ui/Presentation";
 import { displayMoney } from "@/lib/costflow/money";
-import { reconcile, margin } from "@/lib/costflow/reconciliation";
-import { recipientDisplayName } from "@/lib/costflow/labels";
-import type { Expense } from "@/lib/costflow/types";
-import ExpenseDetailDrawer from "@/components/ExpenseDetailDrawer";
-import ActualCostEditor from "@/components/costflow/actual-cost/ActualCostEditor";
+import type { ActualCostReadLine } from "@/lib/costflow/actualCostReadModel";
+import ActualCostSheetView from "@/components/costflow/actual-cost/ActualCostSheetView";
+import ActualCostDetailDrawer from "@/components/costflow/actual-cost/ActualCostDetailDrawer";
+import ActualCostPreflightModal from "@/components/costflow/actual-cost/ActualCostPreflightModal";
 import ActualCostControlCenter from "@/components/costflow/actual-cost/ActualCostControlCenter";
 
 type Props = {
@@ -31,806 +25,273 @@ type Props = {
   onSelectTab?: (tab: string) => void;
 };
 
-type ViewMode = "by-line" | "by-member" | "all-expenses";
-
-export default function ActualCostPanel({ finance, user, canCreate, onSelectTab }: Props) {
-  const [viewMode, setViewMode] = useState<ViewMode>("by-member");
-  const [search, setSearch] = useState("");
-  const [evidenceFilter, setEvidenceFilter] = useState<"ALL" | "COMPLETE" | "MISSING" | "EXCEPTION">("ALL");
-  const [selectedMemberFilter, setSelectedMemberFilter] = useState<string>("ALL");
-
-  // Expanded IC lines in accordion view
-  const [expandedLines, setExpandedLines] = useState<Record<string, boolean>>({});
-
-  // Modal & Drawer states
-  const [selectedExpenseForDrawer, setSelectedExpenseForDrawer] = useState<Expense | null>(null);
+export default function ActualCostPanel({ finance, user, onSelectTab }: Props) {
+  const [activeView, setActiveView] = useState<"sheet" | "control-center">("sheet");
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedLine, setSelectedLine] = useState<ActualCostReadLine | null>(null);
+  const [preflightOpen, setPreflightOpen] = useState(false);
+  const [successorState, successorAction, successorPending] = useActionState(actualCostAction, {} as ActualCostActionState);
 
   const effective = finance.data.revisions.find(r => r.effective);
-  const usersMap = useMemo(() => new Map(finance.users.map(u => [u.id, u.name])), [finance.users]);
+  const actualCosts = finance.actualCosts;
+  const sheet = actualCosts?.sheet;
+  const lines = useMemo(() => actualCosts?.lines ?? [], [actualCosts?.lines]);
+  const comparisons = useMemo(() => actualCosts?.comparisons ?? [], [actualCosts?.comparisons]);
 
-  const recipientName = useCallback((key: string) =>
-    recipientDisplayName(key, usersMap, finance.data.beneficiaries),
-    [finance.data.beneficiaries, usersMap]
-  );
+  const capabilities = actualCosts?.controlCenter.capabilities;
+  const canEdit = !finance.data.closed && sheet?.state === "DRAFT" && !!(capabilities?.account || capabilities?.self);
+  const canReview = canEdit && !!capabilities?.account;
+  const isDd = actualCosts?.canDecide ?? false;
 
-  const getMemberRoleLabel = useCallback((uId: string, role: string) => {
-    if (uId === finance.project.ownerId) return "Project Owner / Account Lead";
-    if (uId === finance.data.config.accountantId) return "Kế toán phụ trách";
-    if (uId === finance.data.config.managerId) return "Quản lý dự án";
-    if (role === "ACCOUNT") return "Account (Quản lý dự án)";
-    if (role === "ADMIN") return "Admin";
-    return "Thành viên dự án";
-  }, [finance.project.ownerId, finance.data.config.accountantId, finance.data.config.managerId]);
-
-  const handleCreateReimbursement = useCallback((recipientKey: string) => {
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      url.searchParams.set("tab", "approvals");
-      url.searchParams.set("kind", "REIMBURSEMENT");
-      url.searchParams.set("recipientKey", recipientKey);
-      window.history.pushState(null, "", url.toString());
-      if (onSelectTab) onSelectTab("approvals");
-    }
-  }, [onSelectTab]);
-
-  // Reconciliation data per recipient
-  const reconciliationRows = useMemo(() => {
-    return reconcile(finance.data, finance.cash);
-  }, [finance.data, finance.cash]);
-
-  const reconciliationMap = useMemo(() => {
-    return new Map(reconciliationRows.map(r => [r.recipientKey, r]));
-  }, [reconciliationRows]);
-
-  // Overall statistics
+  // Stats calculation
   const stats = useMemo(() => {
-    let totalGross = 0;
     let completeEvidence = 0;
-    let missingEvidence = 0;
-    let exceptionPending = 0;
-    let exceptionApproved = 0;
+    let reviewed = 0;
+    let needsAttention = 0;
 
-    finance.data.expenses.forEach(e => {
-      totalGross += parseFloat(e.cost.gross) || 0;
-      if (e.invoiceId && e.paymentProofId) {
+    for (const line of lines) {
+      if (line.missingEvidenceWarnings.length === 0) {
         completeEvidence++;
-      } else if (e.exceptionStatus === "APPROVED") {
-        exceptionApproved++;
-        completeEvidence++;
-      } else if (e.exceptionReason) {
-        exceptionPending++;
-        missingEvidence++;
-      } else {
-        missingEvidence++;
       }
-    });
-
-    // Advance funding disbursed (cash OUT)
-    const totalDisbursedAdvance = finance.cash
-      .filter(c => c.direction === "OUT")
-      .reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
-
-    const totalRefunded = finance.cash
-      .filter(c => c.direction === "IN")
-      .reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
-
-    const effectiveAdvance = totalDisbursedAdvance - totalRefunded;
-    const projectBalance = totalGross - effectiveAdvance;
-
-    const marginData = margin(finance.data);
+      if (line.internalStatus === "ACCOUNT_REVIEWED") {
+        reviewed++;
+      }
+      if (line.internalStatus !== "ACCOUNT_REVIEWED" || line.missingEvidenceWarnings.length > 0
+        || line.sourceKind === "UNBUDGETED"
+        || comparisons.some(item => item.status === "OVER_BUDGET" && item.actualLineIds.includes(line.id))) {
+        needsAttention++;
+      }
+    }
 
     return {
-      count: finance.data.expenses.length,
-      totalGross,
       completeEvidence,
-      missingEvidence,
-      exceptionPending,
-      exceptionApproved,
-      totalDisbursedAdvance,
-      effectiveAdvance,
-      projectBalance,
-      marginData,
+      reviewed,
+      needsAttention,
+      count: lines.length,
     };
-  }, [finance.data, finance.cash]);
+  }, [lines, comparisons]);
 
-  // Per-member summary cards data
-  const memberSummaries = useMemo(() => {
-    return finance.project.members.map(member => {
-      const uId = member.userId;
-      const key = `USER:${uId}`;
-      const name = usersMap.get(uId) ?? "Nhân viên";
-      const userExpenses = finance.data.expenses.filter(e => e.recipientKey === key);
-
-      let memberGross = 0;
-      let memberComplete = 0;
-      let memberMissing = 0;
-
-      userExpenses.forEach(e => {
-        memberGross += parseFloat(e.cost.gross) || 0;
-        if ((e.invoiceId && e.paymentProofId) || e.exceptionStatus === "APPROVED") {
-          memberComplete++;
-        } else {
-          memberMissing++;
-        }
-      });
-
-      const recon = reconciliationMap.get(key);
-      const paid = recon ? parseFloat(recon.paid) || 0 : 0;
-      const refunded = recon ? parseFloat(recon.refunded) || 0 : 0;
-      const netAdvance = paid - refunded;
-      const balance = memberGross - netAdvance;
-
-      return {
-        userId: uId,
-        key,
-        name,
-        role: finance.users.find(u => u.id === uId)?.role ?? "MEMBER",
-        expensesCount: userExpenses.length,
-        gross: memberGross,
-        completeCount: memberComplete,
-        missingCount: memberMissing,
-        advancePaid: paid,
-        advanceRefunded: refunded,
-        netAdvance,
-        balance, // balance > 0: cty nợ NV; balance < 0: NV còn giữ tiền thừa cty
-        expenses: userExpenses,
-      };
-    });
-  }, [finance.project.members, usersMap, finance.data.expenses, reconciliationMap, finance.users]);
-
-  // Filtered expense list
-  const filteredExpenses = useMemo(() => {
-    return finance.data.expenses.filter(e => {
-      if (evidenceFilter === "COMPLETE") {
-        if (!((e.invoiceId && e.paymentProofId) || e.exceptionStatus === "APPROVED")) return false;
-      }
-      if (evidenceFilter === "MISSING") {
-        if ((e.invoiceId && e.paymentProofId) || e.exceptionStatus === "APPROVED") return false;
-      }
-      if (evidenceFilter === "EXCEPTION") {
-        if (!e.exceptionReason) return false;
-      }
-
-      if (selectedMemberFilter !== "ALL" && e.recipientKey !== selectedMemberFilter) {
-        return false;
-      }
-
-      if (search.trim()) {
-        const q = search.toLowerCase().trim();
-        const descMatch = e.description.toLowerCase().includes(q);
-        const recMatch = recipientName(e.recipientKey).toLowerCase().includes(q);
-        if (!descMatch && !recMatch) return false;
-      }
-
-      return true;
-    });
-  }, [finance.data.expenses, evidenceFilter, selectedMemberFilter, search, recipientName]);
-
-  const toggleLineExpand = (lineId: string) => {
-    setExpandedLines(prev => ({ ...prev, [lineId]: !prev[lineId] }));
+  const handleOpenDetail = (line: ActualCostReadLine) => {
+    setSelectedLine(line);
+    setDrawerOpen(true);
   };
 
-
-  const controlCenter = finance.actualCosts?.controlCenter;
-  if (controlCenter && !controlCenter.capabilities.account && !controlCenter.capabilities.audit) {
-    return <ActualCostControlCenter center={controlCenter} />;
-  }
+  const handleAddNew = () => {
+    setSelectedLine(null);
+    setDrawerOpen(true);
+  };
 
   return (
     <div className="space-y-6">
-      {/* 1. TOP HEADER & HERO METRICS */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      {/* 1. TOP HEADER & WORKSPACE HERO */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-bold tracking-tight text-[var(--foreground)]">
-              Actual Cost (Chi phí thực tế & Tạm ứng)
+              Bảng AC – Tổng hợp thực chi
             </h2>
-            <Badge tone="neutral">{stats.count} khoản chi</Badge>
+            <Badge tone="info">
+              {sheet?.revisionId ? `Phiên bản AC-R${sheet.version}` : "Chưa lập phiên bản AC"}
+            </Badge>
+            {sheet?.state && (
+              <Badge tone={sheet.state === "APPROVED" ? "success" : sheet.state === "RETURNED" ? "warning" : sheet.state === "SUBMITTED" ? "info" : "neutral"}>
+                {sheet.state === "APPROVED" ? "Đã Duyệt AC toàn bảng" :
+                 sheet.state === "RETURNED" ? "Trả lại để chỉnh sửa" :
+                 sheet.state === "SUBMITTED" ? "Chờ Duyệt AC" : "Đang soạn thảo"}
+              </Badge>
+            )}
+            <Badge tone="neutral">Expense cũ chỉ đọc</Badge>
           </div>
           <p className="text-sm text-[var(--text-secondary)] mt-1">
-            Theo dõi chi phí thực tế theo dòng IC ngân sách và đối soát từng khoản ứng của nhân sự dự án.
+            Một Bảng AC tổng hợp duy nhất cho dự án · Cùng nhập, Account kiểm tra, Phó Giám đốc duyệt toàn bộ.
           </p>
         </div>
 
-        <Badge tone="neutral">Expense cũ chỉ đọc · ghi nhận mới qua AC chuẩn hóa</Badge>
-      </div>
-
-      <ActualCostEditor finance={finance} currentUserId={user.id} />
-
-      {/* KPI METRICS (SUMMARY STRIP) */}
-      <div className="tf-summary-strip">
-        <div className="tf-summary-item">
-          <span className="tf-summary-label">Tổng Actual Cost</span>
-          <span className="tf-summary-value">{displayMoney(Math.round(stats.totalGross).toString())}</span>
-          <span className="tf-summary-hint">{stats.count} khoản chi đã báo (gồm VAT)</span>
-        </div>
-        <div className="tf-summary-item">
-          <span className="tf-summary-label">IC Căn cứ Ngân sách</span>
-          <span className="tf-summary-value text-[#587216]">{effective ? `IC-R${effective.number}` : "Chưa có"}</span>
-          <span className="tf-summary-hint">{effective ? "Baseline ngân sách hiệu lực" : "Cần Quản lý phê duyệt IC"}</span>
-        </div>
-        <div className="tf-summary-item">
-          <span className="tf-summary-label">Chứng từ Hợp lệ</span>
-          <span className="tf-summary-value text-[var(--success)]">{stats.completeEvidence} / {stats.count} khoản</span>
-          <span className="tf-summary-hint">{stats.missingEvidence > 0 ? `${stats.missingEvidence} khoản cần bổ sung` : "Đầy đủ chứng từ"}</span>
-        </div>
-        <div className="tf-summary-item">
-          <span className="tf-summary-label">Tạm ứng Toàn dự án</span>
-          <span className="tf-summary-value">{displayMoney(Math.round(stats.effectiveAdvance).toString())}</span>
-          <span className="tf-summary-hint">
-            {stats.projectBalance > 0
-              ? `Chi vượt ứng ${displayMoney(String(stats.projectBalance))}`
-              : stats.projectBalance < 0
-              ? `Dư ứng ${displayMoney(String(Math.abs(stats.projectBalance)))}`
-              : "Khớp 100% với AC"}
-          </span>
+        {/* Action Controls */}
+        <div className="flex flex-wrap items-center gap-2">
+          {canReview && (
+            <>
+              <Button size="sm" onClick={() => setPreflightOpen(true)}>
+                <Send size={14} className="mr-1" />
+                Kiểm tra trước khi gửi
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
-      {!effective && (
-        <Alert tone="warning" title="Dự án chưa có Internal Cost hiệu lực">
-          Để ghi nhận chi phí phát sinh Actual Cost, dự án cần có ít nhất một phiên bản IC đã được Quản lý phê duyệt để làm baseline ngân sách.
-        </Alert>
+      {sheet?.state === "RETURNED" && sheet.revisionId && capabilities?.account && !finance.data.closed && (
+        <div className="rounded-xl border border-[var(--warning)] bg-[var(--warning-soft)] p-4 space-y-3">
+          <p className="text-sm font-semibold text-[var(--foreground)]">Bảng AC-R{sheet.version} đã được trả lại</p>
+          {sheet.lastReturnReason && <p className="text-sm text-[var(--foreground)]">Ý kiến Phó Giám đốc: {sheet.lastReturnReason}</p>}
+          <p className="text-xs text-[var(--text-secondary)]">Tạo phiên bản mới từ toàn bộ khoản chi hiện tại, chỉnh sửa theo ý kiến DD rồi gửi lại cả Bảng AC.</p>
+          <form action={successorAction}>
+            <input type="hidden" name="projectId" value={finance.project.id} />
+            <input type="hidden" name="actualCostCommand" value="CREATE_SUCCESSOR" />
+            <input type="hidden" name="sheetRevisionId" value={sheet.revisionId} />
+            <input type="hidden" name="sheetMutationVersion" value={sheet.mutationVersion} />
+            <Button type="submit" size="sm" loading={successorPending}>Tạo Bảng AC-R{sheet.version + 1} để gửi lại</Button>
+          </form>
+          {successorState.error && <Alert tone="danger" title={successorState.error} />}
+          {successorState.success && <Alert tone="success" title={successorState.success} />}
+        </div>
       )}
 
-      {/* 2. NAVIGATION SUB-TABS (CHẾ ĐỘ XEM) */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
-        <div className="flex items-center gap-1.5 p-1 bg-[var(--surface-soft)] rounded-xl border border-[var(--border)] text-xs font-medium">
-          <button
-            type="button"
-            onClick={() => setViewMode("by-member")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
-              viewMode === "by-member"
-                ? "bg-[var(--surface)] text-[var(--foreground)] shadow-sm font-semibold"
-                : "text-[var(--text-secondary)] hover:text-[var(--foreground)]"
-            }`}
-          >
-            <Users size={14} />
-            <span>Theo Nhân sự & Tạm ứng ({finance.project.members.length})</span>
-          </button>
+      {sheet?.state === "DRAFT" && sheet.version > 1 && sheet.lastReturnReason && (
+        <Alert tone="warning" title={`Ý kiến Phó Giám đốc ở lần duyệt trước: ${sheet.lastReturnReason}`} />
+      )}
 
+      {/* Official whole-sheet decision lives in Trình duyệt; Actual Cost only reflects it. */}
+      {isDd && sheet?.state === "SUBMITTED" && sheet.revisionId && (
+        <div className="rounded-2xl border border-[var(--primary)] bg-[var(--primary-soft)] p-4 shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShieldCheck size={20} className="text-[var(--primary)]" />
+              <div>
+                <h3 className="font-bold text-sm text-[var(--foreground)]">
+                  Thẩm định và phê duyệt toàn bộ Bảng AC
+                </h3>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  Bạn đang xem Bảng AC phiên bản AC-R{sheet.version} với {lines.length} khoản chi.
+                </p>
+              </div>
+            </div>
+            {onSelectTab && (
+              <Button size="sm" variant="secondary" onClick={() => onSelectTab("approvals")}>
+                Mở Duyệt AC trong tab Trình duyệt
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* KPI SUMMARY STRIP */}
+      <div className="tf-summary-strip">
+        <div className="tf-summary-item">
+          <span className="tf-summary-label">Thực chi chưa VAT</span>
+          <span className="tf-summary-value">{displayMoney(actualCosts?.summary.actual.net ?? "0")}</span>
+          <span className="tf-summary-hint">{stats.count} khoản chi thực tế</span>
+        </div>
+        <div className="tf-summary-item">
+          <span className="tf-summary-label">Chênh lệch thực chi so với IC</span>
+          <span className="tf-summary-value">{displayMoney(actualCosts?.summary.variance.net ?? "0")}</span>
+          <span className="tf-summary-hint">So theo tiền chưa VAT · {effective ? `Bản IC ${effective.number}` : "Chưa có Bản IC"}</span>
+        </div>
+        <div className="tf-summary-item">
+          <span className="tf-summary-label">Tổng thực chi gồm VAT</span>
+          <span className="tf-summary-value">{displayMoney(actualCosts?.summary.actual.gross ?? "0")}</span>
+          <span className="tf-summary-hint">VAT: {displayMoney(actualCosts?.summary.actual.vat ?? "0")}</span>
+        </div>
+        <div className="tf-summary-item">
+          <span className="tf-summary-label">Cần xử lý</span>
+          <span className="tf-summary-value">{stats.needsAttention} khoản</span>
+          <span className="tf-summary-hint">{stats.reviewed} / {stats.count} đã kiểm tra · {stats.count - stats.completeEvidence} thiếu chứng từ</span>
+        </div>
+      </div>
+
+      {/* VIEW SELECTOR TABS */}
+      <div className="flex items-center gap-2 border-b border-[var(--border)] pb-3">
+        <button
+          type="button"
+          onClick={() => setActiveView("sheet")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            activeView === "sheet"
+              ? "bg-[var(--primary)] text-white shadow-xs"
+              : "bg-[var(--surface-soft)] text-[var(--text-secondary)] hover:text-[var(--foreground)]"
+          }`}
+        >
+          <FileSpreadsheet size={14} />
+          Bảng AC tổng hợp ({lines.length})
+        </button>
+
+        {actualCosts?.controlCenter && (
           <button
             type="button"
-            onClick={() => setViewMode("by-line")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
-              viewMode === "by-line"
-                ? "bg-[var(--surface)] text-[var(--foreground)] shadow-sm font-semibold"
-                : "text-[var(--text-secondary)] hover:text-[var(--foreground)]"
+            onClick={() => setActiveView("control-center")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              activeView === "control-center"
+                ? "bg-[var(--primary)] text-white shadow-xs"
+                : "bg-[var(--surface-soft)] text-[var(--text-secondary)] hover:text-[var(--foreground)]"
             }`}
           >
             <Layers3 size={14} />
-            <span>Theo Dòng IC ({effective?.lines.length ?? 0})</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setViewMode("all-expenses")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
-              viewMode === "all-expenses"
-                ? "bg-[var(--surface)] text-[var(--foreground)] shadow-sm font-semibold"
-                : "text-[var(--text-secondary)] hover:text-[var(--foreground)]"
-            }`}
-          >
-            <Receipt size={14} />
-            <span>Tất cả khoản chi ({stats.count})</span>
-          </button>
-        </div>
-
-        {/* Global Search in AC */}
-        <div className="relative w-full sm:w-64">
-          <input
-            type="text"
-            className="w-full h-8 pl-8 pr-3 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
-            placeholder="Lọc nội dung, người nhận..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-          <Search size={14} className="absolute left-2.5 top-2 text-[var(--text-secondary)]" />
-        </div>
-      </div>
-
-      {/* Quick Evidence Filter Pills */}
-      <div className="flex flex-wrap items-center gap-1.5 text-xs p-2.5 rounded-lg bg-[var(--surface-soft)] border border-[var(--border)] -mt-2">
-        <span className="text-[var(--text-secondary)] font-medium mr-1">Lọc chứng từ:</span>
-        <button
-          type="button"
-          onClick={() => setEvidenceFilter("ALL")}
-          className={`px-2.5 py-1 rounded-md transition-colors ${
-            evidenceFilter === "ALL"
-              ? "bg-[var(--surface)] text-[var(--foreground)] font-bold shadow-xs border border-[var(--border)]"
-              : "text-[var(--text-secondary)] hover:text-[var(--foreground)]"
-          }`}
-        >
-          Tất cả ({stats.count})
-        </button>
-        <button
-          type="button"
-          onClick={() => setEvidenceFilter("MISSING")}
-          className={`px-2.5 py-1 rounded-md transition-colors flex items-center gap-1 ${
-            evidenceFilter === "MISSING"
-              ? "bg-amber-100 text-amber-900 font-bold border border-amber-300 dark:bg-amber-950 dark:text-amber-200"
-              : "text-amber-700 hover:text-amber-900 dark:text-amber-400"
-          }`}
-        >
-          <span>⚠️ Thiếu chứng từ ({stats.missingEvidence})</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setEvidenceFilter("COMPLETE")}
-          className={`px-2.5 py-1 rounded-md transition-colors flex items-center gap-1 ${
-            evidenceFilter === "COMPLETE"
-              ? "bg-green-100 text-green-900 font-bold border border-green-300 dark:bg-green-950 dark:text-green-200"
-              : "text-green-700 hover:text-green-900 dark:text-green-400"
-          }`}
-        >
-          <span>✅ Đủ chứng từ ({stats.completeEvidence})</span>
-        </button>
-        {stats.exceptionPending > 0 && (
-          <button
-            type="button"
-            onClick={() => setEvidenceFilter("EXCEPTION")}
-            className={`px-2.5 py-1 rounded-md transition-colors flex items-center gap-1 ${
-              evidenceFilter === "EXCEPTION"
-                ? "bg-blue-100 text-blue-900 font-bold border border-blue-300 dark:bg-blue-950 dark:text-blue-200"
-                : "text-blue-700 hover:text-blue-900 dark:text-blue-400"
-            }`}
-          >
-            <span>Có giải trình ({stats.exceptionPending})</span>
+            Đối chiếu & Kiểm toán chi tiết
           </button>
         )}
       </div>
 
-      {/* 3. SUB-VIEW: THEO NHÂN SỰ & TẠM ỨNG (MEMBER ADVANCE & EXPENSE VIEW) */}
-      {viewMode === "by-member" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
-            <span className="font-semibold text-[var(--foreground)]">
-              Đối soát Quỹ Tạm ứng & Báo chi theo từng Thành viên dự án
-            </span>
-            <span>Hiển thị theo danh sách thành viên được phân công</span>
+      {/* PRIMARY WORKSPACE CONTENT */}
+      {activeView === "sheet" && (
+        <ActualCostSheetView
+          finance={finance}
+          onSelectLine={handleOpenDetail}
+          onAddNew={handleAddNew}
+          canEdit={canEdit}
+          canReview={canReview}
+          currentUserId={user.id}
+        />
+      )}
+
+      {activeView === "control-center" && actualCosts?.controlCenter && (
+        <ActualCostControlCenter center={actualCosts.controlCenter} />
+      )}
+
+      {/* REGULATORY & GOVERNANCE POLICY BOX */}
+      <div className="tf-ac-policy">
+        <div className="tf-ac-policy-heading">
+          <div className="tf-ac-policy-icon" aria-hidden="true">
+            <ShieldCheck size={18} />
           </div>
-
-          {/* Quy định đối soát & hiệu lực phiếu */}
-          <details className="tf-ac-policy">
-            <summary className="tf-ac-policy-heading cursor-pointer list-none flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="tf-ac-policy-icon" aria-hidden="true"><AlertCircle size={18} /></span>
-                <div>
-                  <h3 id="ac-payment-policy-heading">Nguyên tắc đối soát & hiệu lực thanh toán</h3>
-                  <p>Chọn đúng loại phiếu theo nguồn chi; phê duyệt AC và giải ngân vẫn là hai bước riêng.</p>
-                </div>
-              </div>
-              <span className="text-xs text-[var(--text-secondary)] font-medium">Chi tiết ▾</span>
-            </summary>
-            <dl className="tf-ac-policy-grid">
-              <div>
-                <dt>Nhân sự tự ứng tiền túi</dt>
-                <dd><span>OUT_OF_POCKET</span> Thu hồi qua Phiếu Đề Nghị Hoàn Tạm Ứng (ĐNHTU).</dd>
-              </div>
-              <div>
-                <dt>Chi trả trực tiếp NCC</dt>
-                <dd><span>VENDOR_DIRECT</span> Thanh toán qua Phiếu Đề Nghị Thanh Toán (ĐNTT).</dd>
-              </div>
-              <div>
-                <dt>Khi nào phiếu có hiệu lực?</dt>
-                <dd>Có thể lập trước, nhưng chỉ được giải ngân khi AC tương ứng đã được phê duyệt.</dd>
-              </div>
-              <div>
-                <dt>Ai chịu trách nhiệm?</dt>
-                <dd>Account lập và điều phối hồ sơ; Kế toán rà soát chứng từ, duyệt ngoại lệ và thực hiện chi tiền.</dd>
-              </div>
-            </dl>
-          </details>
-
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {memberSummaries.map(member => {
-              const isOverSpent = member.balance > 0;
-              const isHoldingExcess = member.balance < 0;
-
-              return (
-                <div
-                  key={member.key}
-                  className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between space-y-4"
-                >
-                  {/* Member Head */}
-                  <div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full bg-lime-100 text-lime-800 dark:bg-lime-950/60 dark:text-lime-300 font-bold text-xs flex items-center justify-center">
-                          {member.name.split(" ").map(w => w[0]).slice(-2).join("").toUpperCase()}
-                        </div>
-                        <div>
-                          <span className="font-bold text-sm text-[var(--foreground)] block">
-                            {member.name}
-                          </span>
-                          <span className="text-[11px] text-[var(--text-secondary)]">
-                            {getMemberRoleLabel(member.userId, member.role)}
-                          </span>
-                        </div>
-                      </div>
-
-                      <Badge tone={member.balance === 0 ? "success" : isOverSpent ? "warning" : "neutral"}>
-                        {member.balance === 0 ? "Đã cân bằng" : isOverSpent ? "Cần hoàn ứng (ĐNHTU)" : "Cần nộp trả (ĐNHTU)"}
-                      </Badge>
-                    </div>
-
-                    {/* Member Advance & Incurred Financials */}
-                    <div className="mt-4 p-3 rounded-xl bg-[var(--surface-soft)] space-y-2 text-xs">
-                      <div className="flex justify-between">
-                        <span className="text-[var(--text-secondary)]">Tạm ứng đã nhận:</span>
-                        <span className="font-mono font-semibold text-[var(--foreground)]">
-                          {displayMoney(String(member.netAdvance))}
-                        </span>
-                      </div>
-
-                      <div className="flex justify-between">
-                        <span className="text-[var(--text-secondary)]">Chi phí AC đã báo:</span>
-                        <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">
-                          {displayMoney(String(member.gross))}
-                        </span>
-                      </div>
-
-                      <div className="pt-2 border-t border-[var(--border)] flex justify-between font-bold">
-                        <span>Số dư đối soát:</span>
-                        <span className={`font-mono ${isOverSpent ? "text-rose-600 dark:text-rose-400" : isHoldingExcess ? "text-amber-600 dark:text-amber-400" : "text-emerald-600"}`}>
-                          {isOverSpent
-                            ? `+${displayMoney(String(member.balance))} (Hoàn ứng ĐNHTU cho NV)`
-                            : isHoldingExcess
-                            ? `-${displayMoney(String(Math.abs(member.balance)))} (NV nộp trả cty)`
-                            : "0 ₫ (Cân bằng)"}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Evidence Status for this member */}
-                    <div className="mt-3 flex items-center justify-between text-[11px] text-[var(--text-secondary)]">
-                      <span>{member.expensesCount} khoản chi đã nộp</span>
-                      <span className={member.missingCount > 0 ? "text-amber-600 font-medium" : "text-emerald-600"}>
-                        {member.missingCount > 0 ? `Thiếu ${member.missingCount} chứng từ` : "Đủ chứng từ"}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Actions for this member */}
-                  <div className="pt-3 border-t border-[var(--border)] flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      {canCreate && (isOverSpent || member.expensesCount > 0) && (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => handleCreateReimbursement(member.key)}
-                          className="text-xs text-[var(--primary)] font-semibold"
-                          title="Lập Phiếu Hoàn tạm ứng (ĐNHTU) cho nhân sự này"
-                        >
-                          <RotateCcw size={13} className="mr-1" />
-                          Lập Phiếu ĐNHTU
-                        </Button>
-                      )}
-                    </div>
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setSelectedMemberFilter(member.key);
-                        setViewMode("all-expenses");
-                      }}
-                      className="text-xs"
-                    >
-                      Xem các bill
-                      <ArrowRight size={13} className="ml-1" />
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
+          <div>
+            <h3>Nguyên tắc vận hành Bảng AC</h3>
+            <p>Quy định nghiệm thu chi phí, thẩm quyền phê duyệt và mối liên hệ với dòng tiền thực tế.</p>
           </div>
         </div>
-      )}
 
-      {/* 4. SUB-VIEW: THEO DÒNG IC NGÂN SÁCH (IC BUDGET VARIANCE VIEW) */}
-      {viewMode === "by-line" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
-            <span className="font-semibold text-[var(--foreground)]">
-              So sánh Ngân sách dự toán IC vs Chi phí thực tế AC theo từng Hạng mục
-            </span>
-            <span>Bấm vào dòng để xem danh sách các khoản chi chi tiết</span>
+        <div className="tf-ac-policy-grid">
+          <div>
+            <dt>Duyệt toàn bộ Bảng AC</dt>
+            <dd>
+              Mỗi Project có duy nhất một Bảng AC. Toàn bộ các dòng chi phí trong phiên bản được gửi, xem xét và phê duyệt cùng lúc bởi Phó Giám đốc (DD).
+            </dd>
           </div>
-
-          {effective && effective.lines.length > 0 ? (
-            <Panel className="p-0 overflow-hidden">
-              <Table caption="So sánh IC dự toán và AC phát sinh">
-                <thead>
-                  <tr>
-                    <th scope="col" className="w-10 text-center"></th>
-                    <th scope="col">Hạng mục IC</th>
-                    <th scope="col" className="text-right">Ngân sách IC</th>
-                    <th scope="col" className="text-right">AC Thực tế</th>
-                    <th scope="col" className="text-right">Chênh lệch (Variance)</th>
-                    <th scope="col" className="text-center">Số khoản</th>
-                    <th scope="col" className="text-right w-28">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {effective.lines.map(line => {
-                    const lineExpenses = finance.data.expenses.filter(e => e.lineId === line.id);
-                    const lineGross = lineExpenses.reduce(
-                      (sum, e) => sum + (parseFloat(e.cost.gross) || 0),
-                      0
-                    );
-                    const budgetGross = parseFloat(line.cost?.gross ?? "0") || 0;
-                    const variance = lineGross - budgetGross;
-                    const isExpanded = !!expandedLines[line.id];
-                    const isOverBudget = variance > 0;
-                    const isUnderBudget = variance < 0;
-
-                    return (
-                      <Fragment key={line.id}>
-                        <tr
-                          className="hover:bg-[var(--surface-soft)] cursor-pointer"
-                          onClick={() => toggleLineExpand(line.id)}
-                        >
-                          <td className="text-center">
-                            {lineExpenses.length > 0 ? (
-                              isExpanded ? (
-                                <ChevronDown size={16} className="text-[var(--text-secondary)] inline" />
-                              ) : (
-                                <ChevronRight size={16} className="text-[var(--text-secondary)] inline" />
-                              )
-                            ) : null}
-                          </td>
-                          <td>
-                            <strong className="text-sm font-semibold text-[var(--foreground)] block">
-                              {line.description}
-                            </strong>
-                            <span className="text-xs text-[var(--text-secondary)]">
-                              {line.quantity} {line.unit} × {displayMoney(line.unitPrice)}
-                            </span>
-                          </td>
-                          <td className="text-right tabular-nums font-mono text-sm font-semibold">
-                            {displayMoney(line.cost?.gross ?? "0")}
-                          </td>
-                          <td className="text-right tabular-nums font-mono text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                            {displayMoney(String(lineGross))}
-                          </td>
-                          <td className="text-right tabular-nums font-mono text-sm font-semibold">
-                            <span className={isOverBudget ? "text-rose-600 dark:text-rose-400" : isUnderBudget ? "text-emerald-600" : "text-[var(--text-secondary)]"}>
-                              {isOverBudget
-                                ? `+${displayMoney(String(variance))}`
-                                : isUnderBudget
-                                ? `-${displayMoney(String(Math.abs(variance)))}`
-                                : "Khớp 0 đ"}
-                            </span>
-                          </td>
-                          <td className="text-center">
-                            <Badge tone={lineExpenses.length > 0 ? "neutral" : "neutral"}>
-                              {lineExpenses.length} khoản
-                            </Badge>
-                          </td>
-                          <td className="text-right text-xs text-[var(--text-secondary)]">Chỉ đọc</td>
-                        </tr>
-
-                        {/* EXPANDED ACCORDION SUB-ROWS */}
-                        {isExpanded && lineExpenses.length > 0 && (
-                          <tr className="bg-[var(--surface-soft)]/50">
-                            <td colSpan={7} className="p-3 pl-12">
-                              <div className="space-y-2">
-                                <div className="text-xs font-semibold text-[var(--text-secondary)]">
-                                  Các khoản chi thực tế thuộc dòng &ldquo;{line.description}&rdquo;:
-                                </div>
-                                <div className="space-y-1.5">
-                                  {lineExpenses.map(exp => (
-                                    <div
-                                      key={exp.id}
-                                      onClick={() => setSelectedExpenseForDrawer(exp)}
-                                      className="flex items-center justify-between p-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:border-[var(--primary)] cursor-pointer text-xs transition-colors"
-                                    >
-                                      <div className="flex items-center gap-2">
-                                        <Paperclip size={14} className="text-[var(--text-secondary)]" />
-                                        <span className="font-medium text-[var(--foreground)]">{exp.description}</span>
-                                        <span className="text-[var(--text-secondary)]">· {recipientName(exp.recipientKey)}</span>
-                                      </div>
-
-                                      <div className="flex items-center gap-3">
-                                        <Badge tone={exp.invoiceId && exp.paymentProofId ? "success" : "warning"}>
-                                          {exp.invoiceId && exp.paymentProofId ? "Đủ chứng từ" : "Thiếu chứng từ"}
-                                        </Badge>
-                                        <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                                          {displayMoney(exp.cost.gross)}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </Table>
-            </Panel>
-          ) : (
-            <EmptyState
-              title="Chưa có dòng IC hiệu lực"
-              description="Dự án cần có IC hiệu lực để so sánh ngân sách và chi phí phát sinh."
-            />
-          )}
+          <div>
+            <dt>Tách biệt Phê duyệt và Giải ngân</dt>
+            <dd>
+              <strong>Lưu ý:</strong> phê duyệt AC và giải ngân vẫn là hai bước riêng. Dòng AC đã duyệt phát hành quyền lập ĐNTT hoặc Hoàn tạm ứng, không tự động sinh giao dịch tiền mặt.
+            </dd>
+          </div>
+          <div>
+            <dt>Cơ chế Cùng nhập – Account kiểm tra</dt>
+            <dd>
+              Thành viên dự án cùng nhập các khoản chi phụ trách; Account có toàn quyền sửa trực tiếp trước khi kích hoạt quy trình gửi duyệt.
+            </dd>
+          </div>
+          <div>
+            <dt>Tổng tiền VND không cộng dồn số lượng</dt>
+            <dd>
+              Dòng tổng cộng chân bảng chỉ cộng Tổng NET, VAT, GROSS (VND). Tuyệt đối không cộng dồn số lượng của các đơn vị tính khác nhau.
+            </dd>
+          </div>
         </div>
-      )}
+      </div>
 
-      {/* 5. SUB-VIEW: TẤT CẢ KHOẢN CHI & CHỨNG TỪ (ALL EXPENSES VIEW) */}
-      {viewMode === "all-expenses" && (
-        <Panel className="space-y-4">
-          {/* Filters Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1.5 p-1 bg-[var(--surface-soft)] rounded-lg border border-[var(--border)] text-xs font-medium">
-                <button
-                  type="button"
-                  onClick={() => setEvidenceFilter("ALL")}
-                  className={`px-2.5 py-1 rounded-md transition-all ${
-                    evidenceFilter === "ALL"
-                      ? "bg-[var(--surface)] text-[var(--foreground)] shadow-sm font-semibold"
-                      : "text-[var(--text-secondary)] hover:text-[var(--foreground)]"
-                  }`}
-                >
-                  Tất cả ({stats.count})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEvidenceFilter("COMPLETE")}
-                  className={`px-2.5 py-1 rounded-md transition-all ${
-                    evidenceFilter === "COMPLETE"
-                      ? "bg-[var(--surface)] text-[var(--foreground)] shadow-sm font-semibold"
-                      : "text-[var(--text-secondary)] hover:text-[var(--foreground)]"
-                  }`}
-                >
-                  Đủ chứng từ ({stats.completeEvidence})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEvidenceFilter("MISSING")}
-                  className={`px-2.5 py-1 rounded-md transition-all ${
-                    evidenceFilter === "MISSING"
-                      ? "bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200 shadow-sm font-semibold"
-                      : "text-[var(--text-secondary)] hover:text-[var(--foreground)]"
-                  }`}
-                >
-                  Chờ bổ sung ({stats.missingEvidence})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEvidenceFilter("EXCEPTION")}
-                  className={`px-2.5 py-1 rounded-md transition-all ${
-                    evidenceFilter === "EXCEPTION"
-                      ? "bg-rose-100 text-rose-900 dark:bg-rose-950/60 dark:text-rose-200 shadow-sm font-semibold"
-                      : "text-[var(--text-secondary)] hover:text-[var(--foreground)]"
-                  }`}
-                >
-                  Ngoại lệ ({stats.exceptionPending + stats.exceptionApproved})
-                </button>
-              </div>
-
-              {/* Filter by Member Dropdown */}
-              <select
-                className="h-8 px-2.5 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)]"
-                value={selectedMemberFilter}
-                onChange={e => setSelectedMemberFilter(e.target.value)}
-              >
-                <option value="ALL">-- Tất cả người chi --</option>
-                {finance.project.members.map(m => (
-                  <option key={m.userId} value={`USER:${m.userId}`}>
-                    {usersMap.get(m.userId) ?? "Nhân viên"}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {filteredExpenses.length > 0 ? (
-            <Table caption="Toàn bộ danh sách Actual Cost">
-              <thead>
-                <tr>
-                  <th scope="col">Khoản chi</th>
-                  <th scope="col">Dòng IC nguồn</th>
-                  <th scope="col">Người chi / Nguồn</th>
-                  <th scope="col" className="text-right">Số tiền Gross</th>
-                  <th scope="col" className="text-center">Chứng từ</th>
-                  <th scope="col" className="text-right w-24">Chi tiết</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredExpenses.map(exp => {
-                  const sRev = finance.data.revisions.find(r => r.id === exp.revisionId);
-                  const sLine = sRev?.lines.find(l => l.id === exp.lineId);
-                  const hasFullEvidence = (exp.invoiceId && exp.paymentProofId) || exp.exceptionStatus === "APPROVED";
-
-                  return (
-                    <tr
-                      key={exp.id}
-                      className="hover:bg-[var(--surface-soft)] cursor-pointer"
-                      onClick={() => setSelectedExpenseForDrawer(exp)}
-                    >
-                      <td>
-                        <strong className="text-sm font-semibold text-[var(--foreground)] block">
-                          {exp.description}
-                        </strong>
-                        <span className="text-xs text-[var(--text-secondary)]">
-                          {exp.input.quantity} × {displayMoney(exp.input.unitPrice)} · VAT {exp.input.vatPercent}%
-                        </span>
-                      </td>
-
-                      <td>
-                        <span className="text-xs font-semibold text-[var(--foreground)]">
-                          IC-R{sRev?.number ?? "—"}
-                        </span>
-                        <p className="text-xs text-[var(--text-secondary)] truncate max-w-[180px]" title={sLine?.description}>
-                          {sLine?.description ?? exp.lineId}
-                        </p>
-                      </td>
-
-                      <td>
-                        <span className="text-sm font-medium text-[var(--foreground)] block">
-                          {recipientName(exp.recipientKey)}
-                        </span>
-                        <span className="text-[11px] text-[var(--text-secondary)]">
-                          {exp.fundingSource === "ADVANCE" ? "Khấu trừ tạm ứng" : exp.fundingSource === "OUT_OF_POCKET" ? "Tự chi tiền túi" : "Chi NCC"}
-                        </span>
-                      </td>
-
-                      <td className="text-right font-mono font-bold text-sm text-emerald-600 dark:text-emerald-400">
-                        {displayMoney(exp.cost.gross)}
-                      </td>
-
-                      <td className="text-center">
-                        <Badge tone={hasFullEvidence ? "success" : exp.exceptionReason ? "warning" : "warning"}>
-                          {hasFullEvidence
-                            ? "Đủ chứng từ"
-                            : exp.exceptionReason
-                            ? "Chờ duyệt ngoại lệ"
-                            : "Chờ chứng từ"}
-                        </Badge>
-                      </td>
-
-                      <td className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={e => {
-                            e.stopPropagation();
-                            setSelectedExpenseForDrawer(exp);
-                          }}
-                          className="text-xs"
-                        >
-                          Chi tiết
-                        </Button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </Table>
-          ) : (
-            <EmptyState
-              title="Không tìm thấy khoản chi nào"
-              description="Chưa có khoản chi nào phù hợp với bộ lọc đang chọn."
-            />
-          )}
-        </Panel>
-      )}
-
-      {/* Legacy Expense remains available for historical inspection only. */}
-      <ExpenseDetailDrawer
-        expense={selectedExpenseForDrawer}
-        onClose={() => setSelectedExpenseForDrawer(null)}
+      {/* DETAIL DRAWER */}
+      <ActualCostDetailDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        line={selectedLine}
         finance={finance}
-        currentUser={user}
-        canCreate={canCreate}
-        onSelectTab={onSelectTab}
+        currentUserId={user.id}
+        canEdit={canEdit && (!selectedLine || !!capabilities?.account || selectedLine.createdById === user.id)}
+        canReview={canReview}
+      />
+
+      {/* PREFLIGHT MODAL */}
+      <ActualCostPreflightModal
+        open={preflightOpen}
+        onClose={() => setPreflightOpen(false)}
+        finance={finance}
       />
     </div>
   );

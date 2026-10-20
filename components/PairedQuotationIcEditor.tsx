@@ -902,7 +902,7 @@ export default function PairedQuotationIcEditor({
         description="NCC theo JSON project đã chuyển sang chỉ đọc. Tạo NCC tại danh bạ toàn công ty rồi quay lại chọn phiên bản hiện hành."
       >
         <div className="flex items-center justify-between gap-3">
-          <p className="tf-ui-help">File chứng minh ngân hàng không bắt buộc; Kế toán xác nhận đúng phiên bản ở lần thanh toán đầu hoặc sau thay đổi.</p>
+          <p className="tf-ui-help">File tham chiếu NCC đã có (không bắt buộc). Hoặc tải file tham chiếu mới (không bắt buộc); Kế toán xác nhận đúng phiên bản ở lần thanh toán đầu hoặc sau thay đổi.</p>
           <Button variant="primary" onClick={() => router.push("/suppliers")}>Mở danh bạ NCC</Button>
         </div>
       </Dialog>

@@ -22,7 +22,6 @@ import AdvanceSettlementAllocator from "@/components/costflow/payments/AdvanceSe
 import { PaymentRequestEditor } from "@/components/costflow/payments/PaymentRequestEditor";
 import { SignaturePad } from "@/components/SignaturePad";
 import { displayMoney } from "@/lib/costflow/money";
-import { isExpenseApproved } from "@/lib/costflow/reconciliation";
 
 type Props = {
   open: boolean;
@@ -55,6 +54,14 @@ export default function ExpenseRequestModal({
   initialTab = "create",
   onSuccess,
 }: Props) {
+  const canonicalExpenses = (finance.actualCosts?.lines ?? []).map(line => ({
+    id: line.id,
+    recipientKey: line.recipientKey,
+    fundingSource: line.fundingSource,
+    description: line.description,
+    cost: line.cost ?? { gross: line.amount },
+    approved: line.reviewState === "approved",
+  }));
   const dialogId = useId();
   const [activeTab, setActiveTab] = useState<"create" | "beneficiary">(initialTab);
   const [kind, setKind] = useState(initialKind);
@@ -370,13 +377,13 @@ export default function ExpenseRequestModal({
                     <span className="text-xs font-semibold text-[var(--foreground)] block">
                       Khoản chi AC liên quan (Tùy chọn gắn kèm):
                     </span>
-                    {finance.data.expenses.filter(e => e.recipientKey === selectedRecipientKey && e.fundingSource === "VENDOR_DIRECT").length > 0 ? (
+                    {canonicalExpenses.filter(e => e.recipientKey === selectedRecipientKey && e.fundingSource === "VENDOR_PAYMENT").length > 0 ? (
                       <div className="space-y-1.5">
-                        {finance.data.expenses
-                          .filter(e => e.recipientKey === selectedRecipientKey && e.fundingSource === "VENDOR_DIRECT")
+                        {canonicalExpenses
+                          .filter(e => e.recipientKey === selectedRecipientKey && e.fundingSource === "VENDOR_PAYMENT")
                           .map(exp => {
                             const isChecked = selectedExpenseIds.includes(exp.id);
-                            const isApproved = isExpenseApproved(exp);
+                            const isApproved = exp.approved;
                             return (
                               <label key={exp.id} className="flex items-center justify-between p-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-xs cursor-pointer hover:border-[var(--text-secondary)]">
                                 <div className="flex items-center gap-2">
@@ -389,7 +396,7 @@ export default function ExpenseRequestModal({
                                         : selectedExpenseIds.filter(id => id !== exp.id);
                                       setSelectedExpenseIds(next);
                                       if (next.length > 0) {
-                                        const sumGross = finance.data.expenses
+                                        const sumGross = canonicalExpenses
                                           .filter(item => next.includes(item.id))
                                           .reduce((acc, item) => acc + (parseFloat(item.cost.gross) || 0), 0);
                                         setAmountInput(String(Math.round(sumGross)));
@@ -425,8 +432,8 @@ export default function ExpenseRequestModal({
                         Các khoản chi phí AC của nhân sự này:
                       </span>
                       {(() => {
-                        const mExpenses = finance.data.expenses.filter(e => e.recipientKey === selectedRecipientKey);
-                        const allApproved = mExpenses.length > 0 && mExpenses.every(isExpenseApproved);
+                        const mExpenses = canonicalExpenses.filter(e => e.recipientKey === selectedRecipientKey);
+                        const allApproved = mExpenses.length > 0 && mExpenses.every(e => e.approved);
                         return (
                           <Badge tone={allApproved ? "success" : "warning"}>
                             {allApproved ? "Đủ điều kiện thanh toán (AC đã duyệt)" : "Tạo trước (Chờ duyệt AC để giải ngân)"}
@@ -434,13 +441,13 @@ export default function ExpenseRequestModal({
                         );
                       })()}
                     </div>
-                    {finance.data.expenses.filter(e => e.recipientKey === selectedRecipientKey).length > 0 ? (
+                    {canonicalExpenses.filter(e => e.recipientKey === selectedRecipientKey).length > 0 ? (
                       <div className="space-y-1 text-xs">
-                        {finance.data.expenses.filter(e => e.recipientKey === selectedRecipientKey).map(exp => (
+                        {canonicalExpenses.filter(e => e.recipientKey === selectedRecipientKey).map(exp => (
                           <div key={exp.id} className="flex items-center justify-between p-1.5 rounded bg-[var(--surface)] text-[11px]">
                             <span>{exp.description} ({displayMoney(exp.cost.gross)})</span>
-                            <span className={isExpenseApproved(exp) ? "text-[var(--success)] font-medium" : "text-amber-600 font-medium"}>
-                              {isExpenseApproved(exp) ? "✓ Đã duyệt AC" : "⏳ Chờ duyệt AC"}
+                            <span className={exp.approved ? "text-[var(--success)] font-medium" : "text-amber-600 font-medium"}>
+                              {exp.approved ? "✓ Đã duyệt AC" : "⏳ Chờ duyệt AC"}
                             </span>
                           </div>
                         ))}

@@ -117,7 +117,7 @@ export function PaymentRequestEditor({ finance, onCreated, draft, initialSchedul
       <Input name="expectedSettlementDate" type="date" label="Hạn hoàn ứng dự kiến" value={expectedSettlementDate} onChange={event => setExpectedSettlementDate(event.target.value)} required hint="Quá hạn sẽ hiển thị cảnh báo vàng; không tự động chặn hồ sơ tạm ứng mới có giải trình." />
       <div className="tf-payment-line-editor space-y-3">
         <div className="tf-payment-line-table" aria-label="Bảng nhập các khoản đề nghị trên desktop">
-          <Table caption="Các khoản trong đề nghị tạm ứng">
+          <Table caption="Các khoản trong đề nghị tạm ứng" hideCaption>
             <thead><tr><th scope="col">Khoản</th><th scope="col">Dòng IC hiệu lực</th><th scope="col">Người nhận</th><th scope="col">Số tiền VND</th><th scope="col">Thao tác</th></tr></thead>
             <tbody>{lines.map((line, index) => <tr key={line.stableKey}>
               <td><Input aria-label={`Nội dung khoản ${index + 1}`} aria-required="true" value={line.description} onChange={event => update(line.stableKey, { description: event.target.value })} /></td>

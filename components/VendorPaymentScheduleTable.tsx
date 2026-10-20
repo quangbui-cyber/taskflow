@@ -382,7 +382,7 @@ export default function VendorPaymentScheduleTable({
                 </div>
 
                 {/* Milestones / Installments Table */}
-                <Table caption={`Lịch thanh toán cho đối tác ${vendor.name}`}>
+                <Table caption={`Lịch thanh toán cho đối tác ${vendor.name}`} hideCaption>
                   <thead>
                     <tr>
                       <th scope="col" className="w-16 text-center">Đợt</th>

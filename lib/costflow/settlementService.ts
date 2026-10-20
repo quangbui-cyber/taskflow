@@ -714,7 +714,7 @@ type ProjectionSources = {
 
 function assertNormalizedSettlementSource(line: { sourceKind: string; stableLineId: string }) {
   if (!(["IC_LINKED", "UNBUDGETED"] as const).includes(line.sourceKind as "IC_LINKED" | "UNBUDGETED")) {
-    throw new SettlementDomainError(`Dòng ${line.stableLineId}: legacy Expense chỉ đọc và không được tạo nghĩa vụ quyết toán mới.`);
+    throw new SettlementDomainError(`Dòng ${line.stableLineId}: dữ liệu chi phí cũ chỉ để đối chiếu và không được tạo nghĩa vụ quyết toán mới.`);
   }
 }
 

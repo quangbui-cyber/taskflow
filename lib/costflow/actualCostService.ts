@@ -12,17 +12,44 @@ import {
   normalizeActualCostFundingSource,
   validateUnbudgetedActualCost,
   validateActualCostDecision,
+  validateActualCostFundingAllocations,
   type ActualCostDecisionAction,
   type ActualCostEvidenceKind,
+  type ActualCostFundingAllocation,
+  type ActualCostInternalStatus,
   type ActualCostSourceKind,
 } from "./actualCost";
 import type { FinanceData } from "./types";
 import { resolveSupplierRecipient } from "./supplierReadModel";
+import {
+  assertActualCostDraftMutationVersion,
+  buildActualCostDraftManifest,
+  cloneReturnedActualCostRevision,
+  ensureActualCostDraft,
+  persistActualCostManifest,
+  recordActualCostSheetEvent,
+} from "./actualCostSheet";
 
 export type ActualCostActor = { id: string; role: string };
 export type ActualCostBulkSelection = { lineId: string; version: number; reviewToken: string };
+type ActualCostCommandResult = {
+  success?: string;
+  lineId?: string;
+  version?: number;
+  revisionId?: string;
+  action?: string;
+  notificationUserId?: string | null;
+  notificationMessage?: string;
+  [key: string]: unknown;
+};
 
 export type ActualCostCommand =
+  | {
+      command: "CREATE_SUCCESSOR";
+      projectId: string;
+      revisionId: string;
+      expectedMutationVersion: number;
+    }
   | {
       command: "CREATE_AND_SUBMIT";
       projectId: string;
@@ -45,6 +72,87 @@ export type ActualCostCommand =
       saleQuantity?: string;
       saleDays?: string;
       saleUnitPrice?: string;
+    }
+  | {
+      command: "SAVE_LINE";
+      projectId: string;
+      lineId?: string;
+      sourceKind?: ActualCostSourceKind;
+      revisionId?: string;
+      icLineId?: string;
+      recipientKey: string;
+      description: string;
+      reason?: string;
+      fundingSource: string;
+      fundingAllocations?: ActualCostFundingAllocation[];
+      quantity: string;
+      days: string;
+      unitPrice: string;
+      unit?: string;
+      basis?: "NET" | "GROSS";
+      vatPercent?: string;
+      evidenceIds?: string[];
+      billable?: boolean;
+      saleQuantity?: string;
+      saleDays?: string;
+      saleUnitPrice?: string;
+      internalStatus?: ActualCostInternalStatus;
+      accountNote?: string;
+      sheetRevisionId?: string;
+      expectedMutationVersion?: number;
+    }
+  | {
+      command: "SAVE_LINES";
+      projectId: string;
+      revisionId: string;
+      sheetRevisionId?: string;
+      expectedMutationVersion?: number;
+      lines: Array<Omit<Extract<ActualCostCommand, { command: "SAVE_LINE" }>, "command" | "projectId" | "revisionId" | "sheetRevisionId" | "expectedMutationVersion" | "lineId">>;
+    }
+  | {
+      command: "DELETE_LINE";
+      projectId: string;
+      lineId: string;
+      revisionId: string;
+      expectedMutationVersion: number;
+      restore?: boolean;
+    }
+  | {
+      command: "UPDATE_LINE_STATUS";
+      projectId: string;
+      lineId: string;
+      internalStatus: ActualCostInternalStatus;
+      accountNote?: string;
+      revisionId: string;
+      expectedMutationVersion: number;
+    }
+  | {
+      command: "UPDATE_LINES_STATUS";
+      projectId: string;
+      lineIds: string[];
+      internalStatus: ActualCostInternalStatus;
+      revisionId: string;
+      expectedMutationVersion: number;
+    }
+  | {
+      command: "SUBMIT_SHEET";
+      projectId: string;
+      note?: string;
+      missingEvidenceExplanation?: string;
+      overBudgetExplanation?: string;
+      revisionId: string;
+      expectedMutationVersion: number;
+    }
+  | {
+      command: "DECIDE_SHEET";
+      projectId: string;
+      action: ActualCostDecisionAction;
+      reason: string;
+      lineNotes?: Record<string, string>;
+      acknowledgeMissingEvidence?: boolean;
+      revisionId: string;
+      manifestHash: string;
+      expectedMutationVersion: number;
     }
   | {
       command: "RESUBMIT";
@@ -82,7 +190,8 @@ async function assertProjectActor(tx: Prisma.TransactionClient, projectId: strin
   const member = project.members.some(item => item.userId === activeActor.id);
   const isDd = !!await tx.workflowRoleGrant.findFirst({ where: { userId: activeActor.id, role: "AC_DD", revokedAt: null }, select: { id: true } });
   if (!member && activeActor.role !== "ADMIN" && !isDd) throw new Error("Bạn không có quyền trên Project này.");
-  return { actor: activeActor, project, member, isDd };
+  const isAccount = activeActor.role === "ADMIN" || (member && (activeActor.role === "ACCOUNT" || project.ownerId === activeActor.id));
+  return { actor: activeActor, project, member, isDd, isAccount };
 }
 
 async function resolveIcSource(tx: Prisma.TransactionClient, projectId: string, revisionId: string, icLineId: string) {
@@ -129,11 +238,97 @@ async function assertRecipient(tx: Prisma.TransactionClient, projectId: string, 
 
 export async function executeActualCostCommand(
   actor: ActualCostActor,
+  command: Extract<ActualCostCommand, { command: "CREATE_SUCCESSOR" }>,
+  options?: { notify?: (input: { userId: string; message: string; projectId: string; dedupeKey: string }) => Promise<void> },
+): Promise<{ revisionId: string; success: string }>;
+
+export async function executeActualCostCommand(
+  actor: ActualCostActor,
+  command: Extract<ActualCostCommand, { command: "CREATE_AND_SUBMIT" }>,
+  options?: { notify?: (input: { userId: string; message: string; projectId: string; dedupeKey: string }) => Promise<void> },
+): Promise<{ lineId: string; versionId: string; version: number; amount: string; notificationUserId: string | null; notificationMessage: string }>;
+
+export async function executeActualCostCommand(
+  actor: ActualCostActor,
+  command: Extract<ActualCostCommand, { command: "SAVE_LINE" }>,
+  options?: { notify?: (input: { userId: string; message: string; projectId: string; dedupeKey: string }) => Promise<void> },
+): Promise<{ lineId: string; versionId: string; version?: number; amount: string; success: string }>;
+
+export async function executeActualCostCommand(
+  actor: ActualCostActor,
+  command: Extract<ActualCostCommand, { command: "SAVE_LINES" }>,
+  options?: { notify?: (input: { userId: string; message: string; projectId: string; dedupeKey: string }) => Promise<void> },
+): Promise<{ lineIds: string[]; success: string }>;
+
+export async function executeActualCostCommand(
+  actor: ActualCostActor,
+  command: Extract<ActualCostCommand, { command: "DELETE_LINE" }>,
+  options?: { notify?: (input: { userId: string; message: string; projectId: string; dedupeKey: string }) => Promise<void> },
+): Promise<{ lineId: string; success: string }>;
+
+export async function executeActualCostCommand(
+  actor: ActualCostActor,
+  command: Extract<ActualCostCommand, { command: "UPDATE_LINE_STATUS" }>,
+  options?: { notify?: (input: { userId: string; message: string; projectId: string; dedupeKey: string }) => Promise<void> },
+): Promise<{ lineId: string; versionId: string; success: string }>;
+
+export async function executeActualCostCommand(
+  actor: ActualCostActor,
+  command: Extract<ActualCostCommand, { command: "SUBMIT_SHEET" }>,
+  options?: { notify?: (input: { userId: string; message: string; projectId: string; dedupeKey: string }) => Promise<void> },
+): Promise<{ success: string; notificationUserId: string; notificationMessage: string }>;
+
+export async function executeActualCostCommand(
+  actor: ActualCostActor,
+  command: Extract<ActualCostCommand, { command: "DECIDE_SHEET" }>,
+  options?: { notify?: (input: { userId: string; message: string; projectId: string; dedupeKey: string }) => Promise<void> },
+): Promise<{ action: ActualCostDecisionAction; success: string; notificationUserId: string | null; notificationMessage: string }>;
+
+export async function executeActualCostCommand(
+  actor: ActualCostActor,
+  command: Extract<ActualCostCommand, { command: "RESUBMIT" }>,
+  options?: { notify?: (input: { userId: string; message: string; projectId: string; dedupeKey: string }) => Promise<void> },
+): Promise<{ lineId: string; versionId: string; version: number; amount: string; notificationUserId: string | null; notificationMessage: string }>;
+
+export async function executeActualCostCommand(
+  actor: ActualCostActor,
+  command: Extract<ActualCostCommand, { command: "DECIDE" }>,
+  options?: { notify?: (input: { userId: string; message: string; projectId: string; dedupeKey: string }) => Promise<void> },
+): Promise<{ lineId: string; versionId: string; version: number; amount: string; action: string; notificationUserId: string | null; notificationMessage: string }>;
+
+export async function executeActualCostCommand(
+  actor: ActualCostActor,
+  command: ActualCostCommand,
+  options?: { notify?: (input: { userId: string; message: string; projectId: string; dedupeKey: string }) => Promise<void> },
+): Promise<ActualCostCommandResult>;
+
+export async function executeActualCostCommand(
+  actor: ActualCostActor,
   command: ActualCostCommand,
   options: { notify?: (input: { userId: string; message: string; projectId: string; dedupeKey: string }) => Promise<void> } = {},
-) {
+): Promise<ActualCostCommandResult> {
+  if (["CREATE_AND_SUBMIT", "RESUBMIT", "DECIDE"].includes(command.command)) {
+    throw new Error("Bảng AC chỉ được gửi, duyệt hoặc trả lại toàn bộ; thao tác duyệt từng khoản đã ngừng sử dụng.");
+  }
   const result = await prisma.$transaction(async tx => {
     const context = await assertProjectActor(tx, command.projectId, actor);
+
+    if (command.command === "CREATE_SUCCESSOR") {
+      if (!context.isAccount) throw new Error("Chỉ Account dự án được tạo phiên bản Bảng AC gửi lại.");
+      const returned = await tx.actualCostSheetRevision.findFirst({
+        where: { id: command.revisionId, projectId: command.projectId, state: "RETURNED" },
+        include: { sheet: { select: { currentRevision: true } } },
+      });
+      if (!returned || returned.revision !== returned.sheet.currentRevision || returned.mutationVersion !== command.expectedMutationVersion) {
+        throw new Error("Bảng AC đã thay đổi. Vui lòng tải lại trước khi tạo phiên bản gửi lại.");
+      }
+      const draft = await cloneReturnedActualCostRevision(tx, {
+        projectId: command.projectId,
+        returnedRevisionId: returned.id,
+        actorId: context.actor.id,
+      });
+      return { revisionId: draft.id, success: `Đã tạo Bảng AC-R${draft.revision} để chỉnh sửa và gửi lại toàn bộ.` };
+    }
 
     if (command.command === "CREATE_AND_SUBMIT") {
       if (!context.member) throw new Error("Chỉ thành viên Project được lập AC.");
@@ -220,6 +415,575 @@ export async function executeActualCostCommand(
       const version = line.versions[0];
       const dd = await tx.workflowRoleGrant.findFirst({ where: { role: "AC_DD", revokedAt: null, user: { isActive: true } }, select: { userId: true } });
       return { lineId: line.id, versionId: version.id, version: 1, amount: version.amount, notificationUserId: dd?.userId ?? null, notificationMessage: "Có AC mới chờ DD xem xét." };
+    }
+
+    if (command.command === "SAVE_LINE" || command.command === "SAVE_LINES") {
+      const saveOne = async (command: Extract<ActualCostCommand, { command: "SAVE_LINE" }>) => {
+      if (!context.member && context.actor.role !== "ADMIN") throw new Error("Chỉ thành viên Project được lưu dòng AC.");
+      const sourceKind = command.sourceKind ?? "IC_LINKED";
+      if (sourceKind !== "IC_LINKED" && sourceKind !== "UNBUDGETED") throw new Error("Nguồn AC không hợp lệ.");
+      const recipientKey = await assertRecipient(tx, command.projectId, required(command.recipientKey, "người nhận"));
+      let sourceSnapshot: Record<string, unknown>;
+      let revisionId: string | null = null;
+      let icLineId: string | null = null;
+      let unit: string;
+      let basis: "NET" | "GROSS";
+      let vatPercent: string;
+      let fundingSource: ReturnType<typeof normalizeActualCostFundingSource>;
+      let billable = false;
+      let saleSnapshot: { quantity: string; days: string; unitPrice: string } | null = null;
+      let evidenceLinks: { evidenceId: string; kind: ActualCostEvidenceKind }[] = [];
+
+      if (sourceKind === "IC_LINKED") {
+        const icSource = await resolveIcSource(tx, command.projectId, required(command.revisionId ?? "", "phiên bản IC"), required(command.icLineId ?? "", "dòng IC"));
+        sourceSnapshot = structuredClone(icSource) as unknown as Record<string, unknown>;
+        revisionId = icSource.revisionId;
+        icLineId = icSource.lineId;
+        unit = command.unit?.trim() || icSource.unit;
+        basis = command.basis ?? icSource.basis;
+        vatPercent = command.vatPercent ?? icSource.vatPercent;
+        fundingSource = normalizeActualCostFundingSource(command.fundingSource);
+      } else {
+        const validated = validateUnbudgetedActualCost({
+          ...command,
+          reason: command.reason ?? "",
+          unit: command.unit ?? "",
+          evidenceIds: command.evidenceIds ?? [],
+          billable: command.billable ?? false,
+        });
+        sourceSnapshot = { sourceKind, reason: validated.reason };
+        unit = validated.unit;
+        basis = command.basis ?? "GROSS";
+        vatPercent = command.vatPercent ?? "0";
+        fundingSource = validated.fundingSource;
+        billable = validated.billable;
+        saleSnapshot = validated.saleSnapshot;
+      }
+      if (command.evidenceIds?.length) {
+        const requestedEvidenceIds = [...new Set((command.evidenceIds as unknown[]).filter((id): id is string => typeof id === "string" && !!id))];
+        const evidence = await tx.costFlowEvidence.findMany({
+          where: { projectId: command.projectId, id: { in: requestedEvidenceIds } },
+          select: { id: true, kind: true },
+        });
+        if (evidence.length !== requestedEvidenceIds.length) throw new Error("Chứng từ AC phải thuộc đúng Project.");
+        evidenceLinks = evidence.map(item => ({ evidenceId: item.id, kind: normalizeActualCostEvidenceKind(item.kind) }));
+      }
+      const draft = await ensureActualCostDraft(tx, {
+        projectId: command.projectId,
+        icRevisionId: required(command.revisionId ?? revisionId ?? "", "Bản IC dùng để so sánh"),
+        actorId: context.actor.id,
+      });
+      if (command.sheetRevisionId) {
+        if (draft.revision.id === command.sheetRevisionId) {
+          await assertActualCostDraftMutationVersion(tx, command.sheetRevisionId, command.expectedMutationVersion ?? -1);
+        } else {
+          const returnedSource = await tx.actualCostSheetRevision.findFirst({
+            where: { id: command.sheetRevisionId, projectId: command.projectId, state: "RETURNED", sheetId: draft.sheet.id },
+            select: { id: true },
+          });
+          if (!returnedSource) throw new Error("Phiên bản Bảng AC đã thay đổi. Vui lòng tải lại.");
+          if (draft.revision.mutationVersion !== 0) {
+            throw new Error("Bảng AC đã có thay đổi mới. Vui lòng tải lại trước khi tiếp tục.");
+          }
+        }
+      } else if (draft.revision.mutationVersion !== 0) {
+        throw new Error("Bảng AC đã có thay đổi mới. Vui lòng tải lại trước khi tiếp tục.");
+      }
+      const calculated = calculateActualCost({ ...command, basis, vatPercent });
+      const allocations = command.fundingAllocations?.length
+        ? validateActualCostFundingAllocations(calculated.amount, command.fundingAllocations)
+        : [{ source: fundingSource, amount: calculated.amount }];
+      sourceSnapshot.internalStatus = context.isAccount ? command.internalStatus ?? "PENDING_ACCOUNT_REVIEW" : "PENDING_ACCOUNT_REVIEW";
+      sourceSnapshot.fundingAllocations = allocations;
+      if (context.isAccount && command.accountNote) sourceSnapshot.accountNote = command.accountNote;
+
+      if (command.lineId) {
+        const existingLine = await tx.actualCostLine.findFirst({
+          where: { id: command.lineId, projectId: command.projectId },
+          include: { versions: { orderBy: { version: "desc" }, take: 1, include: { applications: true } } },
+        });
+        if (!existingLine || !existingLine.versions[0]) throw new Error("Không tìm thấy dòng AC để cập nhật.");
+        if (!context.isAccount && existingLine.createdById !== context.actor.id) {
+          throw new Error("Bạn chỉ được sửa khoản thực chi do mình phụ trách; Account dự án có thể sửa toàn bảng.");
+        }
+        if (await tx.actualCostApplication.count({ where: { lineId: existingLine.id, state: "ACTIVE", request: { state: { notIn: ["WITHDRAWN", "REJECTED", "CANCELLED"] } } } })) {
+          throw new Error("AC đang được hồ sơ thanh toán/hoàn ứng sử dụng và đã bị khóa.");
+        }
+        const current = existingLine.versions[0];
+        let targetVersionId = current.id;
+        if (current.state !== "DRAFT") {
+          const nextVersion = existingLine.currentVersion + 1;
+          const newVer = await tx.actualCostVersion.create({
+            data: {
+              projectId: command.projectId,
+              lineId: existingLine.id,
+              version: nextVersion,
+              state: "DRAFT",
+              description: required(command.description, "nội dung AC"),
+              fundingSource,
+              quantity: command.quantity,
+              days: command.days,
+              unitPrice: command.unitPrice,
+              unit,
+              basis,
+              vatPercent,
+              amount: calculated.amount,
+              rawAmount: calculated.rawAmount,
+              sourceSnapshot: sourceSnapshot as unknown as Prisma.InputJsonValue,
+              billable,
+              saleSnapshot: saleSnapshot as Prisma.InputJsonValue ?? undefined,
+              createdById: context.actor.id,
+            },
+          });
+          await tx.actualCostLine.update({ where: { id: existingLine.id }, data: { currentVersion: nextVersion, recipientKey } });
+          targetVersionId = newVer.id;
+        } else {
+          await tx.actualCostVersion.update({
+            where: { id: current.id },
+            data: {
+              description: required(command.description, "nội dung AC"),
+              fundingSource,
+              quantity: command.quantity,
+              days: command.days,
+              unitPrice: command.unitPrice,
+              unit,
+              basis,
+              vatPercent,
+              amount: calculated.amount,
+              rawAmount: calculated.rawAmount,
+              sourceSnapshot: sourceSnapshot as unknown as Prisma.InputJsonValue,
+              billable,
+              saleSnapshot: saleSnapshot as Prisma.InputJsonValue ?? undefined,
+            },
+          });
+          await tx.actualCostLine.update({ where: { id: existingLine.id }, data: { recipientKey } });
+        }
+        if (command.evidenceIds) {
+          await tx.actualCostEvidenceLink.deleteMany({ where: { versionId: targetVersionId } });
+          if (evidenceLinks.length) {
+            await tx.actualCostEvidenceLink.createMany({
+              data: evidenceLinks.map(link => ({
+                projectId: command.projectId,
+                versionId: targetVersionId,
+                evidenceId: link.evidenceId,
+                kind: link.kind,
+                actorId: context.actor.id,
+              })),
+            });
+          }
+        }
+        await tx.actualCostFundingAllocation.deleteMany({ where: { versionId: targetVersionId } });
+        await tx.actualCostFundingAllocation.createMany({
+          data: allocations.map((allocation, position) => ({
+            projectId: command.projectId,
+            versionId: targetVersionId,
+            source: allocation.source,
+            amount: allocation.amount,
+            recipientKey,
+            position,
+            createdById: context.actor.id,
+          })),
+        });
+        await recordActualCostSheetEvent(tx, {
+          projectId: command.projectId,
+          revisionId: draft.revision.id,
+          actorId: context.actor.id,
+          action: "UPDATE_LINE",
+          lineId: existingLine.id,
+          versionId: targetVersionId,
+          payload: {
+            before: {
+              versionId: current.id,
+              description: current.description,
+              recipientKey: existingLine.recipientKey,
+              quantity: current.quantity,
+              days: current.days,
+              unitPrice: current.unitPrice,
+              amount: current.amount,
+              internalStatus: typeof (current.sourceSnapshot as Record<string, unknown> | null)?.internalStatus === "string"
+                ? String((current.sourceSnapshot as Record<string, unknown>).internalStatus) : "",
+            },
+            after: {
+              versionId: targetVersionId,
+              description: required(command.description, "nội dung AC"),
+              recipientKey,
+              quantity: command.quantity,
+              days: command.days,
+              unitPrice: command.unitPrice,
+              amount: calculated.amount,
+              internalStatus: String(sourceSnapshot.internalStatus),
+            },
+          },
+        });
+        return { lineId: existingLine.id, versionId: targetVersionId, amount: calculated.amount, success: "Đã lưu cập nhật dòng AC." };
+      }
+
+      // Create new line
+      const stableLineId = `ac-${Date.now()}-${randomUUID().slice(0, 8)}`;
+      const line = await tx.actualCostLine.create({
+        data: {
+          projectId: command.projectId,
+          stableLineId,
+          sourceKind,
+          icRevisionId: revisionId,
+          icLineId,
+          recipientKey,
+          createdById: context.actor.id,
+          currentVersion: 1,
+          versions: {
+            create: {
+              projectId: command.projectId,
+              version: 1,
+              state: "DRAFT",
+              description: required(command.description, "nội dung AC"),
+              fundingSource,
+              quantity: command.quantity,
+              days: command.days,
+              unitPrice: command.unitPrice,
+              unit,
+              basis,
+              vatPercent,
+              amount: calculated.amount,
+              rawAmount: calculated.rawAmount,
+              sourceSnapshot: sourceSnapshot as unknown as Prisma.InputJsonValue,
+              billable,
+              saleSnapshot: saleSnapshot as Prisma.InputJsonValue ?? undefined,
+              createdById: context.actor.id,
+              evidenceLinks: evidenceLinks.length ? {
+                create: evidenceLinks.map(link => ({ projectId: command.projectId, evidenceId: link.evidenceId, kind: link.kind, actorId: context.actor.id })),
+              } : undefined,
+            },
+          },
+        },
+        include: { versions: true },
+      });
+      await tx.actualCostFundingAllocation.createMany({
+        data: allocations.map((allocation, position) => ({
+          projectId: command.projectId,
+          versionId: line.versions[0].id,
+          source: allocation.source,
+          amount: allocation.amount,
+          recipientKey,
+          position,
+          createdById: context.actor.id,
+        })),
+      });
+      await recordActualCostSheetEvent(tx, {
+        projectId: command.projectId,
+        revisionId: draft.revision.id,
+        actorId: context.actor.id,
+        action: "ADD_LINE",
+        lineId: line.id,
+        versionId: line.versions[0].id,
+      });
+      return { lineId: line.id, versionId: line.versions[0].id, version: 1, amount: calculated.amount, success: "Đã tạo dòng AC mới." };
+      };
+      if (command.command === "SAVE_LINE") return saveOne(command);
+      if (!Array.isArray(command.lines) || command.lines.length < 1 || command.lines.length > 100) {
+        throw new Error("Mỗi lần chỉ dán từ 1 đến 100 khoản thực chi.");
+      }
+      const lineIds: string[] = [];
+      let sheetRevisionId = command.sheetRevisionId;
+      let expectedMutationVersion = command.expectedMutationVersion;
+      for (const input of command.lines) {
+        const result = await saveOne({
+          ...input,
+          command: "SAVE_LINE",
+          projectId: command.projectId,
+          revisionId: command.revisionId,
+          sheetRevisionId,
+          expectedMutationVersion,
+        });
+        lineIds.push(result.lineId);
+        const draft = await tx.actualCostSheetRevision.findFirst({
+          where: { projectId: command.projectId, state: "DRAFT" },
+          orderBy: { revision: "desc" },
+          select: { id: true, mutationVersion: true },
+        });
+        if (!draft) throw new Error("Không tìm thấy bản nháp Bảng AC sau khi ghi nhận khoản chi.");
+        sheetRevisionId = draft.id;
+        expectedMutationVersion = draft.mutationVersion;
+      }
+      return { lineIds, success: `Đã lưu ${lineIds.length} khoản thực chi vào Bảng AC.` };
+    }
+
+    if (command.command === "DELETE_LINE") {
+      await assertActualCostDraftMutationVersion(tx, command.revisionId, command.expectedMutationVersion);
+      const line = await tx.actualCostLine.findFirst({
+        where: { id: command.lineId, projectId: command.projectId },
+        include: { versions: { orderBy: { version: "desc" }, take: 1 } },
+      });
+      if (!line) throw new Error("Không tìm thấy dòng AC.");
+      if (!context.isAccount && line.createdById !== context.actor.id) {
+        throw new Error("Bạn chỉ được thay đổi khoản thực chi do mình phụ trách; Account dự án có thể sửa toàn bảng.");
+      }
+      if (await tx.actualCostApplication.count({ where: { lineId: line.id, state: "ACTIVE" } })) {
+        throw new Error("Không thể xóa dòng AC đã được gắn vào hồ sơ thanh toán.");
+      }
+      await tx.actualCostLine.update({
+        where: { id: line.id },
+        data: command.restore
+          ? { draftRemovedAt: null, draftRemovedById: null }
+          : { draftRemovedAt: new Date(), draftRemovedById: context.actor.id },
+      });
+      await recordActualCostSheetEvent(tx, {
+        projectId: command.projectId,
+        revisionId: command.revisionId,
+        actorId: context.actor.id,
+        action: command.restore ? "RESTORE_LINE" : "REMOVE_LINE",
+        lineId: line.id,
+        versionId: line.versions[0]?.id,
+      });
+      return { lineId: command.lineId, success: command.restore ? "Đã khôi phục khoản thực chi." : "Đã loại khoản thực chi khỏi bản nháp." };
+    }
+
+    if (command.command === "UPDATE_LINE_STATUS") {
+      if (!context.isAccount) throw new Error("Chỉ Account dự án được xác nhận đã kiểm tra khoản thực chi.");
+      await assertActualCostDraftMutationVersion(tx, command.revisionId, command.expectedMutationVersion);
+      const line = await tx.actualCostLine.findFirst({
+        where: { id: command.lineId, projectId: command.projectId },
+        include: { versions: { orderBy: { version: "desc" }, take: 1 } },
+      });
+      if (!line || !line.versions[0]) throw new Error("Không tìm thấy dòng AC.");
+      const current = line.versions[0];
+      const snapshot = (current.sourceSnapshot && typeof current.sourceSnapshot === "object" ? current.sourceSnapshot : {}) as Record<string, unknown>;
+      snapshot.internalStatus = command.internalStatus;
+      if (command.accountNote !== undefined) snapshot.accountNote = command.accountNote;
+      await tx.actualCostVersion.update({
+        where: { id: current.id },
+        data: { sourceSnapshot: snapshot as Prisma.InputJsonValue },
+      });
+      await recordActualCostSheetEvent(tx, {
+        projectId: command.projectId,
+        revisionId: command.revisionId,
+        actorId: context.actor.id,
+        action: "REVIEW_LINE",
+        lineId: line.id,
+        versionId: current.id,
+        payload: { internalStatus: command.internalStatus, accountNote: command.accountNote ?? "" },
+      });
+      return { lineId: line.id, versionId: current.id, success: "Đã cập nhật trạng thái kiểm tra dòng AC." };
+    }
+
+    if (command.command === "UPDATE_LINES_STATUS") {
+      if (!context.isAccount) throw new Error("Chỉ Account dự án được xác nhận đã kiểm tra các khoản thực chi.");
+      await assertActualCostDraftMutationVersion(tx, command.revisionId, command.expectedMutationVersion);
+      const lineIds = [...new Set((command.lineIds as unknown[]).filter((lineId): lineId is string => typeof lineId === "string" && !!lineId))];
+      if (!lineIds.length) throw new Error("Chưa chọn khoản thực chi cần cập nhật.");
+      const lines = await tx.actualCostLine.findMany({
+        where: { projectId: command.projectId, id: { in: lineIds }, draftRemovedAt: null },
+        include: { versions: { orderBy: { version: "desc" }, take: 1 } },
+      });
+      if (lines.length !== lineIds.length || lines.some(line => !line.versions[0])) throw new Error("Danh sách khoản thực chi không hợp lệ.");
+      for (const line of lines) {
+        const current = line.versions[0];
+        const snapshot = (current.sourceSnapshot && typeof current.sourceSnapshot === "object" ? structuredClone(current.sourceSnapshot) : {}) as Record<string, unknown>;
+        snapshot.internalStatus = command.internalStatus;
+        await tx.actualCostVersion.update({ where: { id: current.id }, data: { sourceSnapshot: snapshot as Prisma.InputJsonValue } });
+        await tx.actualCostSheetEvent.create({
+          data: { projectId: command.projectId, revisionId: command.revisionId, actorId: context.actor.id, action: "REVIEW_LINE", lineId: line.id, versionId: current.id, payload: { internalStatus: command.internalStatus } },
+        });
+      }
+      await tx.actualCostSheetRevision.update({ where: { id: command.revisionId }, data: { mutationVersion: { increment: 1 } } });
+      return { success: `Đã cập nhật ${lines.length} khoản thực chi.`, count: lines.length };
+    }
+
+    if (command.command === "SUBMIT_SHEET") {
+      if (!context.isAccount) throw new Error("Chỉ Account dự án được chốt và gửi toàn bộ Bảng AC.");
+      await assertActualCostDraftMutationVersion(tx, command.revisionId, command.expectedMutationVersion);
+      const activeDd = await tx.workflowRoleGrant.findFirst({ where: { role: "AC_DD", revokedAt: null, user: { isActive: true } }, select: { userId: true } });
+      if (!activeDd) throw new Error("Hệ thống chưa cấu hình người duyệt AC (DD).");
+      if (context.actor.id === activeDd.userId) {
+        throw new Error("Người chốt gửi Bảng AC và người Duyệt AC không được là cùng một người.");
+      }
+      const built = await buildActualCostDraftManifest(tx, { projectId: command.projectId, revisionId: command.revisionId });
+      const versions = await tx.actualCostVersion.findMany({
+        where: { projectId: command.projectId, id: { in: built.manifest.map(item => item.versionId) } },
+        include: { line: true, evidenceLinks: true, fundingAllocations: true },
+      });
+      if (versions.length !== built.manifest.length) throw new Error("Bảng AC có dữ liệu không thuộc đúng Project.");
+
+      // Preflight checks
+      for (const ver of versions) {
+        const snapshot = (ver.sourceSnapshot && typeof ver.sourceSnapshot === "object" ? ver.sourceSnapshot : {}) as Record<string, unknown>;
+        if (snapshot.internalStatus !== "ACCOUNT_REVIEWED") {
+          throw new Error(`Dòng "${ver.description}" chưa được Account kiểm tra. 100% dòng phải được kiểm tra trước khi gửi.`);
+        }
+        if (ver.line.sourceKind === "UNBUDGETED" && !snapshot.reason) {
+          throw new Error(`Dòng "${ver.description}" phát sinh ngoài IC nhưng thiếu lý do.`);
+        }
+        const allocatedGross = ver.fundingAllocations.reduce((sum, allocation) => sum + BigInt(allocation.amount), BigInt(0));
+        if (!ver.fundingAllocations.length || allocatedGross.toString() !== ver.amount) {
+          throw new Error(`Dòng "${ver.description}" chưa phân bổ đủ nguồn tiền bằng tổng thực chi.`);
+        }
+      }
+      if (versions.some(version => actualCostEvidenceWarnings(version.evidenceLinks.map(link => link.kind)).length > 0)
+        && !command.missingEvidenceExplanation?.trim()) {
+        throw new Error("Bảng AC còn thiếu chứng từ. Hãy nhập giải trình để Phó Giám đốc xem xét.");
+      }
+      const icGroups = new Map<string, { icGross: bigint; actualGross: bigint }>();
+      for (const version of versions) {
+        if (version.line.sourceKind !== "IC_LINKED") continue;
+        const snapshot = version.sourceSnapshot && typeof version.sourceSnapshot === "object"
+          ? version.sourceSnapshot as Record<string, unknown> : {};
+        const cost = snapshot.cost && typeof snapshot.cost === "object" ? snapshot.cost as Record<string, unknown> : {};
+        const gross = String(cost.gross ?? "");
+        if (!/^\d+$/.test(gross)) throw new Error(`Dòng "${version.description}" thiếu số tiền Bản IC dùng để so sánh.`);
+        const key = `${version.line.icRevisionId}:${version.line.icLineId}`;
+        const group = icGroups.get(key) ?? { icGross: BigInt(gross), actualGross: BigInt(0) };
+        group.actualGross += BigInt(version.amount);
+        icGroups.set(key, group);
+      }
+      if ([...icGroups.values()].some(group => group.actualGross > group.icGross) && !command.overBudgetExplanation?.trim()) {
+        throw new Error("Bảng AC có hạng mục vượt Bản IC. Hãy nhập giải trình để Phó Giám đốc xem xét.");
+      }
+
+      const totalGross = versions.reduce((sum, version) => sum + BigInt(version.amount || "0"), BigInt(0));
+      await persistActualCostManifest(tx, { projectId: command.projectId, revisionId: command.revisionId, manifest: built.manifest, manifestHash: built.manifestHash });
+      await tx.actualCostVersion.updateMany({ where: { id: { in: built.manifest.map(item => item.versionId) }, state: "DRAFT" }, data: { state: "SUBMITTED", submittedAt: new Date() } });
+
+      // Create or update WorkflowRequest
+      const reqTitle = `Duyệt toàn bộ Bảng AC-R${built.revision.revision}`;
+      const payload = {
+        sheetRevisionId: built.revision.id,
+        sheetVersion: built.revision.revision,
+        manifestHash: built.manifestHash,
+        totalGross: totalGross.toString(),
+        totalLines: versions.length,
+        note: command.note ?? "",
+        missingEvidenceExplanation: command.missingEvidenceExplanation ?? "",
+        overBudgetExplanation: command.overBudgetExplanation ?? "",
+      };
+      const request = await tx.workflowRequest.create({
+          data: {
+            projectId: command.projectId,
+            module: "COSTFLOW",
+            kind: "ACTUAL_COST_APPROVAL",
+            title: reqTitle,
+            creatorId: context.actor.id,
+            cashAssigneeId: context.actor.id,
+            state: "SUBMITTED",
+            steps: [{ role: "AC_DD", assigneeId: activeDd.userId, status: "PENDING" }],
+            payload: payload as Prisma.InputJsonValue,
+          },
+      });
+      const submitted = await tx.actualCostSheetRevision.updateMany({
+        where: { id: built.revision.id, projectId: command.projectId, state: "DRAFT", mutationVersion: command.expectedMutationVersion },
+        data: {
+          state: "SUBMITTED",
+          manifestHash: built.manifestHash,
+          submittedById: context.actor.id,
+          submittedAt: new Date(),
+          workflowRequestId: request.id,
+          note: command.note ?? "",
+          missingEvidenceExplanation: command.missingEvidenceExplanation ?? "",
+          overBudgetExplanation: command.overBudgetExplanation ?? "",
+          mutationVersion: { increment: 1 },
+        },
+      });
+      if (submitted.count !== 1) throw new Error("Bảng AC đã có thay đổi mới. Vui lòng tải lại trước khi gửi.");
+      await tx.actualCostSheetEvent.create({
+        data: {
+          projectId: command.projectId,
+          revisionId: built.revision.id,
+          actorId: context.actor.id,
+          action: "SUBMIT_SHEET",
+          payload: { manifestHash: built.manifestHash, workflowRequestId: request.id, totalLines: versions.length },
+        },
+      });
+
+      return {
+        revisionId: built.revision.id,
+        version: built.revision.revision,
+        action: "SUBMITTED",
+        success: `Đã gửi toàn bộ Bảng AC-R${built.revision.revision} cho DD.`,
+        notificationUserId: activeDd.userId,
+        notificationMessage: `Toàn bộ Bảng AC-R${built.revision.revision} đang chờ bạn xem xét.`,
+      };
+    }
+
+    if (command.command === "DECIDE_SHEET") {
+      if (!context.isDd) throw new Error("Chỉ Phó Giám đốc được Duyệt AC.");
+      const revision = await tx.actualCostSheetRevision.findFirst({
+        where: { id: command.revisionId, projectId: command.projectId },
+        include: {
+          lines: {
+            orderBy: { position: "asc" },
+            include: { line: true, version: { include: { evidenceLinks: true } } },
+          },
+        },
+      });
+      if (!revision || revision.state !== "SUBMITTED") throw new Error("Bảng AC này không còn chờ duyệt.");
+      if (revision.mutationVersion !== command.expectedMutationVersion || revision.manifestHash !== command.manifestHash) {
+        throw new Error("Bảng AC đã thay đổi hoặc mã đối chiếu không hợp lệ. Vui lòng tải lại.");
+      }
+      if (revision.submittedById === context.actor.id) throw new Error("Người gửi Bảng AC không được đồng thời là người Duyệt AC.");
+      if (!revision.workflowRequestId) throw new Error("Bảng AC chưa gắn với hồ sơ Trình duyệt.");
+      if (command.action === "RETURNED" && !command.reason.trim()) throw new Error("Cần nhập lý do trả lại toàn bộ Bảng AC.");
+      const warningRows = revision.lines.map(item => ({
+        item,
+        warnings: actualCostEvidenceWarnings(item.version.evidenceLinks.map(link => link.kind)),
+      }));
+      if (command.action === "APPROVED" && warningRows.some(row => row.warnings.length) && !command.acknowledgeMissingEvidence) {
+        throw new Error("DD phải xác nhận rõ việc duyệt toàn bộ Bảng AC dù còn thiếu chứng từ.");
+      }
+      const updated = await tx.actualCostSheetRevision.updateMany({
+        where: { id: revision.id, state: "SUBMITTED", mutationVersion: command.expectedMutationVersion, manifestHash: command.manifestHash },
+        data: {
+          state: command.action,
+          decidedById: context.actor.id,
+          decidedAt: new Date(),
+          returnedAt: command.action === "RETURNED" ? new Date() : null,
+          decisionReason: command.reason.trim(),
+          mutationVersion: { increment: 1 },
+        },
+      });
+      if (updated.count !== 1) throw new Error("Bảng AC đã được quyết định bởi một thao tác khác.");
+      await tx.actualCostVersion.updateMany({
+        where: { id: { in: revision.lines.map(item => item.versionId) }, state: "SUBMITTED" },
+        data: { state: command.action },
+      });
+      const attemptId = randomUUID();
+      for (const row of warningRows) {
+        await tx.actualCostApproval.create({
+          data: {
+            projectId: command.projectId,
+            lineId: row.item.lineId,
+            versionId: row.item.versionId,
+            attemptId,
+            retryKey: `${revision.id}:${row.item.versionId}:${command.action}`,
+            action: command.action,
+            actorId: context.actor.id,
+            reason: command.reason.trim(),
+            warningCodes: row.warnings,
+          },
+        });
+      }
+      await tx.workflowRequest.update({
+        where: { id: revision.workflowRequestId },
+        data: { state: command.action, version: { increment: 1 } },
+      });
+      await tx.actualCostSheetEvent.create({
+        data: {
+          projectId: command.projectId,
+          revisionId: revision.id,
+          actorId: context.actor.id,
+          action: command.action === "APPROVED" ? "APPROVE_SHEET" : "RETURN_SHEET",
+          payload: { reason: command.reason.trim(), lineNotes: command.lineNotes ?? {} },
+        },
+      });
+      return {
+        revisionId: revision.id,
+        version: revision.revision,
+        action: command.action,
+        success: command.action === "APPROVED"
+          ? `Đã Duyệt AC toàn bộ Bảng AC-R${revision.revision}.`
+          : `Đã trả lại toàn bộ Bảng AC-R${revision.revision} cho Account.`,
+        notificationUserId: revision.submittedById,
+        notificationMessage: command.action === "APPROVED"
+          ? `Toàn bộ Bảng AC-R${revision.revision} đã được duyệt.`
+          : `Toàn bộ Bảng AC-R${revision.revision} đã được trả lại.`,
+      };
     }
 
     const line = await tx.actualCostLine.findFirst({
@@ -313,11 +1077,13 @@ export async function executeActualCostCommand(
       notificationUserId: line.createdById,
       notificationMessage: decision.action === "APPROVED" ? "AC đã được DD duyệt." : "AC đã được DD trả lại để chỉnh sửa.",
     };
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15000 });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: command.command === "SAVE_LINES" ? 60000 : 15000 });
 
-  if (result.notificationUserId) {
+  if ("notificationUserId" in result && result.notificationUserId) {
+    const notificationSubject = ("lineId" in result ? result.lineId : undefined)
+      ?? ("revisionId" in result ? result.revisionId : undefined) ?? command.projectId;
     const notification = {
-      dedupeKey: `actual-cost:${result.lineId}:${result.version}:${result.action ?? "SUBMITTED"}`,
+      dedupeKey: `actual-cost:${notificationSubject}:${"version" in result ? result.version ?? 0 : 0}:${"action" in result ? result.action : "UPDATED"}`,
       userId: result.notificationUserId,
       message: result.notificationMessage,
       projectId: command.projectId,
@@ -327,13 +1093,7 @@ export async function executeActualCostCommand(
       : prisma.notification.create({ data: { ...notification, type: "costflow" } }).then(() => undefined)
     ).catch(() => undefined);
   }
-  return {
-    lineId: result.lineId,
-    versionId: result.versionId,
-    version: result.version,
-    amount: result.amount,
-    ...("approvalId" in result ? { approvalId: result.approvalId, approvalAttemptId: result.approvalAttemptId, action: result.action } : {}),
-  };
+  return result;
 }
 
 export async function executeActualCostBulkDecision(actor: ActualCostActor, input: {
@@ -343,6 +1103,7 @@ export async function executeActualCostBulkDecision(actor: ActualCostActor, inpu
   acknowledgeMissingEvidence: boolean;
   selections: ActualCostBulkSelection[];
 }) {
+  throw new Error("Bảng AC chỉ được duyệt hoặc trả lại toàn bộ; thao tác duyệt nhiều khoản riêng lẻ đã ngừng sử dụng.");
   if (!input.selections.length) throw new Error("Chọn ít nhất một dòng AC để quyết định.");
   if (new Set(input.selections.map(item => item.lineId)).size !== input.selections.length) throw new Error("Dòng AC bị chọn trùng.");
   const result = await prisma.$transaction(async tx => {

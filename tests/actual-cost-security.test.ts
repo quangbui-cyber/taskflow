@@ -47,16 +47,13 @@ test("customer acceptance exports authorize the Project and accept snapshot iden
   assert.match(projection, /!addition\.billable/);
 });
 
-test("actual cost bulk decision validates the entire current-version set before writes", () => {
+test("line-level bulk decisions are rejected and whole-sheet decision binds the exact revision", () => {
   const action = source("app/actions/costflow.ts");
   const service = source("lib/costflow/actualCostService.ts");
-  assert.match(action, /BULK_DECIDE/);
-  assert.match(action, /bulkSelection/);
-  assert.match(service, /executeActualCostBulkDecision/);
-  assert.match(service, /lines\.length !== input\.selections\.length/);
-  assert.match(service, /line\.currentVersion !== selection\.version/);
-  assert.match(service, /selection\.reviewToken !==/);
-  assert.ok(service.indexOf("const validated = input.selections.map") < service.indexOf("for (const item of validated)"));
+  assert.match(action, /\["CREATE_AND_SUBMIT", "RESUBMIT", "DECIDE", "BULK_DECIDE"\]\.includes\(action\)/);
+  assert.match(action, /action === "DECIDE_SHEET"/);
+  assert.match(service, /thao tác duyệt nhiều khoản riêng lẻ đã ngừng sử dụng/);
+  assert.match(service, /manifestHash/);
 });
 
 test("control center derives role scope and Project Operations assignment on the server", () => {

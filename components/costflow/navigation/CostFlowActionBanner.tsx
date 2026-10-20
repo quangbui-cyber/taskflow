@@ -55,6 +55,7 @@ export default function CostFlowActionBanner({
   const effectiveRevision = data.revisions?.find(r => r.effective);
   const isClosed = !!data.closed;
   const canCreate = fullAccess && ["ADMIN", "ACCOUNT"].includes(user.role);
+  const actualCostLines = finance.actualCosts?.lines ?? [];
 
   // 1. Check for approvals pending for the current user
   const myPendingRequests = useMemo(() => {
@@ -72,8 +73,8 @@ export default function CostFlowActionBanner({
 
   // 3. Check for AC missing evidence
   const missingEvidenceCount = useMemo(() => {
-    return (data.expenses ?? []).filter(e => !e.invoiceId || !e.paymentProofId).length;
-  }, [data.expenses]);
+    return actualCostLines.filter(line => line.missingEvidenceWarnings.length > 0).length;
+  }, [actualCostLines]);
 
   // 4. Determine banner data based on priority rules
   const bannerData: ActionBannerData | null = useMemo(() => {
@@ -182,7 +183,7 @@ export default function CostFlowActionBanner({
     }
 
     // Priority 6: Ready for Settlement / Liquidation
-    if (!isClosed && (data.expenses ?? []).length > 0 && missingEvidenceCount === 0) {
+    if (!isClosed && actualCostLines.length > 0 && missingEvidenceCount === 0 && actualCostLines.every(line => line.reviewState === "approved")) {
       return {
         tone: "brand",
         badgeText: "Sẵn sàng quyết toán",
@@ -249,7 +250,7 @@ export default function CostFlowActionBanner({
     worksheetHref,
     missingEvidenceCount,
     isClosed,
-    data.expenses,
+    actualCostLines,
   ]);
 
   if (!bannerData) return null;

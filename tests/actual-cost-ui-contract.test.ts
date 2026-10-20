@@ -7,7 +7,7 @@ function source(path: string) {
 }
 
 test("actual cost UI: editor keeps authority, evidence and cash as distinct axes", () => {
-  const editor = source("components/costflow/actual-cost/ActualCostEditor.tsx");
+  const editor = source("components/costflow/actual-cost/ActualCostDetailDrawer.tsx");
   const decisions = source("components/costflow/actual-cost/ActualCostDecisionBar.tsx");
 
   for (const fact of ["EMPLOYEE_ADVANCE", "EMPLOYEE_OUT_OF_POCKET", "VENDOR_ADVANCE", "VENDOR_PAYMENT"]) {
@@ -16,8 +16,9 @@ test("actual cost UI: editor keeps authority, evidence and cash as distinct axes
   assert.match(editor, /quantity/);
   assert.match(editor, /days/);
   assert.match(editor, /unitPrice/);
-  assert.match(editor, /legacy\/needsReview/);
-  assert.match(decisions, /AC_DD/);
+  assert.match(editor, /SAVE_LINE/);
+  assert.match(decisions, /Phó Giám đốc/);
+  assert.match(decisions, /Duyệt toàn bộ Bảng AC/);
   assert.match(decisions, /APPROVED/);
   assert.match(decisions, /RETURNED/);
   assert.match(decisions, /Lý do trả lại/);
@@ -36,16 +37,16 @@ test("actual cost UI: server action receives identifiers and raw inputs only", (
 });
 
 test("actual cost UI: comparison table keeps mixed units separate and totals VND only", () => {
-  const table = source("components/costflow/actual-cost/ActualCostTable.tsx");
-  const editor = source("components/costflow/actual-cost/ActualCostEditor.tsx");
-  for (const label of ["SL", "Ngày", "Đơn giá", "Thành tiền", "Tiết kiệm", "Vượt ngân sách", "Tổng NET", "Tổng VAT", "Tổng GROSS"]) {
+  const table = source("components/costflow/actual-cost/ActualCostSheetView.tsx");
+  const editor = source("components/costflow/actual-cost/ActualCostDetailDrawer.tsx");
+  for (const label of ["SL", "Ngày", "Đơn giá", "Thành tiền", "Vượt ngân sách", "NET:", "VAT:", "GROSS"]) {
     assert.match(table, new RegExp(label));
   }
   assert.doesNotMatch(table, /Tổng số lượng|totalQuantity/);
-  assert.match(table, /line\.unit/);
+  assert.match(table, /l\.unit/);
   assert.match(editor, /\[Phát sinh ngoài IC\]/);
   assert.match(editor, /Thu thêm từ khách/);
-  assert.match(editor, /Cần ít nhất một chứng từ/);
+  assert.match(editor, /Chứng từ nghiệm thu/);
 });
 
 test("actual cost UI: evidence vault exposes five typed kinds and explicit DD acknowledgement", () => {
@@ -55,9 +56,10 @@ test("actual cost UI: evidence vault exposes five typed kinds and explicit DD ac
     assert.match(vault, new RegExp(kind));
   }
   for (const fact of ["sha256", "createdAt", "createdByName", "preview", "Tải xuống"]) assert.match(vault, new RegExp(fact));
-  assert.match(decisions, /reviewToken/);
+  assert.match(decisions, /manifestHash/);
+  assert.match(decisions, /sheetRevisionId/);
   assert.match(decisions, /acknowledgeMissingEvidence/);
-  assert.match(decisions, /Tôi xác nhận duyệt dù còn thiếu chứng từ/);
+  assert.match(decisions, /xác nhận duyệt Bảng AC dù còn thiếu chứng từ/);
 });
 
 test("customer acceptance UI keeps sales actuals and billable additions explicit", () => {
@@ -74,17 +76,19 @@ test("customer acceptance UI keeps sales actuals and billable additions explicit
 });
 
 test("actual cost operational UI keeps desktop, 390px mobile and atomic DD bulk controls", () => {
-  const table = source("components/costflow/actual-cost/ActualCostTable.tsx");
-  const editor = source("components/costflow/actual-cost/ActualCostEditor.tsx");
+  const table = source("components/costflow/actual-cost/ActualCostSheetView.tsx");
+  const editor = source("components/costflow/actual-cost/ActualCostDetailDrawer.tsx");
+  const panel = source("components/ActualCostPanel.tsx");
+  const decision = source("components/costflow/actual-cost/ActualCostDecisionBar.tsx");
   const css = source("app/modules.css");
-  for (const label of ["Theo dòng IC", "Theo NCC", "Theo nhân sự", "DRAFT / needsReview", "SUBMITTED", "APPROVED", "RETURNED", "Tìm Actual Cost"]) assert.match(table, new RegExp(label));
-  for (const field of ["IC GROSS", "AC GROSS", "Chênh lệch", "Khối lượng AC", "Chứng từ", "Mở chi tiết & thao tác"]) assert.match(table, new RegExp(field));
-  assert.match(table, /<Table caption=/);
-  assert.match(table, /scope="col"/);
-  assert.match(table, /scope="row"/);
-  assert.match(table, /BULK_DECIDE/);
-  assert.match(table, /bulkSelection/);
-  assert.match(editor, /actual-cost-detail-/);
+  for (const label of ["Chờ Account kiểm tra", "Account đã kiểm tra", "Cần bổ sung chứng từ", "Vượt ngân sách IC"]) assert.match(table, new RegExp(label));
+  for (const field of ["SL × Ngày", "Đơn giá", "Chênh lệch IC", "Nguồn tiền", "Chứng từ", "Chi tiết"]) assert.match(table, new RegExp(field));
+  assert.match(table, /<table/);
+  assert.match(table, /<th/);
+  assert.match(table, /UPDATE_LINES_STATUS/);
+  assert.doesNotMatch(`${table}\n${editor}`, /BULK_DECIDE|bulkSelection|DECIDE\"/);
+  assert.match(panel, /sheet\.state === "SUBMITTED"/);
+  assert.match(decision, /Duyệt toàn bộ Bảng AC/);
   assert.match(css, /\.tf-ac-desktop/);
   assert.match(css, /\.tf-ac-mobile/);
   assert.match(css, /@media \(max-width: 767px\)/);
@@ -138,7 +142,7 @@ test("costflow visual polish hides redundant captions and keeps accessible table
   assert.doesNotMatch(internal, /<Layers3 size=\{22\}/);
   assert.doesNotMatch(internal, /Các dòng hạng mục IC-R\{visibleRevision\.number\}/);
   assert.match(internal, /caption=\{`Các dòng chi phí và NCC[^`]+`\} hideCaption/);
-  assert.match(worksheet, /caption="Worksheet IC và Actual Cost theo từng lần phát sinh" hideCaption/);
+  assert.match(worksheet, /caption="Đối chiếu IC và thực chi AC theo từng lần phát sinh" hideCaption/);
   assert.match(actualCost, /className="tf-ac-policy"/);
   assert.match(actualCost, /phê duyệt AC và giải ngân vẫn là hai bước riêng/);
   assert.match(css, /\.tf-ac-policy-grid/);

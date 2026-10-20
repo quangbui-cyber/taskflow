@@ -86,7 +86,7 @@ export default function ProjectSettlementTable({ projectId, version, warnings, p
       </ul>
     </div>
     {version.obligations.length === 0 ? <EmptyState title="Chưa có nghĩa vụ quyết toán" description="Hồ sơ chưa có nguồn AC/tạm ứng đủ điều kiện để đối soát." /> : <>
-      <div className="tf-payment-ledger-table"><Table caption="Bảng quyết toán toàn Project theo người nhận và nhà cung cấp">
+      <div className="tf-payment-ledger-table"><Table caption="Bảng quyết toán toàn Project theo người nhận và nhà cung cấp" hideCaption>
         <thead><tr><th scope="col">Người nhận / NCC</th><th scope="col">Phiếu</th><th scope="col" className="text-right">AC Gross</th><th scope="col" className="text-right">Tạm ứng</th><th scope="col" className="text-right">Nghĩa vụ</th><th scope="col">Tiền thực tế</th><th scope="col">Nguồn hồ sơ</th></tr></thead>
         <tbody>{version.obligations.map(row => {
           const payment = paymentRows.find(item => item.obligationId === row.id);

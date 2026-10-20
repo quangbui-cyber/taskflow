@@ -30,7 +30,7 @@ export function PaymentRequestPreview({ title, milestone, explanation, revisionL
       </div>
       <Badge tone={serverProjection ? "success" : "info"}>{serverProjection ? "Dữ liệu đã lưu trên server" : "Bản xem trước sẽ được server tính lại"}</Badge>
     </div>
-    {!lines.length ? <Alert title="Chưa có khoản đề nghị">Thêm ít nhất một khoản để gửi duyệt.</Alert> : <><div className="tf-payment-preview-table"><Table caption="Các khoản trong đề nghị tạm ứng">
+    {!lines.length ? <Alert title="Chưa có khoản đề nghị">Thêm ít nhất một khoản để gửi duyệt.</Alert> : <><div className="tf-payment-preview-table"><Table caption="Các khoản trong đề nghị tạm ứng" hideCaption>
       <thead><tr><th scope="col">Khoản</th><th scope="col">Người nhận</th><th scope="col">IC nguồn</th><th scope="col" className="text-right">Số tiền</th></tr></thead>
       <tbody>{lines.map(line => <tr key={line.stableKey}>
         <td>{line.description || "Chưa nhập nội dung"}</td>

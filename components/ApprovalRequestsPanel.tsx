@@ -35,6 +35,7 @@ import { PaymentRequestReview } from "@/components/costflow/payments/PaymentRequ
 import AdvanceSettlementAllocator from "@/components/costflow/payments/AdvanceSettlementAllocator";
 import CashConfirmationEditor from "@/components/costflow/payments/CashConfirmationEditor";
 import { WORKFLOW_HUB_HREF } from "@/lib/workflow/routes";
+import ActualCostDecisionBar from "@/components/costflow/actual-cost/ActualCostDecisionBar";
 
 import { KIND_INFO, STATE_INFO, ROLE_LABELS as ROLE_LABEL, ACTION_LABELS as ACTION_LABEL } from "@/lib/costflow/labels";
 
@@ -194,7 +195,7 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
             <Badge tone="neutral">{stats.total} hồ sơ</Badge>
           </div>
           <p className="text-sm text-[var(--text-secondary)] mt-0.5">
-            Quản lý hồ sơ đề nghị chi và theo dõi tiến trình phê duyệt 3 cấp.
+            Theo dõi hồ sơ tài chính và quyết định của người có thẩm quyền.
           </p>
         </div>
 
@@ -541,6 +542,13 @@ function CompactRequestCard({
   const stateMeta = STATE_INFO[request.state] ?? { label: request.state, tone: "neutral" as const };
 
   const displayAmount = useMemo(() => {
+    if (request.kind === "ACTUAL_COST_APPROVAL" && request.payload.totalGross) {
+      try {
+        return displayMoney(request.payload.totalGross);
+      } catch {
+        return `${request.payload.totalGross} ₫`;
+      }
+    }
     if (request.payload.amount) {
       try {
         return displayMoney(request.payload.amount);
@@ -557,7 +565,7 @@ function CompactRequestCard({
       }
     }
     return null;
-  }, [request.payload.amount, paymentDossier]);
+  }, [request.kind, request.payload, paymentDossier]);
 
   return (
     <div
@@ -585,9 +593,14 @@ function CompactRequestCard({
             <span className="font-mono text-[11px] text-[var(--text-secondary)]">
               #{request.id.slice(-8)}
             </span>
-            <span className="text-[11px] text-[var(--text-secondary)]">
-              v{request.version}
-            </span>
+            {request.kind !== "ACTUAL_COST_APPROVAL" && (
+              <span className="text-[11px] text-[var(--text-secondary)]">v{request.version}</span>
+            )}
+            {request.kind === "ACTUAL_COST_APPROVAL" && (
+              <span className="text-[11px] font-semibold text-[var(--foreground)]">
+                AC-R{String(request.payload.sheetVersion ?? 1)}
+              </span>
+            )}
             {revision && (
               <span className="text-[11px] font-semibold text-[var(--foreground)]">
                 IC-R{revision.number} {revision.effective && <span className="text-emerald-600 font-bold">(Hiệu lực)</span>}
@@ -723,6 +736,9 @@ function RequestInspectionModal({
   const paymentDossier = finance.paymentDossiers?.find(item => item.requestId === request.id);
 
   const ceoOptional = request.kind === "IC" && current?.role === "CEO";
+  const matchingAcSheet = finance.actualCosts?.sheet?.revisionId === request.payload.sheetRevisionId
+    ? finance.actualCosts?.sheet
+    : undefined;
   const managerId = request.steps.find(step => step.role === "MANAGER")?.assigneeId;
   const draftApprovalSteps = request.steps.length ? request.steps : projectedSteps;
   const missingDraftApprover = draftApprovalSteps.find(step => !step.assigneeId);
@@ -797,7 +813,9 @@ function RequestInspectionModal({
       onClose={onClose}
       className="tf-dialog-wide tf-approval-inspection-modal"
       title={request.title}
-      description={`Mã hồ sơ: #${request.id.slice(-8)} · Phiên bản v${request.version}`}
+      description={request.kind === "ACTUAL_COST_APPROVAL"
+        ? `Mã hồ sơ: #${request.id.slice(-8)} · Bảng AC-R${String(request.payload.sheetVersion ?? 1)}`
+        : `Mã hồ sơ: #${request.id.slice(-8)} · Phiên bản v${request.version}`}
     >
       <div className="space-y-5 pt-2">
         {/* A. HEADER METADATA BANNER */}
@@ -927,6 +945,93 @@ function RequestInspectionModal({
             <p className="text-[var(--text-secondary)] text-[11px]">
               Chi phí hiện tại chỉ đổi sau khi toàn bộ vòng duyệt chấp thuận bản sửa.
             </p>
+          </div>
+        )}
+
+        {/* Duyệt toàn bộ Bảng AC cấp dự án */}
+        {request.kind === "ACTUAL_COST_APPROVAL" && (
+          <div className="space-y-4 rounded-xl border border-[var(--primary)] bg-[var(--surface-soft)] p-4 text-xs">
+            <div className="flex items-center justify-between">
+              <div>
+                <h5 className="font-bold text-sm text-[var(--foreground)]">
+                  Bảng AC phiên bản AC-R{request.payload.sheetVersion ?? 1}
+                </h5>
+                <p className="text-[var(--text-secondary)] mt-0.5">
+                  Một quyết định áp dụng cho toàn bộ các khoản thực chi trong phiên bản này.
+                </p>
+              </div>
+              <Badge tone="info">Duyệt AC</Badge>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 rounded-lg bg-[var(--surface)] border border-[var(--border)]">
+              <div>
+                <span className="text-[var(--text-secondary)] block text-[11px]">Tổng giá trị GROSS:</span>
+                <span className="font-bold font-mono text-sm text-[var(--primary)]">
+                  {displayMoney(request.payload.totalGross ?? "0")}
+                </span>
+              </div>
+              <div>
+                <span className="text-[var(--text-secondary)] block text-[11px]">Tổng số dòng chi phí:</span>
+                <span className="font-bold text-sm text-[var(--foreground)]">
+                  {request.payload.totalLines ?? (finance.actualCosts?.lines.length ?? 0)} dòng
+                </span>
+              </div>
+              <div>
+                <span className="text-[var(--text-secondary)] block text-[11px]">Trạng thái:</span>
+                <Badge tone={request.state === "APPROVED" ? "success" : request.state === "RETURNED" ? "warning" : "info"}>
+                  {request.state === "APPROVED" ? "Đã duyệt" : request.state === "RETURNED" ? "Đã trả lại" : "Chờ duyệt"}
+                </Badge>
+              </div>
+            </div>
+
+            {request.payload.missingEvidenceExplanation && (
+              <div className="p-3 rounded-lg bg-[var(--warning-soft)] border border-[var(--warning)] space-y-1">
+                <p className="font-semibold text-[var(--warning)]">Giải trình của Account về chứng từ thiếu:</p>
+                <p className="whitespace-pre-wrap">{request.payload.missingEvidenceExplanation}</p>
+              </div>
+            )}
+
+            {request.payload.overBudgetExplanation && (
+              <div className="p-3 rounded-lg bg-[var(--warning-soft)] border border-[var(--warning)] space-y-1">
+                <p className="font-semibold text-[var(--warning)]">Giải trình của Account về vượt ngân sách:</p>
+                <p className="whitespace-pre-wrap">{request.payload.overBudgetExplanation}</p>
+              </div>
+            )}
+
+            {request.payload.note && (
+              <div className="p-3 rounded-lg bg-[var(--surface)] border border-[var(--border)] space-y-1">
+                <p className="font-semibold text-[var(--text-secondary)]">Ghi chú của Account:</p>
+                <p className="whitespace-pre-wrap">{request.payload.note}</p>
+              </div>
+            )}
+
+            {matchingAcSheet && (
+              <div className="space-y-2">
+                <h6 className="font-semibold text-[var(--foreground)]">Các khoản thực chi trong Bảng AC</h6>
+                {(finance.actualCosts?.lines ?? []).map(line => (
+                  <div key={line.id} className="flex items-start justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2.5">
+                    <div className="min-w-0">
+                      <p className="font-medium text-[var(--foreground)] break-words">{line.description}</p>
+                      <p className="text-[var(--text-secondary)]">{line.evidence.length} chứng từ · {line.sourceKind === "UNBUDGETED" ? "Phát sinh ngoài IC" : "Theo hạng mục IC"}</p>
+                    </div>
+                    <span className="shrink-0 font-mono font-semibold text-[var(--foreground)]">{displayMoney(line.cost?.gross ?? "0")}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {isMyTurn && finance.actualCosts?.canDecide && request.state === "SUBMITTED" && matchingAcSheet?.revisionId && matchingAcSheet.manifestHash && matchingAcSheet.manifestHash === request.payload.manifestHash && (
+              <div className="pt-2 border-t border-[var(--border)]">
+                <ActualCostDecisionBar
+                  projectId={finance.project.id}
+                  revisionId={matchingAcSheet.revisionId}
+                  mutationVersion={matchingAcSheet.mutationVersion}
+                  manifestHash={matchingAcSheet.manifestHash}
+                  version={request.payload.sheetVersion ?? 1}
+                  warnings={finance.actualCosts?.sheet?.warnings ?? []}
+                />
+              </div>
+            )}
           </div>
         )}
 
@@ -1117,7 +1222,7 @@ function RequestInspectionModal({
 
       {/* E. ACTION AREA: DECISION / SUBMISSION / WITHDRAW */}
       {/* 1. ĐẾN LƯỢT DUYỆT (DECIDE) */}
-      {request.state === "SUBMITTED" && current?.assigneeId === user.id && (
+      {request.kind !== "ACTUAL_COST_APPROVAL" && request.state === "SUBMITTED" && current?.assigneeId === user.id && (
         <div id={`request-decision-${request.id}`} className="p-4 rounded-xl border-2 border-[var(--info)] bg-[var(--info-soft)] space-y-4 scroll-mt-4">
           <div className="flex items-center gap-2 text-sm font-bold text-[var(--info)]">
             <UserCheck size={18} aria-hidden="true" />

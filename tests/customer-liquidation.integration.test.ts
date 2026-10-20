@@ -41,9 +41,9 @@ test("customer-liquidation integration: immutable liquidation, idempotent AR and
 
     const fallback = await loadFinance(projectId, member);
     assert.equal(fallback?.customerAccounting.margin.source, "FINALIZED_QUOTATION_NET");
-    assert.equal(fallback?.customerAccounting.margin.incurredNet, "80000000");
-    assert.equal(fallback?.customerAccounting.margin.netMargin, "70000000");
-    assert.equal(fallback?.customerAccounting.margin.legacyCompatibility, true);
+    assert.equal(fallback?.customerAccounting.margin.incurredNet, "70000000");
+    assert.equal(fallback?.customerAccounting.margin.netMargin, "80000000");
+    assert.equal(fallback?.customerAccounting.margin.legacyCompatibility, false, "historical Expense JSON must not affect margin");
 
     const proof = (name: string, values: number[]): ProjectUpload => { const data = new Uint8Array(values); return { name, mimeType: "application/pdf", size: data.byteLength, data }; };
     const proof1 = proof("tl-1.pdf", [1, 2, 3]);
@@ -91,8 +91,8 @@ test("customer-liquidation integration: immutable liquidation, idempotent AR and
     assert.equal(current?.customerAccounting.currentLiquidation?.version, 2);
     assert.equal(current?.customerAccounting.margin.source, "SIGNED_LIQUIDATION_NET");
     assert.equal(current?.customerAccounting.margin.revenueNet, "120000000");
-    assert.equal(current?.customerAccounting.margin.incurredNet, "80000000");
-    assert.equal(current?.customerAccounting.margin.netMargin, "40000000");
+    assert.equal(current?.customerAccounting.margin.incurredNet, "70000000");
+    assert.equal(current?.customerAccounting.margin.netMargin, "50000000");
     assert.equal(current?.customerAccounting.receivable.collectedGross, "60000000");
     assert.equal(current?.customerAccounting.receivable.outstandingGross, "72000000");
     assert.equal(await prisma.costFlowCash.count({ where: { projectId } }), 0);

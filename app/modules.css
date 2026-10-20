@@ -70,8 +70,12 @@
 .tf-wizard-line { padding: 18px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
 .tf-wizard-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 20px; border-top: 1px solid var(--border); }
 .tf-module-page .tf-ui-panel { border-radius: 10px; }
-.tf-module-page .tf-ui-table caption { padding: 0 0 16px; font-size: 14px; font-weight: 600; }
-.tf-module-page .tf-ui-table th { font-size: 12px; color: var(--text-secondary); background: var(--surface-soft); text-transform: none; }
+.tf-module-page .tf-ui-table caption:not(.sr-only) { padding: 0 0 16px; font-size: 14px; font-weight: 600; }
+.tf-module-page .tf-ui-table th { font-size: 12px; text-transform: none; }
+.tf-module-page .tf-ui-table thead th { font-size: 12px; font-weight: 600; background: var(--primary); color: var(--color-brand-900); border-top: 0; }
+.tf-module-page .tf-ui-table thead tr:first-child th:first-child { border-top-left-radius: calc(var(--radius-panel, 8px) - 1px); }
+.tf-module-page .tf-ui-table thead tr:first-child th:last-child { border-top-right-radius: calc(var(--radius-panel, 8px) - 1px); }
+.tf-module-page .tf-ui-table tbody th { font-size: 13px; font-weight: 500; background: transparent; color: var(--foreground); }
 .tf-module-page .tf-ui-table td { padding-top: 14px; padding-bottom: 14px; font-size: 13px; vertical-align: top; }
 .tf-module-page .tf-ui-table tbody tr:hover { background: #fcfcfd; }
 .tf-module-page .tf-overview-request-table thead th { background: var(--primary); color: var(--color-brand-900); }
@@ -158,9 +162,9 @@
 .tf-ac-policy-grid dd { margin-top: 5px; color: var(--text-secondary); font-size: 12px; line-height: 1.55; }
 .tf-ac-policy-grid dd span { display: inline-block; margin-right: 5px; color: var(--color-brand-700); font-family: var(--font-mono, monospace); font-size: 11px; font-weight: 700; }
 .tf-ac-control-table { min-width: 1200px; }
-.tf-ac-control-table thead th { position: sticky; top: 0; z-index: 3; background: var(--surface-soft); }
+.tf-ac-control-table thead th { position: sticky; top: 0; z-index: 3; background: var(--primary); color: var(--color-brand-900); font-weight: 600; }
 .tf-ac-control-table th:first-child { position: sticky; left: 0; z-index: 2; min-width: 260px; background: var(--surface); text-align: left; }
-.tf-ac-control-table thead th:first-child { z-index: 4; background: var(--surface-soft); }
+.tf-ac-control-table thead th:first-child { z-index: 4; background: var(--primary); color: var(--color-brand-900); font-weight: 600; }
 .tf-ac-control-group { border-top: 2px solid var(--border-strong); }
 .tf-ac-control-group th button { min-height: 36px; text-align: left; font-weight: 700; }
 .tf-ac-control-occurrence span { display: block; color: var(--text-secondary); font-size: 12px; font-weight: 500; }
@@ -203,8 +207,8 @@
 .tf-quotation-impact-totals strong { display: block; font-variant-numeric: tabular-nums; }
 .tf-quotation-impact-scroll { max-width: 100%; overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-panel); }
 .tf-quotation-impact table { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 13px; }
-.tf-quotation-impact th, .tf-quotation-impact td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; }
-.tf-quotation-impact th { background: var(--surface-soft); color: var(--text-secondary); font-size: 12px; }
+.tf-quotation-impact th { background: var(--primary); color: var(--color-brand-900); font-size: 12px; font-weight: 600; }
+.tf-quotation-impact tbody td { background: var(--surface); }
 .tf-quotation-impact td:nth-last-child(-n+2) { text-align: right; font-variant-numeric: tabular-nums; }
 .tf-parameter-override-badge { padding: 2px 7px; border-radius: var(--radius-pill); background: var(--warning-soft); color: var(--warning); font-size: 12px; font-weight: 600; }
 @media (max-width: 1100px) { .tf-workspace-grid { grid-template-columns: minmax(0,1fr); } .tf-summary-card { position: static; } .tf-process-item { padding: 12px; gap: 6px; } .tf-process-number { width: 22px; height: 22px; } }
@@ -385,8 +389,8 @@
 .tf-ic-review-search input { min-width:0; flex:1; border:0; outline:0; background:transparent; font-size:12px; }
 .tf-ic-review-filter-context { display:flex; align-items:center; gap:6px; color:var(--danger); font-size:12px; font-weight:600; }
 .tf-ic-review-table .tf-ui-table { min-width:930px; }
-.tf-ic-review-table .tf-ui-table caption { padding-bottom:10px; }
-.tf-ic-review-table .tf-ui-table th { background:var(--surface-soft); color:var(--text-secondary); font-size:11px; text-transform:none; }
+.tf-ic-review-table .tf-ui-table caption:not(.sr-only) { padding-bottom:10px; }
+.tf-ic-review-table .tf-ui-table thead th { background:var(--primary); color:var(--color-brand-900); font-size:12px; font-weight:600; text-transform:none; border-top:0; }
 .tf-ic-review-table .tf-ui-table td,
 .tf-ic-review-table .tf-ui-table tbody th { padding:10px; vertical-align:top; font-size:12px; }
 .tf-ic-review-table .tf-ui-table tbody th { width:23%; background:var(--surface); color:var(--foreground); text-align:left; }
@@ -783,6 +787,9 @@
 .tf-quotation-insert-menu button { align-items:center; gap:8px; }
 .tf-quotation-root-drop { margin-top:8px; padding:10px; border:1px dashed var(--info); border-radius:var(--radius-control); background:var(--info-soft); color:var(--info); font-size:12px; text-align:center; }
 
+.tf-customer-hierarchy-table thead th { padding:10px; background:var(--primary); color:var(--color-brand-900); font-weight:600; border-top:0; border-color:var(--primary); }
+.tf-customer-hierarchy-table thead tr:first-child th:first-child { border-top-left-radius:calc(var(--radius-panel, 8px) - 1px); }
+.tf-customer-hierarchy-table thead tr:first-child th:last-child { border-top-right-radius:calc(var(--radius-panel, 8px) - 1px); }
 .tf-customer-hierarchy-table .tf-customer-group-row th { padding:9px 10px; border:1px solid var(--border); background:var(--primary-soft); text-align:left; }
 .tf-customer-group-row th { display:table-cell; }
 .tf-customer-group-name { margin-left:8px; font-weight:750; text-transform:uppercase; }

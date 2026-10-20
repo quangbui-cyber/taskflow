@@ -84,7 +84,7 @@ export default function WorksheetGrid({
       <table className="w-full border-collapse text-sm tf-quotation-hierarchy-table">
         <caption className="sr-only">Bảng tính Báo giá và IC song song</caption>
         <thead>
-          <tr className="text-xs font-semibold text-[var(--foreground)] bg-[var(--surface-soft)] border-b border-[var(--border-strong)]">
+          <tr className="text-xs font-semibold text-[var(--color-brand-900)] bg-[var(--primary)] border-b border-[var(--border-strong)]">
             {/* Checkbox select all */}
             <th scope="col" className="p-2 text-center w-16">
               <label className="inline-flex items-center cursor-pointer" title="Chọn tất cả">
@@ -103,24 +103,24 @@ export default function WorksheetGrid({
             {/* Sell Columns */}
             {viewFilter !== "BUY" && (
               <>
-                <th scope="col" className="p-2 text-center w-20 bg-[var(--surface-soft)] border-l border-[var(--border)]">ĐVT</th>
-                <th scope="col" className="p-2 text-center w-16 bg-[var(--surface-soft)]">SL</th>
-                <th scope="col" className="p-2 text-right w-28 bg-[var(--surface-soft)]">Đơn giá bán</th>
-                <th scope="col" className="p-2 text-right w-32 bg-[var(--surface-soft)] font-bold">Thành tiền bán</th>
+                <th scope="col" className="p-2 text-center w-20 border-l border-[var(--border)]">ĐVT</th>
+                <th scope="col" className="p-2 text-center w-16">SL</th>
+                <th scope="col" className="p-2 text-right w-28">Đơn giá bán</th>
+                <th scope="col" className="p-2 text-right w-32 font-bold">Thành tiền bán</th>
               </>
             )}
 
             {/* Buy Columns */}
             {viewFilter !== "SELL" && (
               <>
-                <th scope="col" className="p-2 text-right w-28 bg-[var(--surface-soft)] border-l border-[var(--border)]">
+                <th scope="col" className="p-2 text-right w-28 border-l border-[var(--border)]">
                   {mode === "ic" ? "Đơn giá vốn" : "Giá vốn"}
                 </th>
-                <th scope="col" className="p-2 text-right w-32 bg-[var(--surface-soft)] font-bold">
+                <th scope="col" className="p-2 text-right w-32 font-bold">
                   Thành tiền vốn (IC)
                 </th>
                 {mode === "ic" && (
-                  <th scope="col" className="p-2 text-center w-24 bg-[var(--surface-soft)]">
+                  <th scope="col" className="p-2 text-center w-24">
                     Minh chứng
                   </th>
                 )}
@@ -129,7 +129,7 @@ export default function WorksheetGrid({
 
             {/* Margin Column */}
             {((mode === "paired" && viewFilter === "ALL") || mode === "ic") && (
-              <th scope="col" className="p-2 text-right w-28 bg-[var(--surface-soft)] border-l border-[var(--border)]">
+              <th scope="col" className="p-2 text-right w-28 border-l border-[var(--border)]">
                 Margin
               </th>
             )}

@@ -14,7 +14,7 @@ export default function CustomerQuotationView({ quotation, project }: { quotatio
           <span>{quotation.issues.length} nội dung cần hoàn tất trong màn hình làm việc.</span>
         </div>
       )}
-      <div className="overflow-x-auto mt-4">
+      <div className="overflow-x-auto mt-4 border border-[var(--border)] rounded-xl">
         <table className="w-full border-collapse text-sm tf-customer-hierarchy-table">
           <caption className="sr-only">Hạng mục báo giá khách · VND</caption>
           <thead>

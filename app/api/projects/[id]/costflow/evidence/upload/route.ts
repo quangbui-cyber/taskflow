@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { readProjectUpload } from "@/lib/projectFiles";
@@ -25,7 +25,34 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (Number(request.headers.get("content-length")) > 42 * 1024 * 1024) return Response.json({ error: "Tối đa 10 file, mỗi file 4 MiB." }, { status: 413 });
     const form = await request.formData();
     const lineId = String(form.get("lineId") ?? "").trim();
+    if (form.get("vault") === "true") {
+      if (!project.members.length && actor.role !== "ADMIN") return Response.json({ error: "Chỉ thành viên Project được tải chứng từ AC." }, { status: 403 });
+      const kind = normalizeActualCostEvidenceKind(String(form.get("kind") ?? ""));
+      const entries = form.getAll("proof");
+      if (!entries.length || entries.length > 10) throw new Error("Chọn từ 1 đến 10 file chứng từ.");
+      const uploads = await Promise.all(entries.map(entry => readProjectUpload(entry)));
+      if (uploads.some(upload => !upload)) throw new Error("Chọn file chứng từ hợp lệ, tối đa 4 MiB mỗi file.");
+      const evidence = [];
+      for (const upload of uploads) {
+        if (!upload) continue;
+        const sha256 = createHash("sha256").update(upload.data).digest("hex");
+        const existing = await prisma.costFlowEvidence.findFirst({ where: { projectId: id, kind, sha256 }, select: { id: true, name: true, kind: true, sha256: true } });
+        if (existing) {
+          evidence.push({ ...existing, reused: true });
+          continue;
+        }
+        const created = await prisma.costFlowEvidence.create({
+          data: { projectId: id, sourceFileId: `actual-cost-vault:${randomUUID()}`, kind, name: upload.name, mimeType: upload.mimeType, data: upload.data, sha256, createdBy: actor.id },
+          select: { id: true, name: true, kind: true, sha256: true },
+        });
+        evidence.push({ ...created, reused: false });
+      }
+      return Response.json({ evidence }, { status: 201 });
+    }
     if (lineId) {
+      if (await prisma.actualCostSheet.findUnique({ where: { projectId: id }, select: { id: true } })) {
+        return Response.json({ error: "Hãy tải chứng từ vào Kho và liên kết khi lưu bản nháp Bảng AC." }, { status: 409 });
+      }
       if (!project.members.length && actor.role !== "ADMIN" && !ddGrant) return Response.json({ error: "Không có quyền tải chứng từ AC." }, { status: 403 });
       const kind = normalizeActualCostEvidenceKind(String(form.get("kind") ?? ""));
       const entries = form.getAll("proof");

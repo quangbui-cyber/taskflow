@@ -68,7 +68,7 @@ export default function InternalCostHierarchyTable({
 
   const toggle = (id: string) => onCollapsed(collapsed.includes(id) ? collapsed.filter(value => value !== id) : [...collapsed, id]);
 
-  return <><Table caption="Internal Cost từ báo giá nguồn" className="tf-paired-table tf-paired-workspace-table tf-internal-cost-hierarchy-table">
+  return <><Table caption="Internal Cost từ báo giá nguồn" hideCaption className="tf-paired-table tf-paired-workspace-table tf-internal-cost-hierarchy-table">
     <colgroup>
       <col className="tf-ic-structure-col" />
       <col className="tf-ic-description-col" />

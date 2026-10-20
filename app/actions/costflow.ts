@@ -9,7 +9,8 @@ import { assertCostFlowMutationAllowed, executeFinance } from "@/lib/costflow/se
 import { executePaymentCash } from "@/lib/costflow/paymentCash";
 import { publicPaymentErrorMessage } from "@/lib/costflow/paymentPolicy";
 import { dispatchWorkflowNotifications } from "@/lib/workflow/notifications";
-import { executeActualCostBulkDecision, executeActualCostCommand, type ActualCostBulkSelection, type ActualCostCommand } from "@/lib/costflow/actualCostService";
+import { executeActualCostCommand, type ActualCostCommand } from "@/lib/costflow/actualCostService";
+import { ACTUAL_COST_FUNDING_SOURCES, ACTUAL_COST_INTERNAL_STATUSES, type ActualCostFundingAllocation, type ActualCostInternalStatus } from "@/lib/costflow/actualCost";
 import { executeSettlementCommand, isSettlementCommand } from "@/lib/costflow/settlementService";
 import { addSupplierBankAccount, archiveSupplierBankAccount, createSupplier, publishSupplierBankVersion, publishSupplierLegalVersion, setPrimarySupplierBankAccount, verifySupplierTuple } from "@/lib/costflow/supplierService";
 import { createVendorPaymentDossier } from "@/lib/costflow/vendorPaymentService";
@@ -21,6 +22,23 @@ export type SupplierActionState = { error?: string; success?: string; supplierId
 export type VendorPaymentActionState = { error?: string; success?: string; requestId?: string; invoiceId?: string; idempotent?: boolean };
 
 const supplierText = (form: FormData, key: string) => String(form.get(key) ?? "").trim();
+
+function actualCostStatus(value: FormDataEntryValue | null, fallback?: ActualCostInternalStatus): ActualCostInternalStatus | undefined {
+  return ACTUAL_COST_INTERNAL_STATUSES.find(status => status === value) ?? fallback;
+}
+
+function actualCostAllocations(value: FormDataEntryValue | null): ActualCostFundingAllocation[] | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  let parsed: unknown;
+  try { parsed = JSON.parse(value); } catch { throw new Error("Phân bổ nguồn tiền không hợp lệ."); }
+  if (!Array.isArray(parsed) || parsed.length > 20 || parsed.some(item =>
+    !item || typeof item !== "object" || Array.isArray(item)
+      || !ACTUAL_COST_FUNDING_SOURCES.includes(item.source)
+      || typeof item.amount !== "string"
+      || (item.note !== undefined && typeof item.note !== "string")
+  )) throw new Error("Phân bổ nguồn tiền không hợp lệ.");
+  return parsed as ActualCostFundingAllocation[];
+}
 
 async function readVendorInvoiceUpload(value: FormDataEntryValue | null) {
   if (!(value instanceof File) || value.size === 0) return null;
@@ -88,20 +106,18 @@ export async function actualCostAction(_previous: ActualCostActionState, form: F
   if (!projectId) return { error: "Thiếu Project." };
   try {
     await assertCostFlowMutationAllowed(projectId, action);
-    if (action === "BULK_DECIDE") {
-      const decision = String(form.get("decision") ?? "");
-      if (decision !== "APPROVED" && decision !== "RETURNED") return { error: "Quyết định AC không hợp lệ." };
-      const selections: ActualCostBulkSelection[] = form.getAll("bulkSelection").map(value => {
-        const parsed = JSON.parse(String(value)) as Record<string, unknown>;
-        if (typeof parsed.lineId !== "string" || !Number.isSafeInteger(parsed.version) || typeof parsed.reviewToken !== "string") throw new Error("Dòng AC được chọn không hợp lệ.");
-        return { lineId: parsed.lineId, version: Number(parsed.version), reviewToken: parsed.reviewToken };
-      });
-      const result = await executeActualCostBulkDecision(actor, { projectId, action: decision, reason: String(form.get("reason") ?? ""), acknowledgeMissingEvidence: form.get("acknowledgeMissingEvidence") === "yes", selections });
-      revalidatePath(`/projects/${projectId}/costflow`);
-      return { success: `Đã ${decision === "APPROVED" ? "duyệt" : "trả lại"} ${result.count} dòng AC.` };
+    if (["CREATE_AND_SUBMIT", "RESUBMIT", "DECIDE", "BULK_DECIDE"].includes(action)) {
+      return { error: "Bảng AC chỉ được gửi, duyệt hoặc trả lại toàn bộ; thao tác theo từng dòng đã ngừng sử dụng." };
     }
     let command: ActualCostCommand;
-    if (action === "CREATE_AND_SUBMIT") {
+    if (action === "CREATE_SUCCESSOR") {
+      command = {
+        command: action,
+        projectId,
+        revisionId: String(form.get("sheetRevisionId") ?? ""),
+        expectedMutationVersion: Number(form.get("sheetMutationVersion")),
+      };
+    } else if (action === "CREATE_AND_SUBMIT") {
       command = {
         command: action,
         projectId,
@@ -125,37 +141,136 @@ export async function actualCostAction(_previous: ActualCostActionState, form: F
         saleDays: String(form.get("saleDays") ?? ""),
         saleUnitPrice: String(form.get("saleUnitPrice") ?? ""),
       };
-    } else if (action === "RESUBMIT") {
+    } else if (action === "SAVE_LINES") {
+      const raw = String(form.get("lines") ?? "");
+      if (raw.length > 50000) return { error: "Dữ liệu dán quá lớn. Hãy chia thành các nhóm tối đa 100 khoản." };
+      let parsed: unknown;
+      try { parsed = JSON.parse(raw); } catch { return { error: "Dữ liệu dán không hợp lệ. Hãy kiểm tra lại bảng xem trước." }; }
+      if (!Array.isArray(parsed) || parsed.length < 1 || parsed.length > 100 || parsed.some(item => !item || typeof item !== "object" || Array.isArray(item))) {
+        return { error: "Mỗi lần chỉ dán từ 1 đến 100 khoản thực chi hợp lệ." };
+      }
+      const lines: Extract<ActualCostCommand, { command: "SAVE_LINES" }>["lines"] = parsed.map((item: Record<string, unknown>) => ({
+        sourceKind: item.sourceKind === "UNBUDGETED" ? "UNBUDGETED" : "IC_LINKED",
+        icLineId: String(item.icLineId ?? ""),
+        recipientKey: String(item.recipientKey ?? ""),
+        description: String(item.description ?? ""),
+        reason: String(item.reason ?? ""),
+        fundingSource: String(item.fundingSource ?? "EMPLOYEE_OUT_OF_POCKET"),
+        quantity: String(item.quantity ?? ""),
+        days: String(item.days ?? ""),
+        unitPrice: String(item.unitPrice ?? ""),
+        unit: String(item.unit ?? ""),
+        basis: item.basis === "NET" ? "NET" : "GROSS",
+        vatPercent: String(item.vatPercent ?? "0"),
+        billable: false,
+        evidenceIds: [],
+      }));
+      command = {
+        command: action,
+        projectId,
+        revisionId: String(form.get("revisionId") ?? ""),
+        sheetRevisionId: String(form.get("sheetRevisionId") ?? "").trim() || undefined,
+        expectedMutationVersion: form.get("sheetMutationVersion") === null ? undefined : Number(form.get("sheetMutationVersion")),
+        lines,
+      };
+    } else if (action === "SAVE_LINE") {
+      const fundingAllocations = actualCostAllocations(form.get("fundingAllocations"));
+      command = {
+        command: action,
+        projectId,
+        lineId: String(form.get("lineId") ?? "").trim() || undefined,
+        sourceKind: String(form.get("sourceKind") ?? "IC_LINKED") === "UNBUDGETED" ? "UNBUDGETED" : "IC_LINKED",
+        revisionId: String(form.get("revisionId") ?? ""),
+        icLineId: String(form.get("icLineId") ?? ""),
+        recipientKey: String(form.get("recipientKey") ?? ""),
+        description: String(form.get("description") ?? ""),
+        reason: String(form.get("reason") ?? ""),
+        fundingSource: String(form.get("fundingSource") ?? "EMPLOYEE_OUT_OF_POCKET"),
+        fundingAllocations,
+        quantity: String(form.get("quantity") ?? "1"),
+        days: String(form.get("days") ?? "1"),
+        unitPrice: String(form.get("unitPrice") ?? "0"),
+        unit: String(form.get("unit") ?? ""),
+        basis: String(form.get("basis") ?? "GROSS") === "NET" ? "NET" : "GROSS",
+        vatPercent: String(form.get("vatPercent") ?? "0"),
+        evidenceIds: form.getAll("evidenceIds").map(String),
+        billable: form.get("billable") === "true",
+        saleQuantity: String(form.get("saleQuantity") ?? ""),
+        saleDays: String(form.get("saleDays") ?? ""),
+        saleUnitPrice: String(form.get("saleUnitPrice") ?? ""),
+        internalStatus: actualCostStatus(form.get("internalStatus")),
+        accountNote: String(form.get("accountNote") ?? "").trim() || undefined,
+        sheetRevisionId: String(form.get("sheetRevisionId") ?? "").trim() || undefined,
+        expectedMutationVersion: form.get("sheetMutationVersion") === null ? undefined : Number(form.get("sheetMutationVersion")),
+      };
+    } else if (action === "DELETE_LINE") {
       command = {
         command: action,
         projectId,
         lineId: String(form.get("lineId") ?? ""),
-        expectedVersion: Number(form.get("version")),
-        description: String(form.get("description") ?? ""),
-        fundingSource: String(form.get("fundingSource") ?? ""),
-        quantity: String(form.get("quantity") ?? ""),
-        days: String(form.get("days") ?? ""),
-        unitPrice: String(form.get("unitPrice") ?? ""),
+        revisionId: String(form.get("sheetRevisionId") ?? ""),
+        expectedMutationVersion: Number(form.get("sheetMutationVersion")),
+        restore: form.get("restore") === "true",
       };
-    } else if (action === "DECIDE") {
+    } else if (action === "UPDATE_LINE_STATUS") {
+      command = {
+        command: action,
+        projectId,
+        lineId: String(form.get("lineId") ?? ""),
+        internalStatus: actualCostStatus(form.get("internalStatus"), "PENDING_ACCOUNT_REVIEW")!,
+        accountNote: String(form.get("accountNote") ?? "").trim() || undefined,
+        revisionId: String(form.get("sheetRevisionId") ?? ""),
+        expectedMutationVersion: Number(form.get("sheetMutationVersion")),
+      };
+    } else if (action === "UPDATE_LINES_STATUS") {
+      command = {
+        command: action,
+        projectId,
+        lineIds: form.getAll("lineId").map(String),
+        internalStatus: actualCostStatus(form.get("internalStatus"), "ACCOUNT_REVIEWED")!,
+        revisionId: String(form.get("sheetRevisionId") ?? ""),
+        expectedMutationVersion: Number(form.get("sheetMutationVersion")),
+      };
+    } else if (action === "SUBMIT_SHEET") {
+      command = {
+        command: action,
+        projectId,
+        note: String(form.get("note") ?? ""),
+        missingEvidenceExplanation: String(form.get("missingEvidenceExplanation") ?? ""),
+        overBudgetExplanation: String(form.get("overBudgetExplanation") ?? ""),
+        revisionId: String(form.get("sheetRevisionId") ?? ""),
+        expectedMutationVersion: Number(form.get("sheetMutationVersion")),
+      };
+    } else if (action === "DECIDE_SHEET") {
       const decision = String(form.get("decision") ?? "");
       if (decision !== "APPROVED" && decision !== "RETURNED") return { error: "Quyết định AC không hợp lệ." };
+      let lineNotes: Record<string, string> | undefined = undefined;
+      const rawNotes = form.get("lineNotes");
+      if (rawNotes && typeof rawNotes === "string") {
+        try { lineNotes = JSON.parse(rawNotes); } catch {}
+      }
       command = {
         command: action,
         projectId,
-        lineId: String(form.get("lineId") ?? ""),
-        version: Number(form.get("version")),
         action: decision,
         reason: String(form.get("reason") ?? ""),
-        reviewToken: String(form.get("reviewToken") ?? ""),
-        acknowledgeMissingEvidence: form.get("acknowledgeMissingEvidence") === "yes",
+        lineNotes,
+        acknowledgeMissingEvidence: form.get("acknowledgeMissingEvidence") === "yes" || form.get("acknowledgeMissingEvidence") === "true",
+        revisionId: String(form.get("sheetRevisionId") ?? ""),
+        manifestHash: String(form.get("manifestHash") ?? ""),
+        expectedMutationVersion: Number(form.get("sheetMutationVersion")),
       };
     } else {
       return { error: "Thao tác AC không hợp lệ." };
     }
     const result = await executeActualCostCommand(actor, command);
     revalidatePath(`/projects/${projectId}/costflow`);
-    return { success: action === "DECIDE" ? "Đã lưu quyết định AC." : "AC đã được gửi DD.", lineId: result.lineId, version: result.version };
+    revalidatePath("/workflow");
+    return {
+      success: result.success ?? "Đã cập nhật Bảng AC.",
+      lineId: result.lineId,
+      version: result.version,
+    };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2002") return { error: "Dòng, phiên bản hoặc quyết định AC đã tồn tại." };

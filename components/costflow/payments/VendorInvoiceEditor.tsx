@@ -53,7 +53,7 @@ export function VendorInvoiceEditor({ finance, onBack, onCreated }: { finance: F
         <label className="text-sm font-medium">Hóa đơn XML<input className="mt-1 block w-full text-sm" type="file" name="invoiceXml" accept=".xml,application/xml,text/xml" /></label>
         <label className="text-sm font-medium">Hóa đơn PDF<input className="mt-1 block w-full text-sm" type="file" name="invoicePdf" accept=".pdf,application/pdf" /></label>
       </div>
-      <Table caption="AC đã duyệt đủ điều kiện thanh toán"><thead><tr><th>Chọn / số tiền</th><th>Nội dung</th><th>AC đã duyệt</th><th>Đã gắn hóa đơn</th><th>Lineage IC</th></tr></thead><tbody>{rows.map(line => {
+      <Table caption="AC đã duyệt đủ điều kiện thanh toán" hideCaption><thead><tr><th>Chọn / số tiền</th><th>Nội dung</th><th>AC đã duyệt</th><th>Đã gắn hóa đơn</th><th>Lineage IC</th></tr></thead><tbody>{rows.map(line => {
         const remaining = BigInt(line.amount) - BigInt(line.vendorInvoiceAppliedAmount);
         return <tr key={line.id}><td><Input aria-label={`Số tiền áp dụng ${line.description}`} inputMode="numeric" value={amounts[line.id] ?? ""} onChange={event => setAmounts(current => ({ ...current, [line.id]: event.target.value.replace(/\D/g, "") }))} placeholder={remaining.toString()} /></td><td>{line.description}</td><td>{displayMoney(line.amount)}</td><td>{displayMoney(line.vendorInvoiceAppliedAmount)}</td><td>IC {line.revisionId ?? "phát sinh"}/{line.icLineId ?? "ngoài IC"}</td></tr>;
       })}</tbody></Table>

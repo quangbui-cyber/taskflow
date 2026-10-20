@@ -28,7 +28,7 @@ export default function FinancialLifecycleBar({ finance, activeTab, onSelectTab 
   const data = finance.data;
   const requests = finance.requests;
   const quotations = useMemo(() => finance.data.quotations ?? [], [finance.data.quotations]);
-  const expenses = useMemo(() => finance.data.expenses ?? [], [finance.data.expenses]);
+  const actualCostLines = useMemo(() => finance.actualCosts?.lines ?? [], [finance.actualCosts?.lines]);
   const latestQuotation = quotations.at(-1);
   const effectiveRevision = data.revisions?.find(r => r.effective);
   const isClosed = !!data.closed;
@@ -56,18 +56,18 @@ export default function FinancialLifecycleBar({ finance, activeTab, onSelectTab 
   }, [requests]);
 
   const missingEvidence = useMemo(() => {
-    return expenses.filter(e => !e.invoiceId || !e.paymentProofId).length;
-  }, [expenses]);
+    return actualCostLines.filter(line => line.missingEvidenceWarnings.length > 0).length;
+  }, [actualCostLines]);
 
   // Determine current organizational stage index (1-based: 1 to 5)
   const currentProjectStageIndex = useMemo(() => {
     if (isClosed) return 5;
     if (finance.customerAccounting?.currentLiquidation?.documentNumber) return 5;
-    if (expenses.length > 0) return 4;
+    if (actualCostLines.length > 0) return 4;
     if (effectiveRevision) return 3;
     if (quotations.length > 0) return 2;
     return 1;
-  }, [isClosed, finance.customerAccounting, expenses.length, effectiveRevision, quotations.length]);
+  }, [isClosed, finance.customerAccounting, actualCostLines.length, effectiveRevision, quotations.length]);
 
   const stages: StageConfig[] = useMemo(() => [
     {
@@ -117,14 +117,14 @@ export default function FinancialLifecycleBar({ finance, activeTab, onSelectTab 
       stepNumber: 4,
       label: "Chi phí thực tế (AC)",
       icon: Receipt,
-      isCompleted: expenses.length > 0 && missingEvidence === 0,
+      isCompleted: actualCostLines.length > 0 && missingEvidence === 0,
       isCurrentProjectStage: currentProjectStageIndex === 4,
       summaryText: missingEvidence > 0
         ? `Thiếu ${missingEvidence} chứng từ`
-        : expenses.length > 0
-          ? `${expenses.length} khoản chi net`
+        : actualCostLines.length > 0
+          ? `${actualCostLines.length} khoản chi net`
           : "Chưa phát sinh",
-      statusTone: (expenses.length > 0 && missingEvidence === 0)
+      statusTone: (actualCostLines.length > 0 && missingEvidence === 0)
         ? "completed"
         : currentProjectStageIndex === 4 ? "current" : "upcoming",
     },
@@ -144,7 +144,7 @@ export default function FinancialLifecycleBar({ finance, activeTab, onSelectTab 
     },
   ], [
     quotations, latestQuotation, latestQuotationGross, effectiveRevision, effectiveIcNet,
-    requests, finance.cash.length, pendingRequests, expenses, missingEvidence, isClosed,
+    requests, finance.cash.length, pendingRequests, actualCostLines, missingEvidence, isClosed,
     finance.customerAccounting, currentProjectStageIndex
   ]);
 

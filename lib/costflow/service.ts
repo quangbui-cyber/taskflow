@@ -100,7 +100,7 @@ const LEGACY_COSTFLOW_WRITE_COMMANDS = new Set(["BENEFICIARY", "EXPENSE", "EXPEN
 
 function assertLegacyExpenseReadOnly(command: string) {
   if (LEGACY_COSTFLOW_WRITE_COMMANDS.has(command)) {
-    throw new Error("Expense legacy chỉ đọc. Hãy dùng danh bạ NCC toàn công ty và AC chuẩn hóa.");
+    throw new Error("Dữ liệu chi phí cũ chỉ để đối chiếu. Hãy dùng danh bạ NCC toàn công ty và Bảng AC.");
   }
 }
 
@@ -1728,7 +1728,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
         }
         if (["CLOSE", "REOPEN"].includes(request.kind)) throw new Error("Yêu cầu đóng/mở cũ không được đổi trạng thái tài chính; hãy lập yêu cầu bất biến mới.");
         if (action === "APPROVE" && request.kind === "AC_REVISION" && next.state === "APPROVED") {
-          throw new Error("Expense legacy chỉ đọc. Không thể duyệt bản sửa; hãy ghi nhận lại bằng AC chuẩn hóa.");
+          throw new Error("Dữ liệu chi phí cũ chỉ để đối chiếu. Hãy ghi nhận lại trong Bảng AC.");
         }
         if (action === "APPROVE" && request.kind === "CANCEL") {
           const target = requests.find(r => r.id === payload?.targetRequestId);

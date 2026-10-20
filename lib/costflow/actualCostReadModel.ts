@@ -1,8 +1,9 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
-import { actualCostEvidenceWarnings, actualCostVariance, calculateActualCost, normalizeLegacyActualCosts } from "./actualCost";
-import { calculateLineCost, type CalculatedCost } from "./money";
+import { ACTUAL_COST_EVIDENCE_KINDS, actualCostEvidenceWarnings, actualCostVariance, calculateActualCost, type ActualCostFundingAllocation, type ActualCostInternalStatus, type ActualCostSheetState } from "./actualCost";
+import type { ActualCostFundingSource } from "./types";
+import { calculateLineCost, totals, type CalculatedCost } from "./money";
 import { buildActualCostControlCenter, resolveActualCostCapabilities, type ControlCenterPayment } from "./actualCostControlCenter";
 import type { PaymentLedgerRow } from "./paymentReadModel";
 import type { FinanceData } from "./types";
@@ -22,11 +23,18 @@ export type ActualCostReadLine = {
   version: number | null;
   reviewToken: string | null;
   description: string;
+  sourceReason?: string;
   recipientKey: string;
   fundingSource: string | null;
+  fundingAllocations?: ActualCostFundingAllocation[];
+  internalStatus?: ActualCostInternalStatus;
+  accountNote?: string;
+  ddReturnNote?: string;
   quantity: string | null;
   days: string | null;
   unitPrice: string | null;
+  basis: "NET" | "GROSS";
+  vatPercent: string;
   unit: string | null;
   amount: string;
   cost: CalculatedCost | null;
@@ -42,6 +50,28 @@ export type ActualCostReadLine = {
   acknowledgedWarningCodes: string[];
   missingEvidenceWarnings: string[];
   evidence: { id: string; kind: string; name: string; mimeType: string; size: number; sha256: string; createdById: string; createdByName: string; createdAt: string }[];
+};
+
+export type ActualCostSheet = {
+  revisionId: string | null;
+  version: number;
+  state: ActualCostSheetState;
+  mutationVersion: number;
+  manifestHash: string | null;
+  migrationState: "AUTHORITATIVE" | "UNCONVERTED";
+  totalGross: string;
+  totalNet: string;
+  totalVat: string;
+  totalLines: number;
+  reviewedLines: number;
+  missingEvidenceLines: number;
+  overBudgetLines: number;
+  canSubmit: boolean;
+  canDecide: boolean;
+  blockingErrors: string[];
+  warnings: string[];
+  requestId?: string;
+  lastReturnReason?: string;
 };
 
 export type ActualCostComparison = {
@@ -63,11 +93,11 @@ function object(value: unknown): Record<string, unknown> | null {
 export async function loadActualCosts(projectId: string, actor: Actor, paymentLedger: PaymentLedgerRow[] = []) {
   const activeActor = await prisma.user.findFirst({ where: { id: actor.id, isActive: true }, select: { id: true, role: true } });
   if (!activeActor) return null;
-  const [project, ddGrant, normalized, workspace, vendorInvoiceAllocations] = await Promise.all([
-    prisma.project.findUnique({ where: { id: projectId }, select: { id: true, members: { select: { userId: true, user: { select: { name: true, isActive: true } } } } } }),
+  const [project, ddGrant, normalized, removed, evidenceVault, workspace, vendorInvoiceAllocations, actualCostWorkflowRequest, sheetAggregate] = await Promise.all([
+    prisma.project.findUnique({ where: { id: projectId }, select: { id: true, ownerId: true, members: { select: { userId: true, user: { select: { name: true, isActive: true } } } } } }),
     prisma.workflowRoleGrant.findFirst({ where: { userId: activeActor.id, role: "AC_DD", revokedAt: null }, select: { id: true } }),
     prisma.actualCostLine.findMany({
-      where: { projectId },
+      where: { projectId, draftRemovedAt: null },
       include: {
         applications: { where: { state: "ACTIVE", request: { state: { notIn: ["WITHDRAWN", "REJECTED", "CANCELLED"] } } }, select: { requestId: true, amount: true, request: { select: { state: true, title: true } } } },
         versions: {
@@ -76,15 +106,35 @@ export async function loadActualCosts(projectId: string, actor: Actor, paymentLe
           include: {
             approvals: { orderBy: { createdAt: "desc" }, take: 1 },
             evidenceLinks: { include: { evidence: { select: { id: true, name: true, mimeType: true, data: true, sha256: true, createdBy: true, createdAt: true } } }, orderBy: { createdAt: "asc" } },
+            fundingAllocations: { orderBy: { position: "asc" } },
           },
         },
       },
       orderBy: { createdAt: "asc" },
     }),
+    prisma.actualCostLine.findMany({
+      where: { projectId, draftRemovedAt: { not: null } },
+      select: { id: true, createdById: true, versions: { orderBy: { version: "desc" }, take: 1, select: { description: true } } },
+      orderBy: { draftRemovedAt: "desc" },
+    }),
+    prisma.costFlowEvidence.findMany({
+      where: { projectId, kind: { in: [...ACTUAL_COST_EVIDENCE_KINDS] } },
+      select: { id: true, name: true, kind: true, sha256: true },
+      orderBy: { createdAt: "desc" },
+    }),
     prisma.costFlowWorkspace.findUnique({ where: { projectId }, select: { data: true } }),
     prisma.vendorInvoiceActualCost.findMany({
       where: { projectId, applications: { some: { state: "ACTIVE" } } },
       select: { actualCostVersionId: true, allocatedAmount: true },
+    }),
+    prisma.workflowRequest.findFirst({
+      where: { projectId, module: "COSTFLOW", kind: "ACTUAL_COST_APPROVAL" },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, state: true },
+    }),
+    prisma.actualCostSheet.findUnique({
+      where: { projectId },
+      include: { revisions: { orderBy: { revision: "desc" }, take: 2 } },
     }),
   ]);
   if (!project) return null;
@@ -94,6 +144,7 @@ export async function loadActualCosts(projectId: string, actor: Actor, paymentLe
     actorId: activeActor.id,
     actorRole: activeActor.role,
     isProjectMember: activeMemberIds.includes(activeActor.id),
+    isProjectOwner: project.ownerId === activeActor.id,
     isDd: !!ddGrant,
     accountantId: data?.config.accountantId ?? "",
     operationUserIds: (data?.config.operationUserIds ?? []).filter(id => activeMemberIds.includes(id)),
@@ -104,12 +155,21 @@ export async function loadActualCosts(projectId: string, actor: Actor, paymentLe
 
   const normalizedLines: ActualCostReadLine[] = normalized.flatMap(line => line.versions.map(version => {
     const decision = version.approvals[0];
+    const snapshot = object(version.sourceSnapshot);
+    const internalStatus = (typeof snapshot?.internalStatus === "string" ? snapshot.internalStatus : undefined) as ActualCostInternalStatus | undefined;
+    const fundingAllocations = version.fundingAllocations.length
+      ? version.fundingAllocations.map(allocation => ({ source: allocation.source, amount: allocation.amount })) as ActualCostFundingAllocation[]
+      : Array.isArray(snapshot?.fundingAllocations)
+      ? (snapshot.fundingAllocations as ActualCostFundingAllocation[])
+      : [{ source: (version.fundingSource || "EMPLOYEE_OUT_OF_POCKET") as ActualCostFundingSource, amount: version.amount }];
+    const accountNote = typeof snapshot?.accountNote === "string" ? snapshot.accountNote : undefined;
+    const ddReturnNote = typeof snapshot?.ddReturnNote === "string" ? snapshot.ddReturnNote : undefined;
     return {
       id: line.id,
       stableLineId: line.stableLineId,
       sourceKind: line.sourceKind === "UNBUDGETED" ? "UNBUDGETED" as const : "IC_LINKED" as const,
       source: "normalized" as const,
-      reviewState: version.state === "APPROVED" ? "approved" as const : version.state === "RETURNED" ? "returned" as const : "submitted" as const,
+      reviewState: version.state === "APPROVED" ? "approved" as const : version.state === "RETURNED" ? "returned" as const : version.state === "DRAFT" ? "needsReview" as const : "submitted" as const,
       approvalState: decision?.action === "APPROVED" || decision?.action === "RETURNED" ? decision.action : null,
       approvalId: decision?.id ?? null,
       approvalAttemptId: decision?.attemptId ?? null,
@@ -117,11 +177,18 @@ export async function loadActualCosts(projectId: string, actor: Actor, paymentLe
       version: version.version,
       reviewToken: `${version.id}:${version.version}`,
       description: version.description,
+      sourceReason: typeof snapshot?.reason === "string" ? snapshot.reason : undefined,
       recipientKey: line.recipientKey,
       fundingSource: version.fundingSource,
+      fundingAllocations,
+      internalStatus: internalStatus ?? (version.state === "APPROVED" ? "ACCOUNT_REVIEWED" : "PENDING_ACCOUNT_REVIEW"),
+      accountNote,
+      ddReturnNote,
       quantity: version.quantity,
       days: version.days,
       unitPrice: version.unitPrice,
+      basis: version.basis === "NET" ? "NET" : "GROSS",
+      vatPercent: version.vatPercent,
       unit: version.unit,
       amount: version.amount,
       cost: calculateActualCost({ quantity: version.quantity, days: version.days, unitPrice: version.unitPrice, basis: version.basis === "NET" ? "NET" : "GROSS", vatPercent: version.vatPercent }).cost,
@@ -153,37 +220,6 @@ export async function loadActualCosts(projectId: string, actor: Actor, paymentLe
       })),
     };
   }));
-  const normalizedKeys = new Set(normalized.flatMap(line => [line.id, line.stableLineId]));
-  const legacyCostById = new Map((data?.expenses ?? []).map(expense => [expense.id, expense.cost]));
-  const legacyLines: ActualCostReadLine[] = normalizeLegacyActualCosts(data?.expenses ?? [])
-    .filter(line => !normalizedKeys.has(line.id))
-    .map(line => ({
-      ...line,
-      stableLineId: line.id,
-      sourceKind: "LEGACY" as const,
-      versionId: null,
-      version: null,
-      reviewToken: null,
-      approvalId: null,
-      approvalAttemptId: null,
-      fundingSource: null,
-      quantity: null,
-      days: null,
-      unitPrice: null,
-      unit: null,
-      cost: legacyCostById.get(line.id) ?? null,
-      billable: false,
-      saleSnapshot: null,
-      revisionId: line.revisionId,
-      createdById: null,
-      lockedByApplications: false,
-      applications: [],
-      vendorInvoiceAppliedAmount: "0",
-      decisionReason: "",
-      acknowledgedWarningCodes: [],
-      missingEvidenceWarnings: [],
-      evidence: [],
-    }));
   const groups = new Map<string, { sourceKind: "IC_LINKED" | "UNBUDGETED"; description: string; unit: string; ic: ActualCostComparison["ic"]; lines: ActualCostReadLine[] }>();
   for (const line of normalizedLines) {
     if (!line.cost) continue;
@@ -211,7 +247,7 @@ export async function loadActualCosts(projectId: string, actor: Actor, paymentLe
     const comparison = actualCostVariance(group.ic?.cost ?? zero, group.lines.flatMap(line => line.cost ? [line.cost] : []));
     return { key, sourceKind: group.sourceKind, description: group.description, unit: group.unit, ic: group.ic, actualLineIds: group.lines.map(line => line.id), actual: comparison.actual, variance: comparison.variance, status: comparison.status };
   });
-  const allLines = [...normalizedLines, ...legacyLines];
+  const allLines = normalizedLines;
   const recipientNames = Object.fromEntries([
     ...project.members.map(member => [`USER:${member.userId}`, member.user.name] as const),
     ...(data?.beneficiaries ?? []).map(vendor => [`VENDOR:${vendor.id}`, vendor.name] as const),
@@ -274,6 +310,66 @@ export async function loadActualCosts(projectId: string, actor: Actor, paymentLe
     variance: group.variance,
     status: group.status,
   }));
-  const summary = actualCostVariance(controlCenter.worksheet.totals.ic, lines.flatMap(line => line.cost ? [line.cost] : []));
-  return { lines, comparisons: scopedComparisons, summary, canDecide: capabilities.canDecide, controlCenter };
+  const effectiveIcCosts = data?.revisions.find(revision => revision.effective)?.lines.flatMap(line => line.cost ? [line.cost] : []) ?? [];
+  const summary = actualCostVariance(totals(effectiveIcCosts), lines.flatMap(line => line.cost ? [line.cost] : []));
+
+  const persistedRevision = sheetAggregate?.revisions[0] ?? null;
+  const sheetVersion = persistedRevision?.revision ?? 0;
+  const sheetState: ActualCostSheetState = persistedRevision
+    ? persistedRevision.state as ActualCostSheetState
+    : "DRAFT";
+
+  const totalGrossBig = normalizedLines.reduce((sum, l) => sum + BigInt(l.amount || "0"), BigInt(0));
+  const totalNetBig = normalizedLines.reduce((sum, l) => sum + BigInt(l.cost?.net || "0"), BigInt(0));
+  const totalVatBig = normalizedLines.reduce((sum, l) => sum + BigInt(l.cost?.vat || "0"), BigInt(0));
+
+  const reviewedLines = normalizedLines.filter(l => l.internalStatus === "ACCOUNT_REVIEWED").length;
+  const missingEvidenceLines = normalizedLines.filter(l => l.missingEvidenceWarnings.length > 0).length;
+  const overBudgetLines = scopedComparisons.filter(c => c.status === "OVER_BUDGET").length;
+
+  const blockingErrors: string[] = [];
+  if (normalizedLines.length === 0) {
+    blockingErrors.push("Bảng AC chưa có dòng chi phí nào.");
+  }
+  const unreviewedCount = normalizedLines.length - reviewedLines;
+  if (unreviewedCount > 0) {
+    blockingErrors.push(`${unreviewedCount} dòng chưa được Account kiểm tra.`);
+  }
+
+  const warnings: string[] = [];
+  if (missingEvidenceLines > 0) {
+    warnings.push(`${missingEvidenceLines} dòng chưa đủ chứng từ cốt lõi (BBNT, Hóa đơn VAT, UNC).`);
+  }
+  if (overBudgetLines > 0) {
+    warnings.push(`${overBudgetLines} nhóm chi phí đang vượt ngân sách IC.`);
+  }
+
+  const canSubmit = capabilities.account && sheetState === "DRAFT" && blockingErrors.length === 0;
+
+  const sheet: ActualCostSheet = {
+    revisionId: persistedRevision?.id ?? null,
+    version: sheetVersion,
+    state: sheetState,
+    mutationVersion: persistedRevision?.mutationVersion ?? 0,
+    manifestHash: persistedRevision?.manifestHash ?? null,
+    migrationState: persistedRevision ? "AUTHORITATIVE" : "UNCONVERTED",
+    totalGross: totalGrossBig.toString(),
+    totalNet: totalNetBig.toString(),
+    totalVat: totalVatBig.toString(),
+    totalLines: normalizedLines.length,
+    reviewedLines,
+    missingEvidenceLines,
+    overBudgetLines,
+    canSubmit,
+    canDecide: capabilities.canDecide && sheetState === "SUBMITTED",
+    blockingErrors,
+    warnings,
+    requestId: persistedRevision?.workflowRequestId ?? actualCostWorkflowRequest?.id,
+    lastReturnReason: sheetAggregate?.revisions.find(revision => revision.state === "RETURNED")?.decisionReason || undefined,
+  };
+
+  const removedLines = removed
+    .filter(line => capabilities.account || line.createdById === activeActor.id)
+    .map(line => ({ id: line.id, description: line.versions[0]?.description ?? "Khoản thực chi", createdById: line.createdById }));
+  return { lines, removedLines, evidenceVault, comparisons: scopedComparisons, summary, canDecide: capabilities.canDecide, controlCenter, sheet };
 }

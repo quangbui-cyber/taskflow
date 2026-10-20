@@ -9,7 +9,8 @@ import {
   totals,
   type CalculatedCost,
 } from "./money";
-import type { ActualCostFundingSource, Expense } from "./types";
+import type { ActualCostFundingSource } from "./types";
+export type { ActualCostFundingSource };
 
 export const ACTUAL_COST_FUNDING_SOURCES = [
   "EMPLOYEE_ADVANCE",
@@ -17,6 +18,28 @@ export const ACTUAL_COST_FUNDING_SOURCES = [
   "VENDOR_ADVANCE",
   "VENDOR_PAYMENT",
 ] as const satisfies readonly ActualCostFundingSource[];
+
+export const ACTUAL_COST_SHEET_STATES = [
+  "DRAFT",
+  "SUBMITTED",
+  "APPROVED",
+  "RETURNED",
+] as const;
+export type ActualCostSheetState = typeof ACTUAL_COST_SHEET_STATES[number];
+
+export const ACTUAL_COST_INTERNAL_STATUSES = [
+  "IN_PROGRESS",
+  "NEEDS_INFO",
+  "PENDING_ACCOUNT_REVIEW",
+  "ACCOUNT_REVIEWED",
+] as const;
+export type ActualCostInternalStatus = typeof ACTUAL_COST_INTERNAL_STATUSES[number];
+
+export type ActualCostFundingAllocation = {
+  source: ActualCostFundingSource;
+  amount: string;
+  note?: string;
+};
 
 export const ACTUAL_COST_EVIDENCE_KINDS = [
   "VENDOR_CONTRACT_PO",
@@ -124,6 +147,23 @@ export function normalizeActualCostFundingSource(value: string): ActualCostFundi
   return value as ActualCostFundingSource;
 }
 
+export function validateActualCostFundingAllocations(grossAmount: string, allocations: ActualCostFundingAllocation[]) {
+  if (!allocations.length) {
+    throw new Error("Phải có ít nhất một nguồn phân bổ.");
+  }
+  let sum = BigInt(0);
+  for (const alloc of allocations) {
+    normalizeActualCostFundingSource(alloc.source);
+    const amt = BigInt(alloc.amount || "0");
+    if (amt <= BigInt(0)) throw new Error("Số tiền phân bổ nguồn phải lớn hơn 0.");
+    sum += amt;
+  }
+  if (sum.toString() !== grossAmount) {
+    throw new Error(`Tổng phân bổ nguồn tiền (${sum}) phải bằng đúng tổng chi phí (${grossAmount}).`);
+  }
+  return allocations;
+}
+
 export function validateActualCostDecision(input: {
   action: ActualCostDecisionAction;
   actorId: string;
@@ -144,30 +184,4 @@ export function nextActualCostVersion(currentVersion: number, currentState: stri
   if (currentState !== "RETURNED") throw new Error("Chỉ AC ở trạng thái RETURNED mới được tạo phiên bản tiếp theo.");
   if (!Number.isSafeInteger(currentVersion) || currentVersion < 1) throw new Error("Phiên bản AC không hợp lệ.");
   return currentVersion + 1;
-}
-
-export type LegacyActualCostRow = {
-  id: string;
-  source: "legacy";
-  reviewState: "needsReview";
-  approvalState: null;
-  description: string;
-  recipientKey: string;
-  amount: string;
-  revisionId: string;
-  icLineId: string;
-};
-
-export function normalizeLegacyActualCosts(expenses: Expense[]): LegacyActualCostRow[] {
-  return expenses.map(expense => ({
-    id: expense.id,
-    source: "legacy",
-    reviewState: "needsReview",
-    approvalState: null,
-    description: expense.description,
-    recipientKey: expense.recipientKey,
-    amount: expense.cost.gross,
-    revisionId: expense.revisionId,
-    icLineId: expense.lineId,
-  }));
 }

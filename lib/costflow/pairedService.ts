@@ -158,7 +158,11 @@ export async function savePairedDraft(store: PairedPersistence, projectId: strin
       row.icLineId = line.id; return line;
     });
     // Even a forged stale/deleted sale row cannot delete accrued IC/evidence.
-    for (const line of revision?.lines ?? []) if (!lines.some(l => l.id === line.id) && (line.unitPrice || line.evidenceIds?.length || line.evidenceReason || data.expenses.some(e => e.revisionId === revision?.id && e.lineId === line.id))) lines.push(line);
+    for (const line of revision?.lines ?? []) {
+      if (!lines.some(candidate => candidate.id === line.id) && (line.unitPrice || line.evidenceIds?.length || line.evidenceReason)) {
+        lines.push(line);
+      }
+    }
     if (new Set(lines.map(l=>l.id)).size !== lines.length) throw new Error("Hai hạng mục không được ghi đè cùng dòng IC.");
     if (lines.length > 500) throw new Error("IC tối đa 500 dòng.");
     if (!revision) {

@@ -441,7 +441,7 @@ export default function QuotationPanel({
           </div>
 
           {quotations.length > 0 ? (
-            <Table caption="Danh sách các phiên bản báo giá đã chốt của dự án">
+            <Table caption="Danh sách các phiên bản báo giá đã chốt của dự án" hideCaption>
               <thead>
                 <tr>
                   <th scope="col" className="w-[10%]">Mã</th>

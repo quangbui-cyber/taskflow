@@ -142,7 +142,7 @@ export default function QuotationHierarchyTable({ rows, totals, disabled, collap
       </div>}
     </div>
     <datalist id="quotation-units">{QUOTATION_UNITS.map(option => <option key={option} value={option} />)}</datalist>
-    <Table caption="Hạng mục báo giá khách" className="tf-paired-table tf-paired-workspace-table tf-quotation-hierarchy-table">
+    <Table caption="Hạng mục báo giá khách" hideCaption className="tf-paired-table tf-paired-workspace-table tf-quotation-hierarchy-table">
       <colgroup>
         <col className="tf-quotation-structure-col" />
         <col className="tf-quotation-description-col" />

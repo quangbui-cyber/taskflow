@@ -1,5 +1,6 @@
 export const KIND_LABELS: Record<string, string> = {
   IC: "Dự toán IC",
+  ACTUAL_COST_APPROVAL: "Duyệt toàn bộ Bảng AC",
   AC_REVISION: "Sửa chi phí AC",
   ADVANCE: "Đề nghị tạm ứng",
   VENDOR_PAYMENT: "Đề nghị thanh toán NCC",
@@ -11,6 +12,7 @@ export const KIND_LABELS: Record<string, string> = {
 
 export const KIND_INFO: Record<string, { label: string; tone: "info" | "warning" | "success" | "neutral" }> = {
   IC: { label: "Dự toán IC", tone: "info" },
+  ACTUAL_COST_APPROVAL: { label: "Duyệt toàn bộ Bảng AC", tone: "info" },
   ADVANCE: { label: "Đề nghị tạm ứng (ĐNTU)", tone: "info" },
   VENDOR_PAYMENT: { label: "Đề nghị thanh toán (ĐNTT)", tone: "warning" },
   REIMBURSEMENT: { label: "Hoàn tạm ứng (ĐNHTU)", tone: "success" },
@@ -75,6 +77,7 @@ export const ROLE_LABELS: Record<string, string> = {
   MANAGER: "Quản lý",
   ACCOUNTANT: "Kế toán",
   CEO: "CEO",
+  AC_DD: "Phó Giám đốc (Duyệt AC)",
 };
 
 export function recipientDisplayName(

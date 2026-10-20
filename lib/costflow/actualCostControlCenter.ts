@@ -133,11 +133,12 @@ export function resolveActualCostCapabilities(input: {
   actorId: string;
   actorRole: string;
   isProjectMember: boolean;
+  isProjectOwner?: boolean;
   isDd: boolean;
   accountantId: string;
   operationUserIds: string[];
 }): ActualCostControlCapabilities {
-  const account = input.actorRole === "ADMIN" || (input.actorRole === "ACCOUNT" && input.isProjectMember);
+  const account = input.actorRole === "ADMIN" || (input.isProjectMember && (input.actorRole === "ACCOUNT" || !!input.isProjectOwner));
   const vendorOperations = input.isProjectMember && input.operationUserIds.includes(input.actorId);
   const audit = input.isDd || input.actorId === input.accountantId || input.actorRole === "ADMIN";
   const self = input.isProjectMember;

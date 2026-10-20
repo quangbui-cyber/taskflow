@@ -48,7 +48,7 @@ function StateFacts({ row }: { row: PaymentLedgerRow }) {
 
 export default function PaymentLedgerTable({ projectId, rows }: { projectId: string; rows: PaymentLedgerRow[] }) {
   if (!rows.length) return <EmptyState title="Chưa có dữ liệu sổ thanh toán" description="Sổ sẽ hiển thị sau khi có hồ sơ thanh toán hoặc dữ liệu legacy được nhận diện." />;
-  return <><div className="tf-payment-ledger-table"><Table caption="Sổ đối soát hồ sơ, người nhận và luồng tiền">
+  return <><div className="tf-payment-ledger-table"><Table caption="Sổ đối soát hồ sơ, người nhận và luồng tiền" hideCaption>
     <thead><tr>
       <th scope="col">Hồ sơ / người nhận</th>
       <th scope="col">Trạng thái độc lập</th>

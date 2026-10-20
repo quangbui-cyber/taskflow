@@ -86,7 +86,7 @@ test("legacy finance mutation flow is retained only as historical migration cove
     const uploaded = { name: "outside-receipt.pdf", mimeType: "application/pdf", size: 13, data: new TextEncoder().encode("%PDF-1.4 test") };
     await act(outsider, "CASH", { ...cashFields(reimbursement.id, "2000000", "bank2"), sourceFileId: "" }, undefined, uploaded);
     assert.equal(await prisma.costFlowCash.count({ where: { projectId: project.id } }), 2);
-    assert.equal(reconcile(await state(), await prisma.costFlowCash.findMany({ where: { projectId: project.id } }))[0].balance, "0");
+    assert.equal(reconcile((await state()).expenses, await prisma.costFlowCash.findMany({ where: { projectId: project.id } }))[0].balance, "0");
     await act(manager, "CREATE_REQUEST", { kind: "CLOSE", title: "Đóng tài chính", explanation: "Đủ hồ sơ và đối soát" });
     const close = await latest("CLOSE"); await act(manager, "DECIDE", { requestId: close.id, decision: "APPROVE" });
     assert.equal((await state()).closed, true);

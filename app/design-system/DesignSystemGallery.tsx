@@ -118,7 +118,7 @@ export default function DesignSystemGallery() {
       <section id="table" aria-labelledby="table-title">
         <Panel>
           <h2 id="table-title" className="tf-ui-heading mb-4">Hồ sơ & số liệu</h2>
-          <Table caption="Ví dụ hiển thị — dữ liệu giả lập, không phải hồ sơ thật">
+          <Table caption="Ví dụ hiển thị — dữ liệu giả lập, không phải hồ sơ thật" hideCaption>
             <thead><tr><th scope="col">Hồ sơ / phiên bản</th><th scope="col">Ngân sách</th><th scope="col">CEO</th><th scope="col">Tiền thực tế</th><th scope="col">Ký giấy</th><th scope="col" className="tf-ui-number">Giá trị mẫu (VND)</th></tr></thead>
             <tbody><tr><th scope="row">IC-MẪU / v2</th><td><Badge tone="success">Có hiệu lực</Badge></td><td><Badge tone="danger">Từ chối</Badge></td><td>Chưa ghi nhận</td><td>Chưa ký</td><td className="tf-ui-number">12.000.000 ₫</td></tr>
               <tr><th scope="row">ĐNTT-MẪU / v1</th><td>—</td><td><Badge tone="info">Chờ duyệt</Badge></td><td>Chưa ghi nhận</td><td>Chưa ký</td><td className="tf-ui-number">3.000.000 ₫</td></tr></tbody>
