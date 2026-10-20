@@ -31,7 +31,6 @@ import { displayMoney } from "@/lib/costflow/money";
 import { ordinaryApprovalSteps } from "@/lib/costflow/approvalChain";
 import { FilePlus2, Building2, Search, X } from "lucide-react";
 import { PaymentRequestEditor } from "@/components/costflow/payments/PaymentRequestEditor";
-import { PaymentRequestPreview } from "@/components/costflow/payments/PaymentRequestPreview";
 import { PaymentRequestReview } from "@/components/costflow/payments/PaymentRequestReview";
 import AdvanceSettlementAllocator from "@/components/costflow/payments/AdvanceSettlementAllocator";
 import CashConfirmationEditor from "@/components/costflow/payments/CashConfirmationEditor";
@@ -232,14 +231,35 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
         </div>
       </div>
 
-      {/* KPI METRICS */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* KPI METRICS (5 RESPONSIVE SCOPE CARDS) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <button
+          type="button"
+          onClick={() => setScopeTab("ALL")}
+          className={`p-3.5 rounded-xl border text-left transition-all ${
+            scopeTab === "ALL"
+              ? "border-[var(--primary)] bg-[var(--primary-soft)] ring-2 ring-[var(--primary)] shadow-xs"
+              : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--primary)]"
+          }`}
+        >
+          <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
+            <span className="font-medium">Tất cả hồ sơ</span>
+            <FileText size={16} className={scopeTab === "ALL" ? "text-[var(--primary)]" : "text-[var(--text-secondary)]"} aria-hidden="true" />
+          </div>
+          <p className="text-2xl font-bold tabular-nums text-[var(--foreground)] mt-2">
+            {stats.total}
+          </p>
+          <span className="text-[11px] text-[var(--text-secondary)]">
+            Toàn bộ hồ sơ của dự án
+          </span>
+        </button>
+
         <button
           type="button"
           onClick={() => setScopeTab("MY_ACTION")}
           className={`p-3.5 rounded-xl border text-left transition-all ${
             scopeTab === "MY_ACTION"
-              ? "border-[var(--warning)] bg-[var(--warning-soft)] ring-2 ring-[var(--warning)]"
+              ? "border-[var(--warning)] bg-[var(--warning-soft)] ring-2 ring-[var(--warning)] shadow-xs"
               : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--warning)]"
           }`}
         >
@@ -247,11 +267,14 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
             <span className="font-medium">Chờ tôi xử lý</span>
             <UserCheck size={16} className="text-[var(--warning)]" aria-hidden="true" />
           </div>
-          <p className="text-2xl font-bold tabular-nums text-[var(--warning)] mt-2">
-            {stats.myAction}
+          <p className="text-2xl font-bold tabular-nums text-[var(--warning)] mt-2 flex items-center gap-1.5">
+            <span>{stats.myAction}</span>
+            {stats.myAction > 0 && (
+              <span className="inline-block w-2 h-2 rounded-full bg-[var(--warning)] animate-ping" />
+            )}
           </p>
           <span className="text-[11px] text-[var(--text-secondary)]">
-            {stats.myAction > 0 ? "Cần bạn đưa ra quyết định" : "Không có việc tồn đọng"}
+            {stats.myAction > 0 ? "Cần bạn quyết định" : "Không có việc tồn đọng"}
           </span>
         </button>
 
@@ -260,7 +283,7 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
           onClick={() => setScopeTab("SUBMITTED")}
           className={`p-3.5 rounded-xl border text-left transition-all ${
             scopeTab === "SUBMITTED"
-              ? "border-[var(--info)] bg-[var(--info-soft)] ring-2 ring-[var(--info)]"
+              ? "border-[var(--info)] bg-[var(--info-soft)] ring-2 ring-[var(--info)] shadow-xs"
               : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--info)]"
           }`}
         >
@@ -281,7 +304,7 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
           onClick={() => setScopeTab("APPROVED")}
           className={`p-3.5 rounded-xl border text-left transition-all ${
             scopeTab === "APPROVED"
-              ? "border-[var(--success)] bg-[var(--success-soft)] ring-2 ring-[var(--success)]"
+              ? "border-[var(--success)] bg-[var(--success-soft)] ring-2 ring-[var(--success)] shadow-xs"
               : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--success)]"
           }`}
         >
@@ -293,7 +316,7 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
             {stats.approved}
           </p>
           <span className="text-[11px] text-[var(--text-secondary)]">
-            Đã hoàn thành toàn bộ vòng duyệt
+            Hoàn tất toàn bộ vòng duyệt
           </span>
         </button>
 
@@ -302,7 +325,7 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
           onClick={() => setScopeTab("RETURNED_REJECTED")}
           className={`p-3.5 rounded-xl border text-left transition-all ${
             scopeTab === "RETURNED_REJECTED"
-              ? "border-[var(--danger)] bg-[var(--danger-soft)] ring-2 ring-[var(--danger)]"
+              ? "border-[var(--danger)] bg-[var(--danger-soft)] ring-2 ring-[var(--danger)] shadow-xs"
               : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--danger)]"
           }`}
         >
@@ -314,80 +337,39 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
             {stats.returnedOrRejected}
           </p>
           <span className="text-[11px] text-[var(--text-secondary)]">
-            Cần bổ sung thông tin hoặc giải trình
+            Cần bổ sung giải trình
           </span>
         </button>
       </div>
 
-      {/* 2. FILTER BAR */}
+      {/* 2. FILTER & SEARCH BAR */}
       <Panel className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* Quick Scope Tabs */}
-          <div className="flex flex-wrap items-center gap-1.5 p-1 bg-[var(--surface-soft)] rounded-lg border border-[var(--border)] text-xs font-medium">
-            <button
-              type="button"
-              onClick={() => setScopeTab("ALL")}
-              className={`px-2.5 py-1 rounded-md transition-all ${
-                scopeTab === "ALL"
-                  ? "bg-[var(--surface)] text-[var(--foreground)] shadow-sm font-semibold"
-                  : "text-[var(--text-secondary)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              Tất cả ({stats.total})
-            </button>
-            <button
-              type="button"
-              onClick={() => setScopeTab("MY_ACTION")}
-              className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1 ${
-                scopeTab === "MY_ACTION"
-                  ? "bg-[var(--warning-soft)] text-[var(--warning)] shadow-sm font-semibold"
-                  : "text-[var(--text-secondary)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              <span>Cần tôi duyệt</span>
-              {stats.myAction > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full bg-[var(--warning)] text-white text-[10px]">
-                  {stats.myAction}
-                </span>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => setScopeTab("SUBMITTED")}
-              className={`px-2.5 py-1 rounded-md transition-all ${
-                scopeTab === "SUBMITTED"
-                  ? "bg-[var(--surface)] text-[var(--foreground)] shadow-sm font-semibold"
-                  : "text-[var(--text-secondary)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              Đang duyệt ({stats.submitted})
-            </button>
-            <button
-              type="button"
-              onClick={() => setScopeTab("APPROVED")}
-              className={`px-2.5 py-1 rounded-md transition-all ${
-                scopeTab === "APPROVED"
-                  ? "bg-[var(--surface)] text-[var(--foreground)] shadow-sm font-semibold"
-                  : "text-[var(--text-secondary)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              Đã duyệt ({stats.approved})
-            </button>
-            <button
-              type="button"
-              onClick={() => setScopeTab("RETURNED_REJECTED")}
-              className={`px-2.5 py-1 rounded-md transition-all ${
-                scopeTab === "RETURNED_REJECTED"
-                  ? "bg-[var(--surface)] text-[var(--foreground)] shadow-sm font-semibold"
-                  : "text-[var(--text-secondary)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              Trả / Từ chối ({stats.returnedOrRejected})
-            </button>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="font-medium text-[var(--text-secondary)]">
+              Hiển thị: <strong>{filteredRequests.length}</strong> / {stats.total} hồ sơ
+            </span>
+            {(scopeTab !== "ALL" || search || kindFilter !== "ALL" || stateFilter !== "ALL" || assigneeFilter !== "ALL") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setScopeTab("ALL");
+                  setSearch("");
+                  setKindFilter("ALL");
+                  setStateFilter("ALL");
+                  setAssigneeFilter("ALL");
+                }}
+                className="text-xs text-[var(--text-secondary)] hover:text-[var(--foreground)] h-7 px-2"
+              >
+                <X size={12} className="mr-1" />
+                Đặt lại bộ lọc
+              </Button>
+            )}
           </div>
 
           {/* Search Box */}
-          <div className="relative w-full sm:w-72">
+          <div className="relative w-full sm:w-80">
             <Search
               size={15}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] pointer-events-none"
@@ -395,7 +377,7 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
             />
             <input
               type="text"
-              placeholder="Nhập tên, người lập..."
+              placeholder="Nhập tên, người lập, loại hồ sơ..."
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="tf-field text-xs h-9 w-full"
@@ -418,7 +400,7 @@ export default function ApprovalRequestsPanel({ finance, user, canCreate }: Prop
         {/* Dropdown Filters (Disclosure) */}
         <details className="pt-2 border-t border-[var(--border)]/60 text-xs" open={kindFilter !== "ALL" || stateFilter !== "ALL" || assigneeFilter !== "ALL"}>
           <summary className="cursor-pointer text-[var(--text-secondary)] hover:text-[var(--foreground)] font-medium select-none py-1">
-            Bộ lọc nâng cao {(kindFilter !== "ALL" || stateFilter !== "ALL" || assigneeFilter !== "ALL") && "• (Đang lọc)"}
+            Bộ lọc nâng cao {(kindFilter !== "ALL" || stateFilter !== "ALL" || assigneeFilter !== "ALL") ? "• (Đang lọc)" : ""}
           </summary>
           <div className="grid gap-3 sm:grid-cols-3 pt-2">
             <Select
@@ -720,7 +702,7 @@ function RequestInspectionModal({
   const [corrections, setCorrections] = useState([""]);
   const [signPadOpen, setSignPadOpen] = useState(false);
   const [eSignedData, setESignedData] = useState<string | null>(null);
-  const [eSignedPin, setESignedPin] = useState<string>("");
+  const [, setESignedPin] = useState<string>("");
   const [approverSignedData, setApproverSignedData] = useState<string | null>(null);
   const [approverSignedPin, setApproverSignedPin] = useState<string>("");
   const [approverSignPadOpen, setApproverSignPadOpen] = useState(false);

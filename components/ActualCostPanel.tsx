@@ -329,6 +329,57 @@ export default function ActualCostPanel({ finance, user, canCreate, onSelectTab 
         </div>
       </div>
 
+      {/* Quick Evidence Filter Pills */}
+      <div className="flex flex-wrap items-center gap-1.5 text-xs p-2.5 rounded-lg bg-[var(--surface-soft)] border border-[var(--border)] -mt-2">
+        <span className="text-[var(--text-secondary)] font-medium mr-1">Lọc chứng từ:</span>
+        <button
+          type="button"
+          onClick={() => setEvidenceFilter("ALL")}
+          className={`px-2.5 py-1 rounded-md transition-colors ${
+            evidenceFilter === "ALL"
+              ? "bg-[var(--surface)] text-[var(--foreground)] font-bold shadow-xs border border-[var(--border)]"
+              : "text-[var(--text-secondary)] hover:text-[var(--foreground)]"
+          }`}
+        >
+          Tất cả ({stats.count})
+        </button>
+        <button
+          type="button"
+          onClick={() => setEvidenceFilter("MISSING")}
+          className={`px-2.5 py-1 rounded-md transition-colors flex items-center gap-1 ${
+            evidenceFilter === "MISSING"
+              ? "bg-amber-100 text-amber-900 font-bold border border-amber-300 dark:bg-amber-950 dark:text-amber-200"
+              : "text-amber-700 hover:text-amber-900 dark:text-amber-400"
+          }`}
+        >
+          <span>⚠️ Thiếu chứng từ ({stats.missingEvidence})</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setEvidenceFilter("COMPLETE")}
+          className={`px-2.5 py-1 rounded-md transition-colors flex items-center gap-1 ${
+            evidenceFilter === "COMPLETE"
+              ? "bg-green-100 text-green-900 font-bold border border-green-300 dark:bg-green-950 dark:text-green-200"
+              : "text-green-700 hover:text-green-900 dark:text-green-400"
+          }`}
+        >
+          <span>✅ Đủ chứng từ ({stats.completeEvidence})</span>
+        </button>
+        {stats.exceptionPending > 0 && (
+          <button
+            type="button"
+            onClick={() => setEvidenceFilter("EXCEPTION")}
+            className={`px-2.5 py-1 rounded-md transition-colors flex items-center gap-1 ${
+              evidenceFilter === "EXCEPTION"
+                ? "bg-blue-100 text-blue-900 font-bold border border-blue-300 dark:bg-blue-950 dark:text-blue-200"
+                : "text-blue-700 hover:text-blue-900 dark:text-blue-400"
+            }`}
+          >
+            <span>Có giải trình ({stats.exceptionPending})</span>
+          </button>
+        )}
+      </div>
+
       {/* 3. SUB-VIEW: THEO NHÂN SỰ & TẠM ỨNG (MEMBER ADVANCE & EXPENSE VIEW) */}
       {viewMode === "by-member" && (
         <div className="space-y-4">
@@ -340,14 +391,17 @@ export default function ActualCostPanel({ finance, user, canCreate, onSelectTab 
           </div>
 
           {/* Quy định đối soát & hiệu lực phiếu */}
-          <section className="tf-ac-policy" aria-labelledby="ac-payment-policy-heading">
-            <div className="tf-ac-policy-heading">
-              <span className="tf-ac-policy-icon" aria-hidden="true"><AlertCircle size={18} /></span>
-              <div>
-                <h3 id="ac-payment-policy-heading">Nguyên tắc đối soát & hiệu lực thanh toán</h3>
-                <p>Chọn đúng loại phiếu theo nguồn chi; phê duyệt AC và giải ngân vẫn là hai bước riêng.</p>
+          <details className="tf-ac-policy">
+            <summary className="tf-ac-policy-heading cursor-pointer list-none flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="tf-ac-policy-icon" aria-hidden="true"><AlertCircle size={18} /></span>
+                <div>
+                  <h3 id="ac-payment-policy-heading">Nguyên tắc đối soát & hiệu lực thanh toán</h3>
+                  <p>Chọn đúng loại phiếu theo nguồn chi; phê duyệt AC và giải ngân vẫn là hai bước riêng.</p>
+                </div>
               </div>
-            </div>
+              <span className="text-xs text-[var(--text-secondary)] font-medium">Chi tiết ▾</span>
+            </summary>
             <dl className="tf-ac-policy-grid">
               <div>
                 <dt>Nhân sự tự ứng tiền túi</dt>
@@ -366,7 +420,7 @@ export default function ActualCostPanel({ finance, user, canCreate, onSelectTab 
                 <dd>Account lập và điều phối hồ sơ; Kế toán rà soát chứng từ, duyệt ngoại lệ và thực hiện chi tiền.</dd>
               </div>
             </dl>
-          </section>
+          </details>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {memberSummaries.map(member => {

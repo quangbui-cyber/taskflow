@@ -10,6 +10,8 @@ import QuotationPanel from "@/components/QuotationPanel";
 import SettlementPanel from "@/components/SettlementPanel";
 import CustomerLiquidationPanel from "@/components/costflow/customer/CustomerLiquidationPanel";
 import CustomerAcceptanceExport from "@/components/costflow/customer/CustomerAcceptanceExport";
+import FinancialLifecycleBar from "@/components/costflow/navigation/FinancialLifecycleBar";
+import CostFlowActionBanner from "@/components/costflow/navigation/CostFlowActionBanner";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Field";
 import { Alert, Badge, Panel, Table } from "@/components/ui/Presentation";
@@ -270,8 +272,24 @@ export default function CostFlowPanel({ finance, user, projectHeading, initialTa
       <ModuleTabs label="CostFlow" tabs={tabs.map(([id, label]) => ({ id, label, ...(id === "approvals" ? { count: pendingRequests } : {}) }))} active={activeTab} onChange={setTab} />
     </section>
 
+    {finance.fullAccess && (
+      <FinancialLifecycleBar
+        finance={finance}
+        activeTab={activeTab}
+        onSelectTab={setTab}
+      />
+    )}
+
     {finance.fullAccess && activeTab === "overview" && (
-      <div className="space-y-3">
+      <div className="space-y-4">
+        <CostFlowActionBanner
+          finance={finance}
+          user={user}
+          onSelectTab={setTab}
+          onOpenCreateQuotation={() => setScopeCreateDialogOpen(true)}
+          worksheetHref={worksheetHref(working ?? effective)}
+        />
+
         <div className="tf-summary-strip">
           <SummaryItem
             label="Báo giá hiện hành"

@@ -22,14 +22,14 @@ import {
 } from "lucide-react";
 import type { Finance } from "@/components/CostFlowPanel";
 import { Button } from "@/components/ui/Button";
-import { Input, Select, Textarea } from "@/components/ui/Field";
+import { Select, Textarea } from "@/components/ui/Field";
 import { Alert, Badge, EmptyState, Panel, Table } from "@/components/ui/Presentation";
 import { Dialog } from "@/components/ui/Dialog";
 import ActionForm from "@/components/CostFlowActionForm";
-import IcEvidencePanel from "@/components/IcEvidencePanel";
 import IcRevisionDiff, { IcQuotationUpdates } from "@/components/IcRevisionDiff";
 import VendorPaymentScheduleTable from "@/components/VendorPaymentScheduleTable";
 import EditIcLineModal from "@/components/EditIcLineModal";
+import IcEvidencePanel from "@/components/IcEvidencePanel";
 import { workingIcRevision } from "@/lib/costflow/budgetRevisions";
 import { icStatusProjection, effectiveBaseline } from "@/lib/costflow/icEffectiveness";
 import { calculateCost, calculateMargin, displayMoney, totals, type CalculatedCost } from "@/lib/costflow/money";
@@ -102,14 +102,14 @@ export default function InternalCostPanel({
   const [selectedLineIds, setSelectedLineIds] = useState<string[]>([]);
   const [bulkVendorOpen, setBulkVendorOpen] = useState(false);
   const [bulkVendorId, setBulkVendorId] = useState("");
-  const [createdBeneficiaries, setCreatedBeneficiaries] = useState<{ id: string; name: string }[]>([]);
+  const [createdBeneficiaries] = useState<{ id: string; name: string }[]>([]);
   const [newBeneficiary, setNewBeneficiary] = useState<{
     name: string;
     bank: string;
     account: string;
     sourceFileId: string;
   } | null>(null);
-  const [actionVersion, setActionVersion] = useState(finance.version);
+  const [actionVersion] = useState(finance.version);
   const [bulkEvidenceOpen, setBulkEvidenceOpen] = useState(false);
   const [bulkEvidenceIds, setBulkEvidenceIds] = useState<string[]>([]);
   const [bulkEvidenceReason, setBulkEvidenceReason] = useState("");
@@ -518,16 +518,16 @@ export default function InternalCostPanel({
 
       {/* 3. DRAFTS IN PROGRESS (IF ANY) */}
       {internalDrafts.length > 0 && (
-        <Panel className="bg-[var(--surface-soft)] border-dashed border-[var(--border)]">
-          <div className="flex items-center justify-between mb-3">
+        <details className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3.5 shadow-2xs">
+          <summary className="cursor-pointer flex items-center justify-between text-sm font-semibold text-[var(--foreground)] list-none">
             <div className="flex items-center gap-2">
               <Clock size={16} className="text-[var(--warning)]" aria-hidden="true" />
-              <h3 className="text-sm font-semibold text-[var(--foreground)]">Bản nháp IC đang soạn dở</h3>
+              <span>Bản nháp IC đang soạn dở</span>
               <Badge tone="warning">{internalDrafts.length}</Badge>
             </div>
-            <span className="text-xs text-[var(--text-secondary)]">Lưu tự động trong trình duyệt / máy chủ</span>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <span className="text-xs text-[var(--text-secondary)] font-normal">Chi tiết bản nháp ▾</span>
+          </summary>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 mt-3 pt-3 border-t border-[var(--border)]">
             {internalDrafts.map(draft => {
               const isIcMode = draft.workspaceMode === "ic";
               const targetHref = `/projects/${finance.project.id}/costflow/${
@@ -562,7 +562,7 @@ export default function InternalCostPanel({
               );
             })}
           </div>
-        </Panel>
+        </details>
       )}
 
       {/* 4. HERO EXECUTIVE CARD & 4 KPI METRICS */}

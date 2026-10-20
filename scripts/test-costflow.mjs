@@ -42,6 +42,7 @@ const unitSuites = [
   "tests/workflow-approval.test.ts", "tests/workflow-routes.test.ts",
   "tests/workflow-print-layout.test.ts",
   "tests/session-secret-build.test.ts",
+  "tests/costflow-navigation-ui-contract.test.ts",
   "tests/cloudflare-free-evidence-router.test.ts", "tests/cloudflare-paired-save.test.ts",
   ...(phase8 ? ["tests/actual-cost.test.ts", "tests/actual-cost-control-center.test.ts", "tests/actual-cost-security.test.ts", "tests/actual-cost-ui-contract.test.ts", "tests/customer-liquidation.test.ts", "tests/customer-acceptance-export.test.ts"] : []),
 ];
