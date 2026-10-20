@@ -1329,10 +1329,14 @@ export default function InternalCostPanel({
               )}
 
               {/* DIFF REVISION SO SÁNH */}
-              <Panel className="space-y-3">
-                <h4 className="font-semibold text-sm text-[var(--foreground)]">So sánh thay đổi với phiên bản khác</h4>
-                <IcRevisionDiff revision={visibleRevision} revisions={revisions} />
-              </Panel>
+              <details className="rounded-xl border border-[var(--border)] p-4 bg-[var(--surface)]">
+                <summary className="font-semibold text-sm cursor-pointer text-[var(--foreground)]">
+                  So sánh thay đổi với các revision khác
+                </summary>
+                <div className="mt-3">
+                  <IcRevisionDiff revision={visibleRevision} revisions={revisions} />
+                </div>
+              </details>
 
               {/* SNAPSHOTS LỊCH SỬ GỬI DUYỆT */}
               {visibleRevision.submissions && visibleRevision.submissions.length > 0 && (

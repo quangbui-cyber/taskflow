@@ -48,3 +48,23 @@ test("CostFlowPanel: mounts FinancialLifecycleBar and CostFlowActionBanner", () 
   assert.match(code, /<FinancialLifecycleBar/, "Must render FinancialLifecycleBar");
   assert.match(code, /<CostFlowActionBanner/, "Must render CostFlowActionBanner on overview");
 });
+
+test("CostFlowPanel: Sprint 2 UX - Scope sub-views, dual-labeling and prioritized approvals badge", () => {
+  const code = source("components/CostFlowPanel.tsx");
+
+  // Scope sub-navigation
+  assert.match(code, /scopeSubTab/, "Must have scopeSubTab state");
+  assert.match(code, /Báo giá & Căn cứ/, "Must offer Báo giá sub-tab");
+  assert.match(code, /Nghiệm thu khối lượng/, "Must offer Nghiệm thu sub-tab");
+  assert.match(code, /Thanh lý & Công nợ AR/, "Must offer Thanh lý sub-tab");
+
+  // Dual labeling on Overview
+  assert.match(code, /Báo giá hiện hành \(Bán\)/, "Must dual-label quotation");
+  assert.match(code, /Dự toán IC \(Ngân sách mua\)/, "Must dual-label IC");
+  assert.match(code, /Chi phí thực tế AC \(Phát sinh\)/, "Must dual-label AC");
+  assert.match(code, /Dòng tiền thực tế \(Thu \/ Chi\)/, "Must dual-label cash");
+
+  // Prioritized approvals badge
+  assert.match(code, /myActionCount/, "Must calculate pending approvals for current user");
+  assert.match(code, /myActionCount > 0 \? myActionCount : pendingRequests/, "Must prioritize myActionCount for approvals badge");
+});
