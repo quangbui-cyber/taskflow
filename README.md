@@ -234,26 +234,38 @@ node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 
 ## Production và triển khai
 
-Production hiện tại chạy tại [taskflow.work-vpth.workers.dev](https://taskflow.work-vpth.workers.dev) với kiến trúc:
+Production hiện tại chạy trên **Vercel** tại [taskflow-neon-two.vercel.app](https://taskflow-neon-two.vercel.app):
 
-- **Runtime:** Cloudflare Workers, đóng gói Next.js bằng OpenNext.
+- **Vercel project:** `trnghueys-projects/taskflow-neon`.
+- **Runtime:** Next.js App Router trên Vercel; function region của ứng dụng là Singapore (`sin1`).
 - **Database:** Neon PostgreSQL tại region Singapore.
-- **Secrets:** `DATABASE_URL` và `SESSION_SECRET` được lưu bằng Cloudflare Worker secrets; không ghi vào source, log hoặc README.
-- **Cấu hình Worker:** `wrangler.jsonc`; bundle được tạo trong `.open-next/` và không commit vào Git.
+- **Secrets:** `DATABASE_URL`, `SESSION_SECRET` và các biến tùy chọn được lưu trong Vercel Environment Variables; không ghi giá trị vào source, log hoặc README.
+- **Build:** Vercel chạy `npm run build`. Script generate Prisma Client, chạy production migrations có guard, rồi build Next.js.
 
-Quy trình deploy production phải dùng một checkout sạch tại đúng commit cần phát hành để tránh đưa WIP chưa commit vào bundle:
+Quy trình deploy production phải dùng một checkout sạch tại đúng commit cần phát hành để tránh đưa WIP chưa commit vào bundle. Luôn ghi nhận SHA trước khi deploy:
 
 ```bash
 npm ci
-npx prisma migrate deploy
-npm run build:cloudflare
-npx wrangler deploy
-npx wrangler deployments list
+git rev-parse HEAD
+npx vercel link --yes --project taskflow-neon --scope trnghueys-projects
+npx vercel deploy --prod --yes --scope trnghueys-projects
 ```
 
-`DATABASE_URL` dùng cho `prisma migrate deploy` phải là kết nối trực tiếp tới đúng Neon production database. Chạy migration thành công trước khi publish Worker; không seed hoặc reset production. Sau deploy, tối thiểu kiểm tra `/login`, `manifest.webmanifest`, version ID trên Cloudflare và các luồng authenticated liên quan tới thay đổi.
+Khi Vercel build production, `VERCEL_ENV=production` làm `scripts/deploy-migrations.mjs` chạy `prisma migrate deploy` bằng `DATABASE_URL` production. Ngoài production, script bỏ qua migration. Không chạy `prisma migrate reset`, không seed dữ liệu mẫu và không thay thế production URL bằng connection string local.
 
-Deploy kỹ thuật không đồng nghĩa với business release acceptance. COSTFLOW/WORKFLOW chỉ được đánh dấu sẵn sàng phát hành khi các checkpoint human/company/native/production và sign-off tương ứng đã hoàn tất. Hướng dẫn Vercel cũ và các lưu ý nền tảng khác vẫn nằm trong [DEPLOY.md](DEPLOY.md) cho tới khi tài liệu đó được cập nhật toàn bộ sang Cloudflare.
+Sau deploy, xác nhận deployment ở trạng thái `Ready`, alias production trỏ đúng bản mới và chạy smoke check read-only:
+
+```bash
+npx vercel inspect https://taskflow-neon-two.vercel.app --scope trnghueys-projects
+npx vercel curl /login --deployment https://taskflow-neon-two.vercel.app --scope trnghueys-projects
+npx vercel curl /manifest.webmanifest --deployment https://taskflow-neon-two.vercel.app --scope trnghueys-projects
+```
+
+Tối thiểu `/login` và `manifest.webmanifest` phải trả HTTP 200. Các màn cần đăng nhập phải chuyển về `/login` khi chưa có session; kiểm tra luồng authenticated liên quan tới thay đổi theo một bước nghiệm thu riêng và không tạo dữ liệu production chỉ để smoke test.
+
+`wrangler.jsonc`, script `build:cloudflare` và cấu hình OpenNext vẫn được giữ làm phương án legacy/tham khảo. **Cloudflare Worker không phải production hiện tại**; chỉ deploy Cloudflare khi có quyết định chuyển hạ tầng rõ ràng.
+
+Deploy kỹ thuật không đồng nghĩa với business release acceptance. COSTFLOW/WORKFLOW chỉ được đánh dấu sẵn sàng phát hành khi các checkpoint human/company/native/production và sign-off tương ứng đã hoàn tất. Xem thêm các biến môi trường, bootstrap Admin và lưu ý vận hành trong [DEPLOY.md](DEPLOY.md).
 
 ## Cấu trúc thư mục
 
