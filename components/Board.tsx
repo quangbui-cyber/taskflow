@@ -237,7 +237,6 @@ export default function Board({
                   <div
                     ref={provided.innerRef}
                     {...provided.droppableProps}
-                    data-board-tasks=""
                     className={`min-h-[80px] flex-1 space-y-2 overflow-y-auto p-3 transition-colors ${
                       snapshot.isDraggingOver ? "bg-brand-50/70" : ""
                     }`}
@@ -357,7 +356,7 @@ export default function Board({
                 )}
               </Droppable>
 
-              <div data-board-composer="" className="shrink-0 border-t border-zinc-200 p-3 md:max-h-[calc(100%-8rem)] md:overflow-y-auto">
+              <div className="shrink-0 border-t border-zinc-200 p-3">
                 <NewTaskInline
                   key={`${col.key}-${col.key === "TODO" ? todoComposerSignal : 0}`}
                   projectId={projectId}
