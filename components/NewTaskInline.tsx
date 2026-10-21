@@ -58,6 +58,14 @@ export default function NewTaskInline({
   const formRef = useRef<HTMLFormElement>(null);
   const [briefFiles, setBriefFiles] = useState<File[]>([]);
   const [resultFiles, setResultFiles] = useState<File[]>([]);
+  // The draft lives here rather than in the inputs, because crossing the
+  // desktop breakpoint swaps the dialog and inline form and remounts them.
+  const [title, setTitle] = useState("");
+  const [assigneeId, setAssigneeId] = useState("");
+  const [priority, setPriority] = useState("MEDIUM");
+  const [dueDate, setDueDate] = useState("");
+  const [description, setDescription] = useState("");
+  const [result, setResult] = useState("");
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     async (prev, formData) => {
       const dueDate = String(formData.get("dueDate") ?? "");
@@ -74,9 +82,7 @@ export default function NewTaskInline({
       if (result.error) {
         notify({ message: result.error, tone: "error" });
       } else {
-        formRef.current?.reset();
-        setBriefFiles([]);
-        setResultFiles([]);
+        resetDraft();
         setEditing(false);
         notify({ message: "Đã tạo task.", tone: "success" });
       }
@@ -86,27 +92,35 @@ export default function NewTaskInline({
   );
   const totalFileSize = [...briefFiles, ...resultFiles].reduce((size, file) => size + file.size, 0);
   const statusLabel = STATUSES.find((item) => item.key === status)?.label ?? status;
-  const closeEditor = useCallback(() => {
-    if (pending) return;
+  function resetDraft() {
+    setTitle("");
+    setAssigneeId("");
+    setPriority("MEDIUM");
+    setDueDate("");
+    setDescription("");
+    setResult("");
     setBriefFiles([]);
     setResultFiles([]);
+  }
+
+  const closeEditor = useCallback(() => {
+    if (pending) return;
+    resetDraft();
     setEditing(false);
   }, [pending]);
 
   // In the dialog, a stray Escape or backdrop click should not throw away
-  // a long description, so those only close it while nothing is filled in.
-  const hasDraft = useCallback(() => {
-    if (briefFiles.length > 0 || resultFiles.length > 0) return true;
-    const form = formRef.current;
-    if (!form) return false;
-    const data = new FormData(form);
-    return ["title", "description", "result"].some((field) =>
-      String(data.get(field) ?? "").trim()
-    );
-  }, [briefFiles, resultFiles]);
+  // anything already filled in or picked, so those only close an empty draft.
+  const hasDraft =
+    [title, description, result].some((value) => value.trim()) ||
+    Boolean(assigneeId) ||
+    priority !== "MEDIUM" ||
+    Boolean(dueDate) ||
+    briefFiles.length > 0 ||
+    resultFiles.length > 0;
 
   const requestClose = useCallback(() => {
-    if (isDesktop && hasDraft()) return;
+    if (isDesktop && hasDraft) return;
     closeEditor();
   }, [isDesktop, hasDraft, closeEditor]);
 
@@ -200,6 +214,8 @@ export default function NewTaskInline({
         name="title"
         type="text"
         required
+        value={title}
+        onChange={(event) => setTitle(event.target.value)}
         placeholder="Nhập tên task..."
         className={`tf-field mt-1 bg-white ${isDesktop ? "!text-base font-medium" : ""}`}
       />
@@ -211,6 +227,8 @@ export default function NewTaskInline({
       <span className="text-xs font-medium text-zinc-500">Người làm</span>
       <UserPicker
         name="assigneeId"
+        value={assigneeId}
+        onChange={setAssigneeId}
         options={memberOptions}
         placeholder="Chưa gán"
         emptyLabel="Chưa gán"
@@ -227,7 +245,8 @@ export default function NewTaskInline({
       <div className="relative mt-1">
         <select
           name="priority"
-          defaultValue="MEDIUM"
+          value={priority}
+          onChange={(event) => setPriority(event.target.value)}
           className="tf-field appearance-none !pr-10"
         >
           {PRIORITIES.map((priority) => (
@@ -245,13 +264,17 @@ export default function NewTaskInline({
     </label>
   );
 
-  const deadlineField = <DeadlineField name="dueDate" compact />;
+  const deadlineField = (
+    <DeadlineField name="dueDate" defaultValue={dueDate} onChange={setDueDate} compact />
+  );
 
   const descriptionField = (
     <label className="block">
       <span className="text-xs font-medium text-zinc-500">Mô tả</span>
       <textarea
         name="description"
+        value={description}
+        onChange={(event) => setDescription(event.target.value)}
         rows={isDesktop ? 9 : 3}
         placeholder="Mô tả công việc..."
         className="tf-field mt-1 resize-y"
@@ -275,6 +298,8 @@ export default function NewTaskInline({
       </span>
       <textarea
         name="result"
+        value={result}
+        onChange={(event) => setResult(event.target.value)}
         rows={isDesktop ? 5 : 3}
         placeholder="Nội dung đã hoàn thành hoặc bàn giao..."
         className="tf-field mt-1 resize-y"
