@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   CalendarPlus,
@@ -25,6 +25,7 @@ import {
   MEETING_TITLE_MAX,
   MEETING_TIME_SLOTS,
   formatMeetingTime,
+  presetMeetingAttendees,
   rangesOverlap,
   vnDateTimeToUtc,
 } from "@/lib/meetings";
@@ -92,7 +93,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * Mặc định: 09:00 – 10:00. Chưa tới 9 giờ sáng thì gợi ý hôm nay; đã qua thì gợi ý
  * ngày làm việc kế tiếp (bỏ qua Thứ Bảy, Chủ nhật) vì không đặt được lịch trong quá khứ.
  */
-function defaultValues(now = new Date()): FormValues {
+function defaultValues(attendeeIds: string[] = [], now = new Date()): FormValues {
   let day = now;
   if (formatHour(now) >= DEFAULT_START_TIME) {
     do {
@@ -107,8 +108,13 @@ function defaultValues(now = new Date()): FormValues {
     endTime: DEFAULT_END_TIME,
     roomId: "",
     meetingUrl: "",
-    attendeeIds: [],
+    attendeeIds,
   };
+}
+
+function sameIds(a: string[], b: string[]) {
+  const set = new Set(a);
+  return a.length === b.length && b.every((id) => set.has(id));
 }
 
 function valuesFromMeeting(meeting: EditableMeeting): FormValues {
@@ -135,6 +141,9 @@ export default function MeetingComposer({
   organizerId,
   meeting,
   emailEnabled,
+  initialAttendeeIds,
+  triggerLabel = "Đặt lịch họp",
+  triggerClassName = "tf-button-primary min-h-11 px-4",
 }: {
   people: MeetingPerson[];
   rooms: MeetingRoomOption[];
@@ -146,11 +155,31 @@ export default function MeetingComposer({
   /** Có giá trị thì form ở chế độ sửa */
   meeting?: EditableMeeting;
   emailEnabled: boolean;
+  /** Người được chọn sẵn khi mở form tạo mới (ví dụ: thành viên dự án); vẫn bỏ bớt/thêm được */
+  initialAttendeeIds?: string[];
+  /** Chữ trên nút mở form tạo mới */
+  triggerLabel?: string;
+  triggerClassName?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  // Chỉ chọn sẵn người mời được: đang hoạt động và không phải người tổ chức.
+  const presetAttendeeIds = useMemo(
+    () =>
+      presetMeetingAttendees(
+        initialAttendeeIds ?? [],
+        people.map((person) => person.id),
+        organizerId
+      ),
+    [initialAttendeeIds, organizerId, people]
+  );
+  // Bản mới nhất cho effect đóng form, để danh sách đổi sau router.refresh() không chạy lại effect.
+  const presetRef = useRef(presetAttendeeIds);
+  useEffect(() => {
+    presetRef.current = presetAttendeeIds;
+  }, [presetAttendeeIds]);
   const [values, setValues] = useState<FormValues>(() =>
-    meeting ? valuesFromMeeting(meeting) : defaultValues()
+    meeting ? valuesFromMeeting(meeting) : defaultValues(presetAttendeeIds)
   );
   const [query, setQuery] = useState("");
   const action = useMemo(
@@ -270,9 +299,10 @@ export default function MeetingComposer({
   function openDialog() {
     // Form tạo mới luôn mở với mốc giờ tính từ lúc bấm, không phải lúc trang tải.
     if (!meeting) {
-      const fresh = defaultValues();
+      const fresh = defaultValues(presetAttendeeIds);
+      // Đang có bản nháp (đã gõ tiêu đề hoặc đã đổi người mời) thì giữ nguyên.
       setValues((current) =>
-        current.title || current.attendeeIds.length > 0
+        current.title || !sameIds(current.attendeeIds, presetAttendeeIds)
           ? current
           : { ...fresh, roomId: current.roomId, meetingUrl: current.meetingUrl }
       );
@@ -303,7 +333,7 @@ export default function MeetingComposer({
     if (!state.success) return;
     router.refresh();
     const frame = window.requestAnimationFrame(() => {
-      if (!meeting) setValues(defaultValues());
+      if (!meeting) setValues(defaultValues(presetRef.current));
       setOpen(false);
     });
     return () => window.cancelAnimationFrame(frame);
@@ -324,9 +354,9 @@ export default function MeetingComposer({
           Sửa
         </button>
       ) : (
-        <button type="button" className="tf-button-primary min-h-11 px-4" onClick={openDialog}>
+        <button type="button" className={triggerClassName} onClick={openDialog}>
           <CalendarPlus size={18} strokeWidth={1.8} aria-hidden="true" />
-          Đặt lịch họp
+          {triggerLabel}
         </button>
       )}
 

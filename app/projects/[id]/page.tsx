@@ -19,6 +19,9 @@ import ProjectDescriptionDisclosure from "@/components/ProjectDescriptionDisclos
 import ProjectWebhookPanel from "@/components/ProjectWebhookPanel";
 import ProjectFilesPanel from "@/components/ProjectFilesPanel";
 import ProjectStatusSelect from "@/components/ProjectStatusSelect";
+import MeetingComposer from "@/components/MeetingComposer";
+import { meetingsEnabled } from "@/lib/features";
+import { loadMeetingComposerData } from "@/lib/meetingComposerData";
 import {
   formatVND,
   projectStatusColor,
@@ -123,7 +126,8 @@ export default async function ProjectPage({
   const isMember = project.members.some((m) => m.userId === user.id);
   if (!isMember && user.role !== "ADMIN") redirect("/");
 
-  const [sidebarProjects, clients, accounts, availableUsers, memberGroups, teams] = await Promise.all([
+  const showMeetings = meetingsEnabled();
+  const [sidebarProjects, clients, accounts, availableUsers, memberGroups, teams, meetingData] = await Promise.all([
     prisma.project.findMany({
       where: { members: { some: { userId: user.id } } },
       select: {
@@ -181,7 +185,13 @@ export default async function ProjectPage({
       orderBy: { name: "asc" },
     }),
     prisma.salesTeam.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    // Phần họp đang tắt (ví dụ production) thì không tải dữ liệu và không hiện nút.
+    showMeetings ? loadMeetingComposerData() : null,
   ]);
+  // Chọn sẵn thành viên dự án đang hoạt động; người tổ chức (người đang xem) không tự mời mình.
+  const meetingAttendeeIds = project.members
+    .filter((member) => member.user.isActive && member.userId !== user.id)
+    .map((member) => member.userId);
 
   const members: MemberDTO[] = project.members.map((m) => ({
     userId: m.userId,
@@ -312,6 +322,15 @@ export default async function ProjectPage({
                   canEdit={isOwner || user.role === "ADMIN"}
                   canEditRevenue={hasRevenueAccess(user.role)}
                 />
+                {meetingData && (
+                  <MeetingComposer
+                    {...meetingData.composerProps}
+                    organizerId={user.id}
+                    initialAttendeeIds={meetingAttendeeIds}
+                    triggerLabel="Tạo cuộc họp"
+                    triggerClassName="tf-button-secondary !min-h-9 !px-3 !py-1.5 text-sm"
+                  />
+                )}
                 {isOwner && <ProjectActionsMenu projectId={project.id} />}
               </div>
             </div>

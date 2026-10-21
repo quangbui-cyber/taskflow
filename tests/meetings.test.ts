@@ -5,6 +5,7 @@ import {
   MEETING_TIME_SLOTS,
   formatMeetingWhen,
   isMeetingTimeSlot,
+  presetMeetingAttendees,
   rangesOverlap,
   vnDateTimeToUtc,
   vnDayRange,
@@ -115,4 +116,13 @@ test("long Vietnamese lines fold within 75 octets without splitting characters",
   }
   assert.ok(!ics.includes("�"));
   assert.ok(unfold(ics).includes(`DESCRIPTION:${long.description}`));
+});
+
+test("project members are preselected only when active, without the organizer or duplicates", () => {
+  const active = ["organizer", "an", "binh"];
+  assert.deepEqual(
+    presetMeetingAttendees(["an", "organizer", "disabled", "binh", "an"], active, "organizer"),
+    ["an", "binh"]
+  );
+  assert.deepEqual(presetMeetingAttendees([], active, "organizer"), []);
 });
