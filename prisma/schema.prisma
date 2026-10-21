@@ -17,6 +17,9 @@ model User {
   role                 String              @default("USER") // "ADMIN" | "ACCOUNT" | "USER"
   isActive             Boolean             @default(true)
   deactivatedAt        DateTime?
+  // Xoá tài khoản chỉ đánh dấu dòng này để tên vẫn còn trên dự án đã đóng,
+  // task đã xong và bình luận; tài khoản bị ẩn khỏi danh sách và không đăng nhập được.
+  deletedAt            DateTime?
   managerId            String? // người quản lý trực tiếp
   manager              User?               @relation("TeamManager", fields: [managerId], references: [id], onDelete: SetNull)
   reports              User[]              @relation("TeamManager") // nhân viên dưới quyền
