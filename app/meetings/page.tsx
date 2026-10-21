@@ -6,25 +6,19 @@ import {
   CancelMeetingButton,
   MeetingResponseButtons,
 } from "@/components/MeetingActions";
-import MeetingComposer, {
-  type MeetingGroupOption,
-  type MeetingPerson,
-  type MeetingRoomOption,
-  type PersonSchedule,
-  type RoomBooking,
-} from "@/components/MeetingComposer";
+import MeetingComposer from "@/components/MeetingComposer";
 import Sidebar from "@/components/Sidebar";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { meetingsEnabled } from "@/lib/features";
 import { formatHour, toDateInputVN } from "@/lib/dates";
-import { isEmailConfigured } from "@/lib/email";
 import {
   formatMeetingDay,
   formatMeetingTime,
   meetingResponseLabel,
   vnDayRange,
 } from "@/lib/meetings";
+import { loadMeetingComposerData, type MeetingComposerData } from "@/lib/meetingComposerData";
 import { prisma } from "@/lib/prisma";
 
 type MeetingView = "mine" | "all" | "past";
@@ -69,14 +63,7 @@ function MeetingCard({
   viewer: { id: string; role: string };
   focused: boolean;
   now: Date;
-  composerProps: {
-    people: MeetingPerson[];
-    rooms: MeetingRoomOption[];
-    groups: MeetingGroupOption[];
-    bookings: RoomBooking[];
-    schedules: PersonSchedule[];
-    emailEnabled: boolean;
-  };
+  composerProps: MeetingComposerData;
 }) {
   const isOrganizer = meeting.organizerId === viewer.id;
   const myInvite = meeting.attendees.find((attendee) => attendee.userId === viewer.id);
@@ -266,44 +253,14 @@ export default async function MeetingsPage({
           }
         : { ...upcomingWhere, ...mineWhere };
 
-  const [meetings, people, rooms, groups, upcomingMeetings, sidebarProjects] = await Promise.all([
+  const [meetings, { composerProps, rooms, roomBookings }, sidebarProjects] = await Promise.all([
     prisma.meeting.findMany({
       where: listWhere,
       include: meetingInclude,
       orderBy: { startAt: view === "past" ? "desc" : "asc" },
       take: 100,
     }),
-    prisma.user.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true, email: true, avatarUrl: true },
-      orderBy: { name: "asc" },
-    }),
-    prisma.meetingRoom.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true, capacity: true },
-      orderBy: { name: "asc" },
-    }),
-    prisma.memberGroup.findMany({
-      select: { id: true, name: true, members: { select: { userId: true } } },
-      orderBy: { name: "asc" },
-    }),
-    prisma.meeting.findMany({
-      where: upcomingWhere,
-      select: {
-        id: true,
-        roomId: true,
-        startAt: true,
-        endAt: true,
-        title: true,
-        organizer: { select: { id: true, name: true } },
-        attendees: {
-          where: { response: { not: "DECLINED" } },
-          select: { userId: true },
-        },
-      },
-      orderBy: { startAt: "asc" },
-      take: 500,
-    }),
+    loadMeetingComposerData(now),
     prisma.project.findMany({
       where: { members: { some: { userId: user.id } } },
       select: {
@@ -319,34 +276,6 @@ export default async function MeetingsPage({
       orderBy: { createdAt: "desc" },
     }),
   ]);
-
-  const roomBookings = upcomingMeetings.filter((meeting) => meeting.roomId !== null);
-  const bookings: RoomBooking[] = roomBookings.map((booking) => ({
-    meetingId: booking.id,
-    roomId: booking.roomId!,
-    startAt: booking.startAt.toISOString(),
-    endAt: booking.endAt.toISOString(),
-    title: booking.title,
-    organizerName: booking.organizer.name,
-  }));
-  const composerProps = {
-    people,
-    rooms,
-    groups: groups.map((group) => ({
-      id: group.id,
-      name: group.name,
-      memberIds: group.members.map((member) => member.userId),
-    })),
-    bookings,
-    // Ai đang bận lúc nào — chỉ gửi khung giờ, không gửi tiêu đề cuộc họp của người khác.
-    schedules: upcomingMeetings.map((meeting) => ({
-      meetingId: meeting.id,
-      startAt: meeting.startAt.toISOString(),
-      endAt: meeting.endAt.toISOString(),
-      userIds: [meeting.organizer.id, ...meeting.attendees.map((attendee) => attendee.userId)],
-    })),
-    emailEnabled: isEmailConfigured(),
-  };
 
   const days: { key: string; label: string; meetings: MeetingRow[] }[] = [];
   for (const meeting of meetings) {
