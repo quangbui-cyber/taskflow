@@ -142,8 +142,20 @@ export async function deleteUser(
       }
     }
 
-    // Rời các dự án đang chạy; dự án đã đóng giữ lại để còn ghi nhận.
-    await tx.projectMember.deleteMany({ where: { userId, project: openProject } });
+    // Rời các dự án đang chạy; dự án đã đóng giữ lại để còn ghi nhận. Dự án đang
+    // chạy mà người này vẫn còn task (đã xong) thì giữ họ làm thành viên thường,
+    // vì bảng task tìm người làm trong danh sách thành viên và việc sửa task đòi
+    // người làm phải là thành viên.
+    await tx.projectMember.deleteMany({
+      where: {
+        userId,
+        project: { ...openProject, tasks: { none: { assigneeId: userId } } },
+      },
+    });
+    await tx.projectMember.updateMany({
+      where: { userId, project: openProject },
+      data: { role: "member" },
+    });
     await tx.taskFollower.deleteMany({ where: { userId } });
     await tx.notification.deleteMany({ where: { userId } });
     await tx.pushSubscription.deleteMany({ where: { userId } });
