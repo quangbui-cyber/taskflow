@@ -140,7 +140,9 @@ export default async function TeamPage({
     await Promise.all([
       // Admin thấy mọi nhân viên; quản lý thấy nhân viên trực tiếp của mình
       prisma.user.findMany({
-        where: isAdmin ? { id: { not: user.id } } : { managerId: user.id },
+        where: isAdmin
+          ? { id: { not: user.id }, deletedAt: null }
+          : { managerId: user.id },
         include: {
           assignedTasks: {
             where: performanceTaskWhere,

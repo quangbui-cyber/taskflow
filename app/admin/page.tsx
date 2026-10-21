@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BarChart3 } from "lucide-react";
 import { meetingsEnabled } from "@/lib/features";
+import { OPEN_PROJECT_STATUSES } from "@/lib/types";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
@@ -38,6 +39,7 @@ async function SettingsContent({
 
   if (activeTab === "users") {
     const users = await prisma.user.findMany({
+      where: { deletedAt: null },
       select: {
         id: true,
         name: true,
@@ -51,10 +53,13 @@ async function SettingsContent({
         accountProfile: { select: { id: true } },
         _count: {
           select: {
-            ownedProjects: true,
-            createdTasks: true,
-            assignedTasks: true,
-            memberships: true,
+            ownedProjects: { where: { status: { in: OPEN_PROJECT_STATUSES } } },
+            assignedTasks: {
+              where: {
+                status: { not: "DONE" },
+                project: { status: { in: OPEN_PROJECT_STATUSES } },
+              },
+            },
           },
         },
       },
@@ -81,10 +86,8 @@ async function SettingsContent({
           avatarUrl: user.avatarUrl,
           managerId: user.managerId,
           createdAt: user.createdAt.toISOString(),
-          assignedTaskCount: user._count.assignedTasks,
-          createdTaskCount: user._count.createdTasks,
-          projectMemberCount: user._count.memberships,
-          ownedProjectCount: user._count.ownedProjects,
+          openOwnedProjectCount: user._count.ownedProjects,
+          openAssignedTaskCount: user._count.assignedTasks,
           isAccount: Boolean(user.accountProfile),
         }))}
       />
