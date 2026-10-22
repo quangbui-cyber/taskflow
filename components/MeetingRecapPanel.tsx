@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { upload } from "@vercel/blob/client";
 import {
   AlertTriangle,
   Copy,
   FileAudio,
+  Mic,
   Pencil,
   RefreshCw,
   Send,
@@ -21,14 +21,9 @@ import {
   type MeetingRecapActionState,
 } from "@/app/actions/meetingRecaps";
 import { useInteraction } from "@/components/InteractionProvider";
-import {
-  RECAP_AUDIO_ACCEPT,
-  RECAP_MAX_AUDIO_BYTES,
-  formatClock,
-  parseRecapContent,
-  recapAudioContentType,
-  recapAudioPathname,
-} from "@/lib/meetingRecap";
+import MeetingRecorder from "@/components/MeetingRecorder";
+import { RECAP_AUDIO_ACCEPT, formatClock, parseRecapContent } from "@/lib/meetingRecap";
+import { formatLimit, friendlyUploadError, uploadRecapAudio } from "@/lib/recapUploadClient";
 
 export type MeetingRecapView = {
   status: string;
@@ -44,29 +39,6 @@ export type MeetingRecapView = {
 };
 
 const MB = 1024 * 1024;
-const MULTIPART_FROM_BYTES = 20 * MB;
-
-/** Đọc độ dài file ghi âm ngay trên trình duyệt; null nếu không đọc được. */
-function readAudioDuration(file: File): Promise<number | null> {
-  return new Promise((resolve) => {
-    const url = URL.createObjectURL(file);
-    const audio = document.createElement("audio");
-    const done = (value: number | null) => {
-      window.clearTimeout(timer);
-      URL.revokeObjectURL(url);
-      audio.removeAttribute("src");
-      resolve(value);
-    };
-    const timer = window.setTimeout(() => done(null), 8000);
-    audio.preload = "metadata";
-    audio.onloadedmetadata = () => done(Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : null);
-    audio.onerror = () => done(null);
-    audio.src = url;
-  });
-}
-
-const formatLimit = (minutes: number) =>
-  minutes % 60 === 0 ? `${minutes / 60} giờ` : `${minutes} phút`;
 
 const formatDateTime = (value: string) =>
   new Intl.DateTimeFormat("vi-VN", {
@@ -122,61 +94,17 @@ function AudioUploader({
   async function start() {
     setError(null);
     if (!file) return setError("Hãy chọn file ghi âm.");
-    const pathname = recapAudioPathname(meetingId, file.name);
-    const contentType = recapAudioContentType(file.name);
-    if (!pathname || !contentType) {
-      return setError("Định dạng chưa hỗ trợ. Dùng mp3, m4a, wav, webm, ogg, flac hoặc mp4.");
-    }
-    if (file.size > RECAP_MAX_AUDIO_BYTES) return setError("File ghi âm vượt quá 100 MB.");
     if (!consent) return setError("Hãy xác nhận đã báo cho người tham dự rằng cuộc họp được ghi âm.");
 
     setProgress(0);
     try {
-      // Chặn file quá dài trước khi tải lên (server kiểm tra lại lần nữa).
-      const durationSeconds = await readAudioDuration(file);
-      if (durationSeconds && durationSeconds > maxAudioMinutes * 60) {
-        throw new Error(
-          `File ghi âm dài khoảng ${Math.ceil(durationSeconds / 60)} phút, vượt giới hạn ${formatLimit(maxAudioMinutes)} mỗi file. Hãy cắt bớt rồi tải lại.`
-        );
-      }
-      const check = await fetch(`/api/meetings/${meetingId}/recap/check`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ durationSeconds, size: file.size }),
-      });
-      if (!check.ok) {
-        const data = (await check.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error || "Chưa tải được file lên lúc này. Tải lại trang rồi thử lại.");
-      }
-      const blob = await upload(pathname, file, {
-        access: "private",
-        handleUploadUrl: `/api/meetings/${meetingId}/recap/upload`,
-        clientPayload: JSON.stringify({ durationSeconds, size: file.size }),
-        contentType,
-        multipart: file.size > MULTIPART_FROM_BYTES,
-        onUploadProgress: ({ percentage }) => setProgress(Math.round(percentage)),
-      });
-      const res = await fetch(`/api/meetings/${meetingId}/recap`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pathname: blob.pathname, fileName: file.name, durationSeconds }),
-      });
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) throw new Error(data.error || "Không bắt đầu xử lý được. Thử lại.");
+      await uploadRecapAudio({ meetingId, file, durationSeconds: null, maxAudioMinutes, onProgress: setProgress });
       notify({ message: "Đã tải lên. AI đang chép lời và viết biên bản…", tone: "success" });
       setFile(null);
       if (inputRef.current) inputRef.current.value = "";
       onDone();
     } catch (err) {
-      const raw = err instanceof Error && err.message ? err.message : "";
-      const message = !raw
-        ? "Không tải được file lên."
-        : /client token/i.test(raw)
-          ? "Chưa tải được file lên lúc này. Tải lại trang rồi thử lại."
-          : raw.length > 260
-            ? "Không tải được file lên. Kiểm tra mạng rồi thử lại."
-            : raw;
-      setError(message);
+      setError(friendlyUploadError(err));
     } finally {
       setProgress(null);
     }
@@ -243,6 +171,52 @@ function AudioUploader({
           {label}
         </button>
       )}
+    </div>
+  );
+}
+
+/** Hai cách lấy ghi âm. Cả hai luôn được giữ trên trang (chỉ ẩn bên không chọn) để đổi qua lại không làm dừng bản ghi. */
+function AudioSource({
+  meetingId,
+  uploadLabel,
+  maxAudioMinutes,
+  onDone,
+}: {
+  meetingId: string;
+  uploadLabel: string;
+  maxAudioMinutes: number;
+  onDone: () => void;
+}) {
+  const [mode, setMode] = useState<"record" | "file">("record");
+  const tabs = [
+    { key: "record" as const, label: "Ghi âm trong app", icon: Mic },
+    { key: "file" as const, label: "Tải file lên", icon: FileAudio },
+  ];
+  return (
+    <div>
+      <div className="mb-4 inline-flex rounded-[8px] bg-zinc-100 p-1" role="tablist" aria-label="Cách lấy ghi âm">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            role="tab"
+            aria-selected={mode === tab.key}
+            onClick={() => setMode(tab.key)}
+            className={`inline-flex items-center gap-1.5 rounded-[6px] px-3 py-1.5 text-sm font-medium transition-colors ${
+              mode === tab.key ? "bg-white text-zinc-950 shadow-sm" : "text-zinc-500 hover:text-zinc-800"
+            }`}
+          >
+            <tab.icon size={15} aria-hidden="true" />
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      <div hidden={mode !== "record"}>
+        <MeetingRecorder meetingId={meetingId} maxAudioMinutes={maxAudioMinutes} onUploaded={onDone} />
+      </div>
+      <div hidden={mode !== "file"}>
+        <AudioUploader meetingId={meetingId} label={uploadLabel} maxAudioMinutes={maxAudioMinutes} onDone={onDone} />
+      </div>
     </div>
   );
 }
@@ -482,12 +456,12 @@ export default function MeetingRecapPanel({
             content ? (
               <details>
                 <summary className="cursor-pointer text-sm font-medium text-zinc-700">
-                  Tải file ghi âm khác để làm lại từ đầu
+                  Ghi âm hoặc tải file khác để làm lại từ đầu
                 </summary>
                 <div className="mt-4">
-                  <AudioUploader
+                  <AudioSource
                     meetingId={meetingId}
-                    label="Chép lời và viết lại biên bản"
+                    uploadLabel="Chép lời và viết lại biên bản"
                     maxAudioMinutes={maxAudioMinutes}
                     onDone={() => router.refresh()}
                   />
@@ -495,14 +469,14 @@ export default function MeetingRecapPanel({
               </details>
             ) : (
               <>
-                <h2 className="text-base font-semibold text-zinc-950">Tạo biên bản từ file ghi âm</h2>
+                <h2 className="text-base font-semibold text-zinc-950">Tạo biên bản cuộc họp</h2>
                 <p className="mb-4 mt-1 text-sm leading-6 text-zinc-500">
-                  Tải file ghi âm cuộc họp lên. AI sẽ chép lời tiếng Việt và viết biên bản gồm tóm tắt, quyết định
-                  và việc cần làm. Bạn đọc lại, sửa nếu cần, rồi mới gửi cho người tham dự.
+                  Ghi âm ngay tại đây hoặc tải file ghi âm có sẵn. AI sẽ chép lời tiếng Việt và viết biên bản gồm
+                  tóm tắt, quyết định và việc cần làm. Bạn đọc lại, sửa nếu cần, rồi mới gửi cho người tham dự.
                 </p>
-                <AudioUploader
+                <AudioSource
                   meetingId={meetingId}
-                  label="Tạo biên bản"
+                  uploadLabel="Tạo biên bản"
                   maxAudioMinutes={maxAudioMinutes}
                   onDone={() => router.refresh()}
                 />
