@@ -303,6 +303,24 @@ Cách Gemini viết biên bản:
 - **Cuộc họp dự án:** họp tạo từ trang dự án được gắn với dự án; khi gửi, biên bản được lưu thành file
   `.docx` trong tài liệu dự án (gửi lại thì thay file cũ).
 
+### Bản nháp và bản biên bản đã gửi
+
+- Migration `20261023150000_recap_drafts_and_publication` thêm bản lưu nội dung và công việc đã gửi,
+  đồng thời chuyển các biên bản đã gửi trước đây sang cơ chế này. Chạy migration trước khi phục vụ code mới;
+  quy trình build production hiện có đã gọi `prisma migrate deploy`.
+- Sửa nội dung, tải ghi âm mới hoặc viết lại chỉ thay bản nháp. Người tham dự tiếp tục đọc bản đã gửi
+  cho tới khi người tổ chức bấm **Gửi lại**. Email và file Word lấy đúng bản đã công bố.
+- Cuộc họp tạo ngoài dự án: trên trang biên bản bấm **Gắn vào dự án**, chọn dự án và bấm **Gắn và lưu biên bản**.
+  Người tổ chức, người ghi biên bản hoặc Admin được thực hiện, kể cả khi họp đã kết thúc; người thao tác
+  phải là thành viên dự án hoặc Admin. Bản đã gửi được lưu ngay, bản nháp đợi tới khi gửi. Các task đã tạo
+  giữ nguyên dự án. Không hỗ trợ chuyển cuộc họp đã gắn sang dự án khác trong thao tác này.
+- Viết lại giữ nguyên danh sách công việc, người phụ trách, hạn chót, dấu hoàn thành và liên kết task.
+  Việc AI đề xuất thêm nằm trong **AI đề xuất bổ sung**; người tổ chức chọn **Thêm vào danh sách** hoặc **Bỏ qua**.
+  Việc bổ sung chưa tạo task; tạo task vẫn là thao tác riêng.
+- Kiểm thử PostgreSQL: tạo database cục bộ riêng có tên bắt đầu bằng `taskflow_recap_test`, chạy migrations vào
+  database đó, rồi chạy `TASKFLOW_TEST_DATABASE_URL=postgresql://...@127.0.0.1:PORT/taskflow_recap_test npx tsx --test tests/recapWorkflow.integration.test.ts`.
+  Bộ test từ chối URL không phải database thử nghiệm cục bộ. Không truyền database production.
+
 ### Chống chạy quá tay (giới hạn chi phí)
 
 App tự chặn **trước khi** gọi AI, không có lần chạy nào tự lặp lại:

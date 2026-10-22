@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft, DoorOpen, FileText, FolderKanban, Users } from "lucide-react";
 import MeetingRecapPanel from "@/components/MeetingRecapPanel";
+import MeetingProjectLink from "@/components/MeetingProjectLink";
 import RecapActionItems, { type RecapActionItemView } from "@/components/RecapActionItems";
 import Sidebar from "@/components/Sidebar";
 import { requireUser } from "@/lib/auth";
@@ -11,13 +12,12 @@ import {
   meetingRecorderId,
   canOpenMeetingRecap,
   canReadMeetingRecap,
-  isRecapActionDone,
   isRecapStale,
   recapExportContent,
   recapStartBlockReason,
 } from "@/lib/meetingRecap";
 import { recapActionOrder, toRecapActionExport } from "@/lib/meetingRecapData";
-import { toDateInputVN } from "@/lib/dates";
+import { publishedActionProgress, publishedRecapExport, readPublishedRecap, readRecapSuggestions, toRecapActionView } from "@/lib/recapPublication";
 import { recapLimits } from "@/lib/meetingRecapLimits";
 import { formatMeetingWhen } from "@/lib/meetings";
 import { prisma } from "@/lib/prisma";
@@ -91,18 +91,11 @@ export default async function MeetingRecapPage({
   const people = [meeting.organizer, ...meeting.attendees.map((attendee) => attendee.user)].filter(
     (person, index, all) => all.findIndex((other) => other.id === person.id) === index
   );
-  const actionItems: RecapActionItemView[] = (recap?.actionItems ?? []).map((item) => ({
-    id: item.id,
-    title: item.title,
-    owner: item.owner,
-    ownerName: item.ownerName,
-    dueDate: item.dueDate ? toDateInputVN(item.dueDate) : null,
-    dueText: item.dueText,
-    done: isRecapActionDone(item),
-    task: item.task
-      ? { id: item.task.id, status: item.task.status, projectId: item.task.projectId, projectName: item.task.project.name }
-      : null,
-  }));
+  const publication = readPublishedRecap(recap?.publishedSnapshot);
+  const liveItems = (recap?.actionItems ?? []).map(toRecapActionView);
+  const actionItems: RecapActionItemView[] = canManage ? liveItems
+    : publication && readable ? publishedActionProgress(publication, liveItems) : [];
+  const visibleContent = canManage ? recap?.content : readable ? publication?.content : null;
   // Dự án để tạo task: dự án của cuộc họp (nếu có) đứng đầu, rồi các dự án mình là thành viên.
   const taskProjects = canManage
     ? [
@@ -112,7 +105,12 @@ export default async function MeetingRecapPage({
           .map((project) => ({ id: project.id, name: project.name })),
       ]
     : [];
-  const showContent = Boolean(readable && recap?.content?.trim());
+  const showContent = Boolean(readable && visibleContent?.trim());
+  const linkableProjects = canManage && !meeting.projectId
+    ? user.role === "ADMIN"
+      ? await prisma.project.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } })
+      : sidebarProjects.map(({ id, name }) => ({ id, name }))
+    : [];
 
   return (
     <div className="tf-shell">
@@ -170,6 +168,11 @@ export default async function MeetingRecapPage({
             </dl>
           </header>
 
+          {canManage && !meeting.projectId && (
+            <MeetingProjectLink meetingId={meeting.id} projects={linkableProjects}
+              hasPublishedRecap={Boolean(recap?.sentAt && publication)} />
+          )}
+
           <MeetingRecapPanel
             meetingId={meeting.id}
             canManage={canManage}
@@ -192,28 +195,30 @@ export default async function MeetingRecapPage({
                   viewerId={user.id}
                   canManage={canManage}
                   editable={canManage && recap?.status === "READY"}
+                  suggestions={canManage ? readRecapSuggestions(recap?.actionSuggestions) : []}
                 />
               ) : null
             }
             copyText={
-              showContent && recap?.content
-                ? recapExportContent(recap.content, recap.actionItems.map(toRecapActionExport))
+              showContent && visibleContent && recap
+                ? canManage ? recapExportContent(visibleContent, recap.actionItems.map(toRecapActionExport))
+                  : publication ? publishedRecapExport(publication) : null
                 : null
             }
             recap={
               recap
                 ? {
-                    status: recap.status,
-                    stage: recap.stage,
-                    error: recap.error,
-                    content: readable ? recap.content : null,
+                    status: canManage ? recap.status : publication ? "READY" : "DRAFT",
+                    stage: canManage ? recap.stage : null,
+                    error: canManage ? recap.error : null,
+                    content: visibleContent ?? null,
                     transcript: canManage ? recap.transcript : null,
                     audioName: canManage ? recap.audioName : null,
-                    audioSeconds: recap.audioSeconds,
+                    audioSeconds: canManage ? recap.audioSeconds : null,
                     sentAt: recap.sentAt?.toISOString() ?? null,
                     savedToProject: Boolean(meeting.projectId && recap.projectFileId),
-                    updatedAt: recap.updatedAt.toISOString(),
-                    stale: isRecapStale(recap, now),
+                    updatedAt: (canManage ? recap.updatedAt : recap.sentAt ?? meeting.createdAt).toISOString(),
+                    stale: canManage && isRecapStale(recap, now),
                   }
                 : null
             }

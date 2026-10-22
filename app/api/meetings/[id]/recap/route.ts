@@ -85,7 +85,6 @@ export async function POST(
     audioSeconds: null,
     transcript: null,
     content: null,
-    sentAt: null,
     createdById: user.id,
     processingStartedAt: startedAt,
   };

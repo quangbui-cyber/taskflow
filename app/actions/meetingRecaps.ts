@@ -21,6 +21,9 @@ import { deleteRecapAudio, runMeetingRecap, saveRecapToProject } from "@/lib/mee
 import { sendMeetingRecapEmail } from "@/lib/meetingRecapMail";
 import { notify } from "@/lib/notify";
 import { prisma } from "@/lib/prisma";
+import { createLinkedRecapTask, lockRecap, publishRecap, resolveRecapSuggestion } from "@/lib/recapWorkflow";
+import { readPublishedRecap } from "@/lib/recapPublication";
+import { attachMeetingProject } from "@/lib/recapProject";
 
 export type MeetingRecapActionState = { error?: string; success?: string };
 
@@ -38,6 +41,20 @@ function refresh(meetingId: string) {
   revalidatePath("/meetings");
 }
 
+export async function attachProjectToMeeting(meetingId: string, projectId: string): Promise<MeetingRecapActionState> {
+  const user = await requireUser();
+  if (typeof meetingId !== "string" || typeof projectId !== "string" || !meetingId || !projectId) {
+    return { error: "Hãy chọn dự án để lưu trữ biên bản." };
+  }
+  const result = await attachMeetingProject(prisma, meetingId, projectId, user);
+  if ("error" in result) return { error: result.error };
+  refresh(meetingId);
+  revalidatePath(`/projects/${result.projectId}`);
+  return { success: result.archived
+    ? `Đã gắn vào “${result.projectName}” và lưu biên bản vào tài liệu dự án.`
+    : `Đã gắn vào “${result.projectName}”. Biên bản sẽ được lưu khi bạn bấm gửi.` };
+}
+
 /** Viết lại biên bản từ bản chép lời đã có (không chép lời lại). */
 export async function regenerateMeetingRecap(meetingId: string): Promise<MeetingRecapActionState> {
   if (!meetingRecapsEnabled()) return { error: MEETING_RECAPS_DISABLED_MESSAGE };
@@ -52,8 +69,8 @@ export async function regenerateMeetingRecap(meetingId: string): Promise<Meeting
   if (limited) return { error: limited };
 
   const startedAt = new Date();
-  await prisma.meetingRecap.update({
-    where: { id: recap.id },
+  const claimed = await prisma.meetingRecap.updateMany({
+    where: { id: recap.id, status: recap.status, processingStartedAt: recap.processingStartedAt },
     data: {
       status: "PROCESSING",
       stage: "SUMMARIZING",
@@ -62,6 +79,7 @@ export async function regenerateMeetingRecap(meetingId: string): Promise<Meeting
       createdById: loaded.user.id,
     },
   });
+  if (claimed.count === 0) return { error: "Biên bản vừa được cập nhật. Hãy tải lại trang." };
   after(() => runMeetingRecap(recap.id, startedAt));
   refresh(meetingId);
   return { success: "Đang viết lại biên bản…" };
@@ -78,7 +96,8 @@ export async function saveMeetingRecapContent(
   const value = normalizeRecapContent(content);
   if (!value) return { error: "Biên bản không được để trống." };
 
-  await prisma.meetingRecap.update({ where: { id: recap.id }, data: { content: value } });
+  const saved = await prisma.meetingRecap.updateMany({ where: { id: recap.id, status: "READY" }, data: { content: value } });
+  if (!saved.count) return { error: "Biên bản đang được xử lý. Hãy tải lại trang." };
   refresh(meetingId);
   return { success: "Đã lưu biên bản." };
 }
@@ -94,8 +113,9 @@ export async function sendMeetingRecap(meetingId: string): Promise<MeetingRecapA
   }
 
   const sentAt = new Date();
-  await prisma.meetingRecap.update({ where: { id: recap.id }, data: { sentAt } });
-  const savedToProject = await saveRecapToProject(meetingId, user, sentAt);
+  const publication = await publishRecap(prisma, recap.id, sentAt);
+  if (!publication) return { error: "Biên bản đang được xử lý. Hãy tải lại trang." };
+  const savedToProject = await saveRecapToProject(meetingId, user, sentAt, publication);
   const recipients = await prisma.meetingAttendee.findMany({
     where: { meetingId, response: { not: "DECLINED" }, user: { isActive: true } },
     select: { userId: true },
@@ -109,7 +129,7 @@ export async function sendMeetingRecap(meetingId: string): Promise<MeetingRecapA
     meetingId,
   });
   after(async () => {
-    const result = await sendMeetingRecapEmail(meetingId);
+    const result = await sendMeetingRecapEmail(meetingId, publication);
     if (!result.ok && result.error !== "Chưa cấu hình email.") {
       console.warn("Meeting recap email could not be sent.");
     }
@@ -153,6 +173,7 @@ function loadActionItem(itemId: string) {
           id: true,
           status: true,
           sentAt: true,
+          publishedSnapshot: true,
           meeting: {
             select: {
               id: true,
@@ -176,16 +197,21 @@ export async function toggleRecapActionItem(itemId: string, done: boolean): Prom
   const item = await loadActionItem(itemId);
   if (!item) return { error: "Không tìm thấy việc này. Có thể biên bản vừa được viết lại." };
   const { meeting } = item.recap;
+  const publishedItem = readPublishedRecap(item.recap.publishedSnapshot)?.actionItems.find((row) => row.id === item.id);
   const allowed =
     canManageMeetingRecap(meeting, user) ||
-    (item.ownerId === user.id && canReadMeetingRecap(meeting, item.recap, user));
+    (item.ownerId === user.id && publishedItem?.owner?.id === user.id && canReadMeetingRecap(meeting, item.recap, user));
   if (!allowed) return { error: "Chỉ người phụ trách hoặc người tổ chức mới đánh dấu được việc này." };
   if (item.taskId) return { error: "Việc này đã thành task — cập nhật trạng thái ngay trong task." };
 
-  await prisma.meetingRecapActionItem.update({
-    where: { id: item.id },
-    data: { doneAt: done ? new Date() : null },
+  const toggled = await prisma.$transaction(async (tx) => {
+    await lockRecap(tx, item.recap.id);
+    return tx.meetingRecapActionItem.updateMany({
+      where: { id: item.id, taskId: null, ...(canManageMeetingRecap(meeting, user) ? {} : { ownerId: user.id }) },
+      data: { doneAt: done ? new Date() : null },
+    });
   });
+  if (!toggled.count) return { error: "Việc vừa được cập nhật. Hãy tải lại trang." };
   refresh(meeting.id);
   return {};
 }
@@ -223,28 +249,35 @@ export async function saveRecapActionItem(
     ...(dueDate ? { dueText: null } : {}),
   };
 
-  if (input.id) {
-    const item = await prisma.meetingRecapActionItem.findFirst({
-      where: { id: String(input.id), recapId: recap.id },
-      select: { id: true, taskId: true },
-    });
-    if (!item) return { error: "Không tìm thấy việc này. Có thể biên bản vừa được viết lại." };
-    if (item.taskId) return { error: "Việc này đã thành task — sửa ngay trong task." };
-    await prisma.meetingRecapActionItem.update({ where: { id: item.id }, data });
-  } else {
-    const [count, last] = await Promise.all([
-      prisma.meetingRecapActionItem.count({ where: { recapId: recap.id } }),
-      prisma.meetingRecapActionItem.findFirst({
-        where: { recapId: recap.id },
-        orderBy: { order: "desc" },
-        select: { order: true },
-      }),
-    ]);
-    if (count >= RECAP_ACTION_ITEMS_MAX) return { error: `Mỗi biên bản có tối đa ${RECAP_ACTION_ITEMS_MAX} việc.` };
-    await prisma.meetingRecapActionItem.create({
-      data: { ...data, recapId: recap.id, order: (last?.order ?? -1) + 1 },
-    });
-  }
+  const saved = await prisma.$transaction(async (tx) => {
+    await lockRecap(tx, recap.id);
+    const current = await tx.meetingRecap.findUnique({ where: { id: recap.id }, select: { status: true } });
+    if (current?.status !== "READY") return { error: "Biên bản đang được xử lý. Hãy tải lại trang." };
+    if (input.id) {
+      const item = await tx.meetingRecapActionItem.findFirst({
+        where: { id: String(input.id), recapId: recap.id },
+        select: { id: true, taskId: true },
+      });
+      if (!item) return { error: "Không tìm thấy việc này. Có thể biên bản vừa được viết lại." };
+      if (item.taskId) return { error: "Việc này đã thành task — sửa ngay trong task." };
+      await tx.meetingRecapActionItem.update({ where: { id: item.id }, data });
+    } else {
+      const [count, last] = await Promise.all([
+        tx.meetingRecapActionItem.count({ where: { recapId: recap.id } }),
+        tx.meetingRecapActionItem.findFirst({
+          where: { recapId: recap.id },
+          orderBy: { order: "desc" },
+          select: { order: true },
+        }),
+      ]);
+      if (count >= RECAP_ACTION_ITEMS_MAX) return { error: `Mỗi biên bản có tối đa ${RECAP_ACTION_ITEMS_MAX} việc.` };
+      await tx.meetingRecapActionItem.create({
+        data: { ...data, recapId: recap.id, order: (last?.order ?? -1) + 1 },
+      });
+    }
+    return {};
+  });
+  if ("error" in saved) return { error: saved.error };
   refresh(meetingId);
   return { success: input.id ? "Đã lưu việc cần làm." : "Đã thêm việc cần làm." };
 }
@@ -256,7 +289,10 @@ export async function deleteRecapActionItem(itemId: string): Promise<MeetingReca
   if (!canManageMeetingRecap(item.recap.meeting, user)) {
     return { error: "Chỉ người ghi biên bản, người tổ chức hoặc quản trị viên mới làm được việc này." };
   }
-  await prisma.meetingRecapActionItem.delete({ where: { id: item.id } });
+  await prisma.$transaction(async (tx) => {
+    await lockRecap(tx, item.recap.id);
+    await tx.meetingRecapActionItem.deleteMany({ where: { id: item.id } });
+  });
   refresh(item.recap.meeting.id);
   return { success: item.taskId ? "Đã xoá khỏi biên bản. Task đã tạo vẫn giữ nguyên." : "Đã xoá việc cần làm." };
 }
@@ -287,49 +323,23 @@ export async function createTaskFromRecapActionItem(
   if (user.role !== "ADMIN" && !(await getMembership(project.id, user.id))) {
     return { error: "Bạn không thuộc dự án này nên không tạo task ở đây được." };
   }
-  const assigneeId =
-    item.ownerId && (await getMembership(project.id, item.ownerId)) ? item.ownerId : null;
-
-  const last = await prisma.task.findFirst({
-    where: { projectId: project.id, status: "TODO" },
-    orderBy: { order: "desc" },
-    select: { order: true },
-  });
-
-  let task: { id: string; assignee: { name: string } | null };
+  let task: Awaited<ReturnType<typeof createLinkedRecapTask>>;
   try {
-    task = await prisma.$transaction(async (tx) => {
-      const created = await tx.task.create({
-        data: {
-          title: item.title,
-          description: `Việc giao trong cuộc họp “${meeting.title}” (${formatMeetingWhen(meeting.startAt, meeting.endAt)}).`,
-          projectId: project.id,
-          status: "TODO",
-          priority: "MEDIUM",
-          dueDate: item.dueDate,
-          assigneeId,
-          creatorId: user.id,
-          order: (last?.order ?? 0) + 1,
-        },
-        select: { id: true, assignee: { select: { name: true } } },
-      });
-      // Chỉ gắn khi việc vẫn chưa có task (hai người bấm cùng lúc thì một người bị huỷ).
-      const linked = await tx.meetingRecapActionItem.updateMany({
-        where: { id: item.id, taskId: null },
-        data: { taskId: created.id },
-      });
-      if (linked.count === 0) throw new Error("ALREADY_LINKED");
-      return created;
-    });
+    task = await createLinkedRecapTask(
+      prisma, item.recap.id, item.id, project.id, user.id,
+      `Việc giao trong cuộc họp “${meeting.title}” (${formatMeetingWhen(meeting.startAt, meeting.endAt)}).`,
+    );
   } catch (error) {
+    if (error instanceof Error && error.message === "RECAP_BUSY") return { error: "Biên bản đang được xử lý. Hãy tải lại trang." };
     if (error instanceof Error && error.message === "ALREADY_LINKED") return { error: "Việc này đã có task rồi." };
     throw error;
   }
 
+  const assigneeId = task.assigneeId;
   if (assigneeId && assigneeId !== user.id) {
     await notify([assigneeId], {
       type: "TASK_ASSIGNED",
-      message: `${user.name} đã giao cho bạn task “${item.title}” (từ biên bản họp “${meeting.title}”)`,
+      message: `${user.name} đã giao cho bạn task “${task.title}” (từ biên bản họp “${meeting.title}”)`,
       taskId: task.id,
       projectId: project.id,
     });
@@ -340,7 +350,7 @@ export async function createTaskFromRecapActionItem(
       project.googleChatWebhookUrl,
       [
         `*${project.name}*`,
-        `Công việc mới từ biên bản họp “${meeting.title}”: *${item.title}*`,
+        `Công việc mới từ biên bản họp “${meeting.title}”: *${task.title}*`,
         `Người được giao: ${task.assignee?.name ?? "Chưa giao"}`,
         `Người tạo: ${user.name}`,
         ...(base ? [`<${base}/projects/${project.id}?task=${task.id}|Mở job>`] : []),
@@ -357,4 +367,15 @@ export async function createTaskFromRecapActionItem(
         ? `Đã tạo task trong “${project.name}”. Người phụ trách không thuộc dự án nên task chưa giao cho ai.`
         : `Đã tạo task trong “${project.name}”.`,
   };
+}
+
+/** AI suggestions become action items only after an explicit choice by a recap manager. */
+export async function reviewRecapSuggestion(meetingId: string, suggestionId: string, accept: boolean): Promise<MeetingRecapActionState> {
+  const loaded = await loadManaged(meetingId);
+  if ("error" in loaded) return { error: loaded.error };
+  const recap = loaded.meeting.recap;
+  if (!recap) return { error: "Không tìm thấy biên bản." };
+  const result = await resolveRecapSuggestion(prisma, recap.id, String(suggestionId), accept === true);
+  refresh(meetingId);
+  return result;
 }

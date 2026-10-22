@@ -425,7 +425,7 @@ export default function MeetingRecapPanel({
             <span
               className={`tf-badge mt-0 ${recap?.sentAt ? "bg-brand-50 text-brand-800" : "bg-amber-50 text-amber-800"}`}
             >
-              {recap?.sentAt ? `Đã gửi ${formatDateTime(recap.sentAt)}` : "Chưa gửi — hãy đọc lại trước khi gửi"}
+              {recap?.sentAt ? `Bản nháp · lần gửi gần nhất ${formatDateTime(recap.sentAt)}` : "Bản nháp · hãy đọc lại trước khi gửi"}
             </span>
             {recap?.savedToProject && (
               <span className="tf-badge mt-0 bg-zinc-100 text-zinc-700">Đã lưu vào tài liệu dự án</span>
@@ -467,7 +467,7 @@ export default function MeetingRecapPanel({
                       onClick={() => {
                         if (
                           window.confirm(
-                            "Viết lại biên bản bằng AI? Những chỗ bạn đã sửa tay và danh sách việc cần làm (kể cả ô đã tick) sẽ được làm lại. Task đã tạo vẫn giữ nguyên."
+                            "Viết lại nội dung biên bản bằng AI? Phần nội dung bạn sửa tay sẽ được viết lại. Danh sách công việc và task được giữ nguyên. Người tham dự tiếp tục xem bản đã gửi cho tới khi bạn gửi lại."
                           )
                         ) {
                           run(() => regenerateMeetingRecap(meetingId));

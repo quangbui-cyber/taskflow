@@ -9,24 +9,16 @@ import {
   deleteRecapActionItem,
   saveRecapActionItem,
   toggleRecapActionItem,
+  reviewRecapSuggestion,
   type MeetingRecapActionState,
 } from "@/app/actions/meetingRecaps";
 import Avatar from "@/components/Avatar";
 import { useInteraction } from "@/components/InteractionProvider";
 import { STATUSES } from "@/lib/types";
+import { toDateInputVN } from "@/lib/dates";
 
-export type RecapPerson = { id: string; name: string; avatarUrl: string | null };
-
-export type RecapActionItemView = {
-  id: string;
-  title: string;
-  owner: RecapPerson | null;
-  ownerName: string | null;
-  dueDate: string | null; // YYYY-MM-DD (giờ VN)
-  dueText: string | null;
-  done: boolean;
-  task: { id: string; status: string; projectId: string; projectName: string } | null;
-};
+import type { RecapPerson, RecapActionItemView, RecapSuggestion } from "@/lib/recapPublication";
+export type { RecapActionItemView } from "@/lib/recapPublication";
 
 type Draft = { id?: string; title: string; ownerId: string; dueDate: string };
 
@@ -124,6 +116,7 @@ export default function RecapActionItems({
   viewerId,
   canManage,
   editable,
+  suggestions = [],
 }: {
   meetingId: string;
   items: RecapActionItemView[];
@@ -133,6 +126,7 @@ export default function RecapActionItems({
   viewerId: string;
   canManage: boolean;
   editable: boolean;
+  suggestions?: RecapSuggestion[];
 }) {
   const router = useRouter();
   const { notify } = useInteraction();
@@ -147,11 +141,15 @@ export default function RecapActionItems({
 
   function run(action: () => Promise<MeetingRecapActionState>, after?: () => void) {
     startTransition(async () => {
-      const result = await action();
-      if (result.error) notify({ message: result.error, tone: "error" });
-      else {
-        if (result.success) notify({ message: result.success, tone: "success" });
-        after?.();
+      try {
+        const result = await action();
+        if (result.error) notify({ message: result.error, tone: "error" });
+        else {
+          if (result.success) notify({ message: result.success, tone: "success" });
+          after?.();
+        }
+      } catch {
+        notify({ message: "Không thể cập nhật. Vui lòng thử lại.", tone: "error" });
       }
       router.refresh();
     });
@@ -360,6 +358,32 @@ export default function RecapActionItems({
           );
         })}
       </ul>
+
+      {canManage && suggestions.length > 0 && (
+        <div className="mt-4 rounded-[8px] border border-amber-200 bg-amber-50/50 p-3">
+          <h3 className="text-sm font-semibold text-zinc-900">AI đề xuất bổ sung</h3>
+          <p className="mt-1 text-xs text-zinc-600">Các việc đang có được giữ nguyên. Chọn việc muốn thêm vào danh sách.</p>
+          <ul className="mt-2 divide-y divide-amber-100">
+            {suggestions.map((suggestion) => (
+              <li key={suggestion.id} className="flex flex-wrap items-start gap-2 py-2">
+                <div className="min-w-0 flex-1">
+                  <p className="break-words text-sm text-zinc-800">{suggestion.title}</p>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    {people.find((person) => person.id === suggestion.ownerId)?.name ?? suggestion.ownerName ?? "Chưa giao"}
+                    {" · "}{suggestion.dueDate ? formatDue(toDateInputVN(new Date(suggestion.dueDate))) : suggestion.dueText ?? "Chưa có hạn"}
+                  </p>
+                </div>
+                <button type="button" disabled={pending || !editable}
+                  onClick={() => run(() => reviewRecapSuggestion(meetingId, suggestion.id, true))}
+                  className="tf-button-secondary !min-h-8 !px-2.5 text-xs">Thêm vào danh sách</button>
+                <button type="button" disabled={pending || !editable}
+                  onClick={() => run(() => reviewRecapSuggestion(meetingId, suggestion.id, false))}
+                  className="tf-button-secondary !min-h-8 !px-2.5 text-xs">Bỏ qua</button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {editable &&
         (draft && !draft.id ? (

@@ -518,6 +518,8 @@ model MeetingRecap {
   audioSeconds        Int?
   transcript          String? // bản chép lời có mốc thời gian
   content             String? // biên bản (AI viết, người tổ chức có thể sửa)
+  publishedSnapshot   Json? // bản đã gửi; không đổi khi sửa hoặc viết lại bản nháp
+  actionSuggestions   Json      @default("[]") // đề xuất AI chờ người tổ chức chọn bổ sung
   createdById         String?
   createdBy           User?     @relation("MeetingRecapCreator", fields: [createdById], references: [id], onDelete: SetNull)
   processingStartedAt DateTime?

@@ -1,6 +1,6 @@
 import { emailAppUrl, emailSenderAddress, sendEmail, type EmailResult } from "@/lib/email";
-import { recapContentToHtml, recapExportContent } from "@/lib/meetingRecap";
-import { recapActionExportSelect, recapActionOrder, toRecapActionExport } from "@/lib/meetingRecapData";
+import { recapContentToHtml } from "@/lib/meetingRecap";
+import { publishedRecapExport, readPublishedRecap, type PublishedRecap } from "@/lib/recapPublication";
 import { formatMeetingWhen } from "@/lib/meetings";
 import { prisma } from "@/lib/prisma";
 
@@ -13,7 +13,7 @@ function escapeHtml(value: string): string {
 }
 
 /** Gửi biên bản cho người tổ chức và mọi người được mời (trừ người đã từ chối). */
-export async function sendMeetingRecapEmail(meetingId: string): Promise<EmailResult> {
+export async function sendMeetingRecapEmail(meetingId: string, publication?: PublishedRecap): Promise<EmailResult> {
   if (!emailSenderAddress()) return { ok: false, error: "Chưa cấu hình email." };
 
   const meeting = await prisma.meeting.findUnique({
@@ -26,13 +26,13 @@ export async function sendMeetingRecapEmail(meetingId: string): Promise<EmailRes
         select: { user: { select: { name: true, email: true } } },
       },
       recap: {
-        select: { content: true, actionItems: { select: recapActionExportSelect, orderBy: recapActionOrder } },
+        select: { publishedSnapshot: true },
       },
     },
   });
-  const recap = meeting?.recap;
-  if (!meeting || !recap?.content?.trim()) return { ok: false, error: "Chưa có biên bản để gửi." };
-  const content = recapExportContent(recap.content, recap.actionItems.map(toRecapActionExport));
+  const snapshot = publication ?? readPublishedRecap(meeting?.recap?.publishedSnapshot);
+  if (!meeting || !snapshot?.content.trim()) return { ok: false, error: "Chưa có biên bản để gửi." };
+  const content = publishedRecapExport(snapshot);
 
   const to = [
     ...new Set(

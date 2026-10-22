@@ -666,7 +666,6 @@ export default async function DashboardPage({
                           <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-red-500" aria-hidden="true" />Quá hạn</span>
                           <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-blue-500" aria-hidden="true" />Đang làm</span>
                           <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-orange-500" aria-hidden="true" />Cần làm</span>
-                          <span className="ml-auto text-zinc-400">Thanh dài = nhiều việc hơn · bấm tên để xem chi tiết</span>
                         </div>
                       </div>
                     </>

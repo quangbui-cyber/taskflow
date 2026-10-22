@@ -1,4 +1,7 @@
 import { del, issueSignedToken, presignUrl } from "@vercel/blob";
+import { randomUUID } from "node:crypto";
+import { archivePublishedRecap } from "@/lib/recapProject";
+import { completeRecapDraft } from "@/lib/recapWorkflow";
 import { formatMeetingWhen } from "@/lib/meetings";
 import {
   buildRecapPrompt,
@@ -14,7 +17,6 @@ import {
   limitTranscriptForSummary,
   RECAP_STALE_MS,
   recapActionItemRows,
-  recapExportContent,
   renderRecapContent,
 } from "@/lib/meetingRecap";
 import {
@@ -26,9 +28,7 @@ import {
 import { loadRecapUsage } from "@/lib/meetingRecapData";
 import { recapLimits, retranscribeAllowed, summaryLimitReason } from "@/lib/meetingRecapLimits";
 import { notify } from "@/lib/notify";
-import { DOCX_MIME_TYPE, buildRecapDocx, recapDocxFileName } from "@/lib/recapDocx";
 import { prisma } from "@/lib/prisma";
-import { recapActionExportSelect, recapActionOrder, toRecapActionExport } from "@/lib/meetingRecapData";
 
 const SIGNED_URL_TTL_MS = 30 * 60 * 1000;
 // Lượt chạy nền có 300 giây (maxDuration); chừa lại một chút để kịp ghi lỗi nếu hết giờ.
@@ -224,19 +224,7 @@ export async function runMeetingRecap(recapId: string, startedAt: Date): Promise
     });
     const people = [meeting.organizer, ...meeting.attendees.map((attendee) => attendee.user)];
     const actionRows = recapActionItemRows(summary.actionItems, people, meeting.startAt);
-    // Biên bản và danh sách việc cần làm thay cùng lúc; lần chạy cũ (đã bị thay) không ghi gì.
-    const done = await prisma.$transaction(async (tx) => {
-      const saved = await tx.meetingRecap.updateMany({
-        where: current,
-        data: { status: "READY", stage: null, error: null, content: renderRecapContent(summary) },
-      });
-      if (saved.count === 0) return false;
-      await tx.meetingRecapActionItem.deleteMany({ where: { recapId } });
-      if (actionRows.length) {
-        await tx.meetingRecapActionItem.createMany({ data: actionRows.map((row) => ({ ...row, recapId })) });
-      }
-      return true;
-    });
+    const done = await completeRecapDraft(prisma, recapId, startedAt, renderRecapContent(summary), actionRows, randomUUID);
     if (!done) return;
 
     await notify(managerIds, {
@@ -324,61 +312,11 @@ export async function cleanupMeetingRecaps(now = new Date()) {
 export async function saveRecapToProject(
   meetingId: string,
   uploader: { id: string; role: string },
-  sentAt: Date
+  sentAt: Date,
+  publication?: import("@/lib/recapPublication").PublishedRecap
 ): Promise<boolean> {
-  const meeting = await prisma.meeting.findUnique({
-    where: { id: meetingId },
-    include: {
-      room: { select: { name: true } },
-      organizer: { select: { name: true } },
-      attendees: { select: { user: { select: { name: true } } }, orderBy: { createdAt: "asc" } },
-      recap: {
-        select: { id: true, content: true, projectFileId: true, actionItems: { select: recapActionExportSelect, orderBy: recapActionOrder } },
-      },
-    },
-  });
-  if (!meeting?.projectId || !meeting.recap?.content?.trim()) return false;
-
-  // Người gửi phải vẫn là thành viên dự án (hoặc admin) mới được ghi vào tài liệu dự án.
-  if (uploader.role !== "ADMIN") {
-    const member = await prisma.projectMember.findFirst({
-      where: { projectId: meeting.projectId, userId: uploader.id },
-      select: { id: true },
-    });
-    if (!member) return false;
-  }
-
   try {
-    const data = buildRecapDocx({
-      title: meeting.title,
-      when: formatMeetingWhen(meeting.startAt, meeting.endAt),
-      room: meeting.room?.name ?? null,
-      organizer: meeting.organizer.name,
-      attendees: meeting.attendees.map((attendee) => attendee.user.name),
-      content: recapExportContent(meeting.recap.content, meeting.recap.actionItems.map(toRecapActionExport)),
-      sentAt,
-    });
-    const file = {
-      name: recapDocxFileName(meeting.title, meeting.startAt),
-      mimeType: DOCX_MIME_TYPE,
-      size: data.length,
-      data,
-    };
-    // Gửi lại: thay file cũ (nếu vẫn còn trong đúng dự án) thay vì tạo bản trùng.
-    const existing = meeting.recap.projectFileId
-      ? await prisma.projectFile.findFirst({
-          where: { id: meeting.recap.projectFileId, projectId: meeting.projectId },
-          select: { id: true },
-        })
-      : null;
-    const saved = existing
-      ? await prisma.projectFile.update({ where: { id: existing.id }, data: file, select: { id: true } })
-      : await prisma.projectFile.create({
-          data: { ...file, projectId: meeting.projectId, uploaderId: uploader.id },
-          select: { id: true },
-        });
-    await prisma.meetingRecap.update({ where: { id: meeting.recap.id }, data: { projectFileId: saved.id } });
-    return true;
+    return await archivePublishedRecap(prisma, meetingId, uploader, publication, sentAt);
   } catch (error) {
     console.error("Could not save the meeting recap to project documents", error);
     return false;
