@@ -93,3 +93,67 @@ export const AUTO_SUBMIT_MIN_MS = 30_000;
 export function shouldAutoSubmitRecording(durationMs: number): boolean {
   return durationMs >= AUTO_SUBMIT_MIN_MS;
 }
+
+// ---------- Họp trực tiếp: tự dừng khi người tổ chức quên bấm "Dừng ghi" ----------
+
+/** Quá giờ kết thúc theo lịch bao lâu thì tự dừng. */
+export const OVERTIME_GRACE_MS = 10 * 60 * 1000;
+/** Không nghe tiếng nói bao lâu thì tự dừng, và bao lâu thì bắt đầu cảnh báo. */
+export const SILENCE_STOP_MS = 10 * 60 * 1000;
+export const SILENCE_WARN_MS = 7 * 60 * 1000;
+/** Bấm "Vẫn đang họp" lúc đã quá giờ thì lùi giờ tự dừng thêm bấy nhiêu. */
+export const OVERTIME_EXTEND_MS = 30 * 60 * 1000;
+/** Ngưỡng âm lượng (RMS) coi là có tiếng nói; phòng yên tĩnh sau khi lọc ồn thường dưới mức này. */
+export const SPEECH_RMS_THRESHOLD = 0.012;
+
+export type AutoStopReason = "overtime" | "silence";
+
+export type AutoStopState = {
+  /** Lý do cần dừng ngay; null nếu chưa. */
+  stop: AutoStopReason | null;
+  /** Đã quá giờ kết thúc: còn bao lâu nữa thì tự dừng (để hiện đếm ngược). */
+  overtimeLeftMs: number | null;
+  /** Im lặng đủ lâu để cảnh báo: còn bao lâu nữa thì tự dừng. */
+  silenceLeftMs: number | null;
+};
+
+export function autoStopState({
+  nowMs,
+  endsAtMs,
+  lastSoundAtMs,
+  paused,
+}: {
+  nowMs: number;
+  /** Giờ kết thúc theo lịch (đã cộng phần "Vẫn đang họp" nếu có). */
+  endsAtMs: number | null;
+  lastSoundAtMs: number;
+  paused: boolean;
+}): AutoStopState {
+  let overtimeLeftMs: number | null = null;
+  if (endsAtMs !== null && nowMs >= endsAtMs) {
+    overtimeLeftMs = Math.max(0, endsAtMs + OVERTIME_GRACE_MS - nowMs);
+    if (overtimeLeftMs === 0) return { stop: "overtime", overtimeLeftMs: 0, silenceLeftMs: null };
+  }
+
+  let silenceLeftMs: number | null = null;
+  if (!paused) {
+    const silentFor = nowMs - lastSoundAtMs;
+    if (silentFor >= SILENCE_STOP_MS) return { stop: "silence", overtimeLeftMs, silenceLeftMs: 0 };
+    if (silentFor >= SILENCE_WARN_MS) silenceLeftMs = SILENCE_STOP_MS - silentFor;
+  }
+  return { stop: null, overtimeLeftMs, silenceLeftMs };
+}
+
+export function autoStopMessage(reason: AutoStopReason): string {
+  return reason === "overtime"
+    ? "Đã quá giờ kết thúc cuộc họp 10 phút nên app tự dừng ghi và đang tạo biên bản…"
+    : "Không nghe thấy tiếng nói trong 10 phút nên app tự dừng ghi và đang tạo biên bản…";
+}
+
+/** Độ lớn âm thanh (RMS) của một khung mẫu, từ -1..1. */
+export function rms(samples: ArrayLike<number>): number {
+  if (samples.length === 0) return 0;
+  let sum = 0;
+  for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
+  return Math.sqrt(sum / samples.length);
+}

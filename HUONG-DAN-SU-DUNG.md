@@ -402,6 +402,7 @@ Khi cuộc họp bắt đầu, người tổ chức nhận thông báo (trong ap
 1. Bấm **Bắt đầu ghi âm** (hoặc bấm vào thông báo cuộc họp đã bắt đầu) và cho phép trình duyệt dùng micro.
 2. Đặt máy gần người nói. Thanh đỏ nhấp nháy theo tiếng nói nghĩa là micro đang thu. Có thể **Tạm dừng** / **Ghi tiếp**.
 3. Họp xong bấm **Dừng ghi**, nghe lại nếu cần, rồi bấm **Tạo biên bản từ bản ghi này**.
+4. Lỡ quên bấm Dừng ghi: app tự dừng và **tự tạo biên bản** khi đã **quá giờ kết thúc 10 phút** hoặc **không nghe thấy tiếng nói trong 10 phút**. Trước đó app hiện đếm ngược kèm nút **Vẫn đang họp** (họp kéo dài thì bấm để lùi thêm 30 phút) và **Dừng và tạo biên bản**. Cách tự dừng này cần tab taskflow còn mở trên máy đang ghi.
 
 Bản ghi được lưu dần trên máy (5 giây một lần): lỡ đóng tab hay tải lại trang, mở lại trang biên bản sẽ thấy *"Có bản ghi chưa gửi trên máy này"* (có thể mất vài giây cuối). Trên điện thoại, giữ màn hình mở và ở lại trang trong lúc ghi — khoá máy hoặc chuyển ứng dụng có thể làm trình duyệt dừng ghi.
 

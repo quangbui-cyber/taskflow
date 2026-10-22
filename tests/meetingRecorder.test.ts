@@ -3,6 +3,14 @@ import { test } from "node:test";
 import { recapAudioContentType, recapAudioPathname } from "../lib/meetingRecap";
 import {
   AUTO_SUBMIT_MIN_MS,
+  OVERTIME_EXTEND_MS,
+  OVERTIME_GRACE_MS,
+  SILENCE_STOP_MS,
+  SILENCE_WARN_MS,
+  SPEECH_RMS_THRESHOLD,
+  autoStopMessage,
+  autoStopState,
+  rms,
   NO_TAB_AUDIO_MESSAGE,
   RECORDING_BITS_PER_SECOND,
   canRecordTabAudio,
@@ -97,4 +105,36 @@ test("closing the meeting tab creates the recap automatically, except for accide
   assert.equal(shouldAutoSubmitRecording(29_999), false);
   assert.equal(shouldAutoSubmitRecording(30_000), true);
   assert.equal(shouldAutoSubmitRecording(45 * 60 * 1000), true);
+});
+
+test("in-person recordings stop themselves 10 minutes after the scheduled end", () => {
+  const end = 1_000_000;
+  const base = { endsAtMs: end, lastSoundAtMs: end, paused: false };
+  assert.deepEqual(autoStopState({ ...base, nowMs: end - 1 }), { stop: null, overtimeLeftMs: null, silenceLeftMs: null });
+  assert.equal(autoStopState({ ...base, nowMs: end, lastSoundAtMs: end }).overtimeLeftMs, OVERTIME_GRACE_MS);
+  assert.equal(autoStopState({ ...base, nowMs: end + 4 * 60_000, lastSoundAtMs: end + 4 * 60_000 }).overtimeLeftMs, 6 * 60_000);
+  assert.equal(autoStopState({ ...base, nowMs: end + OVERTIME_GRACE_MS, lastSoundAtMs: end + OVERTIME_GRACE_MS }).stop, "overtime");
+  // Không có giờ kết thúc thì chỉ dựa vào im lặng.
+  assert.equal(autoStopState({ ...base, endsAtMs: null, nowMs: end + OVERTIME_GRACE_MS * 3, lastSoundAtMs: end + OVERTIME_GRACE_MS * 3 }).stop, null);
+});
+
+test("ten minutes of silence stop the recording, with a warning from minute seven", () => {
+  const t = 5_000_000;
+  const base = { endsAtMs: null, lastSoundAtMs: t, paused: false };
+  assert.equal(autoStopState({ ...base, nowMs: t + 6 * 60_000 }).silenceLeftMs, null);
+  assert.equal(autoStopState({ ...base, nowMs: t + SILENCE_WARN_MS }).silenceLeftMs, 3 * 60_000);
+  assert.equal(autoStopState({ ...base, nowMs: t + SILENCE_STOP_MS }).stop, "silence");
+  // Đang tạm dừng thì không tính im lặng.
+  assert.deepEqual(autoStopState({ ...base, paused: true, nowMs: t + SILENCE_STOP_MS * 2 }), { stop: null, overtimeLeftMs: null, silenceLeftMs: null });
+  assert.match(autoStopMessage("silence"), /Không nghe thấy tiếng nói trong 10 phút/);
+  assert.match(autoStopMessage("overtime"), /quá giờ kết thúc cuộc họp 10 phút/);
+  assert.equal(OVERTIME_EXTEND_MS, 30 * 60_000);
+});
+
+test("loudness separates speech from a quiet room", () => {
+  assert.equal(rms([]), 0);
+  const speech = Array.from({ length: 4096 }, (_, i) => 0.1 * Math.sin(i / 8));
+  const room = Array.from({ length: 4096 }, (_, i) => 0.002 * Math.sin(i / 3));
+  assert.ok(rms(speech) > SPEECH_RMS_THRESHOLD);
+  assert.ok(rms(room) < SPEECH_RMS_THRESHOLD);
 });
