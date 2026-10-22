@@ -41,6 +41,7 @@ model User {
   organizedMeetings    Meeting[]           @relation("MeetingOrganizer")
   meetingInvites       MeetingAttendee[]
   createdMeetingRecaps MeetingRecap[]      @relation("MeetingRecapCreator")
+  recapActionItems     MeetingRecapActionItem[] @relation("MeetingRecapActionOwner")
   kpiPlanChanges       KpiPlanChange[]
   uploadedDocuments    DocumentFile[]      @relation("DocumentFileUploader")
   createdDocumentLinks DocumentLink[]      @relation("DocumentLinkCreator")
@@ -274,6 +275,7 @@ model Task {
   followers     TaskFollower[]
   notifications Notification[]
   files         TaskFile[]
+  recapActionItem MeetingRecapActionItem? // việc cần làm trong biên bản họp đã tạo ra task này
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 }
@@ -516,11 +518,34 @@ model MeetingRecap {
   processingStartedAt DateTime?
   sentAt              DateTime? // lúc người tổ chức gửi cho người tham dự; trước đó chỉ người tổ chức/admin xem được
   projectFileId       String? // file biên bản (.docx) đã lưu vào tài liệu dự án, để lần gửi sau thay bản mới
+  actionItems         MeetingRecapActionItem[]
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
   @@index([status, processingStartedAt])
   @@index([createdById])
+}
+
+// Việc cần làm trong biên bản họp — lưu riêng để gắn người phụ trách, tick đã xong và tạo task.
+model MeetingRecapActionItem {
+  id        String       @id @default(cuid())
+  recapId   String
+  recap     MeetingRecap @relation(fields: [recapId], references: [id], onDelete: Cascade)
+  order     Int          @default(0)
+  title     String
+  ownerId   String?
+  owner     User?        @relation("MeetingRecapActionOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  ownerName String? // tên AI nghe được nhưng chưa khớp với ai trong danh sách mời
+  dueDate   DateTime? // 17:00 giờ VN của ngày hạn
+  dueText   String? // hạn như được nói trong họp ("cuối tháng") khi chưa đổi được ra ngày
+  doneAt    DateTime?
+  taskId    String?      @unique // task đã tạo từ việc này; khi đó trạng thái lấy theo task
+  task      Task?        @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([recapId, order])
+  @@index([ownerId])
 }
 
 // Nhật ký mỗi lần gọi AI cho biên bản họp — dùng để đếm hạn mức ngày, chặn chạy quá tay.

@@ -17,7 +17,8 @@ const sample = {
   room: null,
   organizer: "Duy Quang",
   attendees: ["Ngọc Giàu"],
-  content: "## Tóm tắt\nChốt LED 6x3m.\n\n## Việc cần làm\n- Gửi báo giá — Phụ trách: Lan — Hạn: Thứ Sáu",
+  content:
+    "## Tóm tắt\nChốt LED 6x3m.\n\n## Nội dung thảo luận\n### Ngân sách\n- Trần 200 triệu\n\n## Việc cần làm\n- Gửi báo giá — Phụ trách: Lan — Hạn: Thứ Sáu",
   sentAt: new Date("2026-10-22T08:30:00Z"),
 };
 

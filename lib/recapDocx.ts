@@ -163,6 +163,8 @@ export function buildRecapDocumentXml(input: RecapDocxInput): string {
   for (const block of parseRecapContent(input.content)) {
     if (block.type === "heading") {
       parts.push(paragraph([{ text: block.text, bold: true, size: 26 }], { before: 280, after: 100 }));
+    } else if (block.type === "subheading") {
+      parts.push(paragraph([{ text: block.text, bold: true, size: 23, color: "3F3F46" }], { before: 160, after: 60 }));
     } else if (block.type === "list") {
       for (const item of block.items) parts.push(paragraph([{ text: `• ${item}` }], { indent: true, after: 60 }));
     } else {

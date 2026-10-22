@@ -7,7 +7,11 @@ import {
 
 const GROQ_TRANSCRIBE_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models";
-export const RECAP_SUMMARY_MAX_OUTPUT_TOKENS = 8192;
+// Trần token trả về mỗi lượt, đã gồm phần "suy nghĩ" của model (Gemini tính chung và tính tiền như đầu ra).
+export const RECAP_SUMMARY_MAX_OUTPUT_TOKENS = 24_576;
+const OUTPUT_TOKENS_RANGE = { min: 4_096, max: 65_536 };
+export const RECAP_THINKING_LEVELS = ["minimal", "low", "medium", "high"] as const;
+export type RecapThinkingLevel = (typeof RECAP_THINKING_LEVELS)[number];
 
 /** Lỗi đã có câu báo tiếng Việt, hiện thẳng cho người dùng. */
 export class RecapServiceError extends Error {}
@@ -15,8 +19,25 @@ export class RecapServiceError extends Error {}
 export function recapModels(env: NodeJS.ProcessEnv = process.env) {
   return {
     transcribe: env.RECAP_TRANSCRIBE_MODEL?.trim() || "whisper-large-v3",
-    summary: env.RECAP_SUMMARY_MODEL?.trim() || "gemini-3.1-flash-lite",
+    summary: env.RECAP_SUMMARY_MODEL?.trim() || "gemini-3.8-flash",
   };
+}
+
+/**
+ * Cách model viết biên bản: mức "suy nghĩ" (mặc định medium — đủ để gom chủ đề, đoán người phụ trách,
+ * tính ngày hạn) và trần token trả về. Đổi được bằng biến môi trường, giá trị lạ thì dùng mặc định.
+ */
+export function recapSummarySettings(env: NodeJS.ProcessEnv = process.env) {
+  const level = env.RECAP_SUMMARY_THINKING?.trim().toLowerCase() ?? "";
+  const thinkingLevel: RecapThinkingLevel = (RECAP_THINKING_LEVELS as readonly string[]).includes(level)
+    ? (level as RecapThinkingLevel)
+    : "medium";
+  const tokens = Number(env.RECAP_SUMMARY_MAX_OUTPUT_TOKENS);
+  const maxOutputTokens =
+    Number.isInteger(tokens) && tokens >= OUTPUT_TOKENS_RANGE.min && tokens <= OUTPUT_TOKENS_RANGE.max
+      ? tokens
+      : RECAP_SUMMARY_MAX_OUTPUT_TOKENS;
+  return { thinkingLevel, maxOutputTokens };
 }
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -93,23 +114,30 @@ export async function transcribeAudioUrl({
 }
 
 type GeminiResponse = {
-  candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
+  candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string }[];
   promptFeedback?: { blockReason?: string };
+  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number };
 };
 
 /** Viết biên bản có cấu trúc từ bản chép lời. */
+export const RECAP_SUMMARY_TIMEOUT_MS = 150_000;
+
 export async function summarizeTranscript({
   system,
   user,
   env = process.env,
+  timeoutMs = RECAP_SUMMARY_TIMEOUT_MS,
 }: {
   system: string;
   user: string;
   env?: NodeJS.ProcessEnv;
+  /** Thời gian chờ Gemini; lượt chạy nền truyền vào phần thời gian còn lại của nó. */
+  timeoutMs?: number;
 }): Promise<RecapSummary> {
   const apiKey = env.GEMINI_API_KEY?.trim();
   if (!apiKey) throw new RecapServiceError("Chưa cấu hình GEMINI_API_KEY.");
   const model = recapModels(env).summary;
+  const { thinkingLevel, maxOutputTokens } = recapSummarySettings(env);
 
   for (let attempt = 1; ; attempt++) {
     let res: Response;
@@ -121,14 +149,15 @@ export async function summarizeTranscript({
           systemInstruction: { parts: [{ text: system }] },
           contents: [{ role: "user", parts: [{ text: user }] }],
           generationConfig: {
-            temperature: 0.2,
-            // Trần token trả về (đã gồm phần "suy nghĩ" của model) để mỗi lượt có chi phí tối đa.
-            maxOutputTokens: RECAP_SUMMARY_MAX_OUTPUT_TOKENS,
+            // Gemini 3.x bỏ qua temperature; độ cẩn thận điều chỉnh bằng mức suy nghĩ.
+            thinkingConfig: { thinkingLevel },
+            // Trần token trả về (đã gồm phần "suy nghĩ") để mỗi lượt có chi phí tối đa.
+            maxOutputTokens,
             responseMimeType: "application/json",
             responseSchema: RECAP_SUMMARY_SCHEMA,
           },
         }),
-        signal: AbortSignal.timeout(120_000),
+        signal: AbortSignal.timeout(timeoutMs),
       });
     } catch (error) {
       if (isTimeout(error)) throw new RecapServiceError("Gemini xử lý quá lâu. Thử bấm Viết lại sau ít phút.");
@@ -153,7 +182,15 @@ export async function summarizeTranscript({
     }
 
     const data = (await res.json()) as GeminiResponse;
-    const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ?? "";
+    const usage = data.usageMetadata;
+    console.info(
+      `Gemini recap (${model}, thinking ${thinkingLevel}): input ${usage?.promptTokenCount ?? "?"}, thinking ${
+        usage?.thoughtsTokenCount ?? 0
+      }, output ${usage?.candidatesTokenCount ?? "?"} tokens.`
+    );
+    const candidate = data.candidates?.[0];
+    // Bỏ phần "suy nghĩ" nếu model trả kèm, chỉ đọc câu trả lời.
+    const text = candidate?.content?.parts?.filter((part) => !part.thought).map((part) => part.text ?? "").join("") ?? "";
     let parsed: unknown = null;
     try {
       parsed = JSON.parse(text);
@@ -162,6 +199,12 @@ export async function summarizeTranscript({
     }
     const summary = parseRecapSummary(parsed);
     if (summary) return summary;
+    if (candidate?.finishReason === "MAX_TOKENS") {
+      // Gọi lại với cùng trần cũng sẽ hết token như vậy, nên báo luôn thay vì tốn thêm một lượt.
+      throw new RecapServiceError(
+        "AI dùng hết giới hạn token trước khi viết xong biên bản. Nhờ quản trị viên tăng RECAP_SUMMARY_MAX_OUTPUT_TOKENS hoặc giảm RECAP_SUMMARY_THINKING."
+      );
+    }
     if (attempt < 2) continue;
     if (data.promptFeedback?.blockReason) {
       throw new RecapServiceError("Gemini từ chối nội dung cuộc họp này. Thử viết lại hoặc tự soạn biên bản.");
