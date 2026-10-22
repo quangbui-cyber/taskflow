@@ -15,6 +15,7 @@ import {
 } from "@/lib/meetingRecap";
 import { formatMeetingWhen, vnDateTimeToUtc } from "@/lib/meetings";
 import { sendGoogleChat } from "@/lib/googleChat";
+import { taskGoogleChatMessage } from "@/lib/taskGoogleChat";
 import { findRecapMeeting, loadRecapUsage } from "@/lib/meetingRecapData";
 import { recapLimits, summaryLimitReason } from "@/lib/meetingRecapLimits";
 import { deleteRecapAudio, runMeetingRecap, saveRecapToProject } from "@/lib/meetingRecapJob";
@@ -348,13 +349,13 @@ export async function createTaskFromRecapActionItem(
     const base = emailAppUrl();
     await sendGoogleChat(
       project.googleChatWebhookUrl,
-      [
-        `*${project.name}*`,
-        `Công việc mới từ biên bản họp “${meeting.title}”: *${task.title}*`,
-        `Người được giao: ${task.assignee?.name ?? "Chưa giao"}`,
-        `Người tạo: ${user.name}`,
-        ...(base ? [`<${base}/projects/${project.id}?task=${task.id}|Mở job>`] : []),
-      ].join("\n")
+      taskGoogleChatMessage({
+        event: "created", taskId: task.id, projectName: project.name,
+        title: task.title, status: task.status,
+        assigneeName: task.assignee?.name ?? null, actorName: user.name,
+        dueDate: task.dueDate, meetingTitle: meeting.title,
+        url: base ? `${base}/projects/${project.id}?task=${task.id}` : null,
+      })
     );
   }
 

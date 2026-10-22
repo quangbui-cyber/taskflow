@@ -7,6 +7,7 @@ import { getMembership, requireUser } from "@/lib/auth";
 import { followerIds, notify } from "@/lib/notify";
 import { parseCommentMentions } from "@/lib/commentMentions";
 import { sendGoogleChat } from "@/lib/googleChat";
+import { taskGoogleChatMessage, type TaskChatInput } from "@/lib/taskGoogleChat";
 import { PRIORITIES, STATUSES } from "@/lib/types";
 import { readTaskCreationFiles } from "@/lib/taskCreationFiles";
 
@@ -50,14 +51,16 @@ async function taskLink(projectId: string, taskId: string) {
 async function sendTaskChat(
   projectId: string,
   taskId: string,
-  lines: string[]
+  input: Omit<TaskChatInput, "taskId" | "projectName" | "url"> | string[]
 ) {
   const chat = await projectChat(projectId);
   if (!chat?.googleChatWebhookUrl) return;
   const url = await taskLink(projectId, taskId);
   await sendGoogleChat(
     chat.googleChatWebhookUrl,
-    [`*${chat.name}*`, ...lines, `<${url}|Mở job>`].join("\n")
+    Array.isArray(input)
+      ? [`*${chat.name}*`, ...input, `<${url}|Mở job>`].join("\n")
+      : taskGoogleChatMessage({ ...input, taskId, projectName: chat.name, url })
   );
 }
 
@@ -172,12 +175,11 @@ export async function createTask(
     });
   }
 
-  await sendTaskChat(projectId, task.id, [
-    `Công việc mới: *${title}*`,
-    `Trạng thái: ${statusLabel(status)}`,
-    `Người được giao: ${task.assignee?.name ?? "Chưa giao"}`,
-    `Người tạo: ${user.name}`,
-  ]);
+  await sendTaskChat(projectId, task.id, {
+    event: "created", title, status,
+    assigneeName: task.assignee?.name ?? null,
+    actorName: user.name, dueDate: task.dueDate,
+  });
 
   revalidatePath(`/projects/${projectId}`);
   return {};
@@ -312,22 +314,21 @@ export async function updateTask(
   }
 
   if (data.status !== undefined && data.status !== task.status) {
-    await sendTaskChat(task.projectId, taskId, [
-      `Cập nhật trạng thái: *${updatedTask.title}*`,
-      `Trạng thái: ${statusLabel(task.status)} → ${statusLabel(updatedTask.status)}`,
-      `Người được giao: ${updatedTask.assignee?.name ?? "Chưa giao"}`,
-      `Cập nhật bởi: ${actor.name}`,
-    ]);
+    await sendTaskChat(task.projectId, taskId, {
+      event: "status_changed", title: updatedTask.title,
+      previousStatus: task.status, status: updatedTask.status,
+      assigneeName: updatedTask.assignee?.name ?? null,
+      actorName: actor.name, dueDate: updatedTask.dueDate,
+    });
   } else if (
     data.assigneeId !== undefined &&
     data.assigneeId !== task.assigneeId
   ) {
-    await sendTaskChat(task.projectId, taskId, [
-      `Cập nhật người được giao: *${updatedTask.title}*`,
-      `Trạng thái: ${statusLabel(updatedTask.status)}`,
-      `Người được giao: ${updatedTask.assignee?.name ?? "Chưa giao"}`,
-      `Cập nhật bởi: ${actor.name}`,
-    ]);
+    await sendTaskChat(task.projectId, taskId, {
+      event: "assignee_changed", title: updatedTask.title, status: updatedTask.status,
+      assigneeName: updatedTask.assignee?.name ?? null,
+      actorName: actor.name, dueDate: updatedTask.dueDate,
+    });
   }
 
   revalidatePath(`/projects/${task.projectId}`);
@@ -388,12 +389,12 @@ export async function moveTask(
   }
 
   if (status !== task.status) {
-    await sendTaskChat(task.projectId, taskId, [
-      `Cập nhật trạng thái: *${updatedTask.title}*`,
-      `Trạng thái: ${statusLabel(task.status)} → ${statusLabel(updatedTask.status)}`,
-      `Người được giao: ${updatedTask.assignee?.name ?? "Chưa giao"}`,
-      `Cập nhật bởi: ${actor.name}`,
-    ]);
+    await sendTaskChat(task.projectId, taskId, {
+      event: "status_changed", title: updatedTask.title,
+      previousStatus: task.status, status: updatedTask.status,
+      assigneeName: updatedTask.assignee?.name ?? null,
+      actorName: actor.name, dueDate: updatedTask.dueDate,
+    });
   }
 
   revalidatePath(`/projects/${task.projectId}`);
