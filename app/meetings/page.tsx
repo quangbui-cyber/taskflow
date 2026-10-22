@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
-import { CalendarClock, Clock, DoorOpen, Video } from "lucide-react";
+import { CalendarClock, Clock, DoorOpen, FileText, Video } from "lucide-react";
 import Avatar from "@/components/Avatar";
 import {
   CancelMeetingButton,
@@ -10,7 +10,7 @@ import MeetingComposer from "@/components/MeetingComposer";
 import Sidebar from "@/components/Sidebar";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
-import { meetingsEnabled } from "@/lib/features";
+import { meetingRecapsEnabled, meetingsEnabled } from "@/lib/features";
 import { formatHour, toDateInputVN } from "@/lib/dates";
 import {
   formatMeetingDay,
@@ -36,6 +36,7 @@ const meetingInclude = {
     },
     orderBy: { createdAt: "asc" },
   },
+  recap: { select: { status: true, sentAt: true } },
 } satisfies Prisma.MeetingInclude;
 
 type MeetingRow = Prisma.MeetingGetPayload<{ include: typeof meetingInclude }>;
@@ -52,18 +53,36 @@ const RESPONSE_RING: Record<string, string> = {
   DECLINED: "ring-red-300",
 };
 
+/** Nút mở trang biên bản: người tổ chức/admin thấy trạng thái, người tham dự chỉ thấy khi đã gửi. */
+function recapLink(
+  meeting: MeetingRow,
+  canManage: boolean,
+  recapsEnabled: boolean,
+  now: Date
+): string | null {
+  if (meeting.status === "CANCELLED" || meeting.startAt.getTime() > now.getTime()) return null;
+  const recap = meeting.recap;
+  if (!canManage) return recap?.sentAt ? "Biên bản" : null;
+  if (!recap) return recapsEnabled ? "Tạo biên bản" : null;
+  if (recap.status === "PROCESSING") return "Biên bản: đang xử lý";
+  if (recap.status === "FAILED") return "Biên bản: lỗi";
+  return recap.sentAt ? "Biên bản" : "Biên bản: chờ gửi";
+}
+
 function MeetingCard({
   meeting,
   viewer,
   focused,
   now,
   composerProps,
+  recapsEnabled,
 }: {
   meeting: MeetingRow;
   viewer: { id: string; role: string };
   focused: boolean;
   now: Date;
   composerProps: MeetingComposerData;
+  recapsEnabled: boolean;
 }) {
   const isOrganizer = meeting.organizerId === viewer.id;
   const myInvite = meeting.attendees.find((attendee) => attendee.userId === viewer.id);
@@ -76,6 +95,7 @@ function MeetingCard({
   // Sửa giờ họp đã bắt đầu sẽ bị chặn (không đặt lịch về quá khứ), nên chỉ cho sửa trước giờ họp.
   const editable = open && !ongoing && canManage;
   const accepted = meeting.attendees.filter((attendee) => attendee.response === "ACCEPTED").length;
+  const recapLabel = isParticipant || canManage ? recapLink(meeting, canManage, recapsEnabled, now) : null;
 
   return (
     <article
@@ -167,6 +187,16 @@ function MeetingCard({
             <span className={`tf-badge ${RESPONSE_STYLES[myInvite.response] ?? RESPONSE_STYLES.PENDING}`}>
               Bạn: {meetingResponseLabel(myInvite.response)}
             </span>
+          )}
+          {recapLabel && (
+            <Link
+              href={`/meetings/${meeting.id}/recap`}
+              prefetch={false}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-700 hover:underline"
+            >
+              <FileText size={14} aria-hidden="true" />
+              {recapLabel}
+            </Link>
           )}
         </div>
 
@@ -285,6 +315,7 @@ export default async function MeetingsPage({
     else days.push({ key, label: formatMeetingDay(meeting.startAt, now), meetings: [meeting] });
   }
 
+  const recapsEnabled = meetingRecapsEnabled();
   const today = vnDayRange(now);
   const roomsToday = rooms.map((room) => {
     const todayBookings = roomBookings.filter(
@@ -376,6 +407,7 @@ export default async function MeetingsPage({
                           focused={params.focus === meeting.id}
                           now={now}
                           composerProps={composerProps}
+                          recapsEnabled={recapsEnabled}
                         />
                       ))}
                     </div>

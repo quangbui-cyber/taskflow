@@ -10,7 +10,8 @@ export function proxy(request: NextRequest) {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' blob: data:",
     "font-src 'self'",
-    "connect-src 'self'",
+    // Tải file ghi âm biên bản họp thẳng từ trình duyệt lên Vercel Blob.
+    "connect-src 'self' https://vercel.com/api/blob/",
     "worker-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",

@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
+  FileText,
   Inbox,
   MessageSquare,
   RefreshCw,
@@ -48,6 +49,9 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   MEETING_CANCELLED: CalendarX2,
   MEETING_RESPONSE: CalendarCheck,
   MEETING_REMINDER: CalendarClock,
+  MEETING_RECAP_READY: FileText,
+  MEETING_RECAP_FAILED: FileText,
+  MEETING_RECAP_SHARED: FileText,
   LEAVE_REQUEST: CalendarDays,
   LEAVE_DECISION: CalendarDays,
 };
@@ -128,6 +132,8 @@ export default function NotificationList({
       ? "/leave"
       : notification.recognitionId
       ? `/recognition?focus=${notification.recognitionId}#recognition-${notification.recognitionId}`
+      : notification.meetingId && notification.type.startsWith("MEETING_RECAP_")
+      ? `/meetings/${notification.meetingId}/recap`
       : notification.meetingId
       ? `/meetings?focus=${notification.meetingId}#meeting-${notification.meetingId}`
       : notification.projectId

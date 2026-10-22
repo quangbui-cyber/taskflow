@@ -389,7 +389,28 @@ Mở **Cài đặt → Team & Account** để quản lý Team kinh doanh và Acc
 
 Sau khi tạo, có thể đổi Team của Account; các dự án Khách hàng gắn với Account đó sẽ tự chuyển về Team mới. Nếu Account đang gắn với dự án, cần đổi Account của các dự án đó trước khi xóa.
 
-## 15. Quy trình sử dụng đề xuất
+## 15. Biên bản họp
+
+Sau khi cuộc họp bắt đầu, thẻ cuộc họp trong **Lịch họp** có nút **Tạo biên bản** (chỉ người tổ chức và Admin thấy).
+
+### Tạo biên bản
+
+1. Ghi âm cuộc họp bằng điện thoại hoặc phần mềm họp online. **Báo trước cho mọi người** rằng cuộc họp được ghi âm.
+2. Mở **Lịch họp → Tạo biên bản**, chọn file ghi âm (mp3, m4a, wav, webm, ogg, flac hoặc mp4, tối đa 100 MB).
+3. Đánh dấu ô xác nhận đã báo người tham dự, rồi bấm **Tạo biên bản**.
+4. AI chép lời rồi viết biên bản, thường mất 1–3 phút. Có thể rời trang; khi xong app sẽ thông báo.
+
+File ghi âm bị xoá ngay sau khi chép lời. App giữ lại bản chép lời (chỉ người tổ chức và Admin xem được) và biên bản.
+
+### Đọc lại và gửi
+
+- Biên bản gồm: Tóm tắt, Nội dung chính, Quyết định, Việc cần làm (người phụ trách, hạn) và Vấn đề còn mở.
+- AI có thể nghe sai tên riêng hoặc con số. Bấm **Sửa** để chỉnh: dòng bắt đầu bằng `## ` là tiêu đề, dòng bắt đầu bằng `- ` là gạch đầu dòng.
+- **Viết lại** nhờ AI viết lại từ bản chép lời (những chỗ đã sửa tay sẽ mất).
+- Bấm **Gửi cho người tham dự**: mọi người nhận thông báo trong app và email (nếu app đã cấu hình email). Trước khi gửi, người tham dự chưa xem được biên bản.
+- **Xoá biên bản** xoá cả biên bản lẫn bản chép lời.
+
+## 16. Quy trình sử dụng đề xuất
 
 ### Nhận thông báo trên điện thoại
 
