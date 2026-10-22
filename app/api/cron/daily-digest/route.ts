@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { sendGoogleChat } from "@/lib/googleChat";
 import { daysUntil, formatDue, isOverdue } from "@/lib/dates";
 import { meetingsEnabled } from "@/lib/features";
+import { cleanupMeetingRecaps } from "@/lib/meetingRecapJob";
 import { formatMeetingTime, vnDayRange } from "@/lib/meetings";
 import { ARCHIVED_PROJECT_STATUS_KEYS } from "@/lib/types";
 
@@ -302,11 +303,20 @@ export async function GET(request: Request) {
       })
     );
 
+    // Biên bản họp: đánh dấu lỗi lần xử lý bị treo, xoá file ghi âm còn sót.
+    let meetingRecaps: { stuck: number; cleaned: number } | null = null;
+    try {
+      meetingRecaps = await cleanupMeetingRecaps();
+    } catch (error) {
+      console.warn("Meeting recap cleanup failed", error);
+    }
+
     return Response.json({
       ok: true,
       projects: projects.length,
       reminders,
       meetingReminders,
+      meetingRecaps,
       chat: { sent, skipped, failed },
     });
   } catch (error) {

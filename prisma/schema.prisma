@@ -40,6 +40,7 @@ model User {
   recognitionsReceived Recognition[]       @relation("RecognitionRecipient")
   organizedMeetings    Meeting[]           @relation("MeetingOrganizer")
   meetingInvites       MeetingAttendee[]
+  createdMeetingRecaps MeetingRecap[]      @relation("MeetingRecapCreator")
   kpiPlanChanges       KpiPlanChange[]
   uploadedDocuments    DocumentFile[]      @relation("DocumentFileUploader")
   createdDocumentLinks DocumentLink[]      @relation("DocumentLinkCreator")
@@ -469,6 +470,7 @@ model Meeting {
   organizer     User              @relation("MeetingOrganizer", fields: [organizerId], references: [id], onDelete: Cascade)
   attendees     MeetingAttendee[]
   notifications Notification[]
+  recap         MeetingRecap?
   cancelledAt   DateTime?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
@@ -489,4 +491,43 @@ model MeetingAttendee {
 
   @@unique([meetingId, userId])
   @@index([userId])
+}
+
+// Biên bản họp: Groq chép lời file ghi âm, Gemini viết biên bản tiếng Việt.
+// File ghi âm chỉ nằm tạm trên Vercel Blob và bị xoá ngay khi chép lời xong.
+model MeetingRecap {
+  id                  String    @id @default(cuid())
+  meetingId           String    @unique
+  meeting             Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  status              String    @default("PROCESSING") // "PROCESSING" | "READY" | "FAILED"
+  stage               String? // khi đang xử lý: "TRANSCRIBING" | "SUMMARIZING"
+  error               String?
+  audioName           String? // tên file gốc người tổ chức tải lên
+  audioPathname       String? // đường dẫn file tạm trên Vercel Blob; null khi đã xoá
+  audioSeconds        Int?
+  transcript          String? // bản chép lời có mốc thời gian
+  content             String? // biên bản (AI viết, người tổ chức có thể sửa)
+  createdById         String?
+  createdBy           User?     @relation("MeetingRecapCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  processingStartedAt DateTime?
+  sentAt              DateTime? // lúc người tổ chức gửi cho người tham dự; trước đó chỉ người tổ chức/admin xem được
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([status, processingStartedAt])
+  @@index([createdById])
+}
+
+// Nhật ký mỗi lần gọi AI cho biên bản họp — dùng để đếm hạn mức ngày, chặn chạy quá tay.
+// Không ràng buộc khoá ngoại để vẫn giữ số liệu khi cuộc họp/biên bản bị xoá.
+model MeetingRecapRun {
+  id           String   @id @default(cuid())
+  meetingId    String
+  userId       String?
+  kind         String // "TRANSCRIBE" (Groq) | "SUMMARIZE" (Gemini)
+  audioSeconds Int? // với TRANSCRIBE: ước tính trước khi chạy, cập nhật số thật sau khi chép lời
+  createdAt    DateTime @default(now())
+
+  @@index([kind, createdAt])
+  @@index([meetingId, kind, createdAt])
 }

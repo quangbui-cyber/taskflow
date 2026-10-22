@@ -236,3 +236,71 @@ Lịch họp bật mặc định ở mọi môi trường. Muốn tạm ẩn th�
   Gmail chỉ gửi thư trả lời về hộp thư ở bước 1, không cập nhật vào app.
 - **Phòng họp** do Admin thêm trong *Cài đặt → Phòng họp*.
 - Cron 9h sáng (mục trên) nhắc thêm trong app các cuộc họp diễn ra trong ngày.
+
+## Biên bản họp bằng AI (tuỳ chọn)
+
+Người tổ chức tải file ghi âm cuộc họp lên trang **Biên bản** của cuộc họp.
+App gửi file cho **Groq** (`whisper-large-v3`) để chép lời tiếng Việt, rồi nhờ
+**Gemini** (`gemini-3.1-flash-lite`) viết biên bản gồm tóm tắt, nội dung chính,
+quyết định, việc cần làm và vấn đề còn mở. Người tổ chức đọc lại, sửa nếu cần, rồi
+bấm **Gửi cho người tham dự** (thông báo trong app + email nếu đã cấu hình email ở mục trên).
+
+Chi phí tham khảo: khoảng **$0.12 cho mỗi giờ ghi âm** (Groq $0.111/giờ + Gemini
+vài xu). File ghi âm chỉ nằm tạm trên Vercel Blob và **bị xoá ngay khi chép lời xong**;
+app lưu lại bản chép lời và biên bản.
+
+1. **Groq:** tạo API key tại <https://console.groq.com/keys>. Vào **Settings → Billing**
+   chuyển sang gói **Developer** (trả theo dùng) để nhận file tới 100 MB.
+2. **Gemini:** tạo API key tại <https://aistudio.google.com/apikey> và **bật thanh toán**
+   cho project của key đó. Gói miễn phí cho phép Google dùng dữ liệu để cải thiện sản phẩm,
+   không phù hợp với nội dung họp nội bộ.
+3. **Vercel Blob:** Vercel → project → **Storage** → **Create** → **Blob** → chọn
+   **Private** → kết nối với project (Production, Preview; thêm Development nếu chạy thử
+   trên máy). Vercel tự thêm `BLOB_READ_WRITE_TOKEN` cùng các biến Blob khác.
+4. Vercel → Settings → Environment Variables → thêm, lưu dạng Sensitive:
+   - `GROQ_API_KEY`
+   - `GEMINI_API_KEY`
+5. **Redeploy.** Nút **Tạo biên bản** hiện trên các cuộc họp đã bắt đầu.
+
+Thiếu một trong ba khoá (`GROQ_API_KEY`, `GEMINI_API_KEY`, `BLOB_READ_WRITE_TOKEN`) thì
+nút tạo biên bản không hiện; biên bản đã có vẫn xem được. Muốn tắt hẳn thì đặt
+`MEETING_RECAPS_ENABLED=false`. Đổi model không cần sửa code:
+`RECAP_TRANSCRIBE_MODEL` (mặc định `whisper-large-v3`, rẻ hơn: `whisper-large-v3-turbo`)
+và `RECAP_SUMMARY_MODEL` (mặc định `gemini-3.1-flash-lite`).
+
+- **Ai được làm gì:** người tổ chức và Admin tải ghi âm, sửa, viết lại, gửi, xoá biên bản.
+  Người được mời chỉ đọc được **sau khi** biên bản được gửi.
+- **Thời gian xử lý:** thường 1–3 phút cho một cuộc họp 1 giờ, chạy nền nên có thể rời trang.
+  Lần xử lý quá 15 phút được coi là bị gián đoạn: người tổ chức tải file lên lại;
+  cron 9h sáng cũng đánh dấu lỗi và xoá file ghi âm còn sót.
+- **Giới hạn:** file tối đa 100 MB (mp3, m4a, wav, webm, ogg, flac, mp4). Ghi âm iPhone
+  1 giờ khoảng 30–60 MB. Whisper không phân biệt người nói, nên biên bản không ghi
+  "ai nói gì" chính xác.
+- **Quyền riêng tư:** trước khi tải lên, người tổ chức phải xác nhận đã báo cho người tham dự
+  rằng cuộc họp được ghi âm.
+
+### Chống chạy quá tay (giới hạn chi phí)
+
+App tự chặn **trước khi** gọi AI, không có lần chạy nào tự lặp lại:
+
+| Giới hạn | Mặc định | Đổi bằng biến môi trường |
+|---|---|---|
+| Độ dài tối đa mỗi file ghi âm | 180 phút | `RECAP_MAX_AUDIO_MINUTES` |
+| Tổng phút chép lời mỗi ngày (cả công ty) | 600 phút ≈ tối đa $1.1/ngày | `RECAP_DAILY_AUDIO_MINUTES` |
+| Tổng lượt viết biên bản mỗi ngày (cả công ty) | 60 lượt | `RECAP_DAILY_SUMMARIES` |
+| Mỗi cuộc họp mỗi ngày | chép lời 3 lần, viết biên bản 6 lần | — |
+
+- Mỗi lượt Gemini bị giới hạn 8.192 token trả về và tối đa khoảng 5 giờ nội dung đầu vào.
+- Groq/Gemini báo bận (429) hoặc lỗi máy chủ (5xx) thì thử lại tối đa 3 lần; **quá thời gian
+  chờ thì không thử lại** (có thể đã bị tính tiền). Không có hàng đợi hay cron nào tự chạy lại.
+- Hết hạn mức thì người dùng thấy lý do bằng tiếng Việt; ngày mới (0h giờ Việt Nam) tự mở lại.
+- `MEETING_RECAPS_ENABLED=false` rồi Redeploy là tắt hẳn ngay.
+
+Nên đặt thêm **trần chi tiêu ở phía nhà cung cấp** — lớp bảo vệ cuối cùng, kể cả khi code có lỗi:
+
+1. **Groq:** Console → **Settings → Billing → Limits** → nhập trần theo tháng (ví dụ $10),
+   bật email cảnh báo ở 50% / 75% / 90%. Chạm trần là Groq chặn mọi lời gọi tới đầu tháng sau.
+2. **Gemini:** Google AI Studio → tab **Spend** của project → đặt trần theo tháng (ví dụ $5).
+   Trần có hiệu lực sau khoảng 10 phút.
+3. **Vercel:** gói Hobby tự dừng khi vượt mức miễn phí, không tính thêm tiền. Gói Pro: bật
+   **Spend Management** (Settings → Billing) để nhận cảnh báo hoặc tạm dừng dự án.
