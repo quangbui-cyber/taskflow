@@ -279,8 +279,13 @@ và `RECAP_SUMMARY_MODEL` (mặc định `gemini-3.1-flash-lite`).
 - **Giới hạn:** file tối đa 100 MB (mp3, m4a, wav, webm, ogg, flac, mp4). Ghi âm iPhone
   1 giờ khoảng 30–60 MB. Whisper không phân biệt người nói, nên biên bản không ghi
   "ai nói gì" chính xác.
-- **Quyền riêng tư:** trước khi tải lên, người tổ chức phải xác nhận đã báo cho người tham dự
-  rằng cuộc họp được ghi âm.
+- **Quyền riêng tư:** nên báo trước cho người tham dự (nhất là khách hàng) rằng cuộc họp được ghi âm.
+- **Thông báo khi họp bắt đầu:** cron `/api/cron/meeting-starts` chạy **mỗi phút** để báo người tổ chức
+  "cuộc họp đã bắt đầu — bấm để ghi âm". Lịch chạy mỗi phút **cần gói Vercel Pro**; gói Hobby chỉ cho
+  cron mỗi ngày một lần và sẽ **từ chối deploy** — khi đó xoá mục `meeting-starts` trong `vercel.json`.
+  Cron dùng chung `CRON_SECRET` với cron 9h sáng.
+- **Cuộc họp dự án:** họp tạo từ trang dự án được gắn với dự án; khi gửi, biên bản được lưu thành file
+  `.docx` trong tài liệu dự án (gửi lại thì thay file cũ).
 
 ### Chống chạy quá tay (giới hạn chi phí)
 

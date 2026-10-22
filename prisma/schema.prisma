@@ -100,6 +100,7 @@ model Project {
   members              ProjectMember[]
   tasks                Task[]
   files                ProjectFile[]
+  meetings             Meeting[]
   onProcessAt          DateTime? // thời điểm đầu tiên chuyển sang ON_PROCESS - dùng ghi nhận doanh thu
   completedAt          DateTime? // thời điểm chuyển sang DONE
   createdAt            DateTime        @default(now())
@@ -471,6 +472,8 @@ model Meeting {
   attendees     MeetingAttendee[]
   notifications Notification[]
   recap         MeetingRecap?
+  projectId     String? // họp tạo từ trang dự án: biên bản được lưu vào tài liệu dự án
+  project       Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
   cancelledAt   DateTime?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
@@ -478,6 +481,7 @@ model Meeting {
   @@index([status, startAt])
   @@index([roomId, status, startAt])
   @@index([organizerId, startAt])
+  @@index([projectId])
 }
 
 model MeetingAttendee {
@@ -511,6 +515,7 @@ model MeetingRecap {
   createdBy           User?     @relation("MeetingRecapCreator", fields: [createdById], references: [id], onDelete: SetNull)
   processingStartedAt DateTime?
   sentAt              DateTime? // lúc người tổ chức gửi cho người tham dự; trước đó chỉ người tổ chức/admin xem được
+  projectFileId       String? // file biên bản (.docx) đã lưu vào tài liệu dự án, để lần gửi sau thay bản mới
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 

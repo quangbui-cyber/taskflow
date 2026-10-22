@@ -13,6 +13,7 @@ import { RecapServiceError, summarizeTranscript, transcribeAudioUrl } from "@/li
 import { loadRecapUsage } from "@/lib/meetingRecapData";
 import { recapLimits, summaryLimitReason } from "@/lib/meetingRecapLimits";
 import { notify } from "@/lib/notify";
+import { DOCX_MIME_TYPE, buildRecapDocx, recapDocxFileName } from "@/lib/recapDocx";
 import { prisma } from "@/lib/prisma";
 
 const SIGNED_URL_TTL_MS = 30 * 60 * 1000;
@@ -198,4 +199,57 @@ export async function cleanupMeetingRecaps(now = new Date()) {
     where: { createdAt: { lt: new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000) } },
   });
   return { stuck: stuck.length, cleaned };
+}
+
+/**
+ * Họp thuộc dự án: lưu (hoặc thay) biên bản dạng Word vào tài liệu dự án.
+ * Trả về true nếu đã lưu; lỗi lưu không làm hỏng việc gửi biên bản.
+ */
+export async function saveRecapToProject(meetingId: string, uploaderId: string, sentAt: Date): Promise<boolean> {
+  const meeting = await prisma.meeting.findUnique({
+    where: { id: meetingId },
+    include: {
+      room: { select: { name: true } },
+      organizer: { select: { name: true } },
+      attendees: { select: { user: { select: { name: true } } }, orderBy: { createdAt: "asc" } },
+      recap: { select: { id: true, content: true, projectFileId: true } },
+    },
+  });
+  if (!meeting?.projectId || !meeting.recap?.content?.trim()) return false;
+
+  try {
+    const data = buildRecapDocx({
+      title: meeting.title,
+      when: formatMeetingWhen(meeting.startAt, meeting.endAt),
+      room: meeting.room?.name ?? null,
+      organizer: meeting.organizer.name,
+      attendees: meeting.attendees.map((attendee) => attendee.user.name),
+      content: meeting.recap.content,
+      sentAt,
+    });
+    const file = {
+      name: recapDocxFileName(meeting.title, meeting.startAt),
+      mimeType: DOCX_MIME_TYPE,
+      size: data.length,
+      data,
+    };
+    // Gửi lại: thay file cũ (nếu vẫn còn trong đúng dự án) thay vì tạo bản trùng.
+    const existing = meeting.recap.projectFileId
+      ? await prisma.projectFile.findFirst({
+          where: { id: meeting.recap.projectFileId, projectId: meeting.projectId },
+          select: { id: true },
+        })
+      : null;
+    const saved = existing
+      ? await prisma.projectFile.update({ where: { id: existing.id }, data: file, select: { id: true } })
+      : await prisma.projectFile.create({
+          data: { ...file, projectId: meeting.projectId, uploaderId },
+          select: { id: true },
+        });
+    await prisma.meetingRecap.update({ where: { id: meeting.recap.id }, data: { projectFileId: saved.id } });
+    return true;
+  } catch (error) {
+    console.error("Could not save the meeting recap to project documents", error);
+    return false;
+  }
 }

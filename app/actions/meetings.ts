@@ -235,6 +235,25 @@ export async function createMeeting(
   const input = parseMeetingForm(formData, user.id);
   if ("error" in input) return input;
 
+  // Họp tạo từ trang dự án: gắn vào dự án (người tạo phải là thành viên hoặc admin).
+  const requestedProjectId = String(formData.get("projectId") ?? "").trim();
+  let projectId: string | null = null;
+  if (requestedProjectId) {
+    const canUseProject =
+      user.role === "ADMIN" ||
+      Boolean(
+        await prisma.projectMember.findFirst({
+          where: { projectId: requestedProjectId, userId: user.id },
+          select: { id: true },
+        })
+      );
+    const project = canUseProject
+      ? await prisma.project.findUnique({ where: { id: requestedProjectId }, select: { id: true } })
+      : null;
+    if (!project) return { error: "Bạn không có quyền tạo cuộc họp cho dự án này." };
+    projectId = project.id;
+  }
+
   const [roomResult, attendees] = await Promise.all([
     loadActiveRoom(input.roomId),
     loadActiveUsers(input.attendeeIds),
@@ -257,6 +276,7 @@ export async function createMeeting(
           roomId: input.roomId,
           meetingUrl: input.meetingUrl,
           organizerId: user.id,
+          projectId,
           attendees: {
             create: attendees.map((attendee) => ({ userId: attendee.id })),
           },

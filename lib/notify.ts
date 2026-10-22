@@ -24,7 +24,8 @@ export async function notify(
       | "MEETING_REMINDER"
       | "MEETING_RECAP_READY"
       | "MEETING_RECAP_FAILED"
-      | "MEETING_RECAP_SHARED";
+      | "MEETING_RECAP_SHARED"
+      | "MEETING_RECAP_PROMPT";
     message: string;
     taskId?: string;
     projectId?: string;
