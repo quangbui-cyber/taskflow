@@ -232,6 +232,10 @@ test("the owner the AI heard is matched to an invited person only when it is una
   const team = [{ id: "b", name: "Bình Nội dung" }, { id: "d", name: "Dũng Kỹ thuật" }];
   assert.equal(matchRecapOwner("Dũng", team), "d");
   assert.equal(matchRecapOwner("chị Bình", team), "b");
+  // Dũng không có trong danh sách thì để trống, không rơi sang "Nội dung".
+  assert.equal(matchRecapOwner("Dũng", [{ id: "b", name: "Bình Nội dung" }]), null);
+  // Tên lưu không dấu vẫn khớp với tên AI ghi có dấu.
+  assert.equal(matchRecapOwner("Dũng", [{ id: "b", name: "Bình Nội dung" }, { id: "t", name: "Dung Tran" }]), "t");
   // Chữ ở giữa tên cũng tìm được khi chỉ có một người như vậy.
   assert.equal(matchRecapOwner("Minh", western), "u3");
 });
@@ -403,6 +407,16 @@ test("running out of tokens is reported at once instead of paying for a second i
   await assert.rejects(
     summarizeTranscript({ system: "S", user: "U", env: env({ GEMINI_API_KEY: "k" }) }),
     /RECAP_SUMMARY_MAX_OUTPUT_TOKENS/
+  );
+  assert.equal(calls.length, 1);
+});
+
+test("a retried Gemini call only gets the time left, never a fresh allowance", async () => {
+  const calls = mockFetch([json({ error: "busy" }, 503)]);
+  // Lần 1 lỗi 503 → chờ 5 giây → chỉ còn ~17 giây, dưới mức tối thiểu nên dừng thay vì gọi lại.
+  await assert.rejects(
+    summarizeTranscript({ system: "S", user: "U", env: env({ GEMINI_API_KEY: "k" }), timeoutMs: 22_000 }),
+    /Gemini xử lý quá lâu/
   );
   assert.equal(calls.length, 1);
 });

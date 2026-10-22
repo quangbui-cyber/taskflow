@@ -344,29 +344,38 @@ export function normalizePersonName(value: string, stripAccents = true): string 
 
 const HONORIFICS = /^(anh|chị|chi|em|bạn|ban|chú|chu|cô|co|ông|ong|bà|ba|bác|bac|sếp|sep|mr|mrs|ms)\s+/;
 
+const hasAccents = (normalized: string) => normalized !== normalizePersonName(normalized, true);
+
 /**
  * Tìm người phụ trách trong danh sách người tổ chức + người được mời.
- * Thử lần lượt: khớp cả họ tên → khớp phần cuối tên → khớp một cụm chữ trong tên; mỗi bước giữ dấu
- * trước rồi mới bỏ dấu ("Dũng" không được khớp "Nội dung"). Bước nào ra nhiều người thì dừng, không đoán.
+ * Thử lần lượt: khớp cả họ tên → khớp phần cuối tên → khớp một cụm chữ trong tên; bước nào ra nhiều
+ * người thì dừng, không đoán. Chỉ bỏ dấu khi so nếu một bên vốn viết không dấu (tên lưu "Dung Tran",
+ * hoặc AI ghi "Dung"); hai bên đều có dấu thì dấu phải khớp, nên "Dũng" không bao giờ thành "Nội dung".
  */
 export function matchRecapOwner(name: string, people: Person[]): string | null {
   if (isUnknown(name.trim())) return null;
+  const wanted = normalizePersonName(name, false).replace(HONORIFICS, "");
+  if (!wanted) return null;
+  const wantedPlain = !hasAccents(wanted);
   const unique = [...new Map(people.map((person) => [person.id, person])).values()];
-
-  for (const stripAccents of [false, true]) {
-    const wanted = normalizePersonName(name, stripAccents).replace(HONORIFICS, "");
-    if (!wanted) return null;
-    const names = unique.map((person) => ({ id: person.id, name: normalizePersonName(person.name, stripAccents) }));
-    const tiers = [
-      names.filter((person) => person.name === wanted),
-      // Tên gọi thường là phần cuối ("Nguyễn Văn An" → "An"); tên lưu kiểu "Quang Bui" thì tên đứng đầu.
-      names.filter((person) => person.name.endsWith(` ${wanted}`)),
-      names.filter((person) => ` ${person.name} `.includes(` ${wanted} `)),
-    ];
-    for (const matches of tiers) {
-      if (matches.length === 1) return matches[0].id;
-      if (matches.length > 1) return null;
-    }
+  const names = unique.map((person) => {
+    const accented = normalizePersonName(person.name, false);
+    const loose = wantedPlain || !hasAccents(accented);
+    return {
+      id: person.id,
+      name: loose ? normalizePersonName(accented, true) : accented,
+      target: loose ? normalizePersonName(wanted, true) : wanted,
+    };
+  });
+  const tiers = [
+    names.filter((person) => person.name === person.target),
+    // Tên gọi thường là phần cuối ("Nguyễn Văn An" → "An"); tên lưu kiểu "Quang Bui" thì tên đứng đầu.
+    names.filter((person) => person.name.endsWith(` ${person.target}`)),
+    names.filter((person) => ` ${person.name} `.includes(` ${person.target} `)),
+  ];
+  for (const matches of tiers) {
+    if (matches.length === 1) return matches[0].id;
+    if (matches.length > 1) return null;
   }
   return null;
 }

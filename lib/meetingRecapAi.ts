@@ -119,9 +119,12 @@ type GeminiResponse = {
   usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number };
 };
 
-/** Viết biên bản có cấu trúc từ bản chép lời. */
 export const RECAP_SUMMARY_TIMEOUT_MS = 150_000;
+// Còn ít hơn mức này thì không gọi (lại) Gemini nữa, vì gần như chắc chắn không kịp.
+const MIN_SUMMARY_ATTEMPT_MS = 20_000;
+const SUMMARY_TOO_SLOW = "Gemini xử lý quá lâu. Thử bấm Viết lại sau ít phút.";
 
+/** Viết biên bản có cấu trúc từ bản chép lời. */
 export async function summarizeTranscript({
   system,
   user,
@@ -131,15 +134,19 @@ export async function summarizeTranscript({
   system: string;
   user: string;
   env?: NodeJS.ProcessEnv;
-  /** Thời gian chờ Gemini; lượt chạy nền truyền vào phần thời gian còn lại của nó. */
+  /** Tổng thời gian cho mọi lần gọi (kể cả thử lại); lượt chạy nền truyền vào phần thời gian còn lại của nó. */
   timeoutMs?: number;
 }): Promise<RecapSummary> {
   const apiKey = env.GEMINI_API_KEY?.trim();
   if (!apiKey) throw new RecapServiceError("Chưa cấu hình GEMINI_API_KEY.");
   const model = recapModels(env).summary;
   const { thinkingLevel, maxOutputTokens } = recapSummarySettings(env);
+  // Một hạn chót chung: lần thử lại chỉ dùng phần thời gian còn lại, không được cấp lại từ đầu.
+  const deadline = Date.now() + timeoutMs;
 
   for (let attempt = 1; ; attempt++) {
+    const timeLeft = deadline - Date.now();
+    if (timeLeft < MIN_SUMMARY_ATTEMPT_MS) throw new RecapServiceError(SUMMARY_TOO_SLOW);
     let res: Response;
     try {
       res = await fetch(`${GEMINI_BASE_URL}/${encodeURIComponent(model)}:generateContent`, {
@@ -157,10 +164,10 @@ export async function summarizeTranscript({
             responseSchema: RECAP_SUMMARY_SCHEMA,
           },
         }),
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: AbortSignal.timeout(timeLeft),
       });
     } catch (error) {
-      if (isTimeout(error)) throw new RecapServiceError("Gemini xử lý quá lâu. Thử bấm Viết lại sau ít phút.");
+      if (isTimeout(error)) throw new RecapServiceError(SUMMARY_TOO_SLOW);
       if (attempt < 3) {
         await wait(attempt * 3000);
         continue;

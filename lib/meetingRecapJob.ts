@@ -109,6 +109,11 @@ export async function runMeetingRecap(recapId: string, startedAt: Date): Promise
       throw new RecapServiceError("Không nghe được lời nói nào trong file ghi âm. Kiểm tra lại file rồi tải lên lần nữa.");
     }
 
+    // Không đủ thời gian thì dừng trước khi tính lượt; bản chép lời đã lưu để viết lại ở lượt mới.
+    const timeLeft = RUN_BUDGET_MS - (Date.now() - runStartedAt);
+    if (timeLeft < MIN_SUMMARY_TIMEOUT_MS) {
+      throw new RecapServiceError("Chép lời mất nhiều thời gian nên chưa kịp viết biên bản. Bấm Thử viết lại.");
+    }
     // Hạn mức cả công ty: kiểm tra và ghi nhận ngay trước khi gọi Gemini.
     const limited = summaryLimitReason(recapLimits(), await loadRecapUsage(meeting.id), { perMeeting: false });
     if (limited) throw new RecapServiceError(limited);
@@ -130,10 +135,9 @@ export async function runMeetingRecap(recapId: string, startedAt: Date): Promise
     );
     // Chép lời lâu thì phần viết biên bản chỉ còn thời gian còn lại; không kịp thì báo lỗi
     // (bản chép lời đã lưu) để người tổ chức bấm "Thử viết lại" ở một lượt mới.
-    const timeLeft = RUN_BUDGET_MS - (Date.now() - runStartedAt);
     const summary = await summarizeTranscript({
       ...prompt,
-      timeoutMs: Math.min(RECAP_SUMMARY_TIMEOUT_MS, Math.max(MIN_SUMMARY_TIMEOUT_MS, timeLeft)),
+      timeoutMs: Math.min(RECAP_SUMMARY_TIMEOUT_MS, RUN_BUDGET_MS - (Date.now() - runStartedAt)),
     });
     const people = [meeting.organizer, ...meeting.attendees.map((attendee) => attendee.user)];
     const actionRows = recapActionItemRows(summary.actionItems, people, meeting.startAt);
