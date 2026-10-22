@@ -28,7 +28,7 @@ async function loadManaged(meetingId: string) {
   const user = await requireUser();
   const meeting = await findRecapMeeting(meetingId);
   if (!meeting || !canManageMeetingRecap(meeting, user)) {
-    return { error: "Chỉ người tổ chức hoặc quản trị viên mới làm được việc này." } as const;
+    return { error: "Chỉ người ghi biên bản, người tổ chức hoặc quản trị viên mới làm được việc này." } as const;
   }
   return { user, meeting } as const;
 }
@@ -160,6 +160,7 @@ function loadActionItem(itemId: string) {
               startAt: true,
               endAt: true,
               organizerId: true,
+              recorderId: true,
               attendees: { select: { userId: true } },
             },
           },
@@ -253,7 +254,7 @@ export async function deleteRecapActionItem(itemId: string): Promise<MeetingReca
   const item = await loadActionItem(itemId);
   if (!item) return { success: "Đã xoá việc cần làm." };
   if (!canManageMeetingRecap(item.recap.meeting, user)) {
-    return { error: "Chỉ người tổ chức hoặc quản trị viên mới làm được việc này." };
+    return { error: "Chỉ người ghi biên bản, người tổ chức hoặc quản trị viên mới làm được việc này." };
   }
   await prisma.meetingRecapActionItem.delete({ where: { id: item.id } });
   refresh(item.recap.meeting.id);

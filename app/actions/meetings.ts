@@ -30,6 +30,8 @@ type MeetingInput = {
   roomId: string | null;
   meetingUrl: string | null;
   attendeeIds: string[];
+  /** Người ghi biên bản; null = người tổ chức tự ghi. */
+  recorderId: string | null;
 };
 
 type Recipient = { name: string; email: string };
@@ -85,6 +87,12 @@ function parseMeetingForm(
     return { error: `Một cuộc họp tối đa ${MEETING_MAX_ATTENDEES} người tham dự.` };
   }
 
+  const requestedRecorder = String(formData.get("recorderId") ?? "").trim();
+  const recorderId = requestedRecorder && requestedRecorder !== organizerId ? requestedRecorder : null;
+  if (recorderId && !attendeeIds.includes(recorderId)) {
+    return { error: "Người ghi biên bản phải là người tham dự cuộc họp." };
+  }
+
   if (meetingUrl) {
     let valid = false;
     try {
@@ -103,6 +111,7 @@ function parseMeetingForm(
     roomId: roomId || null,
     meetingUrl: meetingUrl || null,
     attendeeIds,
+    recorderId,
   };
 }
 
@@ -276,6 +285,7 @@ export async function createMeeting(
           roomId: input.roomId,
           meetingUrl: input.meetingUrl,
           organizerId: user.id,
+          recorderId: input.recorderId,
           projectId,
           attendees: {
             create: attendees.map((attendee) => ({ userId: attendee.id })),
@@ -300,6 +310,13 @@ export async function createMeeting(
       meetingId,
     }
   );
+  if (input.recorderId) {
+    await notify([input.recorderId], {
+      type: "MEETING_UPDATED",
+      message: `${user.name} giao bạn ghi biên bản cuộc họp “${input.title}”`,
+      meetingId,
+    });
+  }
   queueMeetingEmail(meetingId, "INVITED");
 
   const busy = await busyPeopleNames(
@@ -325,6 +342,7 @@ export async function updateMeeting(
       id: true,
       status: true,
       organizerId: true,
+      recorderId: true,
       startAt: true,
       endAt: true,
       roomId: true,
@@ -390,6 +408,7 @@ export async function updateMeeting(
           endAt: input.endAt,
           roomId: input.roomId,
           meetingUrl: input.meetingUrl,
+          recorderId: input.recorderId,
           sequence: { increment: 1 },
           attendees: {
             create: added.map((attendee) => ({ userId: attendee.id })),
@@ -403,7 +422,18 @@ export async function updateMeeting(
   }
 
   const when = formatMeetingWhen(input.startAt, input.endAt);
+  const newRecorderId =
+    input.recorderId && input.recorderId !== existing.recorderId && input.recorderId !== user.id
+      ? input.recorderId
+      : null;
   await Promise.all([
+    newRecorderId
+      ? notify([newRecorderId], {
+          type: "MEETING_UPDATED",
+          message: `${user.name} giao bạn ghi biên bản cuộc họp “${input.title}”`,
+          meetingId,
+        })
+      : Promise.resolve(),
     notify(
       added.map((attendee) => attendee.id),
       {

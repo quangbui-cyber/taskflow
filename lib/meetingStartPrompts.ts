@@ -9,7 +9,7 @@ import {
 import { deliverPush } from "@/lib/webPush";
 
 /**
- * Báo người tổ chức khi cuộc họp vừa bắt đầu mà chưa có biên bản: bấm vào là mở trang
+ * Báo người ghi biên bản (mặc định là người tổ chức) khi cuộc họp vừa bắt đầu mà chưa có biên bản: bấm vào là mở trang
  * biên bản và ghi âm ngay. Mỗi cuộc họp chỉ báo một lần (khoá chống trùng).
  */
 export async function sendMeetingStartPrompts(now = new Date()) {
@@ -21,15 +21,24 @@ export async function sendMeetingStartPrompts(now = new Date()) {
       startAt: { lte: now, gte: new Date(now.getTime() - MEETING_START_PROMPT_WINDOW_MS) },
       endAt: { gt: now },
       recap: null,
-      organizer: { isActive: true },
     },
-    select: { id: true, title: true, organizerId: true },
+    select: {
+      id: true,
+      title: true,
+      organizer: { select: { id: true, isActive: true } },
+      recorder: { select: { id: true, isActive: true } },
+    },
   });
-  if (meetings.length === 0) return { prompted: 0 };
+  // Người ghi biên bản đã nghỉ thì báo người tổ chức; cả hai đều nghỉ thì bỏ qua.
+  const targets = meetings.flatMap((meeting) => {
+    const userId = [meeting.recorder, meeting.organizer].find((person) => person?.isActive)?.id;
+    return userId ? [{ ...meeting, userId }] : [];
+  });
+  if (targets.length === 0) return { prompted: 0 };
 
-  const rows: Prisma.NotificationCreateManyInput[] = meetings.map((meeting) => ({
+  const rows: Prisma.NotificationCreateManyInput[] = targets.map((meeting) => ({
     dedupeKey: meetingStartPromptKey(meeting.id),
-    userId: meeting.organizerId,
+    userId: meeting.userId,
     type: "MEETING_RECAP_PROMPT",
     message: meetingStartPromptMessage(meeting.title),
     meetingId: meeting.id,

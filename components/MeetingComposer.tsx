@@ -64,6 +64,7 @@ export type EditableMeeting = {
   roomId: string | null;
   meetingUrl: string;
   attendeeIds: string[];
+  recorderId: string | null;
 };
 
 type FormValues = {
@@ -75,6 +76,8 @@ type FormValues = {
   roomId: string;
   meetingUrl: string;
   attendeeIds: string[];
+  /** "" = người tổ chức tự ghi biên bản */
+  recorderId: string;
 };
 
 const INITIAL_STATE: MeetingActionState = {};
@@ -109,6 +112,7 @@ function defaultValues(attendeeIds: string[] = [], now = new Date()): FormValues
     roomId: "",
     meetingUrl: "",
     attendeeIds,
+    recorderId: "",
   };
 }
 
@@ -129,6 +133,7 @@ function valuesFromMeeting(meeting: EditableMeeting): FormValues {
     roomId: meeting.roomId ?? "",
     meetingUrl: meeting.meetingUrl,
     attendeeIds: meeting.attendeeIds,
+    recorderId: meeting.recorderId ?? "",
   };
 }
 
@@ -199,6 +204,10 @@ export default function MeetingComposer({
     [organizerId, people]
   );
   const selected = useMemo(() => new Set(values.attendeeIds), [values.attendeeIds]);
+  // Bỏ người đang được giao ghi biên bản khỏi danh sách mời thì quay về người tổ chức.
+  const recorderId = selected.has(values.recorderId) ? values.recorderId : "";
+  const organizerName = people.find((person) => person.id === organizerId)?.name ?? "Người tổ chức";
+  const selectedPeople = invitable.filter((person) => selected.has(person.id));
   const normalizedQuery = query.trim().toLowerCase();
   const filteredPeople = invitable.filter((person) =>
     `${person.name} ${person.email}`.toLowerCase().includes(normalizedQuery)
@@ -689,6 +698,26 @@ export default function MeetingComposer({
                     </p>
                   )}
                 </fieldset>
+
+                <label className="block">
+                  <span className="tf-label">Người ghi biên bản</span>
+                  <select
+                    name="recorderId"
+                    value={recorderId}
+                    onChange={(event) => set("recorderId", event.target.value)}
+                    className="tf-field"
+                  >
+                    <option value="">{organizerName} (người tổ chức)</option>
+                    {selectedPeople.map((person) => (
+                      <option key={person.id} value={person.id}>
+                        {person.name}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="mt-1.5 block text-xs text-zinc-500">
+                    Người này ghi âm và gửi biên bản. Không chọn ai thì người tổ chức tự ghi.
+                  </span>
+                </label>
 
                 <label className="block">
                   <span className="tf-label">Nội dung (không bắt buộc)</span>

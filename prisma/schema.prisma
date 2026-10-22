@@ -39,6 +39,7 @@ model User {
   recognitionsSent     Recognition[]       @relation("RecognitionSender")
   recognitionsReceived Recognition[]       @relation("RecognitionRecipient")
   organizedMeetings    Meeting[]           @relation("MeetingOrganizer")
+  recordedMeetings     Meeting[]           @relation("MeetingRecorder")
   meetingInvites       MeetingAttendee[]
   createdMeetingRecaps MeetingRecap[]      @relation("MeetingRecapCreator")
   recapActionItems     MeetingRecapActionItem[] @relation("MeetingRecapActionOwner")
@@ -471,6 +472,9 @@ model Meeting {
   room          MeetingRoom?      @relation(fields: [roomId], references: [id], onDelete: SetNull)
   organizerId   String
   organizer     User              @relation("MeetingOrganizer", fields: [organizerId], references: [id], onDelete: Cascade)
+  // Người ghi biên bản (phải là người tham dự). Để trống = người tổ chức tự ghi.
+  recorderId    String?
+  recorder      User?             @relation("MeetingRecorder", fields: [recorderId], references: [id], onDelete: SetNull)
   attendees     MeetingAttendee[]
   notifications Notification[]
   recap         MeetingRecap?
@@ -483,6 +487,7 @@ model Meeting {
   @@index([status, startAt])
   @@index([roomId, status, startAt])
   @@index([organizerId, startAt])
+  @@index([recorderId])
   @@index([projectId])
 }
 

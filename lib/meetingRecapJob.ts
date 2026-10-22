@@ -124,7 +124,7 @@ export async function runMeetingRecap(recapId: string, startedAt: Date): Promise
   if (!recap) return;
   const { meeting } = recap;
   const attendeeNames = meeting.attendees.map((attendee) => attendee.user.name);
-  const managerIds = [meeting.organizerId, recap.createdById];
+  const managerIds = [meeting.organizerId, meeting.recorderId, recap.createdById];
   const personNames = [meeting.organizer.name, ...attendeeNames];
   const hintWords = transcriptionHintWords(meeting.title, personNames);
 

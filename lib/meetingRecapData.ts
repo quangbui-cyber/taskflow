@@ -15,6 +15,7 @@ export function findRecapMeeting(meetingId: string) {
       startAt: true,
       endAt: true,
       organizerId: true,
+      recorderId: true,
       attendees: { select: { userId: true } },
       recap: {
         select: {

@@ -8,6 +8,7 @@ import { requireUser } from "@/lib/auth";
 import { meetingRecapsEnabled, meetingsEnabled } from "@/lib/features";
 import {
   canManageMeetingRecap,
+  meetingRecorderId,
   canOpenMeetingRecap,
   canReadMeetingRecap,
   isRecapActionDone,
@@ -81,6 +82,12 @@ export default async function MeetingRecapPage({
   const readable = canReadMeetingRecap(meeting, recap, user);
   const startBlock = recapStartBlockReason(meeting, user, now);
 
+  const recorderId = meetingRecorderId(meeting);
+  const recorderName =
+    recorderId === meeting.organizerId
+      ? meeting.organizer.name
+      : meeting.attendees.find((attendee) => attendee.userId === recorderId)?.user.name;
+
   const people = [meeting.organizer, ...meeting.attendees.map((attendee) => attendee.user)].filter(
     (person, index, all) => all.findIndex((other) => other.id === person.id) === index
   );
@@ -138,7 +145,9 @@ export default async function MeetingRecapPage({
               <div className="flex items-center gap-2">
                 <DoorOpen size={15} className="shrink-0 text-zinc-400" aria-hidden="true" />
                 <dt className="sr-only">Phòng họp</dt>
-                <dd>{meeting.room?.name ?? "Không dùng phòng"} · {meeting.organizer.name} tổ chức</dd>
+                <dd>{meeting.room?.name ?? "Không dùng phòng"} · {meeting.organizer.name} tổ chức
+                  {recorderName ? ` · ${recorderName} ghi biên bản` : ""}
+                </dd>
               </div>
               {meeting.project && (
                 <div className="flex items-center gap-2">
