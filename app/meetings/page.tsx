@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
-import { CalendarClock, Clock, DoorOpen, FileText, Video } from "lucide-react";
+import { CalendarClock, Clock, DoorOpen, FileText, NotebookPen, Video } from "lucide-react";
 import Avatar from "@/components/Avatar";
 import {
   CancelMeetingButton,
@@ -18,6 +18,7 @@ import {
   meetingResponseLabel,
   vnDayRange,
 } from "@/lib/meetings";
+import { canManageMeetingRecap, meetingRecorderId } from "@/lib/meetingRecap";
 import { loadMeetingComposerData, type MeetingComposerData } from "@/lib/meetingComposerData";
 import { prisma } from "@/lib/prisma";
 
@@ -54,15 +55,11 @@ const RESPONSE_RING: Record<string, string> = {
 };
 
 /** Nút mở trang biên bản: người tổ chức/admin thấy trạng thái, người tham dự chỉ thấy khi đã gửi. */
-function recapLink(
-  meeting: MeetingRow,
-  canManage: boolean,
-  recapsEnabled: boolean,
-  now: Date
-): string | null {
-  if (meeting.status === "CANCELLED" || meeting.startAt.getTime() > now.getTime()) return null;
+function recapLink(meeting: MeetingRow, canManage: boolean, recapsEnabled: boolean): string | null {
+  if (meeting.status === "CANCELLED") return null;
   const recap = meeting.recap;
   if (!canManage) return recap?.sentAt ? "Biên bản" : null;
+  // Người tổ chức/admin thấy nút ngay từ tab "Lịch của tôi"; trang biên bản tự báo nếu họp chưa bắt đầu.
   if (!recap) return recapsEnabled ? "Tạo biên bản" : null;
   if (recap.status === "PROCESSING") return "Biên bản: đang xử lý";
   if (recap.status === "FAILED") return "Biên bản: lỗi";
@@ -88,6 +85,13 @@ function MeetingCard({
   const myInvite = meeting.attendees.find((attendee) => attendee.userId === viewer.id);
   const isParticipant = isOrganizer || Boolean(myInvite);
   const canManage = isOrganizer || viewer.role === "ADMIN";
+  // Người ghi biên bản (mặc định là người tổ chức) cũng được tạo/gửi biên bản.
+  const canRecap = canManageMeetingRecap(meeting, viewer);
+  const recorderId = meetingRecorderId(meeting);
+  const recorderName =
+    recorderId === meeting.organizerId
+      ? meeting.organizer.name
+      : meeting.attendees.find((attendee) => attendee.userId === recorderId)?.user.name;
   const cancelled = meeting.status === "CANCELLED";
   const ended = meeting.endAt.getTime() < now.getTime();
   const ongoing = !cancelled && !ended && meeting.startAt.getTime() <= now.getTime();
@@ -95,7 +99,7 @@ function MeetingCard({
   // Sửa giờ họp đã bắt đầu sẽ bị chặn (không đặt lịch về quá khứ), nên chỉ cho sửa trước giờ họp.
   const editable = open && !ongoing && canManage;
   const accepted = meeting.attendees.filter((attendee) => attendee.response === "ACCEPTED").length;
-  const recapLabel = isParticipant || canManage ? recapLink(meeting, canManage, recapsEnabled, now) : null;
+  const recapLabel = isParticipant || canRecap ? recapLink(meeting, canRecap, recapsEnabled) : null;
 
   return (
     <article
@@ -153,6 +157,12 @@ function MeetingCard({
             />
             {isOrganizer ? "Bạn tổ chức" : `${meeting.organizer.name} tổ chức`}
           </span>
+          {recorderName && (
+            <span className="inline-flex items-center gap-1.5">
+              <NotebookPen size={14} aria-hidden="true" />
+              {recorderId === viewer.id ? "Bạn ghi biên bản" : `${recorderName} ghi biên bản`}
+            </span>
+          )}
         </div>
 
         {meeting.description && isParticipant && (
@@ -188,7 +198,7 @@ function MeetingCard({
               Bạn: {meetingResponseLabel(myInvite.response)}
             </span>
           )}
-          {recapLabel && (
+          {recapLabel && !(open && canRecap) && (
             <Link
               href={`/meetings/${meeting.id}/recap`}
               prefetch={false}
@@ -200,7 +210,7 @@ function MeetingCard({
           )}
         </div>
 
-        {open && (myInvite || canManage) && (
+        {open && (myInvite || canManage || canRecap) && (
           <div className="mt-3.5 flex flex-wrap items-center gap-2">
             {myInvite && (
               <MeetingResponseButtons meetingId={meeting.id} response={myInvite.response} />
@@ -219,8 +229,20 @@ function MeetingCard({
                   roomId: meeting.roomId,
                   meetingUrl: meeting.meetingUrl ?? "",
                   attendeeIds: meeting.attendees.map((attendee) => attendee.userId),
+                  recorderId: meeting.recorderId,
                 }}
               />
+            )}
+            {recapLabel && canRecap && (
+              <Link
+                href={`/meetings/${meeting.id}/recap`}
+                prefetch={false}
+                title="Người ghi biên bản, người tổ chức hoặc quản trị viên tạo được biên bản"
+                className="tf-button-secondary !min-h-9 !px-3 text-xs"
+              >
+                <FileText size={14} aria-hidden="true" />
+                {recapLabel}
+              </Link>
             )}
             {canManage && (
               <CancelMeetingButton

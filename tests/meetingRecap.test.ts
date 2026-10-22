@@ -8,6 +8,7 @@ import {
   badTranscriptWindows,
   buildTranscriptionPrompt,
   canManageMeetingRecap,
+  meetingRecorderId,
   cleanStoredTranscript,
   canOpenMeetingRecap,
   canReadMeetingRecap,
@@ -78,7 +79,7 @@ test("audio pathnames stay inside the meeting's folder with a supported extensio
 });
 
 test("only the organizer and admins manage recaps; attendees read after it is sent", () => {
-  const meeting = { organizerId: "org", attendees: [{ userId: "a1" }] };
+  const meeting = { organizerId: "org", recorderId: null, attendees: [{ userId: "a1" }] };
   const organizer = { id: "org", role: "MEMBER" };
   const admin = { id: "boss", role: "ADMIN" };
   const attendee = { id: "a1", role: "MEMBER" };
@@ -97,10 +98,28 @@ test("only the organizer and admins manage recaps; attendees read after it is se
   assert.equal(canReadMeetingRecap(meeting, { sentAt: null }, organizer), true);
 });
 
+test("the assigned note-taker manages the recap; no assignment means the organizer takes notes", () => {
+  const organizer = { id: "org", role: "MEMBER" };
+  const noteTaker = { id: "a1", role: "MEMBER" };
+  const other = { id: "a2", role: "MEMBER" };
+  const unassigned = { organizerId: "org", recorderId: null, attendees: [{ userId: "a1" }, { userId: "a2" }] };
+  const assigned = { ...unassigned, recorderId: "a1" };
+
+  assert.equal(meetingRecorderId(unassigned), "org");
+  assert.equal(meetingRecorderId(assigned), "a1");
+
+  assert.equal(canManageMeetingRecap(assigned, noteTaker), true);
+  assert.equal(canManageMeetingRecap(assigned, organizer), true);
+  assert.equal(canManageMeetingRecap(assigned, other), false);
+  assert.equal(canManageMeetingRecap(unassigned, noteTaker), false);
+  assert.equal(canReadMeetingRecap(assigned, { sentAt: null }, noteTaker), true);
+  assert.equal(canReadMeetingRecap(assigned, { sentAt: null }, other), false);
+});
+
 test("starting a recap is blocked for cancelled, future or busy meetings", () => {
   const now = new Date("2026-10-22T05:00:00Z");
   const organizer = { id: "org", role: "MEMBER" };
-  const base = { organizerId: "org", status: "SCHEDULED", startAt: new Date("2026-10-22T02:00:00Z"), recap: null };
+  const base = { organizerId: "org", recorderId: null, status: "SCHEDULED", startAt: new Date("2026-10-22T02:00:00Z"), recap: null };
 
   assert.equal(recapStartBlockReason(base, organizer, now), null);
   assert.match(recapStartBlockReason(null, organizer, now) ?? "", /Không tìm thấy/);

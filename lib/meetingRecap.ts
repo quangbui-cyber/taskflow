@@ -58,11 +58,24 @@ export function isRecapAudioPathname(meetingId: string, pathname: string): boole
 // ---------- Phân quyền ----------
 
 type Viewer = { id: string; role: string };
-type MeetingAccess = { organizerId: string; attendees: { userId: string }[] };
+type MeetingRoles = { organizerId: string; recorderId: string | null };
+type MeetingAccess = MeetingRoles & { attendees: { userId: string }[] };
 
-/** Tải ghi âm lên, tạo lại, sửa, gửi, xoá biên bản: chỉ người tổ chức và admin. */
-export function canManageMeetingRecap(meeting: { organizerId: string }, viewer: Viewer): boolean {
-  return meeting.organizerId === viewer.id || viewer.role === "ADMIN";
+/** Người ghi biên bản; người tổ chức không giao cho ai thì tự ghi. */
+export function meetingRecorderId(meeting: MeetingRoles): string {
+  return meeting.recorderId ?? meeting.organizerId;
+}
+
+/**
+ * Tải ghi âm lên, tạo lại, sửa, gửi, xoá biên bản: người ghi biên bản, người tổ chức
+ * (vẫn giữ quyền để làm thay khi cần) và admin.
+ */
+export function canManageMeetingRecap(meeting: MeetingRoles, viewer: Viewer): boolean {
+  return (
+    meetingRecorderId(meeting) === viewer.id ||
+    meeting.organizerId === viewer.id ||
+    viewer.role === "ADMIN"
+  );
 }
 
 /** Mở trang biên bản: người tổ chức, người được mời và admin. */
@@ -707,6 +720,7 @@ export function normalizeRecapContent(value: unknown): string {
 
 export type RecapMeetingState = {
   organizerId: string;
+  recorderId: string | null;
   status: string;
   startAt: Date;
   recap: { status: string; processingStartedAt: Date | null } | null;
@@ -720,7 +734,7 @@ export function recapStartBlockReason(
 ): string | null {
   if (!meeting) return "Không tìm thấy cuộc họp.";
   if (!canManageMeetingRecap(meeting, viewer)) {
-    return "Chỉ người tổ chức hoặc quản trị viên mới tạo được biên bản.";
+    return "Chỉ người ghi biên bản, người tổ chức hoặc quản trị viên mới tạo được biên bản.";
   }
   if (meeting.status === "CANCELLED") return "Cuộc họp đã bị huỷ.";
   if (meeting.startAt.getTime() > now.getTime()) return "Cuộc họp chưa bắt đầu.";
