@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft, DoorOpen, FileText, FolderKanban, Users } from "lucide-react";
 import MeetingRecapPanel from "@/components/MeetingRecapPanel";
+import RecapActionItems, { type RecapActionItemView } from "@/components/RecapActionItems";
 import Sidebar from "@/components/Sidebar";
 import { requireUser } from "@/lib/auth";
 import { meetingRecapsEnabled, meetingsEnabled } from "@/lib/features";
@@ -9,9 +10,13 @@ import {
   canManageMeetingRecap,
   canOpenMeetingRecap,
   canReadMeetingRecap,
+  isRecapActionDone,
   isRecapStale,
+  recapExportContent,
   recapStartBlockReason,
 } from "@/lib/meetingRecap";
+import { recapActionOrder, toRecapActionExport } from "@/lib/meetingRecapData";
+import { toDateInputVN } from "@/lib/dates";
 import { recapLimits } from "@/lib/meetingRecapLimits";
 import { formatMeetingWhen } from "@/lib/meetings";
 import { prisma } from "@/lib/prisma";
@@ -35,12 +40,22 @@ export default async function MeetingRecapPage({
     include: {
       room: { select: { name: true } },
       project: { select: { id: true, name: true } },
-      organizer: { select: { id: true, name: true } },
+      organizer: { select: { id: true, name: true, avatarUrl: true } },
       attendees: {
-        select: { userId: true, user: { select: { name: true } } },
+        select: { userId: true, user: { select: { id: true, name: true, avatarUrl: true } } },
         orderBy: { createdAt: "asc" },
       },
-      recap: true,
+      recap: {
+        include: {
+          actionItems: {
+            orderBy: recapActionOrder,
+            include: {
+              owner: { select: { id: true, name: true, avatarUrl: true } },
+              task: { select: { id: true, status: true, projectId: true, project: { select: { name: true } } } },
+            },
+          },
+        },
+      },
     },
   });
   if (!meeting || !canOpenMeetingRecap(meeting, user)) redirect("/meetings");
@@ -65,6 +80,32 @@ export default async function MeetingRecapPage({
   const recap = meeting.recap;
   const readable = canReadMeetingRecap(meeting, recap, user);
   const startBlock = recapStartBlockReason(meeting, user, now);
+
+  const people = [meeting.organizer, ...meeting.attendees.map((attendee) => attendee.user)].filter(
+    (person, index, all) => all.findIndex((other) => other.id === person.id) === index
+  );
+  const actionItems: RecapActionItemView[] = (recap?.actionItems ?? []).map((item) => ({
+    id: item.id,
+    title: item.title,
+    owner: item.owner,
+    ownerName: item.ownerName,
+    dueDate: item.dueDate ? toDateInputVN(item.dueDate) : null,
+    dueText: item.dueText,
+    done: isRecapActionDone(item),
+    task: item.task
+      ? { id: item.task.id, status: item.task.status, projectId: item.task.projectId, projectName: item.task.project.name }
+      : null,
+  }));
+  // Dự án để tạo task: dự án của cuộc họp (nếu có) đứng đầu, rồi các dự án mình là thành viên.
+  const taskProjects = canManage
+    ? [
+        ...(meeting.project ? [meeting.project] : []),
+        ...sidebarProjects
+          .filter((project) => project.id !== meeting.project?.id && !["DONE", "CANCEL", "FAIL"].includes(project.status))
+          .map((project) => ({ id: project.id, name: project.name })),
+      ]
+    : [];
+  const showContent = Boolean(readable && recap?.content?.trim());
 
   return (
     <div className="tf-shell">
@@ -131,6 +172,25 @@ export default async function MeetingRecapPage({
             meetingEndsAt={meeting.endAt.toISOString()}
             // Mở từ thông báo "cuộc họp đã bắt đầu": ghi âm ngay.
             autoStart={query.record === "1" && canManage && !recap}
+            actionItems={
+              showContent ? (
+                <RecapActionItems
+                  meetingId={meeting.id}
+                  items={actionItems}
+                  people={people}
+                  projects={taskProjects}
+                  defaultProjectId={meeting.project?.id ?? null}
+                  viewerId={user.id}
+                  canManage={canManage}
+                  editable={canManage && recap?.status === "READY"}
+                />
+              ) : null
+            }
+            copyText={
+              showContent && recap?.content
+                ? recapExportContent(recap.content, recap.actionItems.map(toRecapActionExport))
+                : null
+            }
             recap={
               recap
                 ? {

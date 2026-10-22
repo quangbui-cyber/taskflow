@@ -1,5 +1,6 @@
 import { emailAppUrl, emailSenderAddress, sendEmail, type EmailResult } from "@/lib/email";
-import { recapContentToHtml } from "@/lib/meetingRecap";
+import { recapContentToHtml, recapExportContent } from "@/lib/meetingRecap";
+import { recapActionExportSelect, recapActionOrder, toRecapActionExport } from "@/lib/meetingRecapData";
 import { formatMeetingWhen } from "@/lib/meetings";
 import { prisma } from "@/lib/prisma";
 
@@ -24,11 +25,14 @@ export async function sendMeetingRecapEmail(meetingId: string): Promise<EmailRes
         where: { user: { isActive: true }, response: { not: "DECLINED" } },
         select: { user: { select: { name: true, email: true } } },
       },
-      recap: { select: { content: true } },
+      recap: {
+        select: { content: true, actionItems: { select: recapActionExportSelect, orderBy: recapActionOrder } },
+      },
     },
   });
-  const content = meeting?.recap?.content?.trim();
-  if (!meeting || !content) return { ok: false, error: "Chưa có biên bản để gửi." };
+  const recap = meeting?.recap;
+  if (!meeting || !recap?.content?.trim()) return { ok: false, error: "Chưa có biên bản để gửi." };
+  const content = recapExportContent(recap.content, recap.actionItems.map(toRecapActionExport));
 
   const to = [
     ...new Set(
@@ -54,7 +58,7 @@ export async function sendMeetingRecapEmail(meetingId: string): Promise<EmailRes
     "",
     ...details.map(([label, value]) => `${label}: ${value}`),
     "",
-    content.replace(/^## /gm, ""),
+    content.replace(/^#{2,3} /gm, ""),
     "",
     "Biên bản do AI viết từ file ghi âm và đã được người tổ chức đọc lại.",
     ...(link ? [`Xem trong app: ${link}`] : []),

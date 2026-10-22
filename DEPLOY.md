@@ -244,12 +244,12 @@ Người tổ chức **ghi âm ngay trong app** hoặc tải file ghi âm có s�
 Chế độ **Họp online** dùng tính năng chia sẻ tab của trình duyệt để thu thêm tiếng của tab Meet/Zoom — chỉ Chrome/Edge máy tính,
 không cần cấu hình gì thêm.
 App gửi file cho **Groq** (`whisper-large-v3`) để chép lời tiếng Việt, rồi nhờ
-**Gemini** (`gemini-3.1-flash-lite`) viết biên bản gồm tóm tắt, nội dung chính,
-quyết định, việc cần làm và vấn đề còn mở. Người tổ chức đọc lại, sửa nếu cần, rồi
+**Gemini** (`gemini-3.8-flash`, mức suy nghĩ `medium`) viết biên bản gồm tóm tắt, nội dung thảo luận chia theo
+chủ đề, quyết định, việc cần làm (gắn sẵn người phụ trách trong danh sách mời) và vấn đề còn mở. Người tổ chức đọc lại, sửa nếu cần, rồi
 bấm **Gửi cho người tham dự** (thông báo trong app + email nếu đã cấu hình email ở mục trên).
 
-Chi phí tham khảo: khoảng **$0.12 cho mỗi giờ ghi âm** (Groq $0.111/giờ + Gemini
-vài xu). File ghi âm chỉ nằm tạm trên Vercel Blob và **bị xoá ngay khi chép lời xong**;
+Chi phí tham khảo: khoảng **$0.17 cho mỗi giờ ghi âm** (Groq $0.111/giờ + Gemini khoảng
+$0.05–0.07 mỗi lượt viết; từ 1/1/2027 Google tăng giá 3.8 Flash gấp đôi nên khoảng $0.10–0.14). File ghi âm chỉ nằm tạm trên Vercel Blob và **bị xoá ngay khi chép lời xong**;
 app lưu lại bản chép lời và biên bản.
 
 1. **Groq:** tạo API key tại <https://console.groq.com/keys>. Vào **Settings → Billing**
@@ -269,7 +269,18 @@ Thiếu một trong ba khoá (`GROQ_API_KEY`, `GEMINI_API_KEY`, `BLOB_READ_WRITE
 nút tạo biên bản không hiện; biên bản đã có vẫn xem được. Muốn tắt hẳn thì đặt
 `MEETING_RECAPS_ENABLED=false`. Đổi model không cần sửa code:
 `RECAP_TRANSCRIBE_MODEL` (mặc định `whisper-large-v3`, rẻ hơn: `whisper-large-v3-turbo`)
-và `RECAP_SUMMARY_MODEL` (mặc định `gemini-3.1-flash-lite`).
+và `RECAP_SUMMARY_MODEL` (mặc định `gemini-3.8-flash`; rẻ hơn nhưng kém hơn: `gemini-3.1-flash-lite`).
+
+Cách Gemini viết biên bản:
+
+- `RECAP_SUMMARY_THINKING`: mức "suy nghĩ" trước khi viết — `low`, `medium` (mặc định), `high`
+  (`minimal` chỉ dùng với model Flash-Lite). Cao hơn thì gom chủ đề, đoán người phụ trách và ngày hạn
+  kỹ hơn nhưng chậm và tốn hơn.
+- `RECAP_SUMMARY_MAX_OUTPUT_TOKENS`: trần token trả về mỗi lượt, **đã gồm phần suy nghĩ**
+  (mặc định 24576, nhận 4096–65536). Hết trần giữa chừng thì biên bản báo lỗi
+  "AI dùng hết giới hạn token…" — tăng trần hoặc giảm mức suy nghĩ.
+- Log server ghi số token mỗi lượt (`Gemini recap (…): input …, thinking …, output … tokens`)
+  để đối chiếu chi phí và chỉnh hai biến trên.
 
 - **Ai được làm gì:** người tổ chức và Admin tải ghi âm, sửa, viết lại, gửi, xoá biên bản.
   Người được mời chỉ đọc được **sau khi** biên bản được gửi.
@@ -295,7 +306,7 @@ App tự chặn **trước khi** gọi AI, không có lần chạy nào tự l�
 |---|---|---|
 | Độ dài tối đa mỗi file ghi âm | 180 phút | `RECAP_MAX_AUDIO_MINUTES` |
 | Tổng phút chép lời mỗi ngày (cả công ty) | 600 phút ≈ tối đa $1.1/ngày | `RECAP_DAILY_AUDIO_MINUTES` |
-| Tổng lượt viết biên bản mỗi ngày (cả công ty) | 60 lượt | `RECAP_DAILY_SUMMARIES` |
+| Tổng lượt viết biên bản mỗi ngày (cả công ty) | 60 lượt ≈ tối đa $9/ngày (từ 2027 ≈ $18) | `RECAP_DAILY_SUMMARIES` |
 | Mỗi cuộc họp mỗi ngày | chép lời 3 lần, viết biên bản 6 lần | — |
 
 - Mỗi lượt Gemini bị giới hạn 8.192 token trả về và tối đa khoảng 5 giờ nội dung đầu vào.

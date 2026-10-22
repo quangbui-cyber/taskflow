@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
@@ -59,12 +59,21 @@ function RecapContent({ content }: { content: string }) {
           <h2 key={index} className="pt-3 text-base font-semibold text-zinc-950 first:pt-0">
             {block.text}
           </h2>
+        ) : block.type === "subheading" ? (
+          <h3 key={index} className="pt-1.5 text-[15px] font-semibold text-zinc-800">
+            {block.text}
+          </h3>
         ) : block.type === "list" ? (
           <ul key={index} className="list-disc space-y-1 pl-5 marker:text-zinc-400">
             {block.items.map((item, itemIndex) => (
               <li key={itemIndex}>{item}</li>
             ))}
           </ul>
+        ) : block.text.startsWith("Kết luận:") ? (
+          <p key={index}>
+            <span className="font-semibold text-zinc-900">Kết luận:</span>
+            {block.text.slice("Kết luận:".length)}
+          </p>
         ) : (
           <p key={index}>{block.text}</p>
         )
@@ -235,9 +244,15 @@ export default function MeetingRecapPanel({
   autoStart = false,
   meetingEndsAt = null,
   recap,
+  actionItems = null,
+  copyText = null,
 }: {
   meetingId: string;
   meetingUrl: string | null;
+  /** Mục "Việc cần làm" (hiển thị dưới nội dung biên bản). */
+  actionItems?: ReactNode;
+  /** Bản để sao chép: biên bản kèm việc cần làm. */
+  copyText?: string | null;
   autoStart?: boolean;
   meetingEndsAt?: string | null;
   canManage: boolean;
@@ -286,6 +301,7 @@ export default function MeetingRecapPanel({
         {content ? (
           <>
             <RecapContent content={content} />
+            {actionItems}
             {recap?.sentAt && (
               <p className="mt-5 border-t border-zinc-100 pt-3 text-xs text-zinc-500">
                 Biên bản do AI viết từ file ghi âm, người tổ chức đã đọc lại và gửi lúc {formatDateTime(recap.sentAt)}.
@@ -373,7 +389,7 @@ export default function MeetingRecapPanel({
                     className="tf-button-secondary !min-h-9 !px-3 text-xs"
                     onClick={async () => {
                       try {
-                        await navigator.clipboard.writeText(content.replace(/^## /gm, ""));
+                        await navigator.clipboard.writeText((copyText ?? content).replace(/^#{2,3} /gm, ""));
                         notify({ message: "Đã sao chép biên bản.", tone: "success" });
                       } catch {
                         notify({ message: "Trình duyệt không cho sao chép.", tone: "error" });
@@ -389,7 +405,11 @@ export default function MeetingRecapPanel({
                       disabled={pending}
                       className="tf-button-secondary !min-h-9 !px-3 text-xs"
                       onClick={() => {
-                        if (window.confirm("Viết lại biên bản bằng AI? Những chỗ bạn đã sửa tay sẽ mất.")) {
+                        if (
+                          window.confirm(
+                            "Viết lại biên bản bằng AI? Những chỗ bạn đã sửa tay và danh sách việc cần làm (kể cả ô đã tick) sẽ được làm lại. Task đã tạo vẫn giữ nguyên."
+                          )
+                        ) {
                           run(() => regenerateMeetingRecap(meetingId));
                         }
                       }}
@@ -427,7 +447,8 @@ export default function MeetingRecapPanel({
                 aria-label="Nội dung biên bản"
               />
               <p className="text-xs text-zinc-500">
-                Dòng bắt đầu bằng “## ” là tiêu đề, dòng bắt đầu bằng “- ” là gạch đầu dòng.
+                Dòng bắt đầu bằng “## ” là mục lớn, “### ” là chủ đề, “- ” là gạch đầu dòng. Việc cần làm sửa ở danh
+                sách bên dưới.
               </p>
               <div className="flex flex-wrap gap-2">
                 <button
@@ -446,6 +467,8 @@ export default function MeetingRecapPanel({
           ) : (
             <RecapContent content={content} />
           )}
+
+          {actionItems}
 
           {recap?.transcript && (
             <details className="mt-6 border-t border-zinc-100 pt-4">
@@ -486,7 +509,7 @@ export default function MeetingRecapPanel({
                 <h2 className="text-base font-semibold text-zinc-950">Tạo biên bản cuộc họp</h2>
                 <p className="mb-4 mt-1 text-sm leading-6 text-zinc-500">
                   Ghi âm ngay tại đây hoặc tải file ghi âm có sẵn. AI sẽ chép lời tiếng Việt và viết biên bản gồm
-                  tóm tắt, quyết định và việc cần làm. Bạn đọc lại, sửa nếu cần, rồi mới gửi cho người tham dự.
+                  tóm tắt, nội dung theo từng chủ đề, quyết định và việc cần làm (gắn sẵn người phụ trách). Bạn đọc lại, sửa nếu cần, rồi mới gửi cho người tham dự.
                 </p>
                 <AudioSource
                   meetingId={meetingId}

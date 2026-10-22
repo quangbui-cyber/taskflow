@@ -7,16 +7,27 @@ import {
   formatTranscript,
   limitTranscriptForSummary,
   RECAP_STALE_MS,
+  recapActionItemRows,
+  recapExportContent,
   renderRecapContent,
 } from "@/lib/meetingRecap";
-import { RecapServiceError, summarizeTranscript, transcribeAudioUrl } from "@/lib/meetingRecapAi";
+import {
+  RECAP_SUMMARY_TIMEOUT_MS,
+  RecapServiceError,
+  summarizeTranscript,
+  transcribeAudioUrl,
+} from "@/lib/meetingRecapAi";
 import { loadRecapUsage } from "@/lib/meetingRecapData";
 import { recapLimits, summaryLimitReason } from "@/lib/meetingRecapLimits";
 import { notify } from "@/lib/notify";
 import { DOCX_MIME_TYPE, buildRecapDocx, recapDocxFileName } from "@/lib/recapDocx";
 import { prisma } from "@/lib/prisma";
+import { recapActionExportSelect, recapActionOrder, toRecapActionExport } from "@/lib/meetingRecapData";
 
 const SIGNED_URL_TTL_MS = 30 * 60 * 1000;
+// Lượt chạy nền có 300 giây (maxDuration); chừa lại một chút để kịp ghi lỗi nếu hết giờ.
+const RUN_BUDGET_MS = 280_000;
+const MIN_SUMMARY_TIMEOUT_MS = 45_000;
 
 /** Xoá file ghi âm tạm; lỗi xoá không làm hỏng biên bản (cron dọn lại sau). */
 export async function deleteRecapAudio(pathname: string | null | undefined): Promise<boolean> {
@@ -46,6 +57,7 @@ async function signedAudioUrl(pathname: string): Promise<string> {
  * giữa chừng thì kết quả của lần cũ bị bỏ qua thay vì ghi đè.
  */
 export async function runMeetingRecap(recapId: string, startedAt: Date): Promise<void> {
+  const runStartedAt = Date.now();
   const current = { id: recapId, status: "PROCESSING", processingStartedAt: startedAt };
   const recap = await prisma.meetingRecap.findFirst({
     where: current,
@@ -54,7 +66,7 @@ export async function runMeetingRecap(recapId: string, startedAt: Date): Promise
         include: {
           room: { select: { name: true } },
           organizer: { select: { id: true, name: true } },
-          attendees: { select: { user: { select: { name: true } } }, orderBy: { createdAt: "asc" } },
+          attendees: { select: { user: { select: { id: true, name: true } } }, orderBy: { createdAt: "asc" } },
         },
       },
     },
@@ -97,6 +109,11 @@ export async function runMeetingRecap(recapId: string, startedAt: Date): Promise
       throw new RecapServiceError("Không nghe được lời nói nào trong file ghi âm. Kiểm tra lại file rồi tải lên lần nữa.");
     }
 
+    // Không đủ thời gian thì dừng trước khi tính lượt; bản chép lời đã lưu để viết lại ở lượt mới.
+    const timeLeft = RUN_BUDGET_MS - (Date.now() - runStartedAt);
+    if (timeLeft < MIN_SUMMARY_TIMEOUT_MS) {
+      throw new RecapServiceError("Chép lời mất nhiều thời gian nên chưa kịp viết biên bản. Bấm Thử viết lại.");
+    }
     // Hạn mức cả công ty: kiểm tra và ghi nhận ngay trước khi gọi Gemini.
     const limited = summaryLimitReason(recapLimits(), await loadRecapUsage(meeting.id), { perMeeting: false });
     if (limited) throw new RecapServiceError(limited);
@@ -116,12 +133,28 @@ export async function runMeetingRecap(recapId: string, startedAt: Date): Promise
       },
       limitTranscriptForSummary(transcript)
     );
-    const summary = await summarizeTranscript(prompt);
-    const done = await prisma.meetingRecap.updateMany({
-      where: current,
-      data: { status: "READY", stage: null, error: null, content: renderRecapContent(summary) },
+    // Chép lời lâu thì phần viết biên bản chỉ còn thời gian còn lại; không kịp thì báo lỗi
+    // (bản chép lời đã lưu) để người tổ chức bấm "Thử viết lại" ở một lượt mới.
+    const summary = await summarizeTranscript({
+      ...prompt,
+      timeoutMs: Math.min(RECAP_SUMMARY_TIMEOUT_MS, RUN_BUDGET_MS - (Date.now() - runStartedAt)),
     });
-    if (done.count === 0) return;
+    const people = [meeting.organizer, ...meeting.attendees.map((attendee) => attendee.user)];
+    const actionRows = recapActionItemRows(summary.actionItems, people, meeting.startAt);
+    // Biên bản và danh sách việc cần làm thay cùng lúc; lần chạy cũ (đã bị thay) không ghi gì.
+    const done = await prisma.$transaction(async (tx) => {
+      const saved = await tx.meetingRecap.updateMany({
+        where: current,
+        data: { status: "READY", stage: null, error: null, content: renderRecapContent(summary) },
+      });
+      if (saved.count === 0) return false;
+      await tx.meetingRecapActionItem.deleteMany({ where: { recapId } });
+      if (actionRows.length) {
+        await tx.meetingRecapActionItem.createMany({ data: actionRows.map((row) => ({ ...row, recapId })) });
+      }
+      return true;
+    });
+    if (!done) return;
 
     await notify(managerIds, {
       type: "MEETING_RECAP_READY",
@@ -216,7 +249,9 @@ export async function saveRecapToProject(
       room: { select: { name: true } },
       organizer: { select: { name: true } },
       attendees: { select: { user: { select: { name: true } } }, orderBy: { createdAt: "asc" } },
-      recap: { select: { id: true, content: true, projectFileId: true } },
+      recap: {
+        select: { id: true, content: true, projectFileId: true, actionItems: { select: recapActionExportSelect, orderBy: recapActionOrder } },
+      },
     },
   });
   if (!meeting?.projectId || !meeting.recap?.content?.trim()) return false;
@@ -237,7 +272,7 @@ export async function saveRecapToProject(
       room: meeting.room?.name ?? null,
       organizer: meeting.organizer.name,
       attendees: meeting.attendees.map((attendee) => attendee.user.name),
-      content: meeting.recap.content,
+      content: recapExportContent(meeting.recap.content, meeting.recap.actionItems.map(toRecapActionExport)),
       sentAt,
     });
     const file = {

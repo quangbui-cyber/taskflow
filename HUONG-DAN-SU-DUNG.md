@@ -428,9 +428,17 @@ File ghi âm bị xoá ngay sau khi chép lời. App giữ lại bản chép l�
 
 ### Đọc lại và gửi
 
-- Biên bản gồm: Tóm tắt, Nội dung chính, Quyết định, Việc cần làm (người phụ trách, hạn) và Vấn đề còn mở.
-- AI có thể nghe sai tên riêng hoặc con số. Bấm **Sửa** để chỉnh: dòng bắt đầu bằng `## ` là tiêu đề, dòng bắt đầu bằng `- ` là gạch đầu dòng.
-- **Viết lại** nhờ AI viết lại từ bản chép lời (những chỗ đã sửa tay sẽ mất).
+- Biên bản gồm: Tóm tắt, Nội dung thảo luận (chia theo từng chủ đề, mỗi chủ đề có kết luận nếu có), Quyết định, Vấn đề còn mở và danh sách **Việc cần làm**.
+- AI có thể nghe sai tên riêng hoặc con số. Bấm **Sửa** để chỉnh: dòng bắt đầu bằng `## ` là mục lớn, `### ` là chủ đề, `- ` là gạch đầu dòng.
+- **Viết lại** nhờ AI viết lại từ bản chép lời (những chỗ đã sửa tay và danh sách việc cần làm sẽ được làm lại; task đã tạo vẫn giữ nguyên).
+
+### Việc cần làm
+
+- AI gắn sẵn **người phụ trách** nếu tên nghe được khớp rõ với một người trong cuộc họp, và điền **hạn chót** khi trong họp nói rõ ngày (ví dụ "thứ Sáu tuần này"). Không chắc thì để *Chưa giao* / giữ nguyên câu nói (ví dụ *"cuối tháng"*) để người tổ chức tự chọn.
+- Người tổ chức và Admin bấm biểu tượng bút để sửa việc, đổi người phụ trách, chọn hạn; bấm **Thêm việc** để thêm việc mới.
+- Tick ô vuông khi việc đã xong. Người phụ trách cũng tự tick được việc của mình sau khi biên bản đã gửi.
+- **Tạo task**: biến việc thành task trong dự án (cuộc họp dự án thì tạo thẳng trong dự án đó, cuộc họp khác thì chọn dự án), mang theo người phụ trách và hạn chót. Người phụ trách không thuộc dự án thì task được tạo nhưng chưa giao cho ai. Sau khi tạo, trạng thái việc đi theo task (task Hoàn thành thì việc tự được tick).
+- Email biên bản, file Word và nút **Sao chép** đều kèm danh sách việc cần làm.
 - Bấm **Gửi cho người tham dự**: mọi người nhận thông báo trong app và email (nếu app đã cấu hình email). Trước khi gửi, người tham dự chưa xem được biên bản.
 - **Xoá biên bản** xoá cả biên bản lẫn bản chép lời.
 

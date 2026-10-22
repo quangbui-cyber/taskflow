@@ -1,3 +1,5 @@
+import type { Prisma } from "@prisma/client";
+import { isRecapActionDone, type RecapActionItemExport } from "@/lib/meetingRecap";
 import type { RecapUsage } from "@/lib/meetingRecapLimits";
 import { vnDayRange } from "@/lib/meetings";
 import { prisma } from "@/lib/prisma";
@@ -44,5 +46,33 @@ export async function loadRecapUsage(meetingId: string, now = new Date()): Promi
     summariesToday: summaries,
     meetingTranscriptionsToday: meetingTranscriptions,
     meetingSummariesToday: meetingSummaries,
+  };
+}
+
+/** Thứ tự hiển thị việc cần làm: theo thứ tự AI liệt kê, việc thêm tay nằm cuối. */
+export const recapActionOrder: Prisma.MeetingRecapActionItemOrderByWithRelationInput[] = [
+  { order: "asc" },
+  { createdAt: "asc" },
+];
+
+export const recapActionExportSelect = {
+  title: true,
+  ownerName: true,
+  dueDate: true,
+  dueText: true,
+  doneAt: true,
+  owner: { select: { name: true } },
+  task: { select: { status: true } },
+} satisfies Prisma.MeetingRecapActionItemSelect;
+
+type ActionExportRow = Prisma.MeetingRecapActionItemGetPayload<{ select: typeof recapActionExportSelect }>;
+
+export function toRecapActionExport(item: ActionExportRow): RecapActionItemExport {
+  return {
+    title: item.title,
+    owner: item.owner?.name ?? item.ownerName,
+    dueDate: item.dueDate,
+    dueText: item.dueText,
+    done: isRecapActionDone(item),
   };
 }
