@@ -228,7 +228,7 @@ và quyền dùng mật khẩu ứng dụng. Không đưa mã thật vào Git ho
 Email chạy sau khi thao tác lưu thành công; lỗi SMTP không làm mất đơn hoặc lịch đã đặt.
 Lỗi gửi mail được ghi trong runtime logs bằng mã lỗi, không ghi mật khẩu hoặc nội dung thư.
 Đây là gửi trực tiếp theo từng sự kiện, chưa có hàng đợi gửi lại khi máy chủ mail gặp lỗi.
-Lịch họp đang tạm ẩn trên production; chỉ bật lại nếu muốn bằng `MEETINGS_ENABLED=true`.
+Lịch họp bật mặc định ở mọi môi trường. Muốn tạm ẩn thì đặt `MEETINGS_ENABLED=false` rồi Redeploy.
 
 - **Giới hạn của Gmail:** khoảng 500 người nhận/ngày với Gmail thường (2.000 với
   Google Workspace). Vượt mức, Google tạm khoá gửi khoảng 24 giờ.
