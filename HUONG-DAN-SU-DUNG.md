@@ -410,7 +410,7 @@ Bản ghi được lưu dần trên máy (5 giây một lần): lỡ đóng tab 
 1. Mở cuộc họp ở một tab (nếu lịch họp có link, bấm *mở link họp* ngay trong trang biên bản).
 2. Ở trang biên bản chọn **Họp online** (lịch có link họp thì app chọn sẵn), bấm **Bắt đầu ghi âm**.
 3. Chrome hỏi chia sẻ gì: chọn **tab cuộc họp**, bật **"Chia sẻ âm thanh của tab"**, bấm **Chia sẻ**. Sau đó cho phép micro để ghi cả giọng của bạn.
-4. Giữ cả tab cuộc họp và tab taskflow mở. Họp xong bấm **Dừng ghi** (hoặc bấm *Dừng chia sẻ* trên thanh của Chrome — bản ghi tự dừng và được giữ lại).
+4. Giữ cả tab cuộc họp và tab taskflow mở. Họp xong chỉ cần **đóng tab cuộc họp** (hoặc bấm *Dừng chia sẻ* trên thanh của Chrome): app tự dừng ghi và **tự tạo biên bản**, không cần bấm thêm. Bản ghi dưới 30 giây (thường do bấm nhầm) thì app chỉ dừng ghi, không tự tạo biên bản. Muốn đọc lại trước khi tạo, bấm **Dừng ghi** trên taskflow thay vì đóng tab họp.
 
 App trộn tiếng mọi người trong tab họp với giọng của bạn thành một bản ghi. Nếu không cho phép micro, app vẫn ghi tiếng từ tab họp (nhãn *"chỉ tab họp"*).
 

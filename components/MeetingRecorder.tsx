@@ -15,6 +15,7 @@ import {
   pickRecordingMimeType,
   recordingFileName,
   recordingFileType,
+  shouldAutoSubmitRecording,
   type RecordingSource,
 } from "@/lib/meetingRecorder";
 import { formatLimit, friendlyUploadError, uploadRecapAudio } from "@/lib/recapUploadClient";
@@ -65,6 +66,8 @@ export default function MeetingRecorder({
   const router = useRouter();
   const pathname = usePathname();
   const autoStartedRef = useRef(false);
+  // Đặt true khi tab họp đóng / dừng chia sẻ: dừng ghi xong thì tự tạo biên bản.
+  const autoSubmitRef = useRef(false);
   const startButtonRef = useRef<HTMLButtonElement>(null);
   const [startPrompt, setStartPrompt] = useState(false);
   const [supported, setSupported] = useState<boolean | null>(null);
@@ -339,22 +342,34 @@ export default function MeetingRecorder({
       const durationMs = accumulatedRef.current;
       releaseDevices();
       void saveRecordingMeta({ ...meta, durationMs, updatedAt: Date.now() });
-      setSaved({
+      const recording: SavedRecording = {
         blob: new Blob(chunksRef.current, { type: recordingFileType(meta.mimeType).type }),
         mimeType: meta.mimeType,
         startedAt: meta.startedAt,
         durationMs,
         recovered: false,
-      });
+      };
+      setSaved(recording);
       setElapsedMs(durationMs);
       setPhase("stopped");
+
+      if (autoSubmitRef.current) {
+        autoSubmitRef.current = false;
+        if (shouldAutoSubmitRecording(durationMs)) {
+          setNotice("Cuộc họp online đã kết thúc (tab họp đã đóng). App đã dừng ghi và đang tạo biên bản…");
+          void submitRef.current(recording);
+        } else {
+          setNotice("Tab họp đã đóng nên app dừng ghi. Bản ghi dưới 30 giây nên chưa tự tạo biên bản.");
+        }
+      }
     };
     if (source === "online") {
-      // Bấm "Dừng chia sẻ" trên thanh của Chrome hoặc đóng tab họp → dừng ghi, giữ phần đã ghi.
+      // Đóng tab họp hoặc bấm "Dừng chia sẻ" = cuộc họp kết thúc: dừng ghi rồi tự tạo biên bản.
       displayStreamRef.current?.getTracks().forEach((track) =>
-        track.addEventListener("ended", () =>
-          stopRecording("Đã dừng chia sẻ tab cuộc họp nên bản ghi tự dừng. Phần đã ghi vẫn được giữ.")
-        )
+        track.addEventListener("ended", () => {
+          autoSubmitRef.current = true;
+          stopRecording();
+        })
       );
     } else {
       streamRef.current?.getAudioTracks()[0]?.addEventListener("ended", () =>
@@ -373,6 +388,11 @@ export default function MeetingRecorder({
       if (duration >= maxMs) stopRecording(`Đã tới giới hạn ${formatLimit(maxAudioMinutes)} mỗi bản ghi nên app tự dừng.`);
     }, 500);
   }
+
+  const submitRef = useRef(submit);
+  useEffect(() => {
+    submitRef.current = submit;
+  });
 
   // Luôn trỏ tới hàm start mới nhất để hiệu ứng tự ghi âm gọi được mà không phụ thuộc mỗi lần render.
   const startRef = useRef(start);
@@ -429,8 +449,9 @@ export default function MeetingRecorder({
     setPhase("idle");
   }
 
-  async function submit() {
-    if (!saved) return;
+  async function submit(recording: SavedRecording | null = saved) {
+    if (!recording) return;
+    const saved = recording;
     setError(null);
     setPhase("uploading");
     setProgress(0);
@@ -647,7 +668,7 @@ export default function MeetingRecorder({
             </div>
           ) : (
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={submit} className="tf-button-primary">
+              <button type="button" onClick={() => void submit()} className="tf-button-primary">
                 <Upload size={16} aria-hidden="true" />
                 Tạo biên bản từ bản ghi này
               </button>

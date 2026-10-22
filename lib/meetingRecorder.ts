@@ -86,3 +86,10 @@ export function displayCaptureErrorMessage(error: unknown): string {
   }
   return "Không chia sẻ được tab cuộc họp. Tải lại trang rồi thử lại.";
 }
+
+/** Họp online kết thúc (tab họp đóng) thì tự tạo biên bản — trừ bản ghi quá ngắn, thường là bấm nhầm. */
+export const AUTO_SUBMIT_MIN_MS = 30_000;
+
+export function shouldAutoSubmitRecording(durationMs: number): boolean {
+  return durationMs >= AUTO_SUBMIT_MIN_MS;
+}

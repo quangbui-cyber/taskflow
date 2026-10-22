@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { recapAudioContentType, recapAudioPathname } from "../lib/meetingRecap";
 import {
+  AUTO_SUBMIT_MIN_MS,
   NO_TAB_AUDIO_MESSAGE,
   RECORDING_BITS_PER_SECOND,
   canRecordTabAudio,
@@ -10,6 +11,7 @@ import {
   pickRecordingMimeType,
   recordingFileName,
   recordingFileType,
+  shouldAutoSubmitRecording,
 } from "../lib/meetingRecorder";
 import { formatLimit, friendlyUploadError } from "../lib/recapUploadClient";
 
@@ -88,4 +90,11 @@ test("tab sharing problems are explained in plain Vietnamese", () => {
   assert.match(displayCaptureErrorMessage(err("NotSupportedError")), /Chrome hoặc Edge/);
   assert.match(displayCaptureErrorMessage(undefined), /Tải lại trang/);
   assert.match(NO_TAB_AUDIO_MESSAGE, /Chia sẻ âm thanh của tab/);
+});
+
+test("closing the meeting tab creates the recap automatically, except for accidental short recordings", () => {
+  assert.equal(AUTO_SUBMIT_MIN_MS, 30_000);
+  assert.equal(shouldAutoSubmitRecording(29_999), false);
+  assert.equal(shouldAutoSubmitRecording(30_000), true);
+  assert.equal(shouldAutoSubmitRecording(45 * 60 * 1000), true);
 });
