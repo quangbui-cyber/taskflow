@@ -554,7 +554,7 @@ model MeetingRecapRun {
   id           String   @id @default(cuid())
   meetingId    String
   userId       String?
-  kind         String // "TRANSCRIBE" (Groq) | "SUMMARIZE" (Gemini)
+  kind         String // "TRANSCRIBE" (Groq) | "RETRANSCRIBE" (Groq, chép lại cứu đoạn hỏng) | "SUMMARIZE" (Gemini)
   audioSeconds Int? // với TRANSCRIBE: ước tính trước khi chạy, cập nhật số thật sau khi chép lời
   createdAt    DateTime @default(now())
 

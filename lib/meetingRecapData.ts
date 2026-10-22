@@ -36,7 +36,11 @@ export async function loadRecapUsage(meetingId: string, now = new Date()): Promi
   const since = vnDayRange(now).start;
   const today = { createdAt: { gte: since } };
   const [audio, summaries, meetingTranscriptions, meetingSummaries] = await Promise.all([
-    prisma.meetingRecapRun.aggregate({ where: { kind: "TRANSCRIBE", ...today }, _sum: { audioSeconds: true } }),
+    // Phút chép lời tính cả lần chép lại để cứu đoạn hỏng (RETRANSCRIBE) — cùng tốn tiền Groq.
+    prisma.meetingRecapRun.aggregate({
+      where: { kind: { in: ["TRANSCRIBE", "RETRANSCRIBE"] }, ...today },
+      _sum: { audioSeconds: true },
+    }),
     prisma.meetingRecapRun.count({ where: { kind: "SUMMARIZE", ...today } }),
     prisma.meetingRecapRun.count({ where: { meetingId, kind: "TRANSCRIBE", ...today } }),
     prisma.meetingRecapRun.count({ where: { meetingId, kind: "SUMMARIZE", ...today } }),

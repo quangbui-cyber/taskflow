@@ -86,3 +86,15 @@ export function summaryLimitReason(
   }
   return null;
 }
+
+/** Chép lại lần hai (cứu đoạn hỏng) chỉ được làm nếu đủ phút chép lời trong ngày; không tính vào số lần của cuộc họp. */
+export const RECAP_RETRY_MIN_BAD_SECONDS = 10;
+
+export function retranscribeAllowed(
+  limits: RecapLimits,
+  usage: RecapUsage,
+  { badSeconds, audioSeconds }: { badSeconds: number; audioSeconds: number }
+): boolean {
+  if (badSeconds < RECAP_RETRY_MIN_BAD_SECONDS) return false;
+  return usage.audioSecondsToday + audioSeconds <= limits.dailyAudioMinutes * 60;
+}

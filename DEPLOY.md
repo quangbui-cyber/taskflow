@@ -290,6 +290,11 @@ Cách Gemini viết biên bản:
 - **Giới hạn:** file tối đa 100 MB (mp3, m4a, wav, webm, ogg, flac, mp4). Ghi âm iPhone
   1 giờ khoảng 30–60 MB. Whisper không phân biệt người nói, nên biên bản không ghi
   "ai nói gì" chính xác.
+- **Đoạn không nghe rõ:** Whisper đôi khi chép lại phần gợi ý tên (thay cho cả khung 30 giây lời nói thật)
+  hoặc bị kẹt làm rơi chữ có dấu. App nhận ra các đoạn này, tự chép lại cả file **một lần nữa không kèm gợi ý**
+  để lấy lại lời nói (chỉ khi có ít nhất 10 giây bị hỏng, còn hạn mức phút trong ngày và đủ thời gian), đoạn nào
+  vẫn hỏng thì ghi `(không nghe rõ)` kèm khoảng thời gian. Trang biên bản báo số đoạn và tổng thời lượng bị mất.
+  Lần chép lại tính vào tổng phút chép lời trong ngày nhưng không tính vào 3 lần chép lời của mỗi cuộc họp.
 - **Quyền riêng tư:** nên báo trước cho người tham dự (nhất là khách hàng) rằng cuộc họp được ghi âm.
 - **Thông báo khi họp bắt đầu:** cron `/api/cron/meeting-starts` chạy **mỗi phút** để báo người tổ chức
   "cuộc họp đã bắt đầu — bấm để ghi âm". Lịch chạy mỗi phút **cần gói Vercel Pro**; gói Hobby chỉ cho

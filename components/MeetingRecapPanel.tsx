@@ -22,7 +22,13 @@ import {
 } from "@/app/actions/meetingRecaps";
 import { useInteraction } from "@/components/InteractionProvider";
 import MeetingRecorder from "@/components/MeetingRecorder";
-import { RECAP_AUDIO_ACCEPT, formatClock, parseRecapContent } from "@/lib/meetingRecap";
+import {
+  RECAP_AUDIO_ACCEPT,
+  RECAP_UNCLEAR_TEXT,
+  formatClock,
+  parseRecapContent,
+  unclearTranscriptStats,
+} from "@/lib/meetingRecap";
 import { formatLimit, friendlyUploadError, uploadRecapAudio } from "@/lib/recapUploadClient";
 
 export type MeetingRecapView = {
@@ -79,6 +85,45 @@ function RecapContent({ content }: { content: string }) {
         )
       )}
     </div>
+  );
+}
+
+/** Bản chép lời đầy đủ, kèm cảnh báo khi có đoạn máy không chép được. */
+function TranscriptDetails({ recap, transcript }: { recap: MeetingRecapView; transcript: string }) {
+  const unclear = unclearTranscriptStats(transcript);
+  const share = recap.audioSeconds ? Math.round((unclear.seconds / recap.audioSeconds) * 100) : null;
+  return (
+    <details className="mt-6 border-t border-zinc-100 pt-4">
+      <summary className="cursor-pointer text-sm font-medium text-zinc-700">
+        Bản chép lời đầy đủ
+        {recap.audioSeconds ? ` · ${formatClock(recap.audioSeconds)}` : ""}
+        {recap.audioName ? ` · ${recap.audioName}` : ""}
+        {unclear.count > 0 && (
+          <span className="ml-1 font-normal text-amber-700">
+            · {unclear.count} đoạn không nghe rõ ({formatClock(unclear.seconds)})
+          </span>
+        )}
+      </summary>
+      {unclear.count > 0 && (
+        <p className="mt-3 flex items-start gap-2 rounded-[7px] bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <AlertTriangle size={15} className="mt-0.5 shrink-0" aria-hidden="true" />
+          <span>
+            Máy không chép được {unclear.count} đoạn, tổng {formatClock(unclear.seconds)}
+            {share !== null && share > 0 ? ` (khoảng ${share}% thời lượng)` : ""}. Biên bản không có nội dung của
+            những đoạn này — hãy hỏi lại người tham dự nếu có ý quan trọng. Ghi âm gần người nói, ít tiếng vang sẽ
+            giảm lỗi này.
+          </span>
+        </p>
+      )}
+      <pre className="mt-3 max-h-[480px] overflow-auto whitespace-pre-wrap rounded-[7px] bg-zinc-50 p-3 font-sans text-sm leading-6 text-zinc-700">
+        {transcript.split("\n").map((line, index) => (
+          <span key={index} className={line.endsWith(RECAP_UNCLEAR_TEXT) ? "text-amber-700" : undefined}>
+            {line}
+            {"\n"}
+          </span>
+        ))}
+      </pre>
+    </details>
   );
 }
 
@@ -335,10 +380,25 @@ export default function MeetingRecapPanel({
       )}
 
       {recap?.status === "PROCESSING" && recap.stale && (
-        <p role="alert" className="flex items-start gap-2 rounded-[8px] bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div role="alert" className="flex flex-wrap items-start gap-2 rounded-[8px] bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
-          Lần xử lý trước bị gián đoạn. Hãy tải file ghi âm lên lại.
-        </p>
+          <span className="min-w-0 flex-1">
+            {recap.transcript
+              ? "Lần xử lý trước bị gián đoạn nhưng bản chép lời đã được lưu. Bấm Thử viết lại để viết biên bản."
+              : "Lần xử lý trước bị gián đoạn. Hãy tải file ghi âm lên lại."}
+          </span>
+          {recap.transcript && enabled && (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => run(() => regenerateMeetingRecap(meetingId))}
+              className="tf-button-secondary !min-h-8 !px-3 text-xs"
+            >
+              <RefreshCw size={14} aria-hidden="true" />
+              Thử viết lại
+            </button>
+          )}
+        </div>
       )}
 
       {recap?.status === "FAILED" && recap.error && (
@@ -470,18 +530,7 @@ export default function MeetingRecapPanel({
 
           {actionItems}
 
-          {recap?.transcript && (
-            <details className="mt-6 border-t border-zinc-100 pt-4">
-              <summary className="cursor-pointer text-sm font-medium text-zinc-700">
-                Bản chép lời đầy đủ
-                {recap.audioSeconds ? ` · ${formatClock(recap.audioSeconds)}` : ""}
-                {recap.audioName ? ` · ${recap.audioName}` : ""}
-              </summary>
-              <pre className="mt-3 max-h-[480px] overflow-auto whitespace-pre-wrap rounded-[7px] bg-zinc-50 p-3 font-sans text-sm leading-6 text-zinc-700">
-                {recap.transcript}
-              </pre>
-            </details>
-          )}
+          {recap?.transcript && <TranscriptDetails recap={recap} transcript={recap.transcript} />}
         </section>
       )}
 
