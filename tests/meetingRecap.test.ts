@@ -215,17 +215,40 @@ test("a second pass without the hint fills the broken windows; what it cannot fi
     [
       "Với chương trình này, sân phải thuê gần Rạch Chiếc.",
       "Đầu tiên là phần sân bãi, mình cần chốt trước thứ Sáu.",
+      RECAP_UNCLEAR_TEXT, // 30–44s: lần hai cũng hỏng ở đây
       "Tuyết Lê sẽ phụ trách follow, hỗ trợ Huy.",
       RECAP_UNCLEAR_TEXT,
       "Phương án triển khai thế nào?",
     ]
   );
-  assert.equal(
-    formatTranscript(merged).split("\n")[3],
-    `[01:20–01:43] ${RECAP_UNCLEAR_TEXT}`
-  );
+  const lines = formatTranscript(merged).split("\n");
+  assert.equal(lines[2], `[00:30–00:44] ${RECAP_UNCLEAR_TEXT}`);
+  assert.equal(lines[4], `[01:20–01:43] ${RECAP_UNCLEAR_TEXT}`);
   // Không có lần hai: mọi chỗ hỏng thành "(không nghe rõ)".
   assert.equal(mergeRecoveredSegments(primary, realHint).filter((segment) => segment.unclear).length, 2);
+});
+
+test("a partly recovered window still marks the parts the second pass could not fill", () => {
+  const primary = [
+    { start: 0, end: 10, text: "Mở đầu cuộc họp." },
+    { start: 10, end: 40, text: "Duy Quang, Tuyết Lê, Jabil, Pickleball, Huy." },
+    { start: 40, end: 45, text: "Chốt nhé." },
+    { start: 45, end: 47, text: "h v nh m s th l ng c d" },
+    { start: 47, end: 50, text: "Cảm ơn." },
+  ];
+  const secondary = [{ start: 12, end: 20, text: "Phần sân bãi cần chốt trước thứ Sáu." }];
+  assert.equal(
+    formatTranscript(mergeRecoveredSegments(primary, realHint, secondary)),
+    [
+      "[00:00] Mở đầu cuộc họp.",
+      "[00:12] Phần sân bãi cần chốt trước thứ Sáu.",
+      `[00:20–00:40] ${RECAP_UNCLEAR_TEXT}`,
+      "[00:40] Chốt nhé.",
+      // Đoạn hỏng ngắn, không cứu được, vẫn được ghi lại.
+      `[00:45–00:47] ${RECAP_UNCLEAR_TEXT}`,
+      "[00:47] Cảm ơn.",
+    ].join("\n")
+  );
 });
 
 test("the second pass runs only for real damage and within the daily audio budget", () => {
@@ -444,6 +467,16 @@ test("Groq gets the signed audio URL, Vietnamese and the spelling hint — never
   assert.match(String(form.get("url")), /^https:\/\/store\.private\.blob/);
   assert.equal(form.get("prompt"), "Biên bản cuộc họp: Họp.");
   assert.equal(form.get("file"), null);
+});
+
+test("a Groq retry only gets the time left, so the run cannot overshoot its budget", async () => {
+  const calls = mockFetch([json({ error: "busy" }, 503)]);
+  // Lỗi 503 → chờ 5 giây → còn ~9 giây, dưới mức tối thiểu nên dừng thay vì gọi lại.
+  await assert.rejects(
+    transcribeAudioUrl({ audioUrl: "https://x", prompt: "", env: env({ GROQ_API_KEY: "g" }), timeoutMs: 14_000 }),
+    /Groq xử lý quá lâu/
+  );
+  assert.equal(calls.length, 1);
 });
 
 test("Groq errors become clear Vietnamese messages", async () => {

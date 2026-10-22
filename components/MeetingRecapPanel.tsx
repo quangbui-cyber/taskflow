@@ -380,10 +380,25 @@ export default function MeetingRecapPanel({
       )}
 
       {recap?.status === "PROCESSING" && recap.stale && (
-        <p role="alert" className="flex items-start gap-2 rounded-[8px] bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div role="alert" className="flex flex-wrap items-start gap-2 rounded-[8px] bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
-          Lần xử lý trước bị gián đoạn. Hãy tải file ghi âm lên lại.
-        </p>
+          <span className="min-w-0 flex-1">
+            {recap.transcript
+              ? "Lần xử lý trước bị gián đoạn nhưng bản chép lời đã được lưu. Bấm Thử viết lại để viết biên bản."
+              : "Lần xử lý trước bị gián đoạn. Hãy tải file ghi âm lên lại."}
+          </span>
+          {recap.transcript && enabled && (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => run(() => regenerateMeetingRecap(meetingId))}
+              className="tf-button-secondary !min-h-8 !px-3 text-xs"
+            >
+              <RefreshCw size={14} aria-hidden="true" />
+              Thử viết lại
+            </button>
+          )}
+        </div>
       )}
 
       {recap?.status === "FAILED" && recap.error && (

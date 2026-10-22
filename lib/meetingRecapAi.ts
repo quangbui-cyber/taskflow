@@ -60,15 +60,22 @@ export async function transcribeAudioUrl({
   audioUrl,
   prompt,
   env = process.env,
+  timeoutMs = 180_000,
 }: {
   audioUrl: string;
   prompt: string;
   env?: NodeJS.ProcessEnv;
+  /** Tổng thời gian cho mọi lần gọi (kể cả thử lại sau lỗi 429/5xx). */
+  timeoutMs?: number;
 }): Promise<{ segments: TranscriptSegment[]; duration: number }> {
   const apiKey = env.GROQ_API_KEY?.trim();
   if (!apiKey) throw new RecapServiceError("Chưa cấu hình GROQ_API_KEY.");
+  // Một hạn chót chung: lần thử lại chỉ dùng phần thời gian còn lại.
+  const deadline = Date.now() + timeoutMs;
 
   for (let attempt = 1; ; attempt++) {
+    const timeLeft = deadline - Date.now();
+    if (timeLeft < 10_000) throw new RecapServiceError("Groq xử lý quá lâu. Thử lại với file ngắn hơn.");
     const form = new FormData();
     form.append("model", recapModels(env).transcribe);
     form.append("url", audioUrl);
@@ -83,7 +90,7 @@ export async function transcribeAudioUrl({
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}` },
         body: form,
-        signal: AbortSignal.timeout(180_000),
+        signal: AbortSignal.timeout(timeLeft),
       });
     } catch (error) {
       // Quá thời gian chờ thì KHÔNG gọi lại: Groq có thể đã xử lý (và tính tiền) xong.

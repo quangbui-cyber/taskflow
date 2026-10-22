@@ -36,6 +36,7 @@ const RUN_BUDGET_MS = 280_000;
 const MIN_SUMMARY_TIMEOUT_MS = 45_000;
 // Chừa cho phần viết biên bản khi quyết định có chép lại lần hai hay không.
 const SUMMARY_RESERVE_MS = 90_000;
+const MIN_RETRY_MS = 30_000;
 
 /** Xoá file ghi âm tạm; lỗi xoá không làm hỏng biên bản (cron dọn lại sau). */
 export async function deleteRecapAudio(pathname: string | null | undefined): Promise<boolean> {
@@ -71,7 +72,7 @@ async function retranscribeBadParts({
   primary,
   hintWords,
   billedSeconds,
-  hasTime,
+  timeoutMs,
 }: {
   audioUrl: string;
   meetingId: string;
@@ -79,10 +80,11 @@ async function retranscribeBadParts({
   primary: TranscriptSegment[];
   hintWords: Set<string>;
   billedSeconds: number;
-  hasTime: boolean;
+  /** Thời gian dành cho lần chép lại; hết giờ thì bỏ, giữ lần đầu. */
+  timeoutMs: number;
 }): Promise<TranscriptSegment[]> {
   const badSeconds = totalWindowSeconds(badTranscriptWindows(primary, hintWords));
-  if (!hasTime) return [];
+  if (timeoutMs < MIN_RETRY_MS) return [];
   if (!retranscribeAllowed(recapLimits(), await loadRecapUsage(meetingId), { badSeconds, audioSeconds: billedSeconds })) {
     return [];
   }
@@ -90,7 +92,7 @@ async function retranscribeBadParts({
     await prisma.meetingRecapRun.create({
       data: { meetingId, userId, kind: "RETRANSCRIBE", audioSeconds: billedSeconds },
     });
-    const retry = await transcribeAudioUrl({ audioUrl, prompt: "" });
+    const retry = await transcribeAudioUrl({ audioUrl, prompt: "", timeoutMs });
     console.info(`Meeting recap: re-transcribed ${Math.round(badSeconds)}s of unclear audio without the hint.`);
     return cleanTranscriptSegments(retry.segments);
   } catch (error) {
@@ -145,17 +147,27 @@ export async function runMeetingRecap(recapId: string, startedAt: Date): Promise
         data: { audioSeconds: billedSeconds },
       });
       const primary = cleanTranscriptSegments(result.segments);
-      const recovered = await retranscribeBadParts({
-        audioUrl,
-        meetingId: meeting.id,
-        userId: recap.createdById,
-        primary,
-        hintWords,
-        billedSeconds,
-        // Lần hai mất khoảng bằng lần đầu; vẫn phải chừa thời gian cho phần viết biên bản.
-        hasTime: Date.now() - runStartedAt + firstPassMs + SUMMARY_RESERVE_MS <= RUN_BUDGET_MS,
-      });
-      transcript = formatTranscript(mergeRecoveredSegments(primary, hintWords, recovered));
+      transcript = formatTranscript(mergeRecoveredSegments(primary, hintWords));
+      if (badTranscriptWindows(primary, hintWords).length > 0) {
+        // Lưu lần đầu trước khi chép lại: lượt chạy có bị cắt giữa chừng thì vẫn còn bản chép lời để viết lại.
+        const firstSaved = await prisma.meetingRecap.updateMany({
+          where: current,
+          data: { transcript, audioSeconds: Math.round(result.duration) },
+        });
+        if (firstSaved.count === 0) return;
+        // Lần hai chỉ dùng thời gian còn lại sau khi chừa phần viết biên bản, và cần ít nhất bằng lần đầu.
+        const retryBudget = RUN_BUDGET_MS - (Date.now() - runStartedAt) - SUMMARY_RESERVE_MS;
+        const recovered = await retranscribeBadParts({
+          audioUrl,
+          meetingId: meeting.id,
+          userId: recap.createdById,
+          primary,
+          hintWords,
+          billedSeconds,
+          timeoutMs: retryBudget >= firstPassMs ? retryBudget : 0,
+        });
+        if (recovered.length) transcript = formatTranscript(mergeRecoveredSegments(primary, hintWords, recovered));
+      }
       const deleted = await deleteRecapAudio(recap.audioPathname);
       const saved = await prisma.meetingRecap.updateMany({
         where: current,

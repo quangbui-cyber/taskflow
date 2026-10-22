@@ -191,6 +191,8 @@ export function transcriptSegmentIssue(text: string, hintWords: Set<string>): "e
 }
 
 type Window = { start: number; end: number };
+// Khoảng trống ngắn hơn mức này (giữa hai câu) không tính là mất lời.
+const RECOVERY_GAP_SECONDS = 5;
 
 /** Khoảng thời gian bị hỏng của lần chép đầu (đoạn hỏng kéo tới đầu đoạn kế tiếp nếu Groq không trả "end"). */
 export function badTranscriptWindows(segments: TranscriptSegment[], hintWords: Set<string>): Window[] {
@@ -222,15 +224,32 @@ export function mergeRecoveredSegments(
     }
     const next = primary[index + 1]?.start;
     const end = Math.max(segment.start, segment.end ?? next ?? segment.start);
-    const recovered = secondary.filter(
-      (candidate) =>
-        candidate.start >= segment.start - 1 &&
-        candidate.start < end &&
-        !transcriptSegmentIssue(candidate.text, hintWords)
-    );
-    if (recovered.length) out.push(...recovered);
-    else if (out.at(-1)?.unclear) out[out.length - 1] = { ...out[out.length - 1], end };
-    else out.push({ start: segment.start, end, text: RECAP_UNCLEAR_TEXT, unclear: true });
+    const recovered = secondary
+      .filter(
+        (candidate) =>
+          candidate.start >= segment.start - 1 &&
+          candidate.start < end &&
+          !transcriptSegmentIssue(candidate.text, hintWords)
+      )
+      .sort((a, b) => a.start - b.start);
+    // Phần nào trong khoảng hỏng mà lần hai cũng không lấy lại được thì vẫn ghi "(không nghe rõ)".
+    const markUnclear = (from: number, to: number, always = false) => {
+      if (!always && to - from < RECOVERY_GAP_SECONDS) return;
+      const last = out.at(-1);
+      if (last?.unclear && from - (last.end ?? last.start) < RECOVERY_GAP_SECONDS) {
+        out[out.length - 1] = { ...last, end: to };
+      } else {
+        out.push({ start: from, end: to, text: RECAP_UNCLEAR_TEXT, unclear: true });
+      }
+    };
+    let cursor = segment.start;
+    for (const candidate of recovered) {
+      markUnclear(cursor, candidate.start);
+      out.push(candidate);
+      cursor = Math.max(cursor, candidate.end ?? candidate.start);
+    }
+    if (recovered.length === 0) markUnclear(segment.start, end, true);
+    else markUnclear(cursor, end);
   });
   return out;
 }
