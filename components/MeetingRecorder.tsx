@@ -15,6 +15,13 @@ import {
   pickRecordingMimeType,
   recordingFileName,
   recordingFileType,
+  OVERTIME_EXTEND_MS,
+  SPEECH_RMS_THRESHOLD,
+  autoStopMessage,
+  autoStopState,
+  initialAutoStopEndsAt,
+  rms,
+  shouldAutoSubmitRecording,
   type RecordingSource,
 } from "@/lib/meetingRecorder";
 import { formatLimit, friendlyUploadError, uploadRecapAudio } from "@/lib/recapUploadClient";
@@ -50,6 +57,7 @@ export default function MeetingRecorder({
   meetingId,
   meetingUrl,
   autoStart = false,
+  meetingEndsAt = null,
   maxAudioMinutes,
   onUploaded,
 }: {
@@ -58,6 +66,8 @@ export default function MeetingRecorder({
   meetingUrl: string | null;
   /** Mở từ thông báo "cuộc họp đã bắt đầu": họp trực tiếp thì ghi ngay, họp online thì nhắc bấm Bắt đầu. */
   autoStart?: boolean;
+  /** Giờ kết thúc theo lịch (ISO): họp trực tiếp quá 10 phút mà chưa dừng thì app tự dừng. */
+  meetingEndsAt?: string | null;
   maxAudioMinutes: number;
   onUploaded: () => void;
 }) {
@@ -65,6 +75,17 @@ export default function MeetingRecorder({
   const router = useRouter();
   const pathname = usePathname();
   const autoStartedRef = useRef(false);
+  // Đặt true khi tab họp đóng / dừng chia sẻ: dừng ghi xong thì tự tạo biên bản.
+  const autoSubmitRef = useRef(false);
+  const autoSubmitMessageRef = useRef<string | null>(null);
+  // Họp trực tiếp: tự dừng khi quá giờ kết thúc 10 phút hoặc im lặng 10 phút.
+  const autoStopEnabledRef = useRef(false);
+  const endsAtRef = useRef<number | null>(null);
+  const lastSoundAtRef = useRef(0);
+  const [autoStopInfo, setAutoStopInfo] = useState<{ overtimeLeftMs: number | null; silenceLeftMs: number | null }>({
+    overtimeLeftMs: null,
+    silenceLeftMs: null,
+  });
   const startButtonRef = useRef<HTMLButtonElement>(null);
   const [startPrompt, setStartPrompt] = useState(false);
   const [supported, setSupported] = useState<boolean | null>(null);
@@ -91,7 +112,6 @@ export default function MeetingRecorder({
   const runStartRef = useRef<number | null>(null);
   const tickRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const rafRef = useRef<number | null>(null);
   const wakeLockRef = useRef<WakeLockLike | null>(null);
   const maxMs = maxAudioMinutes * 60 * 1000;
 
@@ -130,8 +150,6 @@ export default function MeetingRecorder({
   }, [meetingId, meetingUrl]);
 
   const stopMeter = useCallback(() => {
-    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-    rafRef.current = null;
     audioCtxRef.current?.close().catch(() => {});
     audioCtxRef.current = null;
     setLevel(0);
@@ -204,24 +222,29 @@ export default function MeetingRecorder({
     };
   }, [phase, requestWakeLock]);
 
+  /**
+   * Đo âm lượng ngay trên luồng âm thanh (không dùng vòng vẽ của trình duyệt, vốn dừng khi tab bị ẩn),
+   * vừa để vẽ thanh âm lượng vừa để biết lần cuối có tiếng nói.
+   */
   function startMeter(stream: MediaStream) {
     try {
       const ctx = new AudioContext();
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 512;
-      ctx.createMediaStreamSource(stream).connect(analyser);
-      audioCtxRef.current = ctx;
-      const data = new Uint8Array(analyser.fftSize);
-      const loop = () => {
-        analyser.getByteTimeDomainData(data);
-        let sum = 0;
-        for (const value of data) sum += ((value - 128) / 128) ** 2;
-        setLevel(Math.min(1, Math.sqrt(sum / data.length) * 4));
-        rafRef.current = requestAnimationFrame(loop);
+      void ctx.resume().catch(() => {});
+      const source = ctx.createMediaStreamSource(stream);
+      const processor = ctx.createScriptProcessor(4096, 1, 1);
+      const silent = ctx.createGain();
+      silent.gain.value = 0;
+      processor.onaudioprocess = (event) => {
+        const level = rms(event.inputBuffer.getChannelData(0));
+        if (level > SPEECH_RMS_THRESHOLD) lastSoundAtRef.current = Date.now();
+        setLevel(Math.min(1, level * 4));
       };
-      loop();
+      source.connect(processor);
+      processor.connect(silent);
+      silent.connect(ctx.destination);
+      audioCtxRef.current = ctx;
     } catch {
-      // Không có thanh âm lượng cũng không sao.
+      // Không đo được âm lượng thì vẫn ghi bình thường (chỉ không tự dừng khi im lặng).
     }
   }
 
@@ -339,22 +362,38 @@ export default function MeetingRecorder({
       const durationMs = accumulatedRef.current;
       releaseDevices();
       void saveRecordingMeta({ ...meta, durationMs, updatedAt: Date.now() });
-      setSaved({
+      const recording: SavedRecording = {
         blob: new Blob(chunksRef.current, { type: recordingFileType(meta.mimeType).type }),
         mimeType: meta.mimeType,
         startedAt: meta.startedAt,
         durationMs,
         recovered: false,
-      });
+      };
+      setSaved(recording);
       setElapsedMs(durationMs);
       setPhase("stopped");
+
+      if (autoSubmitRef.current) {
+        autoSubmitRef.current = false;
+        const message =
+          autoSubmitMessageRef.current ??
+          "Cuộc họp online đã kết thúc (tab họp đã đóng). App đã dừng ghi và đang tạo biên bản…";
+        autoSubmitMessageRef.current = null;
+        if (shouldAutoSubmitRecording(durationMs)) {
+          setNotice(message);
+          void submitRef.current(recording);
+        } else {
+          setNotice("App đã dừng ghi. Bản ghi dưới 30 giây nên chưa tự tạo biên bản.");
+        }
+      }
     };
     if (source === "online") {
-      // Bấm "Dừng chia sẻ" trên thanh của Chrome hoặc đóng tab họp → dừng ghi, giữ phần đã ghi.
+      // Đóng tab họp hoặc bấm "Dừng chia sẻ" = cuộc họp kết thúc: dừng ghi rồi tự tạo biên bản.
       displayStreamRef.current?.getTracks().forEach((track) =>
-        track.addEventListener("ended", () =>
-          stopRecording("Đã dừng chia sẻ tab cuộc họp nên bản ghi tự dừng. Phần đã ghi vẫn được giữ.")
-        )
+        track.addEventListener("ended", () => {
+          autoSubmitRef.current = true;
+          stopRecording();
+        })
       );
     } else {
       streamRef.current?.getAudioTracks()[0]?.addEventListener("ended", () =>
@@ -367,12 +406,37 @@ export default function MeetingRecorder({
     setPhase("recording");
     startMeter(stream);
     void requestWakeLock();
+    autoStopEnabledRef.current = source === "mic";
+    endsAtRef.current = initialAutoStopEndsAt(meetingEndsAt ? Date.parse(meetingEndsAt) : null, Date.now());
+    lastSoundAtRef.current = Date.now();
+    setAutoStopInfo({ overtimeLeftMs: null, silenceLeftMs: null });
     tickRef.current = window.setInterval(() => {
       const duration = currentDuration();
       setElapsedMs(duration);
-      if (duration >= maxMs) stopRecording(`Đã tới giới hạn ${formatLimit(maxAudioMinutes)} mỗi bản ghi nên app tự dừng.`);
+      if (duration >= maxMs) {
+        stopRecording(`Đã tới giới hạn ${formatLimit(maxAudioMinutes)} mỗi bản ghi nên app tự dừng.`);
+        return;
+      }
+      if (!autoStopEnabledRef.current) return;
+      const state = autoStopState({
+        nowMs: Date.now(),
+        endsAtMs: endsAtRef.current,
+        lastSoundAtMs: lastSoundAtRef.current,
+        paused: recorderRef.current?.state === "paused",
+      });
+      setAutoStopInfo({ overtimeLeftMs: state.overtimeLeftMs, silenceLeftMs: state.silenceLeftMs });
+      if (state.stop) {
+        autoSubmitRef.current = true;
+        autoSubmitMessageRef.current = autoStopMessage(state.stop);
+        stopRecording();
+      }
     }, 500);
   }
+
+  const submitRef = useRef(submit);
+  useEffect(() => {
+    submitRef.current = submit;
+  });
 
   // Luôn trỏ tới hàm start mới nhất để hiệu ứng tự ghi âm gọi được mà không phụ thuộc mỗi lần render.
   const startRef = useRef(start);
@@ -416,7 +480,23 @@ export default function MeetingRecorder({
     if (!recorder || recorder.state !== "paused") return;
     recorder.resume();
     runStartRef.current = performance.now();
+    lastSoundAtRef.current = Date.now();
     setPhase("recording");
+  }
+
+  /** Người tổ chức bấm "Vẫn đang họp": lùi giờ tự dừng và đếm lại thời gian im lặng. */
+  function keepRecording() {
+    lastSoundAtRef.current = Date.now();
+    if (endsAtRef.current !== null && Date.now() >= endsAtRef.current) {
+      endsAtRef.current = Date.now() + OVERTIME_EXTEND_MS;
+    }
+    setAutoStopInfo({ overtimeLeftMs: null, silenceLeftMs: null });
+  }
+
+  function stopAndCreateRecap() {
+    autoSubmitRef.current = true;
+    autoSubmitMessageRef.current = "Đã dừng ghi và đang tạo biên bản…";
+    stopRecording();
   }
 
   async function discard() {
@@ -429,8 +509,9 @@ export default function MeetingRecorder({
     setPhase("idle");
   }
 
-  async function submit() {
-    if (!saved) return;
+  async function submit(recording: SavedRecording | null = saved) {
+    if (!recording) return;
+    const saved = recording;
     setError(null);
     setPhase("uploading");
     setProgress(0);
@@ -595,6 +676,30 @@ export default function MeetingRecorder({
               ? "Đừng đóng tab này và tab cuộc họp trong lúc ghi. Thanh đỏ nhấp nháy theo tiếng nói nghĩa là đang thu."
               : "Đừng đóng tab trong lúc ghi. Thanh đỏ nhấp nháy theo tiếng nói nghĩa là micro đang thu."}
           </p>
+          {(autoStopInfo.overtimeLeftMs !== null || autoStopInfo.silenceLeftMs !== null) && (
+            <div className="mt-3 space-y-2 rounded-[7px] bg-amber-50 px-3 py-2.5 text-sm text-amber-900" role="status">
+              {autoStopInfo.overtimeLeftMs !== null && (
+                <p>
+                  Đã quá giờ kết thúc cuộc họp. App sẽ tự dừng ghi và tạo biên bản sau{" "}
+                  <strong className="tabular-nums">{formatClock(autoStopInfo.overtimeLeftMs / 1000)}</strong>.
+                </p>
+              )}
+              {autoStopInfo.silenceLeftMs !== null && (
+                <p>
+                  Không nghe thấy tiếng nói. App sẽ tự dừng ghi và tạo biên bản sau{" "}
+                  <strong className="tabular-nums">{formatClock(autoStopInfo.silenceLeftMs / 1000)}</strong>.
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={stopAndCreateRecap} className="tf-button-primary !min-h-8 !px-3 text-xs">
+                  Dừng và tạo biên bản
+                </button>
+                <button type="button" onClick={keepRecording} className="tf-button-secondary !min-h-8 !px-3 text-xs">
+                  {autoStopInfo.overtimeLeftMs !== null ? "Vẫn đang họp (+30 phút)" : "Vẫn đang họp"}
+                </button>
+              </div>
+            </div>
+          )}
           {!storageOk && (
             <p className="mt-2 text-xs text-amber-800">
               Trình duyệt không cho lưu tạm trên máy (chế độ ẩn danh?). Bản ghi vẫn chạy, nhưng đóng tab sẽ mất.
@@ -647,7 +752,7 @@ export default function MeetingRecorder({
             </div>
           ) : (
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={submit} className="tf-button-primary">
+              <button type="button" onClick={() => void submit()} className="tf-button-primary">
                 <Upload size={16} aria-hidden="true" />
                 Tạo biên bản từ bản ghi này
               </button>

@@ -170,6 +170,7 @@ function AudioSource({
   meetingId,
   meetingUrl,
   autoStart = false,
+  meetingEndsAt = null,
   uploadLabel,
   maxAudioMinutes,
   onDone,
@@ -177,6 +178,7 @@ function AudioSource({
   meetingId: string;
   meetingUrl: string | null;
   autoStart?: boolean;
+  meetingEndsAt?: string | null;
   uploadLabel: string;
   maxAudioMinutes: number;
   onDone: () => void;
@@ -210,6 +212,7 @@ function AudioSource({
           meetingId={meetingId}
           meetingUrl={meetingUrl}
           autoStart={autoStart}
+          meetingEndsAt={meetingEndsAt}
           maxAudioMinutes={maxAudioMinutes}
           onUploaded={onDone}
         />
@@ -230,11 +233,13 @@ export default function MeetingRecapPanel({
   maxAudioMinutes,
   meetingUrl,
   autoStart = false,
+  meetingEndsAt = null,
   recap,
 }: {
   meetingId: string;
   meetingUrl: string | null;
   autoStart?: boolean;
+  meetingEndsAt?: string | null;
   canManage: boolean;
   enabled: boolean;
   startBlock: string | null;
@@ -469,6 +474,7 @@ export default function MeetingRecapPanel({
                   <AudioSource
                     meetingId={meetingId}
                     meetingUrl={meetingUrl}
+                    meetingEndsAt={meetingEndsAt}
                     uploadLabel="Chép lời và viết lại biên bản"
                     maxAudioMinutes={maxAudioMinutes}
                     onDone={() => router.refresh()}
@@ -486,6 +492,7 @@ export default function MeetingRecapPanel({
                   meetingId={meetingId}
                   meetingUrl={meetingUrl}
                   autoStart={autoStart}
+                  meetingEndsAt={meetingEndsAt}
                   uploadLabel="Tạo biên bản"
                   maxAudioMinutes={maxAudioMinutes}
                   onDone={() => router.refresh()}

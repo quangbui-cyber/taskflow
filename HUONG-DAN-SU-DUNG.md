@@ -402,6 +402,7 @@ Khi cuộc họp bắt đầu, người tổ chức nhận thông báo (trong ap
 1. Bấm **Bắt đầu ghi âm** (hoặc bấm vào thông báo cuộc họp đã bắt đầu) và cho phép trình duyệt dùng micro.
 2. Đặt máy gần người nói. Thanh đỏ nhấp nháy theo tiếng nói nghĩa là micro đang thu. Có thể **Tạm dừng** / **Ghi tiếp**.
 3. Họp xong bấm **Dừng ghi**, nghe lại nếu cần, rồi bấm **Tạo biên bản từ bản ghi này**.
+4. Lỡ quên bấm Dừng ghi: app tự dừng và **tự tạo biên bản** khi đã **quá giờ kết thúc 10 phút** hoặc **không nghe thấy tiếng nói trong 10 phút**. Trước đó app hiện đếm ngược kèm nút **Vẫn đang họp** (họp kéo dài thì bấm để lùi thêm 30 phút) và **Dừng và tạo biên bản**. Cách tự dừng này cần tab taskflow còn mở trên máy đang ghi.
 
 Bản ghi được lưu dần trên máy (5 giây một lần): lỡ đóng tab hay tải lại trang, mở lại trang biên bản sẽ thấy *"Có bản ghi chưa gửi trên máy này"* (có thể mất vài giây cuối). Trên điện thoại, giữ màn hình mở và ở lại trang trong lúc ghi — khoá máy hoặc chuyển ứng dụng có thể làm trình duyệt dừng ghi.
 
@@ -410,7 +411,7 @@ Bản ghi được lưu dần trên máy (5 giây một lần): lỡ đóng tab 
 1. Mở cuộc họp ở một tab (nếu lịch họp có link, bấm *mở link họp* ngay trong trang biên bản).
 2. Ở trang biên bản chọn **Họp online** (lịch có link họp thì app chọn sẵn), bấm **Bắt đầu ghi âm**.
 3. Chrome hỏi chia sẻ gì: chọn **tab cuộc họp**, bật **"Chia sẻ âm thanh của tab"**, bấm **Chia sẻ**. Sau đó cho phép micro để ghi cả giọng của bạn.
-4. Giữ cả tab cuộc họp và tab taskflow mở. Họp xong bấm **Dừng ghi** (hoặc bấm *Dừng chia sẻ* trên thanh của Chrome — bản ghi tự dừng và được giữ lại).
+4. Giữ cả tab cuộc họp và tab taskflow mở. Họp xong chỉ cần **đóng tab cuộc họp** (hoặc bấm *Dừng chia sẻ* trên thanh của Chrome): app tự dừng ghi và **tự tạo biên bản**, không cần bấm thêm. Bản ghi dưới 30 giây (thường do bấm nhầm) thì app chỉ dừng ghi, không tự tạo biên bản. Muốn đọc lại trước khi tạo, bấm **Dừng ghi** trên taskflow thay vì đóng tab họp.
 
 App trộn tiếng mọi người trong tab họp với giọng của bạn thành một bản ghi. Nếu không cho phép micro, app vẫn ghi tiếng từ tab họp (nhãn *"chỉ tab họp"*).
 

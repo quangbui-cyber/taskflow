@@ -128,6 +128,7 @@ export default async function MeetingRecapPage({
             cancelled={meeting.status === "CANCELLED"}
             maxAudioMinutes={recapLimits().maxAudioMinutes}
             meetingUrl={canManage ? meeting.meetingUrl : null}
+            meetingEndsAt={meeting.endAt.toISOString()}
             // Mở từ thông báo "cuộc họp đã bắt đầu": ghi âm ngay.
             autoStart={query.record === "1" && canManage && !recap}
             recap={
