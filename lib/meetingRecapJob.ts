@@ -2,9 +2,15 @@ import { del, issueSignedToken, presignUrl } from "@vercel/blob";
 import { formatMeetingWhen } from "@/lib/meetings";
 import {
   buildRecapPrompt,
+  badTranscriptWindows,
   buildTranscriptionPrompt,
+  cleanStoredTranscript,
   cleanTranscriptSegments,
   formatTranscript,
+  mergeRecoveredSegments,
+  totalWindowSeconds,
+  transcriptionHintWords,
+  type TranscriptSegment,
   limitTranscriptForSummary,
   RECAP_STALE_MS,
   recapActionItemRows,
@@ -18,7 +24,7 @@ import {
   transcribeAudioUrl,
 } from "@/lib/meetingRecapAi";
 import { loadRecapUsage } from "@/lib/meetingRecapData";
-import { recapLimits, summaryLimitReason } from "@/lib/meetingRecapLimits";
+import { recapLimits, retranscribeAllowed, summaryLimitReason } from "@/lib/meetingRecapLimits";
 import { notify } from "@/lib/notify";
 import { DOCX_MIME_TYPE, buildRecapDocx, recapDocxFileName } from "@/lib/recapDocx";
 import { prisma } from "@/lib/prisma";
@@ -28,6 +34,8 @@ const SIGNED_URL_TTL_MS = 30 * 60 * 1000;
 // Lượt chạy nền có 300 giây (maxDuration); chừa lại một chút để kịp ghi lỗi nếu hết giờ.
 const RUN_BUDGET_MS = 280_000;
 const MIN_SUMMARY_TIMEOUT_MS = 45_000;
+// Chừa cho phần viết biên bản khi quyết định có chép lại lần hai hay không.
+const SUMMARY_RESERVE_MS = 90_000;
 
 /** Xoá file ghi âm tạm; lỗi xoá không làm hỏng biên bản (cron dọn lại sau). */
 export async function deleteRecapAudio(pathname: string | null | undefined): Promise<boolean> {
@@ -49,6 +57,46 @@ async function signedAudioUrl(pathname: string): Promise<string> {
   });
   const { presignedUrl } = await presignUrl(token, { operation: "get", pathname, access: "private" });
   return presignedUrl;
+}
+
+/**
+ * Lần chép đầu có đoạn hỏng (Whisper chép lại gợi ý hoặc bị kẹt rơi dấu, thường mất cả khung 30 giây
+ * lời nói thật): chép lại cả file một lần nữa, không kèm gợi ý, để lấy lại lời nói ở các đoạn đó.
+ * Chỉ làm khi đủ hạn mức phút trong ngày và đủ thời gian; lỗi ở bước này không làm hỏng biên bản.
+ */
+async function retranscribeBadParts({
+  audioUrl,
+  meetingId,
+  userId,
+  primary,
+  hintWords,
+  billedSeconds,
+  hasTime,
+}: {
+  audioUrl: string;
+  meetingId: string;
+  userId: string | null;
+  primary: TranscriptSegment[];
+  hintWords: Set<string>;
+  billedSeconds: number;
+  hasTime: boolean;
+}): Promise<TranscriptSegment[]> {
+  const badSeconds = totalWindowSeconds(badTranscriptWindows(primary, hintWords));
+  if (!hasTime) return [];
+  if (!retranscribeAllowed(recapLimits(), await loadRecapUsage(meetingId), { badSeconds, audioSeconds: billedSeconds })) {
+    return [];
+  }
+  try {
+    await prisma.meetingRecapRun.create({
+      data: { meetingId, userId, kind: "RETRANSCRIBE", audioSeconds: billedSeconds },
+    });
+    const retry = await transcribeAudioUrl({ audioUrl, prompt: "" });
+    console.info(`Meeting recap: re-transcribed ${Math.round(badSeconds)}s of unclear audio without the hint.`);
+    return cleanTranscriptSegments(retry.segments);
+  } catch (error) {
+    console.warn("Meeting recap re-transcription failed; keeping the first pass.", error);
+    return [];
+  }
 }
 
 /**
@@ -75,6 +123,8 @@ export async function runMeetingRecap(recapId: string, startedAt: Date): Promise
   const { meeting } = recap;
   const attendeeNames = meeting.attendees.map((attendee) => attendee.user.name);
   const managerIds = [meeting.organizerId, recap.createdById];
+  const personNames = [meeting.organizer.name, ...attendeeNames];
+  const hintWords = transcriptionHintWords(meeting.title, personNames);
 
   try {
     let transcript = recap.transcript ?? "";
@@ -82,16 +132,30 @@ export async function runMeetingRecap(recapId: string, startedAt: Date): Promise
     if (recap.audioPathname && !recap.transcript) {
       await prisma.meetingRecap.updateMany({ where: current, data: { stage: "TRANSCRIBING" } });
       const audioUrl = await signedAudioUrl(recap.audioPathname);
+      const firstStartedAt = Date.now();
       const result = await transcribeAudioUrl({
         audioUrl,
-        prompt: buildTranscriptionPrompt(meeting.title, [meeting.organizer.name, ...attendeeNames]),
+        prompt: buildTranscriptionPrompt(meeting.title, personNames),
       });
-      transcript = formatTranscript(cleanTranscriptSegments(result.segments));
+      const firstPassMs = Date.now() - firstStartedAt;
+      const billedSeconds = Math.max(1, Math.ceil(result.duration));
       // Thay số phút ước tính bằng số phút Groq thật sự tính tiền.
       await prisma.meetingRecapRun.updateMany({
         where: { meetingId: meeting.id, kind: "TRANSCRIBE", createdAt: { gte: startedAt } },
-        data: { audioSeconds: Math.max(1, Math.ceil(result.duration)) },
+        data: { audioSeconds: billedSeconds },
       });
+      const primary = cleanTranscriptSegments(result.segments);
+      const recovered = await retranscribeBadParts({
+        audioUrl,
+        meetingId: meeting.id,
+        userId: recap.createdById,
+        primary,
+        hintWords,
+        billedSeconds,
+        // Lần hai mất khoảng bằng lần đầu; vẫn phải chừa thời gian cho phần viết biên bản.
+        hasTime: Date.now() - runStartedAt + firstPassMs + SUMMARY_RESERVE_MS <= RUN_BUDGET_MS,
+      });
+      transcript = formatTranscript(mergeRecoveredSegments(primary, hintWords, recovered));
       const deleted = await deleteRecapAudio(recap.audioPathname);
       const saved = await prisma.meetingRecap.updateMany({
         where: current,
@@ -103,6 +167,13 @@ export async function runMeetingRecap(recapId: string, startedAt: Date): Promise
         },
       });
       if (saved.count === 0) return;
+    } else if (transcript) {
+      // Viết lại từ bản chép lời cũ: đổi các dòng chép lại gợi ý / rơi dấu thành "(không nghe rõ)".
+      const cleaned = cleanStoredTranscript(transcript, hintWords);
+      if (cleaned !== transcript) {
+        transcript = cleaned;
+        await prisma.meetingRecap.updateMany({ where: current, data: { transcript } });
+      }
     }
 
     if (!transcript.trim()) {
