@@ -59,3 +59,30 @@ export function microphoneErrorMessage(error: unknown): string {
   }
   return "Không bật được micro. Tải lại trang rồi thử lại.";
 }
+
+export type RecordingSource = "mic" | "online";
+
+/**
+ * Thu âm thanh của một tab (Google Meet, Zoom web…) chỉ ổn định trên Chrome/Edge máy tính.
+ * Safari, Firefox và trình duyệt điện thoại không chia sẻ được âm thanh tab.
+ */
+export function canRecordTabAudio(userAgent: string, hasGetDisplayMedia: boolean): boolean {
+  if (!hasGetDisplayMedia) return false;
+  if (/Android|iPhone|iPad|iPod|Mobile/i.test(userAgent)) return false;
+  if (/Firefox\//.test(userAgent)) return false;
+  return /Chrome\/|Chromium\/|Edg\//.test(userAgent);
+}
+
+export const NO_TAB_AUDIO_MESSAGE =
+  "Chưa lấy được âm thanh của tab họp. Bấm Bắt đầu lại, chọn tab cuộc họp và bật “Chia sẻ âm thanh của tab” trước khi bấm Chia sẻ.";
+
+export function displayCaptureErrorMessage(error: unknown): string {
+  const name = error instanceof Error ? error.name : "";
+  if (name === "NotAllowedError" || name === "AbortError") {
+    return "Bạn chưa chọn tab cuộc họp để chia sẻ. Bấm Bắt đầu ghi âm, chọn tab Google Meet/Zoom rồi bấm Chia sẻ.";
+  }
+  if (name === "NotSupportedError" || name === "TypeError") {
+    return "Trình duyệt này không chia sẻ được âm thanh tab. Hãy dùng Chrome hoặc Edge trên máy tính.";
+  }
+  return "Không chia sẻ được tab cuộc họp. Tải lại trang rồi thử lại.";
+}

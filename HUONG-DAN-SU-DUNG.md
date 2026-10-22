@@ -403,7 +403,16 @@ Mở **Lịch họp → Tạo biên bản** ở cuộc họp đã bắt đầu. 
 2. Đặt máy gần người nói. Thanh đỏ nhấp nháy theo tiếng nói nghĩa là micro đang thu. Có thể **Tạm dừng** / **Ghi tiếp**.
 3. Họp xong bấm **Dừng ghi**, nghe lại nếu cần, rồi bấm **Tạo biên bản từ bản ghi này**.
 
-Bản ghi được lưu dần trên máy (5 giây một lần): lỡ đóng tab hay tải lại trang, mở lại trang biên bản sẽ thấy *"Có bản ghi chưa gửi trên máy này"* (có thể mất vài giây cuối). Trên điện thoại, giữ màn hình mở và ở lại trang trong lúc ghi — khoá máy hoặc chuyển ứng dụng có thể làm trình duyệt dừng ghi. Họp online (Meet/Zoom) thì nên dùng bản ghi của Meet/Zoom rồi tải file lên.
+Bản ghi được lưu dần trên máy (5 giây một lần): lỡ đóng tab hay tải lại trang, mở lại trang biên bản sẽ thấy *"Có bản ghi chưa gửi trên máy này"* (có thể mất vài giây cuối). Trên điện thoại, giữ màn hình mở và ở lại trang trong lúc ghi — khoá máy hoặc chuyển ứng dụng có thể làm trình duyệt dừng ghi.
+
+**Họp online (Google Meet, Zoom trên web…)** — chỉ dùng được với Chrome hoặc Edge trên máy tính:
+
+1. Mở cuộc họp ở một tab (nếu lịch họp có link, bấm *mở link họp* ngay trong trang biên bản).
+2. Ở trang biên bản chọn **Họp online** (lịch có link họp thì app chọn sẵn), đánh dấu ô xác nhận, bấm **Bắt đầu ghi âm**.
+3. Chrome hỏi chia sẻ gì: chọn **tab cuộc họp**, bật **"Chia sẻ âm thanh của tab"**, bấm **Chia sẻ**. Sau đó cho phép micro để ghi cả giọng của bạn.
+4. Giữ cả tab cuộc họp và tab taskflow mở. Họp xong bấm **Dừng ghi** (hoặc bấm *Dừng chia sẻ* trên thanh của Chrome — bản ghi tự dừng và được giữ lại).
+
+App trộn tiếng mọi người trong tab họp với giọng của bạn thành một bản ghi. Nếu không cho phép micro, app vẫn ghi tiếng từ tab họp (nhãn *"chỉ tab họp"*).
 
 **Tải file có sẵn** (tab *Tải file lên*)
 

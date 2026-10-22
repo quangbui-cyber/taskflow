@@ -241,6 +241,8 @@ Lịch họp bật mặc định ở mọi môi trường. Muốn tạm ẩn th�
 
 Người tổ chức **ghi âm ngay trong app** hoặc tải file ghi âm có sẵn lên trang **Biên bản** của cuộc họp
 (ghi âm trong app cần HTTPS — Vercel có sẵn — và quyền micro: `Permissions-Policy` cho phép `microphone=(self)`).
+Chế độ **Họp online** dùng tính năng chia sẻ tab của trình duyệt để thu thêm tiếng của tab Meet/Zoom — chỉ Chrome/Edge máy tính,
+không cần cấu hình gì thêm.
 App gửi file cho **Groq** (`whisper-large-v3`) để chép lời tiếng Việt, rồi nhờ
 **Gemini** (`gemini-3.1-flash-lite`) viết biên bản gồm tóm tắt, nội dung chính,
 quyết định, việc cần làm và vấn đề còn mở. Người tổ chức đọc lại, sửa nếu cần, rồi
