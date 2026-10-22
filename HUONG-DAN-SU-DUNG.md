@@ -395,10 +395,22 @@ Sau khi cuộc họp bắt đầu, thẻ cuộc họp trong **Lịch họp** có
 
 ### Tạo biên bản
 
-1. Ghi âm cuộc họp bằng điện thoại hoặc phần mềm họp online. **Báo trước cho mọi người** rằng cuộc họp được ghi âm.
-2. Mở **Lịch họp → Tạo biên bản**, chọn file ghi âm (mp3, m4a, wav, webm, ogg, flac hoặc mp4, tối đa 100 MB).
-3. Đánh dấu ô xác nhận đã báo người tham dự, rồi bấm **Tạo biên bản**.
-4. AI chép lời rồi viết biên bản, thường mất 1–3 phút. Có thể rời trang; khi xong app sẽ thông báo.
+Mở **Lịch họp → Tạo biên bản** ở cuộc họp đã bắt đầu. **Báo trước cho mọi người** rằng cuộc họp được ghi âm. Có hai cách:
+
+**Ghi âm ngay trong app** (tab *Ghi âm trong app*)
+
+1. Đánh dấu ô xác nhận đã báo người tham dự, bấm **Bắt đầu ghi âm** và cho phép trình duyệt dùng micro.
+2. Đặt máy gần người nói. Thanh đỏ nhấp nháy theo tiếng nói nghĩa là micro đang thu. Có thể **Tạm dừng** / **Ghi tiếp**.
+3. Họp xong bấm **Dừng ghi**, nghe lại nếu cần, rồi bấm **Tạo biên bản từ bản ghi này**.
+
+Bản ghi được lưu dần trên máy (5 giây một lần): lỡ đóng tab hay tải lại trang, mở lại trang biên bản sẽ thấy *"Có bản ghi chưa gửi trên máy này"* (có thể mất vài giây cuối). Trên điện thoại, giữ màn hình mở và ở lại trang trong lúc ghi — khoá máy hoặc chuyển ứng dụng có thể làm trình duyệt dừng ghi. Họp online (Meet/Zoom) thì nên dùng bản ghi của Meet/Zoom rồi tải file lên.
+
+**Tải file có sẵn** (tab *Tải file lên*)
+
+1. Chọn file ghi âm (mp3, m4a, wav, webm, ogg, flac hoặc mp4, tối đa 100 MB).
+2. Đánh dấu ô xác nhận đã báo người tham dự, rồi bấm **Tạo biên bản**.
+
+Sau đó AI chép lời rồi viết biên bản, thường mất 1–3 phút. Có thể rời trang; khi xong app sẽ thông báo.
 
 Giới hạn: mỗi file tối đa 3 giờ; mỗi cuộc họp chép lời tối đa 3 lần và viết lại tối đa 6 lần mỗi ngày; cả công ty có hạn mức phút chép lời mỗi ngày. Khi chạm giới hạn, app báo lý do và mở lại vào ngày hôm sau.
 
