@@ -7,6 +7,7 @@ import {
 
 const GROQ_TRANSCRIBE_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models";
+export const RECAP_SUMMARY_MAX_OUTPUT_TOKENS = 8192;
 
 /** Lỗi đã có câu báo tiếng Việt, hiện thẳng cho người dùng. */
 export class RecapServiceError extends Error {}
@@ -19,6 +20,8 @@ export function recapModels(env: NodeJS.ProcessEnv = process.env) {
 }
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const isTimeout = (error: unknown) =>
+  error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
 
 function groqError(status: number): RecapServiceError {
   if (status === 401 || status === 403) return new RecapServiceError("Groq từ chối API key. Nhờ quản trị viên kiểm tra GROQ_API_KEY.");
@@ -61,7 +64,9 @@ export async function transcribeAudioUrl({
         body: form,
         signal: AbortSignal.timeout(180_000),
       });
-    } catch {
+    } catch (error) {
+      // Quá thời gian chờ thì KHÔNG gọi lại: Groq có thể đã xử lý (và tính tiền) xong.
+      if (isTimeout(error)) throw new RecapServiceError("Groq xử lý quá lâu. Thử lại với file ngắn hơn.");
       if (attempt < 3) {
         await wait(attempt * 3000);
         continue;
@@ -117,13 +122,16 @@ export async function summarizeTranscript({
           contents: [{ role: "user", parts: [{ text: user }] }],
           generationConfig: {
             temperature: 0.2,
+            // Trần token trả về (đã gồm phần "suy nghĩ" của model) để mỗi lượt có chi phí tối đa.
+            maxOutputTokens: RECAP_SUMMARY_MAX_OUTPUT_TOKENS,
             responseMimeType: "application/json",
             responseSchema: RECAP_SUMMARY_SCHEMA,
           },
         }),
         signal: AbortSignal.timeout(120_000),
       });
-    } catch {
+    } catch (error) {
+      if (isTimeout(error)) throw new RecapServiceError("Gemini xử lý quá lâu. Thử bấm Viết lại sau ít phút.");
       if (attempt < 3) {
         await wait(attempt * 3000);
         continue;

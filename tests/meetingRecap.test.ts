@@ -13,6 +13,7 @@ import {
   formatTranscript,
   isRecapAudioPathname,
   isRecapStale,
+  limitTranscriptForSummary,
   normalizeRecapContent,
   parseRecapContent,
   parseRecapSummary,
@@ -23,6 +24,12 @@ import {
   renderRecapContent,
 } from "../lib/meetingRecap";
 import { RecapServiceError, summarizeTranscript, transcribeAudioUrl } from "../lib/meetingRecapAi";
+import {
+  estimateAudioSeconds,
+  recapLimits,
+  summaryLimitReason,
+  transcriptionLimitReason,
+} from "../lib/meetingRecapLimits";
 import { notificationDestination } from "../lib/pushPolicy";
 
 const env = (values: Record<string, string>) => values as unknown as NodeJS.ProcessEnv;
@@ -258,6 +265,7 @@ test("Gemini is asked for structured JSON and its answer is validated", async ()
   const body = JSON.parse(String(calls[0].init.body));
   assert.equal(body.generationConfig.responseMimeType, "application/json");
   assert.equal(body.generationConfig.responseSchema.type, "OBJECT");
+  assert.equal(body.generationConfig.maxOutputTokens, 8192);
   assert.equal(body.systemInstruction.parts[0].text, "S");
   assert.equal(body.contents[0].parts[0].text, "U");
 });
@@ -283,4 +291,81 @@ test("the summary model can be switched without a code change", async () => {
     env: env({ GEMINI_API_KEY: "k", RECAP_SUMMARY_MODEL: "gemini-3.5-flash-lite" }),
   });
   assert.match(calls[0].url, /models\/gemini-3\.5-flash-lite:generateContent$/);
+});
+
+// ---------- Hạn mức chống cháy tiền ----------
+
+const usage = (over: Partial<Record<string, number>> = {}) => ({
+  audioSecondsToday: 0,
+  summariesToday: 0,
+  meetingTranscriptionsToday: 0,
+  meetingSummariesToday: 0,
+  ...over,
+});
+
+test("limits have safe defaults and can be raised with env vars, ignoring junk", () => {
+  assert.deepEqual(recapLimits(env({})), {
+    maxAudioMinutes: 180,
+    dailyAudioMinutes: 600,
+    dailySummaries: 60,
+    perMeetingTranscriptions: 3,
+    perMeetingSummaries: 6,
+  });
+  const custom = recapLimits(env({ RECAP_MAX_AUDIO_MINUTES: "240", RECAP_DAILY_AUDIO_MINUTES: "-5", RECAP_DAILY_SUMMARIES: "abc" }));
+  assert.equal(custom.maxAudioMinutes, 240);
+  assert.equal(custom.dailyAudioMinutes, 600);
+  assert.equal(custom.dailySummaries, 60);
+});
+
+test("audio length comes from the browser, or is estimated from file size at 128 kbps", () => {
+  assert.equal(estimateAudioSeconds(50_000_000, 3601.2), 3602);
+  assert.equal(estimateAudioSeconds(57_600_000, null), 3600);
+  assert.equal(estimateAudioSeconds(57_600_000, "Infinity"), 3600);
+  assert.equal(estimateAudioSeconds(0, undefined), 1);
+});
+
+test("transcription is blocked for over-long files, busy meetings and an exhausted daily budget", () => {
+  const limits = recapLimits(env({}));
+  assert.equal(transcriptionLimitReason(limits, usage(), 3600), null);
+  assert.match(transcriptionLimitReason(limits, usage(), 181 * 60) ?? "", /vượt giới hạn 180 phút/);
+  assert.match(transcriptionLimitReason(limits, usage({ meetingTranscriptionsToday: 3 }), 60) ?? "", /3 lần hôm nay/);
+  assert.match(
+    transcriptionLimitReason(limits, usage({ audioSecondsToday: 590 * 60 }), 11 * 60) ?? "",
+    /còn 10 phút chép lời/
+  );
+  assert.equal(transcriptionLimitReason(limits, usage({ audioSecondsToday: 590 * 60 }), 10 * 60), null);
+});
+
+test("recap writing is capped per meeting (regenerate) and company-wide", () => {
+  const limits = recapLimits(env({}));
+  assert.equal(summaryLimitReason(limits, usage(), { perMeeting: true }), null);
+  assert.match(summaryLimitReason(limits, usage({ meetingSummariesToday: 6 }), { perMeeting: true }) ?? "", /6 lần hôm nay/);
+  assert.equal(summaryLimitReason(limits, usage({ meetingSummariesToday: 6 }), { perMeeting: false }), null);
+  assert.match(summaryLimitReason(limits, usage({ summariesToday: 60 }), { perMeeting: false }) ?? "", /hết 60 lượt/);
+});
+
+test("very long transcripts are cut on a line break before going to the AI", () => {
+  const transcript = Array.from({ length: 10 }, (_, i) => `[0${i}:00] câu số ${i}`).join("\n");
+  assert.equal(limitTranscriptForSummary(transcript, 10_000), transcript);
+  const cut = limitTranscriptForSummary(transcript, 40);
+  assert.ok(cut.startsWith("[00:00] câu số 0\n[01:00] câu số 1"));
+  assert.ok(cut.endsWith("[… phần sau quá dài nên không được đưa vào biên bản]"));
+  assert.ok(!cut.includes("câu số 9"));
+});
+
+test("a timed-out AI call is never retried, so it cannot be billed twice", async () => {
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls += 1;
+    throw Object.assign(new Error("timed out"), { name: "TimeoutError" });
+  }) as typeof fetch;
+  await assert.rejects(
+    transcribeAudioUrl({ audioUrl: "https://x", prompt: "", env: env({ GROQ_API_KEY: "k" }) }),
+    /quá lâu/
+  );
+  assert.equal(calls, 1);
+
+  calls = 0;
+  await assert.rejects(summarizeTranscript({ system: "S", user: "U", env: env({ GEMINI_API_KEY: "k" }) }), /quá lâu/);
+  assert.equal(calls, 1);
 });

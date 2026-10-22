@@ -5,10 +5,13 @@ import {
   buildTranscriptionPrompt,
   cleanTranscriptSegments,
   formatTranscript,
+  limitTranscriptForSummary,
   RECAP_STALE_MS,
   renderRecapContent,
 } from "@/lib/meetingRecap";
 import { RecapServiceError, summarizeTranscript, transcribeAudioUrl } from "@/lib/meetingRecapAi";
+import { loadRecapUsage } from "@/lib/meetingRecapData";
+import { recapLimits, summaryLimitReason } from "@/lib/meetingRecapLimits";
 import { notify } from "@/lib/notify";
 import { prisma } from "@/lib/prisma";
 
@@ -71,6 +74,11 @@ export async function runMeetingRecap(recapId: string, startedAt: Date): Promise
         prompt: buildTranscriptionPrompt(meeting.title, [meeting.organizer.name, ...attendeeNames]),
       });
       transcript = formatTranscript(cleanTranscriptSegments(result.segments));
+      // Thay số phút ước tính bằng số phút Groq thật sự tính tiền.
+      await prisma.meetingRecapRun.updateMany({
+        where: { meetingId: meeting.id, kind: "TRANSCRIBE", createdAt: { gte: startedAt } },
+        data: { audioSeconds: Math.max(1, Math.ceil(result.duration)) },
+      });
       const deleted = await deleteRecapAudio(recap.audioPathname);
       const saved = await prisma.meetingRecap.updateMany({
         where: current,
@@ -88,6 +96,13 @@ export async function runMeetingRecap(recapId: string, startedAt: Date): Promise
       throw new RecapServiceError("Không nghe được lời nói nào trong file ghi âm. Kiểm tra lại file rồi tải lên lần nữa.");
     }
 
+    // Hạn mức cả công ty: kiểm tra và ghi nhận ngay trước khi gọi Gemini.
+    const limited = summaryLimitReason(recapLimits(), await loadRecapUsage(meeting.id), { perMeeting: false });
+    if (limited) throw new RecapServiceError(limited);
+    await prisma.meetingRecapRun.create({
+      data: { meetingId: meeting.id, userId: recap.createdById, kind: "SUMMARIZE" },
+    });
+
     await prisma.meetingRecap.updateMany({ where: current, data: { stage: "SUMMARIZING" } });
     const prompt = buildRecapPrompt(
       {
@@ -98,7 +113,7 @@ export async function runMeetingRecap(recapId: string, startedAt: Date): Promise
         attendees: attendeeNames,
         description: meeting.description,
       },
-      transcript
+      limitTranscriptForSummary(transcript)
     );
     const summary = await summarizeTranscript(prompt);
     const done = await prisma.meetingRecap.updateMany({
@@ -178,5 +193,9 @@ export async function cleanupMeetingRecaps(now = new Date()) {
       cleaned += 1;
     }
   }
+  // Nhật ký lượt dùng chỉ cần cho hạn mức ngày và đối chiếu chi phí gần đây.
+  await prisma.meetingRecapRun.deleteMany({
+    where: { createdAt: { lt: new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000) } },
+  });
   return { stuck: stuck.length, cleaned };
 }

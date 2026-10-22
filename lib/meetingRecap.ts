@@ -363,3 +363,16 @@ export function recapStartBlockReason(
   }
   return null;
 }
+
+/** Giới hạn độ dài bản chép lời gửi cho AI (≈ 5 giờ nói) để chi phí mỗi lượt có trần. */
+export const RECAP_SUMMARY_INPUT_MAX_CHARS = 250_000;
+
+export function limitTranscriptForSummary(
+  transcript: string,
+  maxChars = RECAP_SUMMARY_INPUT_MAX_CHARS
+): string {
+  if (transcript.length <= maxChars) return transcript;
+  const cut = transcript.slice(0, maxChars);
+  const lastLine = cut.lastIndexOf("\n");
+  return `${lastLine > 0 ? cut.slice(0, lastLine) : cut}\n[… phần sau quá dài nên không được đưa vào biên bản]`;
+}

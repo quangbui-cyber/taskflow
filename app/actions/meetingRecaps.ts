@@ -5,7 +5,8 @@ import { after } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { MEETING_RECAPS_DISABLED_MESSAGE, meetingRecapsEnabled } from "@/lib/features";
 import { canManageMeetingRecap, isRecapStale, normalizeRecapContent } from "@/lib/meetingRecap";
-import { findRecapMeeting } from "@/lib/meetingRecapData";
+import { findRecapMeeting, loadRecapUsage } from "@/lib/meetingRecapData";
+import { recapLimits, summaryLimitReason } from "@/lib/meetingRecapLimits";
 import { deleteRecapAudio, runMeetingRecap } from "@/lib/meetingRecapJob";
 import { sendMeetingRecapEmail } from "@/lib/meetingRecapMail";
 import { notify } from "@/lib/notify";
@@ -37,6 +38,8 @@ export async function regenerateMeetingRecap(meetingId: string): Promise<Meeting
   if (recap.status === "PROCESSING" && !isRecapStale(recap)) {
     return { error: "Biên bản đang được xử lý. Đợi xong rồi thử lại." };
   }
+  const limited = summaryLimitReason(recapLimits(), await loadRecapUsage(meetingId), { perMeeting: true });
+  if (limited) return { error: limited };
 
   const startedAt = new Date();
   await prisma.meetingRecap.update({

@@ -1,13 +1,11 @@
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { getCurrentUser } from "@/lib/auth";
-import { MEETING_RECAPS_DISABLED_MESSAGE, meetingRecapsEnabled } from "@/lib/features";
 import {
   RECAP_AUDIO_CONTENT_TYPES,
   RECAP_MAX_AUDIO_BYTES,
   isRecapAudioPathname,
-  recapStartBlockReason,
 } from "@/lib/meetingRecap";
-import { findRecapMeeting } from "@/lib/meetingRecapData";
+import { recapUploadBlockReason } from "@/lib/meetingRecapGuard";
 
 export const runtime = "nodejs";
 
@@ -32,16 +30,20 @@ export async function POST(
     const result = await handleUpload({
       body,
       request,
-      onBeforeGenerateToken: async (pathname) => {
-        if (!meetingRecapsEnabled()) throw new Error(MEETING_RECAPS_DISABLED_MESSAGE);
-        const user = await getCurrentUser();
-        if (!user) throw new Error("Phiên đăng nhập đã hết hạn.");
-        const meeting = await findRecapMeeting(meetingId);
-        const blocked = recapStartBlockReason(meeting, user);
-        if (blocked) throw new Error(blocked);
+      onBeforeGenerateToken: async (pathname, clientPayload) => {
         if (!isRecapAudioPathname(meetingId, pathname)) {
           throw new Error("Định dạng file chưa hỗ trợ. Dùng mp3, m4a, wav, webm, ogg, flac hoặc mp4.");
         }
+        // Kiểm tra lại quyền và hạn mức ngay trước khi cấp token (trình duyệt đã hỏi /check trước đó).
+        let payload: { durationSeconds?: unknown; size?: unknown } = {};
+        try {
+          payload = JSON.parse(clientPayload ?? "{}") ?? {};
+        } catch {
+          payload = {};
+        }
+        const user = await getCurrentUser();
+        const blocked = await recapUploadBlockReason(meetingId, user, payload);
+        if (blocked || !user) throw new Error(blocked ?? "Phiên đăng nhập đã hết hạn.");
         return {
           allowedContentTypes: RECAP_AUDIO_CONTENT_TYPES,
           maximumSizeInBytes: RECAP_MAX_AUDIO_BYTES,

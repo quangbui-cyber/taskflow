@@ -400,6 +400,8 @@ Sau khi cuộc họp bắt đầu, thẻ cuộc họp trong **Lịch họp** có
 3. Đánh dấu ô xác nhận đã báo người tham dự, rồi bấm **Tạo biên bản**.
 4. AI chép lời rồi viết biên bản, thường mất 1–3 phút. Có thể rời trang; khi xong app sẽ thông báo.
 
+Giới hạn: mỗi file tối đa 3 giờ; mỗi cuộc họp chép lời tối đa 3 lần và viết lại tối đa 6 lần mỗi ngày; cả công ty có hạn mức phút chép lời mỗi ngày. Khi chạm giới hạn, app báo lý do và mở lại vào ngày hôm sau.
+
 File ghi âm bị xoá ngay sau khi chép lời. App giữ lại bản chép lời (chỉ người tổ chức và Admin xem được) và biên bản.
 
 ### Đọc lại và gửi

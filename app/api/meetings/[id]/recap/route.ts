@@ -8,7 +8,8 @@ import {
   isRecapAudioPathname,
   recapStartBlockReason,
 } from "@/lib/meetingRecap";
-import { findRecapMeeting } from "@/lib/meetingRecapData";
+import { findRecapMeeting, loadRecapUsage } from "@/lib/meetingRecapData";
+import { estimateAudioSeconds, recapLimits, transcriptionLimitReason } from "@/lib/meetingRecapLimits";
 import { deleteRecapAudio, runMeetingRecap } from "@/lib/meetingRecapJob";
 import { prisma } from "@/lib/prisma";
 
@@ -30,10 +31,12 @@ export async function POST(
   const { id: meetingId } = await params;
   let pathname = "";
   let fileName = "";
+  let durationSeconds: unknown = null;
   try {
-    const body = (await request.json()) as { pathname?: unknown; fileName?: unknown };
+    const body = (await request.json()) as { pathname?: unknown; fileName?: unknown; durationSeconds?: unknown };
     pathname = typeof body.pathname === "string" ? body.pathname : "";
     fileName = typeof body.fileName === "string" ? body.fileName.trim().slice(0, 200) : "";
+    durationSeconds = body.durationSeconds;
   } catch {
     return Response.json({ error: "Yêu cầu không hợp lệ." }, { status: 400 });
   }
@@ -49,14 +52,23 @@ export async function POST(
     return Response.json({ error: blocked ?? "Không tìm thấy cuộc họp." }, { status: 409 });
   }
 
+  let audioSeconds: number;
   try {
     const blob = await head(pathname);
     if (blob.size > RECAP_MAX_AUDIO_BYTES) {
       await deleteRecapAudio(pathname);
       return Response.json({ error: "File ghi âm vượt quá 100 MB." }, { status: 400 });
     }
+    audioSeconds = estimateAudioSeconds(blob.size, durationSeconds);
   } catch {
     return Response.json({ error: "Không tìm thấy file vừa tải lên. Thử tải lại." }, { status: 400 });
+  }
+
+  // Hạn mức: độ dài mỗi file, số lần chép lời mỗi cuộc họp, tổng phút mỗi ngày.
+  const limited = transcriptionLimitReason(recapLimits(), await loadRecapUsage(meetingId), audioSeconds);
+  if (limited) {
+    await deleteRecapAudio(pathname);
+    return Response.json({ error: limited }, { status: 429 });
   }
 
   // File cũ còn sót (lần trước lỗi xoá) thì dọn luôn.
@@ -82,6 +94,11 @@ export async function POST(
     create: { meetingId, ...fresh },
     update: fresh,
     select: { id: true },
+  });
+
+  // Ghi nhận ngay (trước khi gọi Groq) để các lần tải tiếp theo tính cả lượt này.
+  await prisma.meetingRecapRun.create({
+    data: { meetingId, userId: user.id, kind: "TRANSCRIBE", audioSeconds },
   });
 
   after(() => runMeetingRecap(recap.id, startedAt));

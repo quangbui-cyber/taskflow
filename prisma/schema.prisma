@@ -517,3 +517,17 @@ model MeetingRecap {
   @@index([status, processingStartedAt])
   @@index([createdById])
 }
+
+// Nhật ký mỗi lần gọi AI cho biên bản họp — dùng để đếm hạn mức ngày, chặn chạy quá tay.
+// Không ràng buộc khoá ngoại để vẫn giữ số liệu khi cuộc họp/biên bản bị xoá.
+model MeetingRecapRun {
+  id           String   @id @default(cuid())
+  meetingId    String
+  userId       String?
+  kind         String // "TRANSCRIBE" (Groq) | "SUMMARIZE" (Gemini)
+  audioSeconds Int? // với TRANSCRIBE: ước tính trước khi chạy, cập nhật số thật sau khi chép lời
+  createdAt    DateTime @default(now())
+
+  @@index([kind, createdAt])
+  @@index([meetingId, kind, createdAt])
+}

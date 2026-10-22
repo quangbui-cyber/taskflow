@@ -13,6 +13,8 @@ export function proxy(request: NextRequest) {
     // Tải file ghi âm biên bản họp thẳng từ trình duyệt lên Vercel Blob.
     "connect-src 'self' https://vercel.com/api/blob/",
     "worker-src 'self'",
+    // Đọc độ dài file ghi âm (biên bản họp) ngay trên trình duyệt trước khi tải lên.
+    "media-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

@@ -278,3 +278,29 @@ và `RECAP_SUMMARY_MODEL` (mặc định `gemini-3.1-flash-lite`).
   "ai nói gì" chính xác.
 - **Quyền riêng tư:** trước khi tải lên, người tổ chức phải xác nhận đã báo cho người tham dự
   rằng cuộc họp được ghi âm.
+
+### Chống chạy quá tay (giới hạn chi phí)
+
+App tự chặn **trước khi** gọi AI, không có lần chạy nào tự lặp lại:
+
+| Giới hạn | Mặc định | Đổi bằng biến môi trường |
+|---|---|---|
+| Độ dài tối đa mỗi file ghi âm | 180 phút | `RECAP_MAX_AUDIO_MINUTES` |
+| Tổng phút chép lời mỗi ngày (cả công ty) | 600 phút ≈ tối đa $1.1/ngày | `RECAP_DAILY_AUDIO_MINUTES` |
+| Tổng lượt viết biên bản mỗi ngày (cả công ty) | 60 lượt | `RECAP_DAILY_SUMMARIES` |
+| Mỗi cuộc họp mỗi ngày | chép lời 3 lần, viết biên bản 6 lần | — |
+
+- Mỗi lượt Gemini bị giới hạn 8.192 token trả về và tối đa khoảng 5 giờ nội dung đầu vào.
+- Groq/Gemini báo bận (429) hoặc lỗi máy chủ (5xx) thì thử lại tối đa 3 lần; **quá thời gian
+  chờ thì không thử lại** (có thể đã bị tính tiền). Không có hàng đợi hay cron nào tự chạy lại.
+- Hết hạn mức thì người dùng thấy lý do bằng tiếng Việt; ngày mới (0h giờ Việt Nam) tự mở lại.
+- `MEETING_RECAPS_ENABLED=false` rồi Redeploy là tắt hẳn ngay.
+
+Nên đặt thêm **trần chi tiêu ở phía nhà cung cấp** — lớp bảo vệ cuối cùng, kể cả khi code có lỗi:
+
+1. **Groq:** Console → **Settings → Billing → Limits** → nhập trần theo tháng (ví dụ $10),
+   bật email cảnh báo ở 50% / 75% / 90%. Chạm trần là Groq chặn mọi lời gọi tới đầu tháng sau.
+2. **Gemini:** Google AI Studio → tab **Spend** của project → đặt trần theo tháng (ví dụ $5).
+   Trần có hiệu lực sau khoảng 10 phút.
+3. **Vercel:** gói Hobby tự dừng khi vượt mức miễn phí, không tính thêm tiền. Gói Pro: bật
+   **Spend Management** (Settings → Billing) để nhận cảnh báo hoặc tạm dừng dự án.

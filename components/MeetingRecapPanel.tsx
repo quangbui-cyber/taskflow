@@ -46,6 +46,28 @@ export type MeetingRecapView = {
 const MB = 1024 * 1024;
 const MULTIPART_FROM_BYTES = 20 * MB;
 
+/** Đọc độ dài file ghi âm ngay trên trình duyệt; null nếu không đọc được. */
+function readAudioDuration(file: File): Promise<number | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const audio = document.createElement("audio");
+    const done = (value: number | null) => {
+      window.clearTimeout(timer);
+      URL.revokeObjectURL(url);
+      audio.removeAttribute("src");
+      resolve(value);
+    };
+    const timer = window.setTimeout(() => done(null), 8000);
+    audio.preload = "metadata";
+    audio.onloadedmetadata = () => done(Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : null);
+    audio.onerror = () => done(null);
+    audio.src = url;
+  });
+}
+
+const formatLimit = (minutes: number) =>
+  minutes % 60 === 0 ? `${minutes / 60} giờ` : `${minutes} phút`;
+
 const formatDateTime = (value: string) =>
   new Intl.DateTimeFormat("vi-VN", {
     timeZone: "Asia/Ho_Chi_Minh",
@@ -81,10 +103,12 @@ function RecapContent({ content }: { content: string }) {
 function AudioUploader({
   meetingId,
   label,
+  maxAudioMinutes,
   onDone,
 }: {
   meetingId: string;
   label: string;
+  maxAudioMinutes: number;
   onDone: () => void;
 }) {
   const { notify } = useInteraction();
@@ -108,9 +132,26 @@ function AudioUploader({
 
     setProgress(0);
     try {
+      // Chặn file quá dài trước khi tải lên (server kiểm tra lại lần nữa).
+      const durationSeconds = await readAudioDuration(file);
+      if (durationSeconds && durationSeconds > maxAudioMinutes * 60) {
+        throw new Error(
+          `File ghi âm dài khoảng ${Math.ceil(durationSeconds / 60)} phút, vượt giới hạn ${formatLimit(maxAudioMinutes)} mỗi file. Hãy cắt bớt rồi tải lại.`
+        );
+      }
+      const check = await fetch(`/api/meetings/${meetingId}/recap/check`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ durationSeconds, size: file.size }),
+      });
+      if (!check.ok) {
+        const data = (await check.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error || "Chưa tải được file lên lúc này. Tải lại trang rồi thử lại.");
+      }
       const blob = await upload(pathname, file, {
         access: "private",
         handleUploadUrl: `/api/meetings/${meetingId}/recap/upload`,
+        clientPayload: JSON.stringify({ durationSeconds, size: file.size }),
         contentType,
         multipart: file.size > MULTIPART_FROM_BYTES,
         onUploadProgress: ({ percentage }) => setProgress(Math.round(percentage)),
@@ -118,7 +159,7 @@ function AudioUploader({
       const res = await fetch(`/api/meetings/${meetingId}/recap`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pathname: blob.pathname, fileName: file.name }),
+        body: JSON.stringify({ pathname: blob.pathname, fileName: file.name, durationSeconds }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(data.error || "Không bắt đầu xử lý được. Thử lại.");
@@ -127,8 +168,15 @@ function AudioUploader({
       if (inputRef.current) inputRef.current.value = "";
       onDone();
     } catch (err) {
-      const message = err instanceof Error && err.message ? err.message : "Không tải được file lên.";
-      setError(message.length > 220 ? "Không tải được file lên. Kiểm tra mạng rồi thử lại." : message);
+      const raw = err instanceof Error && err.message ? err.message : "";
+      const message = !raw
+        ? "Không tải được file lên."
+        : /client token/i.test(raw)
+          ? "Chưa tải được file lên lúc này. Tải lại trang rồi thử lại."
+          : raw.length > 260
+            ? "Không tải được file lên. Kiểm tra mạng rồi thử lại."
+            : raw;
+      setError(message);
     } finally {
       setProgress(null);
     }
@@ -148,7 +196,8 @@ function AudioUploader({
           </span>
         ) : (
           <span className="text-sm text-zinc-600">
-            <span className="font-medium text-brand-700">Chọn file ghi âm</span> (mp3, m4a, wav, webm… tối đa 100 MB)
+            <span className="font-medium text-brand-700">Chọn file ghi âm</span> (mp3, m4a, wav, webm… tối đa 100 MB,{" "}
+            {formatLimit(maxAudioMinutes)})
           </span>
         )}
         <input
@@ -204,6 +253,7 @@ export default function MeetingRecapPanel({
   enabled,
   startBlock,
   cancelled,
+  maxAudioMinutes,
   recap,
 }: {
   meetingId: string;
@@ -211,6 +261,7 @@ export default function MeetingRecapPanel({
   enabled: boolean;
   startBlock: string | null;
   cancelled: boolean;
+  maxAudioMinutes: number;
   recap: MeetingRecapView | null;
 }) {
   const router = useRouter();
@@ -221,10 +272,12 @@ export default function MeetingRecapPanel({
 
   const processing = recap?.status === "PROCESSING" && !recap.stale;
 
-  // Đang xử lý thì cứ vài giây tải lại để thấy kết quả.
+  // Đang xử lý thì cứ vài giây tải lại để thấy kết quả (chỉ khi tab đang mở, tự dừng sau 15 phút).
   useEffect(() => {
     if (!processing) return;
-    const timer = window.setInterval(() => router.refresh(), 4000);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") router.refresh();
+    }, 4000);
     return () => window.clearInterval(timer);
   }, [processing, router]);
 
@@ -432,7 +485,12 @@ export default function MeetingRecapPanel({
                   Tải file ghi âm khác để làm lại từ đầu
                 </summary>
                 <div className="mt-4">
-                  <AudioUploader meetingId={meetingId} label="Chép lời và viết lại biên bản" onDone={() => router.refresh()} />
+                  <AudioUploader
+                    meetingId={meetingId}
+                    label="Chép lời và viết lại biên bản"
+                    maxAudioMinutes={maxAudioMinutes}
+                    onDone={() => router.refresh()}
+                  />
                 </div>
               </details>
             ) : (
@@ -442,7 +500,12 @@ export default function MeetingRecapPanel({
                   Tải file ghi âm cuộc họp lên. AI sẽ chép lời tiếng Việt và viết biên bản gồm tóm tắt, quyết định
                   và việc cần làm. Bạn đọc lại, sửa nếu cần, rồi mới gửi cho người tham dự.
                 </p>
-                <AudioUploader meetingId={meetingId} label="Tạo biên bản" onDone={() => router.refresh()} />
+                <AudioUploader
+                  meetingId={meetingId}
+                  label="Tạo biên bản"
+                  maxAudioMinutes={maxAudioMinutes}
+                  onDone={() => router.refresh()}
+                />
               </>
             )
           ) : (

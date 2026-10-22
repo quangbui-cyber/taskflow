@@ -12,6 +12,7 @@ import {
   isRecapStale,
   recapStartBlockReason,
 } from "@/lib/meetingRecap";
+import { recapLimits } from "@/lib/meetingRecapLimits";
 import { formatMeetingWhen } from "@/lib/meetings";
 import { prisma } from "@/lib/prisma";
 
@@ -109,6 +110,7 @@ export default async function MeetingRecapPage({
             enabled={meetingRecapsEnabled()}
             startBlock={startBlock}
             cancelled={meeting.status === "CANCELLED"}
+            maxAudioMinutes={recapLimits().maxAudioMinutes}
             recap={
               recap
                 ? {
