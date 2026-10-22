@@ -85,7 +85,7 @@ export async function sendMeetingRecap(meetingId: string): Promise<MeetingRecapA
 
   const sentAt = new Date();
   await prisma.meetingRecap.update({ where: { id: recap.id }, data: { sentAt } });
-  const savedToProject = await saveRecapToProject(meetingId, user.id, sentAt);
+  const savedToProject = await saveRecapToProject(meetingId, user, sentAt);
   const recipients = await prisma.meetingAttendee.findMany({
     where: { meetingId, response: { not: "DECLINED" }, user: { isActive: true } },
     select: { userId: true },

@@ -205,7 +205,11 @@ export async function cleanupMeetingRecaps(now = new Date()) {
  * Họp thuộc dự án: lưu (hoặc thay) biên bản dạng Word vào tài liệu dự án.
  * Trả về true nếu đã lưu; lỗi lưu không làm hỏng việc gửi biên bản.
  */
-export async function saveRecapToProject(meetingId: string, uploaderId: string, sentAt: Date): Promise<boolean> {
+export async function saveRecapToProject(
+  meetingId: string,
+  uploader: { id: string; role: string },
+  sentAt: Date
+): Promise<boolean> {
   const meeting = await prisma.meeting.findUnique({
     where: { id: meetingId },
     include: {
@@ -216,6 +220,15 @@ export async function saveRecapToProject(meetingId: string, uploaderId: string, 
     },
   });
   if (!meeting?.projectId || !meeting.recap?.content?.trim()) return false;
+
+  // Người gửi phải vẫn là thành viên dự án (hoặc admin) mới được ghi vào tài liệu dự án.
+  if (uploader.role !== "ADMIN") {
+    const member = await prisma.projectMember.findFirst({
+      where: { projectId: meeting.projectId, userId: uploader.id },
+      select: { id: true },
+    });
+    if (!member) return false;
+  }
 
   try {
     const data = buildRecapDocx({
@@ -243,7 +256,7 @@ export async function saveRecapToProject(meetingId: string, uploaderId: string, 
     const saved = existing
       ? await prisma.projectFile.update({ where: { id: existing.id }, data: file, select: { id: true } })
       : await prisma.projectFile.create({
-          data: { ...file, projectId: meeting.projectId, uploaderId },
+          data: { ...file, projectId: meeting.projectId, uploaderId: uploader.id },
           select: { id: true },
         });
     await prisma.meetingRecap.update({ where: { id: meeting.recap.id }, data: { projectFileId: saved.id } });
