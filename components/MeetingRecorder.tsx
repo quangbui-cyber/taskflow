@@ -1,16 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Mic, Pause, Play, Square, Trash2, Upload } from "lucide-react";
+import { ExternalLink, Mic, Pause, Play, Square, Trash2, Upload, Video } from "lucide-react";
 import { useInteraction } from "@/components/InteractionProvider";
 import { formatClock } from "@/lib/meetingRecap";
 import {
   RECORDING_BITS_PER_SECOND,
   RECORDING_CHUNK_MS,
+  NO_TAB_AUDIO_MESSAGE,
+  canRecordTabAudio,
+  displayCaptureErrorMessage,
   microphoneErrorMessage,
   pickRecordingMimeType,
   recordingFileName,
   recordingFileType,
+  type RecordingSource,
 } from "@/lib/meetingRecorder";
 import { formatLimit, friendlyUploadError, uploadRecapAudio } from "@/lib/recapUploadClient";
 import {
@@ -34,18 +38,30 @@ type SavedRecording = {
 type WakeLockLike = { release: () => Promise<void> };
 
 const MB = 1024 * 1024;
+const MIC_CONSTRAINTS: MediaTrackConstraints = {
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
+  channelCount: 1,
+};
 
 export default function MeetingRecorder({
   meetingId,
+  meetingUrl,
   maxAudioMinutes,
   onUploaded,
 }: {
   meetingId: string;
+  /** Link họp online (nếu có) — để gợi ý chế độ "Họp online" và mở nhanh cuộc họp. */
+  meetingUrl: string | null;
   maxAudioMinutes: number;
   onUploaded: () => void;
 }) {
   const { notify } = useInteraction();
   const [supported, setSupported] = useState<boolean | null>(null);
+  const [canOnline, setCanOnline] = useState(false);
+  const [source, setSource] = useState<RecordingSource>("mic");
+  const [liveLabel, setLiveLabel] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");
   const [consent, setConsent] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -58,6 +74,8 @@ export default function MeetingRecorder({
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const displayStreamRef = useRef<MediaStream | null>(null);
+  const mixCtxRef = useRef<AudioContext | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const seqRef = useRef(0);
   const metaRef = useRef<RecordingMeta | null>(null);
@@ -76,10 +94,14 @@ export default function MeetingRecorder({
   useEffect(() => {
     const canRecord =
       typeof window.MediaRecorder !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia);
+    const tabAudio = canRecord && canRecordTabAudio(navigator.userAgent, Boolean(navigator.mediaDevices?.getDisplayMedia));
     let cancelled = false;
     loadRecording(meetingId).then((found) => {
       if (cancelled) return;
       setSupported(canRecord);
+      setCanOnline(tabAudio);
+      // Cuộc họp có link online thì mặc định ghi tab họp + micro.
+      if (tabAudio && meetingUrl) setSource("online");
       if (found) {
         setSaved({
           blob: new Blob(found.chunks, { type: recordingFileType(found.meta.mimeType).type }),
@@ -97,7 +119,7 @@ export default function MeetingRecorder({
     return () => {
       cancelled = true;
     };
-  }, [meetingId]);
+  }, [meetingId, meetingUrl]);
 
   const stopMeter = useCallback(() => {
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
@@ -127,6 +149,10 @@ export default function MeetingRecorder({
     tickRef.current = null;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
+    displayStreamRef.current?.getTracks().forEach((track) => track.stop());
+    displayStreamRef.current = null;
+    mixCtxRef.current?.close().catch(() => {});
+    mixCtxRef.current = null;
     stopMeter();
     releaseWakeLock();
   }, [releaseWakeLock, stopMeter]);
@@ -191,6 +217,66 @@ export default function MeetingRecorder({
     }
   }
 
+  async function acquireMicStream(): Promise<MediaStream | null> {
+    try {
+      const mic = await navigator.mediaDevices.getUserMedia({ audio: MIC_CONSTRAINTS });
+      streamRef.current = mic;
+      return mic;
+    } catch (err) {
+      setError(microphoneErrorMessage(err));
+      return null;
+    }
+  }
+
+  /**
+   * Họp online: chia sẻ tab cuộc họp (lấy tiếng mọi người) rồi trộn với micro (giọng mình).
+   * Gọi chia sẻ tab trước tiên vì trình duyệt chỉ cho phép ngay sau cú bấm.
+   */
+  async function acquireOnlineStream(): Promise<MediaStream | null> {
+    let display: MediaStream;
+    try {
+      display = await navigator.mediaDevices.getDisplayMedia({
+        video: { displaySurface: "browser" },
+        audio: { suppressLocalAudioPlayback: false },
+        preferCurrentTab: false,
+        selfBrowserSurface: "exclude",
+        surfaceSwitching: "include",
+        systemAudio: "include",
+      } as DisplayMediaStreamOptions);
+    } catch (err) {
+      setError(displayCaptureErrorMessage(err));
+      return null;
+    }
+    if (display.getAudioTracks().length === 0) {
+      display.getTracks().forEach((track) => track.stop());
+      setError(NO_TAB_AUDIO_MESSAGE);
+      return null;
+    }
+    displayStreamRef.current = display;
+
+    let mic: MediaStream | null = null;
+    try {
+      mic = await navigator.mediaDevices.getUserMedia({ audio: MIC_CONSTRAINTS });
+      streamRef.current = mic;
+    } catch {
+      setNotice("Không bật được micro nên chỉ ghi tiếng từ tab cuộc họp (không có giọng của bạn).");
+    }
+
+    try {
+      const ctx = new AudioContext();
+      await ctx.resume().catch(() => {});
+      const mixed = ctx.createMediaStreamDestination();
+      ctx.createMediaStreamSource(new MediaStream(display.getAudioTracks())).connect(mixed);
+      if (mic) ctx.createMediaStreamSource(mic).connect(mixed);
+      mixCtxRef.current = ctx;
+      return mixed.stream;
+    } catch {
+      releaseDevices();
+      setError("Không trộn được âm thanh tab và micro. Tải lại trang rồi thử lại.");
+      return null;
+    }
+  }
+
   async function start() {
     setError(null);
     setNotice(null);
@@ -199,29 +285,25 @@ export default function MeetingRecorder({
     if (!mimeType) return setError("Trình duyệt này không ghi âm được. Hãy dùng Chrome, Edge hoặc Safari mới, hoặc tải file lên.");
 
     setPhase("requesting");
-    let stream: MediaStream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
-      });
-    } catch (err) {
-      setError(microphoneErrorMessage(err));
+    const acquired = source === "online" ? await acquireOnlineStream() : await acquireMicStream();
+    if (!acquired) {
       setPhase("idle");
       return;
     }
+    const stream = acquired;
 
     let recorder: MediaRecorder;
     try {
       recorder = new MediaRecorder(stream, { mimeType, audioBitsPerSecond: RECORDING_BITS_PER_SECOND });
     } catch {
-      stream.getTracks().forEach((track) => track.stop());
+      releaseDevices();
       setError("Trình duyệt này không ghi âm được. Hãy dùng Chrome, Edge hoặc Safari mới, hoặc tải file lên.");
       setPhase("idle");
       return;
     }
 
-    streamRef.current = stream;
     recorderRef.current = recorder;
+    setLiveLabel(source === "online" ? (streamRef.current ? "tab họp + micro" : "chỉ tab họp") : null);
     chunksRef.current = [];
     seqRef.current = 0;
     accumulatedRef.current = 0;
@@ -260,9 +342,18 @@ export default function MeetingRecorder({
       setElapsedMs(durationMs);
       setPhase("stopped");
     };
-    stream.getAudioTracks()[0]?.addEventListener("ended", () =>
-      stopRecording("Micro đã bị ngắt. Phần đã ghi vẫn được giữ.")
-    );
+    if (source === "online") {
+      // Bấm "Dừng chia sẻ" trên thanh của Chrome hoặc đóng tab họp → dừng ghi, giữ phần đã ghi.
+      displayStreamRef.current?.getTracks().forEach((track) =>
+        track.addEventListener("ended", () =>
+          stopRecording("Đã dừng chia sẻ tab cuộc họp nên bản ghi tự dừng. Phần đã ghi vẫn được giữ.")
+        )
+      );
+    } else {
+      streamRef.current?.getAudioTracks()[0]?.addEventListener("ended", () =>
+        stopRecording("Micro đã bị ngắt. Phần đã ghi vẫn được giữ.")
+      );
+    }
 
     recorder.start(RECORDING_CHUNK_MS);
     setElapsedMs(0);
@@ -363,11 +454,83 @@ export default function MeetingRecorder({
             />
             Tôi đã báo cho người tham dự biết cuộc họp được ghi âm. File ghi âm bị xoá ngay sau khi chép lời.
           </label>
-          <ul className="list-disc space-y-0.5 pl-5 text-xs leading-5 text-zinc-500">
-            <li>Đặt máy gần người nói. Ghi tối đa {formatLimit(maxAudioMinutes)} mỗi lần.</li>
-            <li>Trên điện thoại: giữ màn hình mở và ở lại trang này trong lúc ghi.</li>
-            <li>Bản ghi được lưu dần trên máy này, lỡ đóng tab vẫn còn.</li>
-          </ul>
+          {canOnline ? (
+            <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Loại cuộc họp">
+              {(
+                [
+                  { key: "mic", icon: Mic, title: "Họp trực tiếp", text: "Thu bằng micro của máy này." },
+                  {
+                    key: "online",
+                    icon: Video,
+                    title: "Họp online (Meet, Zoom…)",
+                    text: "Thu tiếng tab cuộc họp và micro của bạn.",
+                  },
+                ] as const
+              ).map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  role="radio"
+                  aria-checked={source === option.key}
+                  disabled={phase === "requesting"}
+                  onClick={() => setSource(option.key)}
+                  className={`flex items-start gap-2.5 rounded-[8px] border px-3 py-2.5 text-left transition-colors ${
+                    source === option.key
+                      ? "border-brand-400 bg-brand-50/60 ring-1 ring-brand-300"
+                      : "border-zinc-200 hover:border-zinc-300"
+                  }`}
+                >
+                  <option.icon size={18} className="mt-0.5 shrink-0 text-zinc-500" aria-hidden="true" />
+                  <span>
+                    <span className="block text-sm font-medium text-zinc-900">{option.title}</span>
+                    <span className="block text-xs leading-5 text-zinc-500">{option.text}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            meetingUrl && (
+              <p className="rounded-[7px] bg-zinc-50 px-3 py-2 text-xs leading-5 text-zinc-600">
+                Muốn ghi cả tiếng mọi người trong cuộc họp online, hãy mở trang này bằng Chrome hoặc Edge trên máy tính.
+              </p>
+            )
+          )}
+
+          {source === "online" && canOnline ? (
+            <ol className="list-decimal space-y-0.5 pl-5 text-xs leading-5 text-zinc-600">
+              <li>
+                Mở cuộc họp ở một tab khác
+                {meetingUrl?.startsWith("https://") && (
+                  <>
+                    {" "}
+                    (
+                    <a
+                      href={meetingUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-0.5 font-medium text-brand-700 hover:underline"
+                    >
+                      mở link họp
+                      <ExternalLink size={12} aria-hidden="true" />
+                    </a>
+                    )
+                  </>
+                )}
+                .
+              </li>
+              <li>
+                Bấm <strong>Bắt đầu ghi âm</strong>, chọn tab cuộc họp và bật <strong>“Chia sẻ âm thanh của tab”</strong>, rồi bấm
+                Chia sẻ.
+              </li>
+              <li>Cho phép micro để ghi cả giọng của bạn. Giữ cả hai tab mở đến khi họp xong.</li>
+            </ol>
+          ) : (
+            <ul className="list-disc space-y-0.5 pl-5 text-xs leading-5 text-zinc-500">
+              <li>Đặt máy gần người nói. Ghi tối đa {formatLimit(maxAudioMinutes)} mỗi lần.</li>
+              <li>Trên điện thoại: giữ màn hình mở và ở lại trang này trong lúc ghi.</li>
+              <li>Bản ghi được lưu dần trên máy này, lỡ đóng tab vẫn còn.</li>
+            </ul>
+          )}
           <button
             type="button"
             onClick={start}
@@ -389,6 +552,7 @@ export default function MeetingRecorder({
             />
             <span className="text-sm font-medium text-red-800">
               {phase === "recording" ? "Đang ghi âm" : "Đã tạm dừng"}
+              {liveLabel && <span className="font-normal text-red-700"> · {liveLabel}</span>}
             </span>
             <span className="ml-auto font-mono text-2xl tabular-nums text-zinc-900">{formatClock(elapsedMs / 1000)}</span>
           </div>
@@ -396,7 +560,9 @@ export default function MeetingRecorder({
             <div className="h-full rounded-full bg-red-400 transition-[width] duration-75" style={{ width: `${Math.round(level * 100)}%` }} />
           </div>
           <p className="mt-2 text-xs text-zinc-600">
-            Đừng đóng tab trong lúc ghi. Thanh đỏ nhấp nháy theo tiếng nói nghĩa là micro đang thu.
+            {liveLabel
+              ? "Đừng đóng tab này và tab cuộc họp trong lúc ghi. Thanh đỏ nhấp nháy theo tiếng nói nghĩa là đang thu."
+              : "Đừng đóng tab trong lúc ghi. Thanh đỏ nhấp nháy theo tiếng nói nghĩa là micro đang thu."}
           </p>
           {!storageOk && (
             <p className="mt-2 text-xs text-amber-800">

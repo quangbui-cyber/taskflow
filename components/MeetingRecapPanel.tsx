@@ -178,11 +178,13 @@ function AudioUploader({
 /** Hai cách lấy ghi âm. Cả hai luôn được giữ trên trang (chỉ ẩn bên không chọn) để đổi qua lại không làm dừng bản ghi. */
 function AudioSource({
   meetingId,
+  meetingUrl,
   uploadLabel,
   maxAudioMinutes,
   onDone,
 }: {
   meetingId: string;
+  meetingUrl: string | null;
   uploadLabel: string;
   maxAudioMinutes: number;
   onDone: () => void;
@@ -212,7 +214,12 @@ function AudioSource({
         ))}
       </div>
       <div hidden={mode !== "record"}>
-        <MeetingRecorder meetingId={meetingId} maxAudioMinutes={maxAudioMinutes} onUploaded={onDone} />
+        <MeetingRecorder
+          meetingId={meetingId}
+          meetingUrl={meetingUrl}
+          maxAudioMinutes={maxAudioMinutes}
+          onUploaded={onDone}
+        />
       </div>
       <div hidden={mode !== "file"}>
         <AudioUploader meetingId={meetingId} label={uploadLabel} maxAudioMinutes={maxAudioMinutes} onDone={onDone} />
@@ -228,9 +235,11 @@ export default function MeetingRecapPanel({
   startBlock,
   cancelled,
   maxAudioMinutes,
+  meetingUrl,
   recap,
 }: {
   meetingId: string;
+  meetingUrl: string | null;
   canManage: boolean;
   enabled: boolean;
   startBlock: string | null;
@@ -461,6 +470,7 @@ export default function MeetingRecapPanel({
                 <div className="mt-4">
                   <AudioSource
                     meetingId={meetingId}
+                    meetingUrl={meetingUrl}
                     uploadLabel="Chép lời và viết lại biên bản"
                     maxAudioMinutes={maxAudioMinutes}
                     onDone={() => router.refresh()}
@@ -476,6 +486,7 @@ export default function MeetingRecapPanel({
                 </p>
                 <AudioSource
                   meetingId={meetingId}
+                  meetingUrl={meetingUrl}
                   uploadLabel="Tạo biên bản"
                   maxAudioMinutes={maxAudioMinutes}
                   onDone={() => router.refresh()}

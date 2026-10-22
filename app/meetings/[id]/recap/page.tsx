@@ -111,6 +111,7 @@ export default async function MeetingRecapPage({
             startBlock={startBlock}
             cancelled={meeting.status === "CANCELLED"}
             maxAudioMinutes={recapLimits().maxAudioMinutes}
+            meetingUrl={canManage ? meeting.meetingUrl : null}
             recap={
               recap
                 ? {
