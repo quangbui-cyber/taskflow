@@ -19,6 +19,7 @@ import {
   SPEECH_RMS_THRESHOLD,
   autoStopMessage,
   autoStopState,
+  initialAutoStopEndsAt,
   rms,
   shouldAutoSubmitRecording,
   type RecordingSource,
@@ -406,7 +407,7 @@ export default function MeetingRecorder({
     startMeter(stream);
     void requestWakeLock();
     autoStopEnabledRef.current = source === "mic";
-    endsAtRef.current = meetingEndsAt ? Date.parse(meetingEndsAt) || null : null;
+    endsAtRef.current = initialAutoStopEndsAt(meetingEndsAt ? Date.parse(meetingEndsAt) : null, Date.now());
     lastSoundAtRef.current = Date.now();
     setAutoStopInfo({ overtimeLeftMs: null, silenceLeftMs: null });
     tickRef.current = window.setInterval(() => {

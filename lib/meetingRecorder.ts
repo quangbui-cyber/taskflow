@@ -157,3 +157,12 @@ export function rms(samples: ArrayLike<number>): number {
   for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
   return Math.sqrt(sum / samples.length);
 }
+
+/**
+ * Mốc "giờ kết thúc" dùng cho việc tự dừng khi bắt đầu ghi. Bắt đầu ghi lúc đã quá giờ
+ * (họp kéo dài) thì tính lại từ lúc bắt đầu, cộng thêm 30 phút — không dừng ngay lập tức.
+ */
+export function initialAutoStopEndsAt(endsAtMs: number | null, nowMs: number): number | null {
+  if (endsAtMs === null || !Number.isFinite(endsAtMs)) return null;
+  return nowMs >= endsAtMs ? nowMs + OVERTIME_EXTEND_MS : endsAtMs;
+}

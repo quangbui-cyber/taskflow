@@ -10,6 +10,7 @@ import {
   SPEECH_RMS_THRESHOLD,
   autoStopMessage,
   autoStopState,
+  initialAutoStopEndsAt,
   rms,
   NO_TAB_AUDIO_MESSAGE,
   RECORDING_BITS_PER_SECOND,
@@ -137,4 +138,19 @@ test("loudness separates speech from a quiet room", () => {
   const room = Array.from({ length: 4096 }, (_, i) => 0.002 * Math.sin(i / 3));
   assert.ok(rms(speech) > SPEECH_RMS_THRESHOLD);
   assert.ok(rms(room) < SPEECH_RMS_THRESHOLD);
+});
+
+test("starting to record after the scheduled end gives 30 more minutes instead of stopping at once", () => {
+  const end = 1_000_000;
+  assert.equal(initialAutoStopEndsAt(null, end), null);
+  assert.equal(initialAutoStopEndsAt(Number.NaN, end), null);
+  assert.equal(initialAutoStopEndsAt(end, end - 60_000), end);
+  const late = end + 25 * 60_000;
+  const endsAt = initialAutoStopEndsAt(end, late)!;
+  assert.equal(endsAt, late + OVERTIME_EXTEND_MS);
+  assert.deepEqual(autoStopState({ nowMs: late + 500, endsAtMs: endsAt, lastSoundAtMs: late + 500, paused: false }), {
+    stop: null,
+    overtimeLeftMs: null,
+    silenceLeftMs: null,
+  });
 });
