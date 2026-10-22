@@ -41,3 +41,20 @@ test("malformed payloads still show a notification and external destinations fal
     assert.equal(w.shown[0].options.data.url, "https://app.example.test/notifications");
   }
 });
+
+test("meeting, recap and leave notifications open their own pages, keeping the query", async () => {
+  for (const [path, expected] of [
+    ["/meetings/m1/recap?record=1", "https://app.example.test/meetings/m1/recap?record=1"],
+    ["/meetings/m1/recap", "https://app.example.test/meetings/m1/recap"],
+    ["/meetings?focus=m1#meeting-m1", "https://app.example.test/meetings?focus=m1#meeting-m1"],
+    ["/leave", "https://app.example.test/leave"],
+    ["/meetings/m1/recap/../../admin", "https://app.example.test/notifications"],
+    ["/meetings/m1/other", "https://app.example.test/notifications"],
+  ]) {
+    const w = worker();
+    let pending: Promise<unknown> = Promise.resolve();
+    w.handlers.push({ data: { json: () => ({ title: "myCreative", body: "x", url: path }) }, waitUntil: (value: Promise<unknown>) => { pending = value; } });
+    await pending;
+    assert.equal(w.shown[0].options.data.url, expected, path);
+  }
+});

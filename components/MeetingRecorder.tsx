@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { ExternalLink, Mic, Pause, Play, Square, Trash2, Upload, Video } from "lucide-react";
 import { useInteraction } from "@/components/InteractionProvider";
 import { formatClock } from "@/lib/meetingRecap";
@@ -48,22 +49,29 @@ const MIC_CONSTRAINTS: MediaTrackConstraints = {
 export default function MeetingRecorder({
   meetingId,
   meetingUrl,
+  autoStart = false,
   maxAudioMinutes,
   onUploaded,
 }: {
   meetingId: string;
   /** Link họp online (nếu có) — để gợi ý chế độ "Họp online" và mở nhanh cuộc họp. */
   meetingUrl: string | null;
+  /** Mở từ thông báo "cuộc họp đã bắt đầu": họp trực tiếp thì ghi ngay, họp online thì nhắc bấm Bắt đầu. */
+  autoStart?: boolean;
   maxAudioMinutes: number;
   onUploaded: () => void;
 }) {
   const { notify } = useInteraction();
+  const router = useRouter();
+  const pathname = usePathname();
+  const autoStartedRef = useRef(false);
+  const startButtonRef = useRef<HTMLButtonElement>(null);
+  const [startPrompt, setStartPrompt] = useState(false);
   const [supported, setSupported] = useState<boolean | null>(null);
   const [canOnline, setCanOnline] = useState(false);
   const [source, setSource] = useState<RecordingSource>("mic");
   const [liveLabel, setLiveLabel] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");
-  const [consent, setConsent] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [level, setLevel] = useState(0);
   const [saved, setSaved] = useState<SavedRecording | null>(null);
@@ -280,7 +288,6 @@ export default function MeetingRecorder({
   async function start() {
     setError(null);
     setNotice(null);
-    if (!consent) return setError("Hãy xác nhận đã báo cho người tham dự rằng cuộc họp được ghi âm.");
     const mimeType = pickRecordingMimeType((type) => MediaRecorder.isTypeSupported(type));
     if (!mimeType) return setError("Trình duyệt này không ghi âm được. Hãy dùng Chrome, Edge hoặc Safari mới, hoặc tải file lên.");
 
@@ -367,6 +374,30 @@ export default function MeetingRecorder({
     }, 500);
   }
 
+  // Luôn trỏ tới hàm start mới nhất để hiệu ứng tự ghi âm gọi được mà không phụ thuộc mỗi lần render.
+  const startRef = useRef(start);
+  useEffect(() => {
+    startRef.current = start;
+  });
+
+  // Mở từ thông báo "cuộc họp đã bắt đầu": họp trực tiếp thì ghi ngay; họp online thì trình duyệt
+  // bắt buộc người dùng tự bấm để chọn tab, nên chỉ đưa nút Bắt đầu lên trước mắt.
+  useEffect(() => {
+    if (!autoStart || autoStartedRef.current || phase !== "idle" || supported !== true) return;
+    autoStartedRef.current = true;
+    window.setTimeout(() => {
+      if (source === "online") {
+        setStartPrompt(true);
+        startButtonRef.current?.scrollIntoView({ block: "center" });
+        startButtonRef.current?.focus();
+      } else {
+        void startRef.current();
+      }
+      // Bỏ ?record=1 để tải lại trang không tự ghi lần nữa.
+      router.replace(pathname, { scroll: false });
+    }, 0);
+  }, [autoStart, phase, supported, source, router, pathname]);
+
   function pause() {
     const recorder = recorderRef.current;
     if (!recorder || recorder.state !== "recording") return;
@@ -444,16 +475,6 @@ export default function MeetingRecorder({
 
       {(phase === "idle" || phase === "requesting") && supported && (
         <>
-          <label className="flex items-start gap-2.5 text-sm leading-6 text-zinc-600">
-            <input
-              type="checkbox"
-              checked={consent}
-              disabled={phase === "requesting"}
-              onChange={(event) => setConsent(event.target.checked)}
-              className="mt-1 h-4 w-4 shrink-0 accent-[#a8d431]"
-            />
-            Tôi đã báo cho người tham dự biết cuộc họp được ghi âm. File ghi âm bị xoá ngay sau khi chép lời.
-          </label>
           {canOnline ? (
             <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Loại cuộc họp">
               {(
@@ -528,12 +549,22 @@ export default function MeetingRecorder({
             <ul className="list-disc space-y-0.5 pl-5 text-xs leading-5 text-zinc-500">
               <li>Đặt máy gần người nói. Ghi tối đa {formatLimit(maxAudioMinutes)} mỗi lần.</li>
               <li>Trên điện thoại: giữ màn hình mở và ở lại trang này trong lúc ghi.</li>
-              <li>Bản ghi được lưu dần trên máy này, lỡ đóng tab vẫn còn.</li>
+              <li>Bản ghi được lưu dần trên máy này, lỡ đóng tab vẫn còn. File ghi âm bị xoá ngay sau khi chép lời.</li>
             </ul>
           )}
+          {startPrompt && (
+            <p className="rounded-[7px] bg-brand-50 px-3 py-2 text-sm leading-6 text-brand-900">
+              Cuộc họp đã bắt đầu. Bấm <strong>Bắt đầu ghi âm</strong>, chọn tab cuộc họp và bật{" "}
+              <strong>“Chia sẻ âm thanh của tab”</strong>.
+            </p>
+          )}
           <button
+            ref={startButtonRef}
             type="button"
-            onClick={start}
+            onClick={() => {
+              setStartPrompt(false);
+              void start();
+            }}
             disabled={phase === "requesting"}
             className="tf-button-primary"
           >

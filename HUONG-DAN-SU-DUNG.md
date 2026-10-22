@@ -395,11 +395,11 @@ Sau khi cuộc họp bắt đầu, thẻ cuộc họp trong **Lịch họp** có
 
 ### Tạo biên bản
 
-Mở **Lịch họp → Tạo biên bản** ở cuộc họp đã bắt đầu. **Báo trước cho mọi người** rằng cuộc họp được ghi âm. Có hai cách:
+Khi cuộc họp bắt đầu, người tổ chức nhận thông báo (trong app và trên điện thoại nếu đã bật thông báo) *"Cuộc họp … đã bắt đầu. Bấm để ghi âm và tạo biên bản."*. Bấm vào là mở trang biên bản và **bắt đầu ghi âm ngay** (họp online thì bấm thêm **Bắt đầu ghi âm** để chọn tab cuộc họp). Cũng có thể tự mở **Lịch họp → Tạo biên bản** ở cuộc họp đã bắt đầu. Có hai cách:
 
 **Ghi âm ngay trong app** (tab *Ghi âm trong app*)
 
-1. Đánh dấu ô xác nhận đã báo người tham dự, bấm **Bắt đầu ghi âm** và cho phép trình duyệt dùng micro.
+1. Bấm **Bắt đầu ghi âm** (hoặc bấm vào thông báo cuộc họp đã bắt đầu) và cho phép trình duyệt dùng micro.
 2. Đặt máy gần người nói. Thanh đỏ nhấp nháy theo tiếng nói nghĩa là micro đang thu. Có thể **Tạm dừng** / **Ghi tiếp**.
 3. Họp xong bấm **Dừng ghi**, nghe lại nếu cần, rồi bấm **Tạo biên bản từ bản ghi này**.
 
@@ -408,7 +408,7 @@ Bản ghi được lưu dần trên máy (5 giây một lần): lỡ đóng tab 
 **Họp online (Google Meet, Zoom trên web…)** — chỉ dùng được với Chrome hoặc Edge trên máy tính:
 
 1. Mở cuộc họp ở một tab (nếu lịch họp có link, bấm *mở link họp* ngay trong trang biên bản).
-2. Ở trang biên bản chọn **Họp online** (lịch có link họp thì app chọn sẵn), đánh dấu ô xác nhận, bấm **Bắt đầu ghi âm**.
+2. Ở trang biên bản chọn **Họp online** (lịch có link họp thì app chọn sẵn), bấm **Bắt đầu ghi âm**.
 3. Chrome hỏi chia sẻ gì: chọn **tab cuộc họp**, bật **"Chia sẻ âm thanh của tab"**, bấm **Chia sẻ**. Sau đó cho phép micro để ghi cả giọng của bạn.
 4. Giữ cả tab cuộc họp và tab taskflow mở. Họp xong bấm **Dừng ghi** (hoặc bấm *Dừng chia sẻ* trên thanh của Chrome — bản ghi tự dừng và được giữ lại).
 
@@ -417,7 +417,7 @@ App trộn tiếng mọi người trong tab họp với giọng của bạn thà
 **Tải file có sẵn** (tab *Tải file lên*)
 
 1. Chọn file ghi âm (mp3, m4a, wav, webm, ogg, flac hoặc mp4, tối đa 100 MB).
-2. Đánh dấu ô xác nhận đã báo người tham dự, rồi bấm **Tạo biên bản**.
+2. Bấm **Tạo biên bản**.
 
 Sau đó AI chép lời rồi viết biên bản, thường mất 1–3 phút. Có thể rời trang; khi xong app sẽ thông báo.
 
@@ -432,6 +432,10 @@ File ghi âm bị xoá ngay sau khi chép lời. App giữ lại bản chép l�
 - **Viết lại** nhờ AI viết lại từ bản chép lời (những chỗ đã sửa tay sẽ mất).
 - Bấm **Gửi cho người tham dự**: mọi người nhận thông báo trong app và email (nếu app đã cấu hình email). Trước khi gửi, người tham dự chưa xem được biên bản.
 - **Xoá biên bản** xoá cả biên bản lẫn bản chép lời.
+
+### Biên bản của cuộc họp dự án
+
+Cuộc họp tạo bằng nút **Tạo cuộc họp** trong trang dự án được gắn với dự án đó. Khi người tổ chức bấm **Gửi cho người tham dự**, biên bản được lưu thành file Word *"Biên bản họp - <tên cuộc họp> - <ngày>.docx"* trong tab **Tài liệu** của dự án (mọi thành viên dự án xem được). Gửi lại thì file được thay bằng bản mới, không tạo thêm file trùng.
 
 ## 16. Quy trình sử dụng đề xuất
 

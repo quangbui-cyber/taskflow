@@ -7,7 +7,7 @@ import { MEETING_RECAPS_DISABLED_MESSAGE, meetingRecapsEnabled } from "@/lib/fea
 import { canManageMeetingRecap, isRecapStale, normalizeRecapContent } from "@/lib/meetingRecap";
 import { findRecapMeeting, loadRecapUsage } from "@/lib/meetingRecapData";
 import { recapLimits, summaryLimitReason } from "@/lib/meetingRecapLimits";
-import { deleteRecapAudio, runMeetingRecap } from "@/lib/meetingRecapJob";
+import { deleteRecapAudio, runMeetingRecap, saveRecapToProject } from "@/lib/meetingRecapJob";
 import { sendMeetingRecapEmail } from "@/lib/meetingRecapMail";
 import { notify } from "@/lib/notify";
 import { prisma } from "@/lib/prisma";
@@ -83,7 +83,9 @@ export async function sendMeetingRecap(meetingId: string): Promise<MeetingRecapA
     return { error: "Biên bản chưa sẵn sàng để gửi." };
   }
 
-  await prisma.meetingRecap.update({ where: { id: recap.id }, data: { sentAt: new Date() } });
+  const sentAt = new Date();
+  await prisma.meetingRecap.update({ where: { id: recap.id }, data: { sentAt } });
+  const savedToProject = await saveRecapToProject(meetingId, user, sentAt);
   const recipients = await prisma.meetingAttendee.findMany({
     where: { meetingId, response: { not: "DECLINED" }, user: { isActive: true } },
     select: { userId: true },
@@ -103,10 +105,13 @@ export async function sendMeetingRecap(meetingId: string): Promise<MeetingRecapA
     }
   });
   refresh(meetingId);
+  if (savedToProject) revalidatePath("/projects/[id]", "page");
+  const projectNote = savedToProject ? " Đã lưu vào tài liệu dự án." : "";
   return {
-    success: recipientIds.length
-      ? `Đã gửi biên bản cho ${recipientIds.length} người.`
-      : "Đã lưu biên bản. Cuộc họp không có người tham dự nào khác.",
+    success:
+      (recipientIds.length
+        ? `Đã gửi biên bản cho ${recipientIds.length} người.`
+        : "Đã lưu biên bản. Cuộc họp không có người tham dự nào khác.") + projectNote,
   };
 }
 

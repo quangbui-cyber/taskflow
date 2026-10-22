@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, DoorOpen, FileText, Users } from "lucide-react";
+import { ArrowLeft, DoorOpen, FileText, FolderKanban, Users } from "lucide-react";
 import MeetingRecapPanel from "@/components/MeetingRecapPanel";
 import Sidebar from "@/components/Sidebar";
 import { requireUser } from "@/lib/auth";
@@ -21,17 +21,20 @@ export const maxDuration = 300;
 
 export default async function MeetingRecapPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ record?: string }>;
 }) {
   const user = await requireUser();
   if (!meetingsEnabled()) redirect("/");
-  const { id } = await params;
+  const [{ id }, query] = await Promise.all([params, searchParams]);
 
   const meeting = await prisma.meeting.findUnique({
     where: { id },
     include: {
       room: { select: { name: true } },
+      project: { select: { id: true, name: true } },
       organizer: { select: { id: true, name: true } },
       attendees: {
         select: { userId: true, user: { select: { name: true } } },
@@ -96,6 +99,19 @@ export default async function MeetingRecapPage({
                 <dt className="sr-only">Phòng họp</dt>
                 <dd>{meeting.room?.name ?? "Không dùng phòng"} · {meeting.organizer.name} tổ chức</dd>
               </div>
+              {meeting.project && (
+                <div className="flex items-center gap-2">
+                  <FolderKanban size={15} className="shrink-0 text-zinc-400" aria-hidden="true" />
+                  <dt className="sr-only">Dự án</dt>
+                  <dd>
+                    Dự án{" "}
+                    <Link href={`/projects/${meeting.project.id}`} className="font-medium text-brand-700 hover:underline">
+                      {meeting.project.name}
+                    </Link>{" "}
+                    · biên bản được lưu vào tài liệu dự án khi gửi
+                  </dd>
+                </div>
+              )}
               <div className="flex items-start gap-2">
                 <Users size={15} className="mt-0.5 shrink-0 text-zinc-400" aria-hidden="true" />
                 <dt className="sr-only">Người tham dự</dt>
@@ -112,6 +128,8 @@ export default async function MeetingRecapPage({
             cancelled={meeting.status === "CANCELLED"}
             maxAudioMinutes={recapLimits().maxAudioMinutes}
             meetingUrl={canManage ? meeting.meetingUrl : null}
+            // Mở từ thông báo "cuộc họp đã bắt đầu": ghi âm ngay.
+            autoStart={query.record === "1" && canManage && !recap}
             recap={
               recap
                 ? {
@@ -123,6 +141,7 @@ export default async function MeetingRecapPage({
                     audioName: canManage ? recap.audioName : null,
                     audioSeconds: recap.audioSeconds,
                     sentAt: recap.sentAt?.toISOString() ?? null,
+                    savedToProject: Boolean(meeting.projectId && recap.projectFileId),
                     updatedAt: recap.updatedAt.toISOString(),
                     stale: isRecapStale(recap, now),
                   }

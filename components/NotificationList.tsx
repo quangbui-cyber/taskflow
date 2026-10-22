@@ -17,6 +17,7 @@ import {
   FileText,
   Inbox,
   MessageSquare,
+  Mic,
   RefreshCw,
   Star,
   type LucideIcon,
@@ -52,6 +53,7 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   MEETING_RECAP_READY: FileText,
   MEETING_RECAP_FAILED: FileText,
   MEETING_RECAP_SHARED: FileText,
+  MEETING_RECAP_PROMPT: Mic,
   LEAVE_REQUEST: CalendarDays,
   LEAVE_DECISION: CalendarDays,
 };
@@ -132,6 +134,8 @@ export default function NotificationList({
       ? "/leave"
       : notification.recognitionId
       ? `/recognition?focus=${notification.recognitionId}#recognition-${notification.recognitionId}`
+      : notification.meetingId && notification.type === "MEETING_RECAP_PROMPT"
+      ? `/meetings/${notification.meetingId}/recap?record=1`
       : notification.meetingId && notification.type.startsWith("MEETING_RECAP_")
       ? `/meetings/${notification.meetingId}/recap`
       : notification.meetingId

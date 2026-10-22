@@ -142,6 +142,7 @@ export default function MeetingComposer({
   meeting,
   emailEnabled,
   initialAttendeeIds,
+  projectId,
   triggerLabel = "Đặt lịch họp",
   triggerClassName = "tf-button-primary min-h-11 px-4",
 }: {
@@ -157,6 +158,8 @@ export default function MeetingComposer({
   emailEnabled: boolean;
   /** Người được chọn sẵn khi mở form tạo mới (ví dụ: thành viên dự án); vẫn bỏ bớt/thêm được */
   initialAttendeeIds?: string[];
+  /** Tạo từ trang dự án: cuộc họp gắn với dự án, biên bản được lưu vào tài liệu dự án */
+  projectId?: string;
   /** Chữ trên nút mở form tạo mới */
   triggerLabel?: string;
   triggerClassName?: string;
@@ -479,6 +482,7 @@ export default function MeetingComposer({
                 <fieldset>
                   <legend className="tf-label">Phòng họp</legend>
                   <input type="hidden" name="roomId" value={values.roomId} />
+                  {projectId && !meeting && <input type="hidden" name="projectId" value={projectId} />}
                   <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Phòng họp">
                     {[{ id: "", name: "Không dùng phòng", capacity: null }, ...rooms].map((room) => {
                       const clash = room.id ? roomClashes.get(room.id) : undefined;

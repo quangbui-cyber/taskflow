@@ -34,6 +34,7 @@ export type MeetingRecapView = {
   audioName: string | null;
   audioSeconds: number | null;
   sentAt: string | null;
+  savedToProject?: boolean;
   updatedAt: string;
   stale: boolean;
 };
@@ -86,7 +87,6 @@ function AudioUploader({
   const { notify } = useInteraction();
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
-  const [consent, setConsent] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const busy = progress !== null;
@@ -94,7 +94,6 @@ function AudioUploader({
   async function start() {
     setError(null);
     if (!file) return setError("Hãy chọn file ghi âm.");
-    if (!consent) return setError("Hãy xác nhận đã báo cho người tham dự rằng cuộc họp được ghi âm.");
 
     setProgress(0);
     try {
@@ -141,16 +140,7 @@ function AudioUploader({
         />
       </label>
 
-      <label className="flex items-start gap-2.5 text-sm leading-6 text-zinc-600">
-        <input
-          type="checkbox"
-          checked={consent}
-          disabled={busy}
-          onChange={(event) => setConsent(event.target.checked)}
-          className="mt-1 h-4 w-4 shrink-0 accent-[#a8d431]"
-        />
-        Tôi đã báo cho người tham dự biết cuộc họp được ghi âm. File ghi âm bị xoá ngay sau khi chép lời.
-      </label>
+      <p className="text-xs text-zinc-500">File ghi âm bị xoá ngay sau khi chép lời.</p>
 
       {error && (
         <p role="alert" className="rounded-[7px] bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -179,12 +169,14 @@ function AudioUploader({
 function AudioSource({
   meetingId,
   meetingUrl,
+  autoStart = false,
   uploadLabel,
   maxAudioMinutes,
   onDone,
 }: {
   meetingId: string;
   meetingUrl: string | null;
+  autoStart?: boolean;
   uploadLabel: string;
   maxAudioMinutes: number;
   onDone: () => void;
@@ -217,6 +209,7 @@ function AudioSource({
         <MeetingRecorder
           meetingId={meetingId}
           meetingUrl={meetingUrl}
+          autoStart={autoStart}
           maxAudioMinutes={maxAudioMinutes}
           onUploaded={onDone}
         />
@@ -236,10 +229,12 @@ export default function MeetingRecapPanel({
   cancelled,
   maxAudioMinutes,
   meetingUrl,
+  autoStart = false,
   recap,
 }: {
   meetingId: string;
   meetingUrl: string | null;
+  autoStart?: boolean;
   canManage: boolean;
   enabled: boolean;
   startBlock: string | null;
@@ -351,6 +346,9 @@ export default function MeetingRecapPanel({
             >
               {recap?.sentAt ? `Đã gửi ${formatDateTime(recap.sentAt)}` : "Chưa gửi — hãy đọc lại trước khi gửi"}
             </span>
+            {recap?.savedToProject && (
+              <span className="tf-badge mt-0 bg-zinc-100 text-zinc-700">Đã lưu vào tài liệu dự án</span>
+            )}
             <div className="ml-auto flex flex-wrap gap-2">
               {!editing && (
                 <>
@@ -487,6 +485,7 @@ export default function MeetingRecapPanel({
                 <AudioSource
                   meetingId={meetingId}
                   meetingUrl={meetingUrl}
+                  autoStart={autoStart}
                   uploadLabel="Tạo biên bản"
                   maxAudioMinutes={maxAudioMinutes}
                   onDone={() => router.refresh()}

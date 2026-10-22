@@ -327,6 +327,7 @@ export default async function ProjectPage({
                     {...meetingData.composerProps}
                     organizerId={user.id}
                     initialAttendeeIds={meetingAttendeeIds}
+                    projectId={project.id}
                     triggerLabel="Tạo cuộc họp"
                     triggerClassName="tf-button-secondary !min-h-9 !px-3 !py-1.5 text-sm"
                   />
