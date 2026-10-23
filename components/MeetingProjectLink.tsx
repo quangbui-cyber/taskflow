@@ -1,16 +1,19 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { FolderPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { attachProjectToMeeting } from "@/app/actions/meetingRecaps";
 import { useInteraction } from "@/components/InteractionProvider";
+import GroupedProjectPicker from "@/components/GroupedProjectPicker";
+import type { PickerProject } from "@/lib/projectPickerGroups";
 
 export default function MeetingProjectLink({ meetingId, projects, hasPublishedRecap }: {
   meetingId: string;
-  projects: { id: string; name: string }[];
+  projects: PickerProject[];
   hasPublishedRecap: boolean;
 }) {
+  const labelId = useId();
   const [open, setOpen] = useState(false);
   const [projectId, setProjectId] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -48,13 +51,13 @@ export default function MeetingProjectLink({ meetingId, projects, hasPublishedRe
             }
           });
         }}>
-          <label className="block">
-            <span className="tf-label">Dự án lưu trữ biên bản</span>
-            <select value={projectId} disabled={pending} required onChange={(event) => setProjectId(event.target.value)} className="tf-field mt-1 w-full">
-              <option value="">Chọn dự án</option>
-              {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
-            </select>
-          </label>
+          <div>
+            <span id={labelId} className="tf-label">Dự án lưu trữ biên bản</span>
+            <div className="mt-1">
+              <GroupedProjectPicker projects={projects} value={projectId} onChange={setProjectId}
+                disabled={pending} labelId={labelId} />
+            </div>
+          </div>
           <p className="text-xs leading-5 text-zinc-500">
             {hasPublishedRecap ? "Bản biên bản đã gửi sẽ được lưu ngay thành file Word trong Tài liệu dự án."
               : "Biên bản sẽ được lưu vào Tài liệu dự án khi bạn bấm gửi."}

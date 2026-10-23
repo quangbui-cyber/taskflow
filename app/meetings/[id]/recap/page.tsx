@@ -108,8 +108,8 @@ export default async function MeetingRecapPage({
   const showContent = Boolean(readable && visibleContent?.trim());
   const linkableProjects = canManage && !meeting.projectId
     ? user.role === "ADMIN"
-      ? await prisma.project.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } })
-      : sidebarProjects.map(({ id, name }) => ({ id, name }))
+      ? await prisma.project.findMany({ select: { id: true, name: true, status: true }, orderBy: { name: "asc" } })
+      : sidebarProjects.map(({ id, name, status }) => ({ id, name, status }))
     : [];
 
   return (
