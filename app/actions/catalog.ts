@@ -1,29 +1,113 @@
 "use server";
 
+import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, requireUser } from "@/lib/auth";
+import {
+  canCreateClient,
+  clientNameError,
+  clientNameKey,
+  normalizeClientName,
+} from "@/lib/clientCatalog";
 
 export type CatalogState = { error?: string; success?: string };
+export type QuickClientState = CatalogState & {
+  client?: { id: string; name: string };
+};
 
 const ACCOUNT_ELIGIBLE_ROLES = ["ADMIN", "ACCOUNT"];
+
+async function findClientByName(name: string, excludeId?: string) {
+  const key = clientNameKey(name);
+  const clients = await prisma.client.findMany({
+    select: { id: true, name: true },
+  });
+  return clients.find((client) => client.id !== excludeId && clientNameKey(client.name) === key) ?? null;
+}
+
+async function insertClient(name: string) {
+  try {
+    const client = await prisma.client.create({
+      data: { name },
+      select: { id: true, name: true },
+    });
+    return { client, created: true };
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return { client: await findClientByName(name), created: false };
+    }
+    throw error;
+  }
+}
 
 export async function createClient(
   _prev: CatalogState,
   formData: FormData
 ): Promise<CatalogState> {
   await requireAdmin();
-  const name = String(formData.get("name") ?? "").trim();
-  if (!name) return { error: "Tên client không được để trống." };
+  const name = normalizeClientName(String(formData.get("name") ?? ""));
+  const validationError = clientNameError(name);
+  if (validationError) return { error: validationError };
 
-  const existing = await prisma.client.findUnique({ where: { name } });
+  const existing = await findClientByName(name);
   if (existing) return { error: "Client này đã tồn tại." };
 
-  await prisma.client.create({
-    data: { name },
-  });
+  const result = await insertClient(name);
+  if (!result.client || !result.created) return { error: "Client này đã tồn tại." };
   revalidatePath("/admin");
+  revalidatePath("/projects/new");
   return { success: `Đã thêm client "${name}".` };
+}
+
+export async function createProjectClient(
+  rawName: string,
+): Promise<QuickClientState> {
+  const user = await requireUser();
+  if (!canCreateClient(user.role)) {
+    return { error: "Chỉ Admin hoặc Account được tạo Client mới." };
+  }
+
+  const name = normalizeClientName(rawName);
+  const validationError = clientNameError(name);
+  if (validationError) return { error: validationError };
+
+  const existing = await findClientByName(name);
+  if (existing) {
+    return {
+      success: `Client "${existing.name}" đã tồn tại và đã được chọn.`,
+      client: existing,
+    };
+  }
+
+  const result = await insertClient(name);
+  if (!result.client) {
+    const concurrentClient = await findClientByName(name);
+    if (concurrentClient) {
+      return {
+        success: `Client "${concurrentClient.name}" đã tồn tại và đã được chọn.`,
+        client: concurrentClient,
+      };
+    }
+    return { error: "Không thể tạo Client lúc này. Vui lòng thử lại." };
+  }
+
+  if (!result.created) {
+    return {
+      success: `Client "${result.client.name}" đã tồn tại và đã được chọn.`,
+      client: result.client,
+    };
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/projects/new");
+  return {
+    success: `Đã tạo Client "${result.client.name}".`,
+    client: result.client,
+  };
 }
 
 export async function updateClient(
@@ -31,19 +115,27 @@ export async function updateClient(
   name: string
 ): Promise<CatalogState> {
   await requireAdmin();
-  const normalizedName = name.trim();
-  if (!normalizedName) return { error: "Tên client không được để trống." };
+  const normalizedName = normalizeClientName(name);
+  const validationError = clientNameError(normalizedName);
+  if (validationError) return { error: validationError };
 
-  const duplicate = await prisma.client.findFirst({
-    where: { name: normalizedName, id: { not: id } },
-    select: { id: true },
-  });
+  const duplicate = await findClientByName(normalizedName, id);
   if (duplicate) return { error: "Client này đã tồn tại." };
 
-  await prisma.client.update({
-    where: { id },
-    data: { name: normalizedName },
-  });
+  try {
+    await prisma.client.update({
+      where: { id },
+      data: { name: normalizedName },
+    });
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return { error: "Client này đã tồn tại." };
+    }
+    throw error;
+  }
   revalidatePath("/admin");
   revalidatePath("/projects/new");
   revalidatePath("/projects/[id]", "page");

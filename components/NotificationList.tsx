@@ -10,6 +10,7 @@ import {
   CalendarX2,
   AlarmClock,
   Bell,
+  CheckCheck,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -22,7 +23,10 @@ import {
   Star,
   type LucideIcon,
 } from "lucide-react";
-import { markNotificationRead } from "@/app/actions/notifications";
+import {
+  markAllNotificationsRead,
+  markNotificationRead,
+} from "@/app/actions/notifications";
 
 export type NotificationItem = {
   id: string;
@@ -77,17 +81,21 @@ export default function NotificationList({
   initialNotifications,
   totalPages,
   totalUnread: initialTotalUnread,
+  totalUnreadAll: initialTotalUnreadAll,
 }: {
   activeView: "all" | "unread" | "archive";
   currentPage: number;
   initialNotifications: NotificationItem[];
   totalPages: number;
   totalUnread: number;
+  totalUnreadAll: number;
 }) {
   const router = useRouter();
   const [notifications, setNotifications] = useState(initialNotifications);
   const [totalUnread, setTotalUnread] = useState(initialTotalUnread);
+  const [totalUnreadAll, setTotalUnreadAll] = useState(initialTotalUnreadAll);
   const [readingId, setReadingId] = useState<string | null>(null);
+  const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
   const [, startTransition] = useTransition();
 
   // Trang này không tự tải lại: trên điện thoại, mở lại trình duyệt chỉ hiện bản
@@ -128,7 +136,7 @@ export default function NotificationList({
   };
 
   function openNotification(notification: NotificationItem) {
-    if (readingId) return;
+    if (readingId || isMarkingAllRead) return;
 
     const destination = notification.type.startsWith("LEAVE_")
       ? "/leave"
@@ -160,6 +168,7 @@ export default function NotificationList({
     if (!notification.read && activeView !== "archive") {
       setTotalUnread((current) => Math.max(0, current - 1));
     }
+    setTotalUnreadAll((current) => Math.max(0, current - 1));
 
     startTransition(async () => {
       try {
@@ -178,8 +187,36 @@ export default function NotificationList({
         if (!notification.read && activeView !== "archive") {
           setTotalUnread((current) => current + 1);
         }
+        setTotalUnreadAll((current) => current + 1);
       } finally {
         setReadingId(null);
+      }
+    });
+  }
+
+  function markAllRead() {
+    if (totalUnreadAll === 0 || readingId || isMarkingAllRead) return;
+
+    const previousNotifications = notifications;
+    const previousTotalUnread = totalUnread;
+    const previousTotalUnreadAll = totalUnreadAll;
+    setIsMarkingAllRead(true);
+    setNotifications((current) =>
+      current.map((notification) => ({ ...notification, read: true }))
+    );
+    setTotalUnread(0);
+    setTotalUnreadAll(0);
+
+    startTransition(async () => {
+      try {
+        await markAllNotificationsRead();
+        router.refresh();
+      } catch {
+        setNotifications(previousNotifications);
+        setTotalUnread(previousTotalUnread);
+        setTotalUnreadAll(previousTotalUnreadAll);
+      } finally {
+        setIsMarkingAllRead(false);
       }
     });
   }
@@ -227,9 +264,20 @@ export default function NotificationList({
             Lưu trữ
           </Link>
         </div>
-        <p className="hidden text-xs text-zinc-400 sm:block">
-          Nhấn vào thông báo để đánh dấu đã đọc
-        </p>
+        <div className="flex items-center gap-3">
+          <p className="hidden text-xs text-zinc-400 lg:block">
+            Nhấn vào thông báo để đánh dấu đã đọc
+          </p>
+          <button
+            type="button"
+            onClick={markAllRead}
+            disabled={totalUnreadAll === 0 || Boolean(readingId) || isMarkingAllRead}
+            className="tf-button-secondary min-h-10 px-3"
+          >
+            <CheckCheck size={16} aria-hidden="true" />
+            {isMarkingAllRead ? "Đang đánh dấu..." : "Đánh dấu tất cả đã đọc"}
+          </button>
+        </div>
       </div>
 
       {notifications.length === 0 ? (

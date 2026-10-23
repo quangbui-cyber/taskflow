@@ -39,10 +39,13 @@ export default async function NotificationsPage({
     ...(view === "unread" ? { read: false } : {}),
   };
 
-  const [totalNotifications, totalUnread, sidebarProjects] = await Promise.all([
+  const [totalNotifications, totalUnread, totalUnreadAll, sidebarProjects] = await Promise.all([
     prisma.notification.count({ where: notificationWhere }),
     prisma.notification.count({
       where: { userId: user.id, read: false, createdAt: { gte: archiveCutoff } },
+    }),
+    prisma.notification.count({
+      where: { userId: user.id, read: false },
     }),
     prisma.project.findMany({
       where: { members: { some: { userId: user.id } } },
@@ -99,7 +102,7 @@ export default async function NotificationsPage({
           <NotificationList
             // Danh sách giữ trạng thái "đã đọc" tạm ở client; đổi key khi dữ liệu
             // server thay đổi để thông báo mới hiện ra sau mỗi lần tải lại.
-            key={`${view}-${requestedPage}-${totalUnread}-${notifications
+            key={`${view}-${requestedPage}-${totalUnread}-${totalUnreadAll}-${notifications
               .map((notification) => `${notification.id}${notification.read ? "r" : "u"}`)
               .join("")}`}
             activeView={view}
@@ -117,6 +120,7 @@ export default async function NotificationsPage({
             }))}
             totalPages={totalPages}
             totalUnread={totalUnread}
+            totalUnreadAll={totalUnreadAll}
           />
         </div>
       </main>

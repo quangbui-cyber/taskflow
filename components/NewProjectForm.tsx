@@ -17,6 +17,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import ClientSelect, { type ClientOption } from "@/components/ClientSelect";
+import QuickClientCreator from "@/components/QuickClientCreator";
 import ProjectAccountSelect, { preventMissingProjectAccount, type ProjectAccountOption } from "@/components/ProjectAccountSelect";
 import { useActionFeedback, useInteraction } from "@/components/InteractionProvider";
 import { PROJECT_TYPES, type ProjectCategory } from "@/lib/types";
@@ -53,6 +54,7 @@ type NewProjectFormProps = {
   clients: ClientOption[];
   accounts: ProjectAccountOption[];
   canEditRevenue: boolean;
+  canCreateClient: boolean;
   responsibilityOptions: ResponsibilityOptions;
 };
 
@@ -138,6 +140,7 @@ function ProjectDetailsForm({
   clients,
   accounts,
   canEditRevenue,
+  canCreateClient,
   responsibilityOptions,
   category,
   onBack,
@@ -156,6 +159,8 @@ function ProjectDetailsForm({
   const [importError, setImportError] = useState("");
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [draftVersion, setDraftVersion] = useState(0);
+  const [clientOptions, setClientOptions] = useState(clients);
+  const [selectedClientId, setSelectedClientId] = useState("");
   useActionFeedback(state);
 
   useEffect(() => {
@@ -181,6 +186,7 @@ function ProjectDetailsForm({
         throw new Error(result.error || "Không thể đọc PO.");
       }
       setImportResult(result);
+      setSelectedClientId(matchClientId(result.draft.clientName, clientOptions));
       setDraftVersion((version) => version + 1);
     } catch (error) {
       setImportResult(null);
@@ -194,7 +200,7 @@ function ProjectDetailsForm({
   }
 
   const importedClientId = importResult
-    ? matchClientId(importResult.draft.clientName, clients)
+    ? matchClientId(importResult.draft.clientName, clientOptions)
     : "";
 
   return (
@@ -383,11 +389,26 @@ function ProjectDetailsForm({
           <div className="block">
             <span className="text-xs font-medium text-zinc-500">Client</span>
             <ClientSelect
-              key={`client-${draftVersion}`}
-              clients={clients}
-              defaultValue={importedClientId}
+              clients={clientOptions}
+              value={selectedClientId}
+              onChange={setSelectedClientId}
+              disabled={pending}
               className="mt-1"
             />
+            {canCreateClient && (
+              <QuickClientCreator
+                suggestedName={importResult && !importedClientId ? importResult.draft.clientName : ""}
+                disabled={pending || importing}
+                onCreated={(client) => {
+                  setClientOptions((current) =>
+                    [...current.filter((item) => item.id !== client.id), client].sort((a, b) =>
+                      a.name.localeCompare(b.name, "vi"),
+                    ),
+                  );
+                  setSelectedClientId(client.id);
+                }}
+              />
+            )}
           </div>
         )}
         {category === "CLIENT" && (
@@ -435,7 +456,7 @@ function ProjectDetailsForm({
         </label>
       )}
       {category === "CLIENT" &&
-        clients.length === 0 &&
+        clientOptions.length === 0 &&
         accounts.length === 0 && (
           <p className="text-xs text-zinc-400">
             Chưa có Client/Account nào. Admin có thể thêm trong Cài đặt.

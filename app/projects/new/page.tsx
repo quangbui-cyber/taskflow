@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { canViewRevenue, requireUser } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
 import NewProjectForm from "@/components/NewProjectForm";
+import { canCreateClient } from "@/lib/clientCatalog";
 
 export default async function NewProjectPage() {
   const user = await requireUser();
@@ -52,6 +53,7 @@ export default async function NewProjectPage() {
           </div>
           <NewProjectForm
             canEditRevenue={canViewRevenue(user.role)}
+            canCreateClient={canCreateClient(user.role)}
             clients={clients}
             responsibilityOptions={{ teams, groups }}
             accounts={accounts.map((account) => ({

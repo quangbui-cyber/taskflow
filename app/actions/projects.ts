@@ -79,6 +79,14 @@ async function findValidAccount(accountId: string | null) {
   });
 }
 
+async function findValidClient(clientId: string | null) {
+  if (!clientId) return null;
+  return prisma.client.findUnique({
+    where: { id: clientId },
+    select: { id: true },
+  });
+}
+
 async function validateResponsibility(assignment: ProjectResponsibility) {
   const exists = assignment.responsibleTeamId
     ? await prisma.salesTeam.findUnique({
@@ -148,9 +156,15 @@ export async function createProject(
       };
     }
   }
-  const account = await findValidAccount(accountId);
+  const [account, client] = await Promise.all([
+    findValidAccount(accountId),
+    findValidClient(clientId),
+  ]);
   if (accountId && !account) {
     return { error: "Hãy chọn Account đang hoạt động, đã liên kết tài khoản và Team kinh doanh." };
+  }
+  if (clientId && !client) {
+    return { error: "Client không còn tồn tại. Vui lòng chọn lại." };
   }
   if (purchaseOrderNumber) {
     const existingProject = await prisma.project.findUnique({
@@ -247,9 +261,15 @@ export async function updateProject(
   if (assignmentError) return assignmentError;
   const execution = parseExecutionFields(formData, category);
   if ("error" in execution) return execution;
-  const account = await findValidAccount(accountId);
+  const [account, client] = await Promise.all([
+    findValidAccount(accountId),
+    findValidClient(clientId),
+  ]);
   if (accountId && !account) {
     return { error: "Hãy chọn Account đang hoạt động, đã liên kết tài khoản và Team kinh doanh." };
+  }
+  if (clientId && !client) {
+    return { error: "Client không còn tồn tại. Vui lòng chọn lại." };
   }
   await prisma.$transaction(async (tx) => {
     await tx.project.update({
