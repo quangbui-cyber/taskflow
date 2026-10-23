@@ -7,6 +7,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { activeDirectReportsWhere } from "@/lib/directReports";
 import { canCreateProjects, canViewRevenue, requireUser } from "@/lib/auth";
 import { daysUntil, isOverdue } from "@/lib/dates";
 import Sidebar from "@/components/Sidebar";
@@ -133,7 +134,7 @@ export default async function DashboardPage({
       orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }],
     }),
     prisma.user.findMany({
-      where: { managerId: user.id },
+      where: activeDirectReportsWhere(user.id),
       select: {
         id: true,
         name: true,

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { activeDirectReportsWhere } from "@/lib/directReports";
 import { requireUser } from "@/lib/auth";
 import {
   combinePeriodResultsWithActiveWork,
@@ -142,7 +143,7 @@ export default async function TeamPage({
       prisma.user.findMany({
         where: isAdmin
           ? { id: { not: user.id }, deletedAt: null }
-          : { managerId: user.id },
+          : activeDirectReportsWhere(user.id),
         include: {
           assignedTasks: {
             where: performanceTaskWhere,
