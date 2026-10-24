@@ -51,7 +51,8 @@ const integrationSuites = integration ? [
   "tests/quotation-parameters.integration.test.ts", "tests/workflow.integration.test.ts", "tests/budget.integration.test.ts",
   "tests/paired.integration.test.ts", "tests/payment.integration.test.ts", "tests/workflow-documents.integration.test.ts",
   "tests/workflow-approval.integration.test.ts", "tests/excel-intake.integration.test.ts", "tests/excel-round-trip.integration.test.ts",
-  ...(phase8 ? ["tests/actual-cost.integration.test.ts", "tests/actual-cost-control-center.integration.test.ts", "tests/customer-liquidation.integration.test.ts"] : []),
+  // The sheet integration runs above through the Phase 12 disposable-schema negative matrix.
+  ...(phase8 ? ["tests/actual-cost-control-center.integration.test.ts", "tests/customer-liquidation.integration.test.ts"] : []),
 ] : [];
 const files = [...phase10GapSuites, ...unitSuites, ...integrationSuites];
 const env = { ...process.env };

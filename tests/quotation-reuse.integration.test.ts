@@ -78,6 +78,7 @@ test("quotation reuse catalog, independent drafts and template lifecycle", { ski
     await prisma.quotationTemplateProposal.deleteMany({ where: { proposedBy: { in: ids } } });
     const projects = await prisma.project.findMany({ where: { ownerId: { in: ids } }, select: { id: true } });
     const projectIds = projects.map(project => project.id);
+    await prisma.settlementExportSourceProjection.deleteMany({ where: { projectId: { in: projectIds } } });
     await prisma.costFlowHistory.deleteMany({ where: { projectId: { in: projectIds } } });
     await prisma.costFlowWorkspace.deleteMany({ where: { projectId: { in: projectIds } } });
     await prisma.project.deleteMany({ where: { ownerId: { in: ids } } });

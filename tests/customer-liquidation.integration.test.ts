@@ -8,7 +8,8 @@ function approvedDatabaseUrl() {
   assert.ok(["postgres:", "postgresql:"].includes(url.protocol), "Phase 8 test requires PostgreSQL");
   assert.equal(url.hostname, "127.0.0.1", "Phase 8 test only uses 127.0.0.1");
   assert.equal(url.port, "55439", "Phase 8 test only uses port 55439");
-  assert.equal(url.pathname, "/taskflow", "Phase 8 test only uses database taskflow");
+  assert.ok(["/taskflow", "/costflow_test"].includes(url.pathname), "Phase 8 test only uses the approved local test databases");
+  assert.equal(url.search, "");
 }
 
 test("customer-liquidation integration: immutable liquidation, idempotent AR and isolated net margin", async () => {

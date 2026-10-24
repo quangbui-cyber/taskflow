@@ -52,7 +52,7 @@ test("Budget sources persist immutable versions, reject foreign/stale actors and
     assert.equal((await prisma.project.findUniqueOrThrow({ where: { id: project.id } })).revenue, 777);
     assert.equal(await prisma.costFlowCash.count({ where: { projectId: project.id } }), 0);
     const createVersion = await version();
-    const draftRace = await Promise.allSettled(["Incomplete IC", "Competing IC"].map(title => act("SAVE_IC", { title, lines: JSON.stringify([{ evidenceReason: "Synthetic test estimate pending supplier document", description: "Print", unit: "set", quantity: "3", unitPrice: "", basis: "NET", vatPercent: "" }]) }, account, createVersion)));
+    const draftRace = await Promise.allSettled(["Incomplete IC", "Competing IC"].map(title => act("SAVE_IC", { title, lines: JSON.stringify([{ evidenceReason: "Synthetic test estimate pending supplier document", description: "Print", unit: "set", quantity: "3", days: "1", unitPrice: "", basis: "NET", vatPercent: "" }]) }, account, createVersion)));
     assert.equal(draftRace.filter(result => result.status === "fulfilled").length, 1);
     assert.equal((await state()).revisions.length, 1);
     const draft = (await state()).revisions[0];
@@ -61,7 +61,7 @@ test("Budget sources persist immutable versions, reject foreign/stale actors and
     assert.equal(draft.lines[0].vatPercent, "");
     await assert.rejects(act("SUBMIT", { requestId: draft.requestId, explanation: "Incomplete draft" }), /đủ nội dung/);
     await assert.rejects(act("SAVE_IC", { requestId: draft.requestId, title: "Invalid", lines: JSON.stringify([{ ...draft.lines[0], unitPrice: "bad" }]) }));
-    await act("SAVE_IC", { requestId: draft.requestId, title: "Filled", lines: JSON.stringify([{ ...draft.lines[0], unitPrice: "100.4", vatPercent: "0" }]) });
+    await act("SAVE_IC", { requestId: draft.requestId, title: "Filled", lines: JSON.stringify([{ ...draft.lines[0], unitPrice: "100.4", vatPercent: "0", evidenceIds: [evidence.id] }]) });
     assert.equal((await state()).revisions[0].lines[0].cost?.net, "301");
     await assert.rejects(act("COPY_IC", { sourceRevisionId: randomUUID(), title: "Foreign copy" }), /cùng project/);
     await assert.rejects(act("COPY_IC", { sourceRevisionId: draft.id, title: "Competing" }), /đang xử lý/);

@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { extractText, getDocumentProxy } from "unpdf";
 import {
   buildCustomerAcceptanceProjection,
@@ -170,8 +172,19 @@ test("PDF and XLSX render the exact same stored projection rows and remain senti
   assert.deepEqual(customerAcceptanceXlsxRows(result), canonical);
   const pdf = customerAcceptancePdf(result);
   const xlsx = customerAcceptanceXlsx(result);
+  if (process.env.CUSTOMER_ACCEPTANCE_INSPECT_ARTIFACTS === "1") {
+    const inspectDir = join(process.cwd(), ".codex-tmp", "qa", "customer-acceptance-20261024");
+    mkdirSync(inspectDir, { recursive: true });
+    writeFileSync(join(inspectDir, "customer-acceptance.pdf"), pdf);
+    writeFileSync(join(inspectDir, "customer-acceptance.xlsx"), xlsx);
+  }
   assert.equal(pdf.subarray(0, 5).toString(), "%PDF-");
   assert.equal(xlsx.readUInt32LE(0), 0x04034b50);
+  const workbookXml = xlsx.toString("utf8");
+  assert.match(workbookXml, /<sheet name="Nghiệm thu khách hàng"/);
+  assert.match(workbookXml, /<autoFilter ref="A4:M6"/);
+  assert.match(workbookXml, /<c r="M7" s="1"><v>7680000<\/v><\/c>/);
+  assert.match(workbookXml, /Extra customer booth/);
   for (const token of ["VENDOR_PRIVATE", "COST_PRIVATE", "RECIPIENT_PRIVATE", "EVIDENCE_PRIVATE", "IC_INTERNAL_NOTE", "DD_EVENT_PRIVATE", "MARGIN_PRIVATE"]) {
     assert.ok(!pdf.includes(Buffer.from(token)), `PDF: ${token}`);
     assert.ok(!xlsx.includes(Buffer.from(token)), `XLSX: ${token}`);
@@ -180,11 +193,16 @@ test("PDF and XLSX render the exact same stored projection rows and remain senti
   assert.ok(canonical.flat().includes("Đại diện Creative Station"));
   const document = await getDocumentProxy(new Uint8Array(pdf));
   try {
+    assert.equal(document.numPages, 1);
     const extracted = await extractText(document, { mergePages: true });
     assert.match(extracted.text, /Đại diện Khách hàng/);
     assert.match(extracted.text, /Đại diện Creative Station/);
     assert.match(extracted.text, /Activation day/);
+    assert.match(extracted.text, /Extra customer booth/);
     assert.match(extracted.text, /7[.]680[.]000|7680000/);
+    for (const token of ["VENDOR_PRIVATE", "COST_PRIVATE", "RECIPIENT_PRIVATE", "EVIDENCE_PRIVATE", "IC_INTERNAL_NOTE", "DD_EVENT_PRIVATE", "MARGIN_PRIVATE"]) {
+      assert.ok(!extracted.text.includes(token), `PDF text: ${token}`);
+    }
   } finally {
     await document.cleanup();
   }

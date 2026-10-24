@@ -2,20 +2,24 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID, createHash } from "node:crypto";
 import type { DocumentPayload } from "../lib/workflow/documents";
+import { withPhase12TestSchema } from "./phase12/pilotFixture";
 
 test("Workflow templates, independent/project documents, versions and signed originals obey server gates", { skip: !process.env.COSTFLOW_TEST_DATABASE_URL }, async () => {
   const url = new URL(process.env.COSTFLOW_TEST_DATABASE_URL!);
   assert.ok(["localhost", "127.0.0.1"].includes(url.hostname)); assert.equal(url.pathname, "/costflow_test");
-  process.env.DATABASE_URL = process.env.COSTFLOW_TEST_DATABASE_URL;
+  await withPhase12TestSchema(async () => {
   const { prisma } = await import("../lib/prisma");
   const { executeWorkflow, loadDocument, loadWorkflow, downloadWorkflowFile } = await import("../lib/workflow/service");
   const { assertWorkflowFile, isTemplateKind } = await import("../lib/workflow/documents");
   const prefix = `wf-test-${randomUUID()}`;
+  const previousAttestationKey = process.env.DOCUMENT_ATTESTATION_KEY_V1;
+  process.env.DOCUMENT_ATTESTATION_KEY_V1 = "workflow-integration-local-test-only-key";
   const mk = (label: string, role = "USER", managerId?: string) => prisma.user.create({ data: { name: `Workflow test ${label}`, email: `${prefix}-${label}@example.test`, passwordHash: "unused-in-service-test", role, managerId } });
   const proof = { name: "workflow-test.pdf", mimeType: "application/pdf", size: 23, data: new TextEncoder().encode("%PDF-1.4 test document\n") };
   const act = async (actor: { id: string; role: string }, command: string, fields: Record<string, string> = {}, upload?: typeof proof) => {
     const f = new FormData(); f.set("command", command); for (const [k, v] of Object.entries(fields)) f.set(k, v);
-    return executeWorkflow(actor, f, upload ?? null);
+    if (command === "SUBMIT_DOCUMENT") f.set("signingMode", "PHYSICAL");
+    return executeWorkflow(actor, f, command === "UPLOAD_SIGNED" ? null : upload ?? null, command === "UPLOAD_SIGNED" && upload ? [upload] : []);
   };
   try {
     const manager = await mk("manager"); const creator = await mk("creator", "USER", manager.id);
@@ -88,7 +92,7 @@ test("Workflow templates, independent/project documents, versions and signed ori
     assert.equal(downloaded!.sha256, createHash("sha256").update(proof.data).digest("hex"));
     await requestAct(creator, "ADD_REFERENCE", {}, proof, newId);
     assert.equal(((await req(newId)).payload as unknown as DocumentPayload).signature!.state, "CONFIRMED");
-    await assert.rejects(() => act(creator, "SAVE_DOCUMENT", { ...docFields, templateId: newDraftId, parentRequestId: newId, title: "Sửa tài liệu sau duyệt" }, proof), /đã ký/);
+    await assert.rejects(() => act(creator, "SAVE_DOCUMENT", { ...docFields, templateId: newDraftId, parentRequestId: newId, title: "Sửa tài liệu sau duyệt" }, proof), /Tạo bản sửa đổi/);
     assert.equal((await req(newId)).state, "APPROVED");
     const project = await prisma.project.create({ data: { name: "Workflow membership test", ownerId: creator.id, members: { create: [creator, member].map(u => ({ userId: u.id })) } } });
     const projectDoc = (await act(creator, "SAVE_DOCUMENT", { ...docFields, templateId: newDraftId, projectId: project.id }, proof)).requestId!;
@@ -112,11 +116,11 @@ test("Workflow templates, independent/project documents, versions and signed ori
     await requestAct(ceo, "DECIDE_DOCUMENT", { decision: "REJECT", reason: "Test rejected" }, undefined, projectDoc);
     assert.equal((await req(projectDoc)).state, "REJECTED");
     await requestAct(manager, "TRANSFER_DOCUMENT", { target: "SIGNATURE", assigneeId: stranger.id, reason: "Giao kiểm tra bản ký" }, undefined, newId);
-    await requestAct(creator, "UPLOAD_SIGNED", { keeper: "Test keeper", location: "Test folder new scan" }, proof, newId);
+    await assert.rejects(() => requestAct(creator, "UPLOAD_SIGNED", { keeper: "Test keeper", location: "Test folder new scan" }, proof, newId), /Batch scan hiện tại/);
     assert.ok(await loadDocument(newId, stranger));
     assert.ok((await loadWorkflow(stranger)).requests.some(r => r.id === newId));
     await assert.rejects(() => requestAct(manager, "CONFIRM_SIGNED", { signatureConfirmed: "yes" }, undefined, newId), /Quản lý phụ trách/);
-    await requestAct(stranger, "CONFIRM_SIGNED", { signatureConfirmed: "yes" }, undefined, newId);
+    await assert.rejects(() => requestAct(stranger, "CONFIRM_SIGNED", { signatureConfirmed: "yes" }, undefined, newId), /đang chờ kiểm tra/);
     assert.equal(await prisma.costFlowCash.count({ where: { requestId: newId } }), 0);
     assert.equal(await prisma.workflowHistory.count({ where: { requestId: newId } }), (await req(newId)).version + 1);
     // Each financial proposal has its own version stream. Both remain usable.
@@ -158,5 +162,10 @@ test("Workflow templates, independent/project documents, versions and signed ori
     assert.deepEqual(await prisma.costFlowWorkspace.findMany({ orderBy: { projectId: "asc" } }), budgetsBefore);
     console.log("Proposal variants PASS: simultaneous submission, independent freshness, frozen snapshots, legacy compatibility, Admin owner, no cash/budget effects");
     console.log("Workflow PASS: owner/publication gates, immutable versions/files, independent/member/assigned access, return/full resubmit, signature separation, no Admin approval bypass, concurrency, no cash side effect");
-  } finally { await prisma.$disconnect(); }
+  } finally {
+    if (previousAttestationKey === undefined) delete process.env.DOCUMENT_ATTESTATION_KEY_V1;
+    else process.env.DOCUMENT_ATTESTATION_KEY_V1 = previousAttestationKey;
+    await prisma.$disconnect();
+  }
+  });
 });

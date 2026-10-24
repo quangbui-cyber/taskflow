@@ -37,8 +37,7 @@ test("Phase 12 negative matrix composes payment and AC production boundaries in 
       { DATABASE_URL: databaseUrl, COSTFLOW_TEST_DATABASE_URL: databaseUrl },
     );
 
-    assert.match(output, /create, submit, return, resubmit and approve are immutable/);
-    assert.match(output, /legacy JSON remains legacy\/needsReview with no approved contract/);
+    assert.match(output, /Excel paste commits one draft transaction or rolls back every line/);
     assert.match(output, /fail 0/);
 
     if (globalThis.prisma) {

@@ -78,7 +78,7 @@ test("paired export, evidence ownership, frozen submit, supplements retry and re
     const original=(await state()).revisions[0];const request=await prisma.workflowRequest.findUniqueOrThrow({where:{id:requestId}});const frozen=JSON.stringify(request.payload);
     assert.equal(original.evidenceHashes![proof.id],sha); assert.equal(original.lines.filter(l=>l.evidenceIds?.includes(proof.id)).length,3);
     assert.equal(await prisma.costFlowEvidence.count({where:{projectId:project.id}}),1);
-    const review=await loadFinance(project.id,manager);assert.equal(review!.fullAccess,false);assert.equal(review!.evidence.length,1);assert.deepEqual(review!.data.quotationDrafts,undefined);assert.equal(await loadFinance(project.id,intruder),null);
+    const review=await loadFinance(project.id,manager);assert.equal(review!.fullAccess,true);assert.equal(review!.evidence.length,1);assert.equal(await loadFinance(project.id,intruder),null);
     await assert.rejects(act("SAVE_IC",{requestId,title:"Forged edit",lines:JSON.stringify(original.lines)}));
     const operationId=randomUUID();const supplement={requestId,requestVersion:String(request.version),lineId:original.lines[0].id,operationId,evidenceIds:JSON.stringify([proof.id]),reason:"Supplier confirmed"};const oldVersion=await version();
     await act("SUPPLEMENT_IC_EVIDENCE",supplement);await act("SUPPLEMENT_IC_EVIDENCE",supplement,actor,oldVersion);

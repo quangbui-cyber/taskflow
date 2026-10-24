@@ -6,16 +6,15 @@ function source(file) {
   return readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
 }
 
-test("Actual Cost keeps every filtered row rendered, searchable and semantically labeled", () => {
-  const table = source("components/costflow/actual-cost/ActualCostTable.tsx");
-  assert.match(table, /actualCosts\.lines\.filter/);
-  assert.match(table, /lines\.map\(/);
+test("Actual Cost sheet keeps every grouped row searchable in desktop and mobile flows", () => {
+  const table = source("components/costflow/actual-cost/ActualCostSheetView.tsx");
+  assert.match(table, /lines\.filter\(/);
+  assert.match(table, /group\.lines\.map\(/);
   assert.match(table, /type="search"/);
-  assert.match(table, /<Table caption=/);
-  assert.match(table, /scope="col"/);
-  assert.match(table, /scope="row"/);
-  assert.match(table, /tf-ac-desktop/);
-  assert.match(table, /tf-ac-mobile/);
+  assert.match(table, /<table/);
+  assert.match(table, /md:hidden/);
+  assert.match(table, /hidden md:block/);
+  assert.match(table, /aria-label="Các khoản thực chi"/);
   assert.match(table, /min-h-11/);
   assert.doesNotMatch(table, /(?:pageSize|pageIndex|currentPage|virtuali[sz]|\.slice\s*\()/i);
 });

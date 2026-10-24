@@ -3,7 +3,7 @@ import "server-only";
 import { readFileSync } from "node:fs";
 import { customerAcceptanceArtifactRows, customerAcceptanceProjectionHash, type CustomerAcceptanceProjection } from "./customerAcceptanceProjection";
 
-type FontMetrics = { glyph: (code: number) => number; unitsPerEm: number; bbox: [number, number, number, number]; ascent: number; descent: number };
+type FontMetrics = { glyph: (code: number) => number; width: (glyph: number) => number; unitsPerEm: number; bbox: [number, number, number, number]; ascent: number; descent: number };
 
 function table(font: Buffer, name: string) {
   const count = font.readUInt16BE(4);
@@ -23,7 +23,7 @@ function fontMetrics(font: Buffer): FontMetrics {
     const platform = font.readUInt16BE(record);
     const encoding = font.readUInt16BE(record + 2);
     const offset = cmap + font.readUInt32BE(record + 4);
-    if (font.readUInt16BE(offset) === 4 && (platform === 3 && [1, 10].includes(encoding) || platform === 0)) format4 = offset;
+    if (font.readUInt16BE(offset) === 4 && platform === 3 && encoding === 1) format4 = offset;
   }
   if (format4 < 0) throw new Error("Font không có Unicode cmap format 4.");
   const segmentCount = font.readUInt16BE(format4 + 6) / 2;
@@ -49,8 +49,11 @@ function fontMetrics(font: Buffer): FontMetrics {
   };
   const head = table(font, "head").offset;
   const hhea = table(font, "hhea").offset;
+  const hmtx = table(font, "hmtx").offset;
+  const metricCount = font.readUInt16BE(hhea + 34);
   return {
     glyph,
+    width: (glyphId: number) => font.readUInt16BE(hmtx + Math.min(glyphId, metricCount - 1) * 4),
     unitsPerEm: font.readUInt16BE(head + 18),
     bbox: [font.readInt16BE(head + 36), font.readInt16BE(head + 38), font.readInt16BE(head + 40), font.readInt16BE(head + 42)],
     ascent: font.readInt16BE(hhea + 4),
@@ -108,16 +111,16 @@ export function customerAcceptancePdfRows(projection: CustomerAcceptanceProjecti
 
 export function customerAcceptancePdf(projection: CustomerAcceptanceProjection) {
   const artifactRows = customerAcceptancePdfRows(projection);
-  const prefix = artifactRows.slice(0, 4);
-  const body = artifactRows.slice(4);
-  const pages: string[][] = [];
-  for (let index = 0; index < body.length || index === 0; index += 30) pages.push([...(index ? [prefix[3]] : prefix), ...body.slice(index, index + 30)].map(row => row.join(" | ")));
-  const allText = pages.flat().join("\n");
+  const items = artifactRows.slice(4, -2);
+  const pages: string[][][] = [];
+  for (let index = 0; index < items.length || index === 0; index += 5) pages.push(items.slice(index, index + 5));
+  const allText = artifactRows.flat().join("\n") + "ĐVT Hợp đồng Thực tế Chênh lệch Đơn giá bán NET VAT GROSS Trang Phiên bản : . × / , 0123456789";
   const codes = [...new Set([...allText].map(character => character.codePointAt(0) ?? 32).filter(code => code <= 0xffff))].sort((a, b) => a - b);
-  const font = readFileSync(new URL("../../node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf", import.meta.url));
+  const font = readFileSync(new URL("../../node_modules/next/dist/compiled/@vercel/og/Geist-Regular.ttf", import.meta.url));
   const metrics = fontMetrics(font);
   const cidMap = Buffer.alloc((Math.max(...codes, 0) + 1) * 2);
   for (const code of codes) cidMap.writeUInt16BE(metrics.glyph(code), code * 2);
+  const widths = codes.map(code => `${code} [${scale(metrics.width(metrics.glyph(code)), metrics.unitsPerEm)}]`).join(" ");
 
   const objects: Buffer[] = [];
   const reserve = () => { objects.push(Buffer.alloc(0)); return objects.length; };
@@ -126,15 +129,35 @@ export function customerAcceptancePdf(projection: CustomerAcceptanceProjection) 
   const catalogId = reserve();
   const pagesId = reserve();
   const fontFileId = add(stream(font, `/Length1 ${font.length}`));
-  const descriptorId = add(`<< /Type /FontDescriptor /FontName /LiberationSans /Flags 32 /FontBBox [${metrics.bbox.map(value => scale(value, metrics.unitsPerEm)).join(" ")}] /ItalicAngle 0 /Ascent ${scale(metrics.ascent, metrics.unitsPerEm)} /Descent ${scale(metrics.descent, metrics.unitsPerEm)} /CapHeight ${scale(metrics.ascent, metrics.unitsPerEm)} /StemV 80 /FontFile2 ${fontFileId} 0 R >>`);
+  const descriptorId = add(`<< /Type /FontDescriptor /FontName /Geist /Flags 32 /FontBBox [${metrics.bbox.map(value => scale(value, metrics.unitsPerEm)).join(" ")}] /ItalicAngle 0 /Ascent ${scale(metrics.ascent, metrics.unitsPerEm)} /Descent ${scale(metrics.descent, metrics.unitsPerEm)} /CapHeight ${scale(metrics.ascent, metrics.unitsPerEm)} /StemV 80 /FontFile2 ${fontFileId} 0 R >>`);
   const cidMapId = add(stream(cidMap));
   const unicodeId = add(stream(toUnicode(codes)));
-  const cidFontId = add(`<< /Type /Font /Subtype /CIDFontType2 /BaseFont /LiberationSans /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor ${descriptorId} 0 R /DW 500 /CIDToGIDMap ${cidMapId} 0 R >>`);
-  const type0Id = add(`<< /Type /Font /Subtype /Type0 /BaseFont /LiberationSans /Encoding /Identity-H /DescendantFonts [${cidFontId} 0 R] /ToUnicode ${unicodeId} 0 R >>`);
+  const cidFontId = add(`<< /Type /Font /Subtype /CIDFontType2 /BaseFont /Geist /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor ${descriptorId} 0 R /DW 500 /W [${widths}] /CIDToGIDMap ${cidMapId} 0 R >>`);
+  const type0Id = add(`<< /Type /Font /Subtype /Type0 /BaseFont /Geist /Encoding /Identity-H /DescendantFonts [${cidFontId} 0 R] /ToUnicode ${unicodeId} 0 R >>`);
   const pageIds: number[] = [];
-  for (const lines of pages) {
-    const commands = lines.map((line, index) => `1 0 0 1 30 ${555 - index * 15} Tm <${utf16Hex([...line].slice(0, 150).join(""))}> Tj`).join("\n");
-    const contentId = add(stream(Buffer.from(`BT\n/F1 7 Tf\n${commands}\nET`)));
+  for (const [pageIndex, pageItems] of pages.entries()) {
+    const commands: string[] = [];
+    const draw = (value: string, x: number, y: number, size = 10) => commands.push(`BT /F1 ${size} Tf 1 0 0 1 ${x} ${y} Tm <${utf16Hex(value)}> Tj ET`);
+    const rule = (y: number) => commands.push(`0.82 G 36 ${y} m 806 ${y} l S 0 G`);
+    draw(artifactRows[0][0], 36, 548, 17);
+    draw(`${artifactRows[1][0]}: ${artifactRows[1][1]}     ${artifactRows[1][2]}: ${artifactRows[1][3]}`, 36, 521, 10);
+    draw(`${artifactRows[2][0]}: ${artifactRows[2][1]}     Phiên bản: ${artifactRows[2][3]}`, 36, 503, 10);
+    rule(490);
+    for (const [itemIndex, row] of pageItems.entries()) {
+      const y = 468 - itemIndex * 76;
+      draw(`${row[0]}. ${row[1]}`, 42, y, 11);
+      draw(`ĐVT: ${row[2]}     Hợp đồng: ${row[3]} × ${row[4]} ngày     Thực tế: ${row[5]} × ${row[6]} ngày`, 42, y - 19, 9);
+      draw(`Chênh lệch: ${row[7]} SL, ${row[8]} ngày     Đơn giá bán: ${row[9]}     NET: ${row[10]}     VAT: ${row[11]}     GROSS: ${row[12]}`, 42, y - 37, 9);
+      rule(y - 50);
+    }
+    if (pageIndex === pages.length - 1) {
+      const total = artifactRows.at(-2) ?? [];
+      draw(`TỔNG CỘNG     NET: ${total[10]}     VAT: ${total[11]}     GROSS: ${total[12]}`, 42, 75, 11);
+      const signatures = artifactRows.at(-1) ?? [];
+      draw(`${signatures[0]}                                      ${signatures[7]}`, 42, 48, 9);
+    }
+    draw(`Trang ${pageIndex + 1}/${pages.length}`, 756, 25, 8);
+    const contentId = add(stream(Buffer.from(commands.join("\n"))));
     const pageId = add(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 ${type0Id} 0 R >> >> /Contents ${contentId} 0 R >>`);
     pageIds.push(pageId);
   }

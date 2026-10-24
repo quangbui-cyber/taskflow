@@ -3,7 +3,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 
 function assertAuthorizedLocalDatabase() {
-  assert.equal(process.env.DATABASE_URL, "postgresql://postgres@127.0.0.1:55439/taskflow", "Only the authorized local taskflow database may be used.");
+  const databaseUrl = process.env.DATABASE_URL ?? "";
+  assert.ok(
+    databaseUrl === "postgresql://postgres@127.0.0.1:55439/taskflow"
+      || /^postgresql:\/\/postgres@127\.0\.0\.1:55439\/costflow_test\?schema=phase12_[a-z0-9]+&options=/.test(databaseUrl),
+    "Only the authorized local taskflow or isolated costflow_test database may be used.",
+  );
 }
 
 test("Excel paste commits one draft transaction or rolls back every line", async () => {

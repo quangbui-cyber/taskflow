@@ -42,10 +42,7 @@ test("Phase 12 representative lifecycles use production boundaries and remain au
     const activeSchema = await servicePrisma.$queryRawUnsafe("SELECT current_schema()::text AS name");
     assert.equal(activeSchema[0].name, schemaName, "production services use the disposable Phase 12 schema");
     const { executeFinance } = await import(`../lib/costflow/service.ts?phase12=${schemaName}`);
-    const {
-      attachActualCostEvidence,
-      executeActualCostCommand,
-    } = await import(`../lib/costflow/actualCostService.ts?phase12=${schemaName}`);
+    const { executeActualCostCommand } = await import(`../lib/costflow/actualCostService.ts?phase12=${schemaName}`);
     const { executeSettlementCommand } = await import(`../lib/costflow/settlementService.ts?phase12=${schemaName}`);
 
     const execute = async (projectId, actor, command, fields = {}) => {
@@ -150,10 +147,21 @@ test("Phase 12 representative lifecycles use production boundaries and remain au
       const finance = (await client.costFlowWorkspace.findUniqueOrThrow({ where: { projectId: scenario.projectId } })).data;
       const revision = finance.revisions.find(item => item.id === icResult.revisionId);
       const icLine = revision.lines[0];
-      const actual = await executeActualCostCommand(owner, {
-        command: "CREATE_AND_SUBMIT",
+      const invoice = new TextEncoder().encode(`phase12:${kind}:invoice`);
+      const invoiceEvidence = await client.costFlowEvidence.create({ data: {
         projectId: scenario.projectId,
-        stableLineId: `phase12-${kind.toLowerCase()}-actual`,
+        sourceFileId: "",
+        kind: "VAT_INVOICE",
+        name: `${kind}.txt`,
+        mimeType: "text/plain",
+        data: invoice,
+        sha256: createHash("sha256").update(invoice).digest("hex"),
+        createdBy: ownerId,
+      } });
+      const actual = await executeActualCostCommand(owner, {
+        command: "SAVE_LINE",
+        projectId: scenario.projectId,
+        sourceKind: "IC_LINKED",
         revisionId: revision.id,
         icLineId: icLine.id,
         recipientKey: `USER:${ownerId}`,
@@ -162,27 +170,43 @@ test("Phase 12 representative lifecycles use production boundaries and remain au
         quantity: icLine.quantity,
         days: icLine.days,
         unitPrice: icLine.unitPrice,
+        unit: icLine.unit,
+        basis: icLine.basis,
+        vatPercent: icLine.vatPercent,
+        evidenceIds: [invoiceEvidence.id],
       }, { notify: async () => undefined });
-      const invoice = new TextEncoder().encode(`phase12:${kind}:invoice`);
-      const attached = await attachActualCostEvidence(owner, {
-        projectId: scenario.projectId,
-        lineId: actual.lineId,
-        expectedVersion: actual.version,
-        kind: "VAT_INVOICE",
-      }, [{ name: `${kind}.txt`, mimeType: "text/plain", size: invoice.byteLength, data: invoice }]);
-      const actualVersion = await client.actualCostVersion.findFirstOrThrow({
-        where: { lineId: actual.lineId, version: attached.version },
+      const draft = await client.actualCostSheetRevision.findFirstOrThrow({
+        where: { projectId: scenario.projectId, state: "DRAFT" },
       });
-      const actualApproval = await executeActualCostCommand(manager, {
-        command: "DECIDE",
+      await executeActualCostCommand(owner, {
+        command: "UPDATE_LINE_STATUS",
         projectId: scenario.projectId,
         lineId: actual.lineId,
-        version: actualVersion.version,
-        reviewToken: `${actualVersion.id}:${actualVersion.version}`,
+        internalStatus: "ACCOUNT_REVIEWED",
+        revisionId: draft.id,
+        expectedMutationVersion: draft.mutationVersion,
+      }, { notify: async () => undefined });
+      const checkedDraft = await client.actualCostSheetRevision.findUniqueOrThrow({ where: { id: draft.id } });
+      await executeActualCostCommand(owner, {
+        command: "SUBMIT_SHEET",
+        projectId: scenario.projectId,
+        revisionId: draft.id,
+        expectedMutationVersion: checkedDraft.mutationVersion,
+        missingEvidenceExplanation: "Chưa có đầy đủ chứng từ; DD xem xét.",
+      }, { notify: async () => undefined });
+      const submitted = await client.actualCostSheetRevision.findUniqueOrThrow({ where: { id: draft.id } });
+      await executeActualCostCommand(manager, {
+        command: "DECIDE_SHEET",
+        projectId: scenario.projectId,
+        revisionId: draft.id,
+        expectedMutationVersion: submitted.mutationVersion,
+        manifestHash: submitted.manifestHash,
         action: "APPROVED",
         reason: "Evidence and IC lineage verified",
         acknowledgeMissingEvidence: true,
       }, { notify: async () => undefined });
+      const actualVersion = await client.actualCostVersion.findFirstOrThrow({ where: { lineId: actual.lineId, state: "APPROVED" } });
+      const actualApproval = await client.actualCostApproval.findFirstOrThrow({ where: { versionId: actualVersion.id, action: "APPROVED" } });
 
       const createdSettlement = await executeSettlementCommand(
         owner,
@@ -235,8 +259,8 @@ test("Phase 12 representative lifecycles use production boundaries and remain au
         icRevisionId: revision.id,
         icRequestId: icRequest.id,
         actualCostVersionId: actualVersion.id,
-        actualCostApprovalId: actualApproval.approvalId,
-        actualCostApprovalAttemptId: actualApproval.approvalAttemptId,
+        actualCostApprovalId: actualApproval.id,
+        actualCostApprovalAttemptId: actualApproval.attemptId,
         settlementRequestId: settlementRequest.id,
         settlementVersionId: settlementVersion.id,
         settlementAttemptId: settlementVersion.approvedAttemptId,

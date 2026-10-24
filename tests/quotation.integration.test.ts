@@ -61,7 +61,7 @@ test("Brief/PO quotations preserve source and revisions, link IC with separate c
     assert.ok(await getQuotationExport(project.id,revised.id,reader));
     assert.equal(await getQuotationExport(project.id,quote.id,outsider),null);
     assert.equal(await getQuotationExport(otherProject.id,quote.id,outsider),null);
-    const icLine = { ...line, unitPrice:"50.4", vatPercent:"0", quotationId:quote.id,quotationLineId:quote.lines[0].id, cost:{gross:"999999"} };
+    const icLine = { ...line, days:"1", unitPrice:"50.4", vatPercent:"0", quotationId:quote.id,quotationLineId:quote.lines[0].id, cost:{gross:"999999"} };
     await assert.rejects(() => act(account,"SAVE_IC",{title:"IC invalid",lines:JSON.stringify([{...icLine,quotationLineId:revised.lines[0].id}])}),/báo giá nguồn/);
     await act(account,"SAVE_IC",{title:"IC from quote",lines:JSON.stringify([icLine])});
     const ic = (await state()).revisions[0];

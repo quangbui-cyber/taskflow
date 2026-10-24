@@ -25,6 +25,9 @@ const nextConfig: NextConfig = {
   // Vercel's Next.js builder expects the standard .next artifact directory.
   // Keep the non-synced directory only for local macOS development/builds.
   distDir: process.env.TASKFLOW_DIST_DIR || (process.env.VERCEL === "1" ? ".next" : ".next.nosync"),
+  outputFileTracingIncludes: {
+    "/api/projects/*/costflow/customer-acceptance/pdf": ["./node_modules/next/dist/compiled/@vercel/og/Geist-Regular.ttf"],
+  },
   serverExternalPackages: ["nodemailer"],
   experimental: {
     serverActions: {

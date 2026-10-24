@@ -7,7 +7,8 @@ function approvedDatabaseUrl() {
   assert.equal(url.protocol, "postgresql:");
   assert.equal(url.hostname, "127.0.0.1");
   assert.equal(url.port, "55439");
-  assert.equal(url.pathname, "/taskflow");
+  assert.ok(["/taskflow", "/costflow_test"].includes(url.pathname));
+  assert.equal(url.search, "");
 }
 
 test("control-center integration enforces self, accountant and Project Operations scopes", async () => {
