@@ -389,10 +389,16 @@ export default function MeetingRecorder({
   async function chooseMic(deviceId: string) {
     setMicId(deviceId);
     saveMic(deviceId);
-    if (source !== "online" || !mixCtxRef.current) return;
+    const ctx = mixCtxRef.current;
+    if (source !== "online" || !ctx) return;
     setSwitchingMic(true);
     try {
       const next = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(deviceId) });
+      // Đã dừng ghi hoặc rời trang trong lúc chờ micro mới: tắt micro mới luôn.
+      if (mixCtxRef.current !== ctx) {
+        next.getTracks().forEach((track) => track.stop());
+        return;
+      }
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = next;
       attachMicToMix(next);

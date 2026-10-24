@@ -68,10 +68,16 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    let user = await prisma.user.findUnique({
+    const linked = await prisma.user.findUnique({
       where: { googleSub: identity.sub },
-      select: { id: true, isActive: true, sessionVersion: true },
+      select: { id: true, isActive: true, sessionVersion: true, deletedAt: true },
     });
+    if (linked?.deletedAt) {
+      // Tài khoản cũ đã bị xoá: gỡ liên kết Google để tài khoản mới cùng email dùng lại được.
+      await prisma.user.updateMany({ where: { id: linked.id, deletedAt: { not: null } }, data: { googleSub: null } });
+    }
+    let user: { id: string; isActive: boolean; sessionVersion: number } | null =
+      linked && !linked.deletedAt ? linked : null;
     if (!user) {
       const matchingEmail = await prisma.user.findUnique({
         where: { email: identity.email },

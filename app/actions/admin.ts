@@ -171,6 +171,9 @@ export async function deleteUser(
         isActive: false,
         // Giải phóng email để có thể tạo lại tài khoản mới với email này.
         email: `deleted-${userId}@deleted.invalid`,
+        // Giải phóng tài khoản Google để tài khoản mới cùng email liên kết lại được.
+        googleSub: null,
+        googleMeetToken: null,
         passwordHash: lockedPasswordHash,
         sessionVersion: { increment: 1 },
         managerId: null,
