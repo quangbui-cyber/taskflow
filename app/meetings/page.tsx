@@ -56,7 +56,7 @@ function recapLink(meeting: MeetingRow, canManage: boolean, recapsEnabled: boole
   if (meeting.status === "CANCELLED") return null;
   const recap = meeting.recap;
   if (!canManage) return recap?.sentAt ? "Biên bản" : null;
-  // Người tổ chức/admin thấy nút ngay từ tab "Lịch của tôi"; trang biên bản tự báo nếu họp chưa bắt đầu.
+  // Người tổ chức/admin thấy nút ngay từ tab "Lịch của tôi"; bắt đầu ghi được cả trước giờ họp.
   if (!recap) return recapsEnabled ? "Tạo biên bản" : null;
   if (recap.status === "PROCESSING") return "Biên bản: đang xử lý";
   if (recap.status === "FAILED") return "Biên bản: lỗi";

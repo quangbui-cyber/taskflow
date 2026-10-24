@@ -19,6 +19,7 @@ import {
 import { recapActionOrder, toRecapActionExport } from "@/lib/meetingRecapData";
 import { publishedActionProgress, publishedRecapExport, readPublishedRecap, readRecapSuggestions, toRecapActionView } from "@/lib/recapPublication";
 import { recapLimits } from "@/lib/meetingRecapLimits";
+import { formatHour } from "@/lib/dates";
 import { formatMeetingWhen } from "@/lib/meetings";
 import { prisma } from "@/lib/prisma";
 
@@ -178,6 +179,11 @@ export default async function MeetingRecapPage({
             canManage={canManage}
             enabled={meetingRecapsEnabled()}
             startBlock={startBlock}
+            earlyNote={
+              meeting.startAt.getTime() > now.getTime()
+                ? `Chưa đến giờ họp (${formatHour(meeting.startAt)}). Bạn vẫn có thể bắt đầu ghi ngay khi cuộc họp bắt đầu.`
+                : null
+            }
             cancelled={meeting.status === "CANCELLED"}
             maxAudioMinutes={recapLimits().maxAudioMinutes}
             meetingUrl={canManage ? meeting.meetingUrl : null}
