@@ -114,7 +114,6 @@ export default function RoomCalendar({
   };
   const room = rooms.find((item) => item.id === roomId) ?? null;
   const visibleRooms = room ? [room] : rooms;
-  const color = colorOfRoom(roomId);
 
   const roomMeetings = useMemo(
     () =>
@@ -411,7 +410,7 @@ export default function RoomCalendar({
                       className="group absolute z-0 rounded-[6px] text-left outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
                       style={{ top: px(minute) + 1, height: HOUR_PX / 2 - 2, ...laneStyle(lane, laneCount) }}
                     >
-                      <span className="hidden h-full items-center gap-1 rounded-[6px] border border-dashed border-zinc-300 bg-white/80 px-2 text-[11px] font-medium text-zinc-500 group-hover:flex group-focus-visible:flex">
+                      <span className="hidden h-full items-center gap-1 rounded-[6px] border border-dashed border-emerald-300 bg-emerald-50 px-2 text-[11px] font-medium text-emerald-700 group-hover:flex group-focus-visible:flex">
                         <Plus size={12} aria-hidden="true" />
                         {minuteToTime(minute)}
                       </span>
@@ -507,39 +506,6 @@ export default function RoomCalendar({
             );
           })}
         </div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-zinc-200 px-4 py-2.5 text-xs text-zinc-500">
-        {room ? (
-          <>
-            <span className="inline-flex items-center gap-1.5">
-              <i className="inline-block h-2.5 w-3.5 rounded-[3px]" style={{ background: color.solid }} />
-              Họp của bạn
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <i
-                className="inline-block h-2.5 w-3.5 rounded-[3px] border-l-[3px]"
-                style={{ background: color.soft, borderColor: color.solid }}
-              />
-              Người khác đã đặt
-            </span>
-          </>
-        ) : (
-          <>
-            {rooms.map((item) => (
-              <span key={item.id} className="inline-flex items-center gap-1.5">
-                <i className="inline-block h-2.5 w-3.5 rounded-[3px]" style={{ background: colorOfRoom(item.id).solid }} />
-                {item.name}
-              </span>
-            ))}
-            <span>Màu đậm là họp của bạn</span>
-          </>
-        )}
-        <span className="hidden sm:inline">
-          {room
-            ? "Bấm lại tên phòng để xem tất cả phòng."
-            : "Bấm tên phòng để xem riêng phòng đó. Bấm vào ô trống để đặt phòng."}
-        </span>
       </div>
 
       {selected && (

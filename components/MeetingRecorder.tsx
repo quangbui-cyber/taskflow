@@ -132,7 +132,6 @@ export default function MeetingRecorder({
   // Micro đang chọn ("" = micro mặc định của máy) và danh sách micro trên máy.
   const [mics, setMics] = useState<MicOption[]>([]);
   const [micId, setMicId] = useState("");
-  const [micLevel, setMicLevel] = useState(0);
   const [switchingMic, setSwitchingMic] = useState(false);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -245,7 +244,6 @@ export default function MeetingRecorder({
     mixCtxRef.current = null;
     mixDestRef.current = null;
     micNodesRef.current = [];
-    setMicLevel(0);
     stopMeter();
     releaseWakeLock();
   }, [releaseWakeLock, stopMeter]);
@@ -361,7 +359,7 @@ export default function MeetingRecorder({
     }
   }
 
-  /** Nối micro vào bộ trộn (họp online) kèm thanh âm lượng riêng của micro. */
+  /** Nối micro vào bộ trộn (họp online); đổi micro thì gỡ nhánh cũ ra trước. */
   function attachMicToMix(mic: MediaStream) {
     const ctx = mixCtxRef.current;
     const dest = mixDestRef.current;
@@ -369,20 +367,7 @@ export default function MeetingRecorder({
     micNodesRef.current.forEach((node) => node.disconnect());
     const source = ctx.createMediaStreamSource(mic);
     source.connect(dest);
-    const nodes: AudioNode[] = [source];
-    try {
-      const processor = ctx.createScriptProcessor(2048, 1, 1);
-      const silent = ctx.createGain();
-      silent.gain.value = 0;
-      processor.onaudioprocess = (event) => setMicLevel(Math.min(1, rms(event.inputBuffer.getChannelData(0)) * 4));
-      source.connect(processor);
-      processor.connect(silent);
-      silent.connect(ctx.destination);
-      nodes.push(processor, silent);
-    } catch {
-      // Không đo được âm lượng micro thì vẫn ghi bình thường.
-    }
-    micNodesRef.current = nodes;
+    micNodesRef.current = [source];
   }
 
   /** Chọn micro khác. Đang ghi họp online thì đổi ngay, bản ghi không bị ngắt. */
@@ -884,18 +869,7 @@ export default function MeetingRecorder({
             <div className="h-full rounded-full bg-red-400 transition-[width] duration-75" style={{ width: `${Math.round(level * 100)}%` }} />
           </div>
           {source === "online" && (
-            <div className="mt-3 space-y-1.5">
-              <div className="flex items-center gap-2">
-                <span className="w-24 shrink-0 text-xs text-zinc-600">Giọng của bạn</span>
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white" aria-hidden="true">
-                  <div
-                    className="h-full rounded-full bg-brand-500 transition-[width] duration-75"
-                    style={{ width: `${Math.round(micLevel * 100)}%` }}
-                  />
-                </div>
-              </div>
-              {micPicker}
-            </div>
+            <div className="mt-3">{micPicker}</div>
           )}
           <p className="mt-2 text-xs text-zinc-600">
             {liveLabel
