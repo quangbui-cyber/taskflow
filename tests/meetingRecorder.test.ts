@@ -9,6 +9,7 @@ import {
   SILENCE_WARN_MS,
   SPEECH_RMS_THRESHOLD,
   autoStopMessage,
+  chunksToKeep,
   autoStopState,
   initialAutoStopEndsAt,
   rms,
@@ -153,4 +154,16 @@ test("starting to record after the scheduled end gives 30 more minutes instead o
     overtimeLeftMs: null,
     silenceLeftMs: null,
   });
+});
+
+test("auto-stop for silence keeps the recording only up to just after the last speech", () => {
+  // 10 phút ghi = 120 đoạn 5 giây; lần cuối có tiếng ở phút thứ 2, giữ thêm 30 giây → 2:30 = 30 đoạn
+  assert.equal(chunksToKeep(120, 150_000, 5_000), 30);
+  // Mốc không chia hết thì làm tròn lên để không cắt mất lời nói
+  assert.equal(chunksToKeep(120, 151_000, 5_000), 31);
+  // Không bao giờ giữ nhiều hơn số đoạn đang có
+  assert.equal(chunksToKeep(10, 600_000, 5_000), 10);
+  // Luôn giữ đoạn đầu (chứa phần đầu file), kể cả khi chưa từng có tiếng nói
+  assert.equal(chunksToKeep(120, 0, 5_000), 1);
+  assert.equal(chunksToKeep(0, 30_000, 5_000), 0);
 });

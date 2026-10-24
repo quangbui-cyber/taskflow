@@ -94,7 +94,7 @@ export function shouldAutoSubmitRecording(durationMs: number): boolean {
   return durationMs >= AUTO_SUBMIT_MIN_MS;
 }
 
-// ---------- Họp trực tiếp: tự dừng khi người tổ chức quên bấm "Dừng ghi" ----------
+// ---------- Tự dừng khi người ghi quên bấm "Dừng ghi" (họp trực tiếp và online) ----------
 
 /** Quá giờ kết thúc theo lịch bao lâu thì tự dừng. */
 export const OVERTIME_GRACE_MS = 10 * 60 * 1000;
@@ -144,10 +144,23 @@ export function autoStopState({
   return { stop: null, overtimeLeftMs, silenceLeftMs };
 }
 
+/** Tự dừng vì im lặng: giữ thêm bấy nhiêu sau lần cuối có tiếng nói rồi bỏ phần im lặng phía sau. */
+export const SILENCE_TRIM_KEEP_MS = 30 * 1000;
+
+/**
+ * Số đoạn ghi (mỗi đoạn RECORDING_CHUNK_MS) cần giữ để bản ghi kết thúc ngay sau mốc `keepUntilMs`
+ * (tính theo thời lượng đã ghi). Luôn giữ ít nhất đoạn đầu vì đoạn đầu chứa phần đầu file.
+ */
+export function chunksToKeep(totalChunks: number, keepUntilMs: number, chunkMs = RECORDING_CHUNK_MS): number {
+  if (totalChunks <= 0) return 0;
+  const needed = Math.ceil(Math.max(keepUntilMs, 0) / chunkMs);
+  return Math.min(totalChunks, Math.max(1, needed));
+}
+
 export function autoStopMessage(reason: AutoStopReason): string {
   return reason === "overtime"
     ? "Đã quá giờ kết thúc cuộc họp 10 phút nên app tự dừng ghi và đang tạo biên bản…"
-    : "Không nghe thấy tiếng nói trong 10 phút nên app tự dừng ghi và đang tạo biên bản…";
+    : "Không nghe thấy tiếng nói trong 10 phút nên app tự dừng ghi, bỏ đoạn im lặng ở cuối và đang tạo biên bản…";
 }
 
 /** Độ lớn âm thanh (RMS) của một khung mẫu, từ -1..1. */
