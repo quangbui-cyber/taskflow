@@ -66,3 +66,39 @@ export function minuteToTime(minute: number): string {
   const clamped = Math.max(0, Math.min(minute, 23 * 60 + 30));
   return `${String(Math.floor(clamped / 60)).padStart(2, "0")}:${String(clamped % 60).padStart(2, "0")}`;
 }
+
+/**
+ * Xếp các cuộc họp trùng giờ trong một ngày thành các cột cạnh nhau (khi xem nhiều phòng cùng lúc).
+ * Trả về vị trí cột và tổng số cột của nhóm trùng giờ chứa cuộc họp đó.
+ */
+export function layoutOverlaps<T extends { startMin: number; endMin: number }>(
+  items: readonly T[]
+): Array<T & { column: number; columns: number }> {
+  const sorted = [...items].sort((a, b) => a.startMin - b.startMin || b.endMin - a.endMin);
+  const result: Array<T & { column: number; columns: number }> = [];
+  let group: Array<T & { column: number; columns: number }> = [];
+  let columnEnds: number[] = [];
+  let groupEnd = -1;
+
+  const closeGroup = () => {
+    for (const item of group) item.columns = columnEnds.length;
+    result.push(...group);
+    group = [];
+    columnEnds = [];
+  };
+
+  for (const item of sorted) {
+    if (group.length > 0 && item.startMin >= groupEnd) closeGroup();
+    let column = columnEnds.findIndex((end) => end <= item.startMin);
+    if (column === -1) {
+      column = columnEnds.length;
+      columnEnds.push(item.endMin);
+    } else {
+      columnEnds[column] = item.endMin;
+    }
+    group.push({ ...item, column, columns: 1 });
+    groupEnd = Math.max(groupEnd, item.endMin);
+  }
+  if (group.length > 0) closeGroup();
+  return result;
+}

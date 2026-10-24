@@ -4,6 +4,7 @@ import {
   addDaysToKey,
   calendarWeekRange,
   formatWeekLabel,
+  layoutOverlaps,
   minuteToTime,
   mondayOfKey,
   resolveCalendarWeek,
@@ -46,4 +47,20 @@ test("labels and minute helpers read Vietnam time", () => {
   assert.equal(vnMinuteOfDay(new Date("2026-10-26T02:30:00Z")), 9 * 60 + 30);
   assert.equal(minuteToTime(9 * 60 + 30), "09:30");
   assert.equal(minuteToTime(24 * 60), "23:30");
+});
+
+test("meetings at the same time in different rooms sit side by side", () => {
+  const laid = layoutOverlaps([
+    { id: "a", startMin: 540, endMin: 600 },
+    { id: "b", startMin: 570, endMin: 630 },
+    { id: "c", startMin: 600, endMin: 660 },
+    { id: "d", startMin: 720, endMin: 780 },
+  ]);
+  const byId = Object.fromEntries(laid.map((item) => [item.id, item]));
+  assert.deepEqual([byId.a.column, byId.a.columns], [0, 2]);
+  assert.deepEqual([byId.b.column, byId.b.columns], [1, 2]);
+  // c bắt đầu đúng lúc a kết thúc nên dùng lại cột của a
+  assert.deepEqual([byId.c.column, byId.c.columns], [0, 2]);
+  // d không trùng ai nên chiếm trọn chiều ngang
+  assert.deepEqual([byId.d.column, byId.d.columns], [0, 1]);
 });
