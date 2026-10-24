@@ -283,6 +283,7 @@ export default function MeetingRecapPanel({
   canManage,
   enabled,
   startBlock,
+  earlyNote = null,
   cancelled,
   maxAudioMinutes,
   meetingUrl,
@@ -303,6 +304,8 @@ export default function MeetingRecapPanel({
   canManage: boolean;
   enabled: boolean;
   startBlock: string | null;
+  /** Chưa tới giờ họp: nhắc nhẹ, không chặn việc ghi âm. */
+  earlyNote?: string | null;
   cancelled: boolean;
   maxAudioMinutes: number;
   recap: MeetingRecapView | null;
@@ -560,6 +563,9 @@ export default function MeetingRecapPanel({
                   Ghi âm ngay tại đây hoặc tải file ghi âm có sẵn. AI sẽ chép lời tiếng Việt và viết biên bản gồm
                   tóm tắt, nội dung theo từng chủ đề, quyết định và việc cần làm (gắn sẵn người phụ trách). Bạn đọc lại, sửa nếu cần, rồi mới gửi cho người tham dự.
                 </p>
+                {earlyNote && (
+                  <p className="mb-4 rounded-[7px] bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-800">{earlyNote}</p>
+                )}
                 <AudioSource
                   meetingId={meetingId}
                   meetingUrl={meetingUrl}

@@ -125,10 +125,8 @@ test("starting a recap is blocked for cancelled, future or busy meetings", () =>
   assert.match(recapStartBlockReason(null, organizer, now) ?? "", /Không tìm thấy/);
   assert.match(recapStartBlockReason(base, { id: "a1", role: "MEMBER" }, now) ?? "", /người tổ chức/);
   assert.match(recapStartBlockReason({ ...base, status: "CANCELLED" }, organizer, now) ?? "", /huỷ/);
-  assert.match(
-    recapStartBlockReason({ ...base, startAt: new Date("2026-10-22T06:00:00Z") }, organizer, now) ?? "",
-    /chưa bắt đầu/
-  );
+  // Chưa tới giờ họp vẫn được bắt đầu ghi bằng tay
+  assert.equal(recapStartBlockReason({ ...base, startAt: new Date("2026-10-22T06:00:00Z") }, organizer, now), null);
 
   const busy = { status: "PROCESSING", processingStartedAt: new Date(now.getTime() - 60_000) };
   assert.match(recapStartBlockReason({ ...base, recap: busy }, organizer, now) ?? "", /đang được xử lý/);

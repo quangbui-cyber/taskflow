@@ -737,7 +737,8 @@ export function recapStartBlockReason(
     return "Chỉ người ghi biên bản, người tổ chức hoặc quản trị viên mới tạo được biên bản.";
   }
   if (meeting.status === "CANCELLED") return "Cuộc họp đã bị huỷ.";
-  if (meeting.startAt.getTime() > now.getTime()) return "Cuộc họp chưa bắt đầu.";
+  // Không chặn theo giờ bắt đầu: người ghi biên bản tự bấm ghi khi cuộc họp thật sự bắt đầu,
+  // kể cả khi họp sớm hơn lịch.
   if (meeting.recap && meeting.recap.status === "PROCESSING" && !isRecapStale(meeting.recap, now)) {
     return "Biên bản đang được xử lý. Đợi xong rồi thử lại.";
   }
