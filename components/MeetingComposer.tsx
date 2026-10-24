@@ -54,6 +54,8 @@ export type PersonSchedule = {
   endAt: string;
   userIds: string[];
 };
+/** Khung giờ chọn sẵn khi bấm ô trống trên lịch phòng */
+export type MeetingSlot = { date: string; startTime: string; endTime: string; roomId: string };
 export type EditableMeeting = {
   id: string;
   organizerId: string;
@@ -150,6 +152,10 @@ export default function MeetingComposer({
   projectId,
   triggerLabel = "Đặt lịch họp",
   triggerClassName = "tf-button-primary min-h-11 px-4",
+  initialSlot,
+  defaultOpen = false,
+  hideTrigger = false,
+  onClose,
 }: {
   people: MeetingPerson[];
   rooms: MeetingRoomOption[];
@@ -168,9 +174,15 @@ export default function MeetingComposer({
   /** Chữ trên nút mở form tạo mới */
   triggerLabel?: string;
   triggerClassName?: string;
+  /** Mở từ ô trống trên lịch phòng: điền sẵn ngày, giờ và phòng */
+  initialSlot?: MeetingSlot;
+  defaultOpen?: boolean;
+  /** Không hiện nút mở form (form do nơi khác mở, ví dụ lịch phòng) */
+  hideTrigger?: boolean;
+  onClose?: () => void;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   // Chỉ chọn sẵn người mời được: đang hoạt động và không phải người tổ chức.
   const presetAttendeeIds = useMemo(
     () =>
@@ -183,11 +195,15 @@ export default function MeetingComposer({
   );
   // Bản mới nhất cho effect đóng form, để danh sách đổi sau router.refresh() không chạy lại effect.
   const presetRef = useRef(presetAttendeeIds);
+  const onCloseRef = useRef(onClose);
   useEffect(() => {
     presetRef.current = presetAttendeeIds;
-  }, [presetAttendeeIds]);
+    onCloseRef.current = onClose;
+  }, [presetAttendeeIds, onClose]);
   const [values, setValues] = useState<FormValues>(() =>
-    meeting ? valuesFromMeeting(meeting) : defaultValues(presetAttendeeIds)
+    meeting
+      ? valuesFromMeeting(meeting)
+      : { ...defaultValues(presetAttendeeIds), ...initialSlot }
   );
   const [query, setQuery] = useState("");
   const action = useMemo(
@@ -265,6 +281,11 @@ export default function MeetingComposer({
   const busySelectedCount = values.attendeeIds.filter(isBusy).length;
   const selectedRoomClash = values.roomId ? roomClashes.get(values.roomId) : undefined;
 
+  function close() {
+    setOpen(false);
+    onClose?.();
+  }
+
   function set<K extends keyof FormValues>(key: K, value: FormValues[K]) {
     setValues((current) => ({ ...current, [key]: value }));
   }
@@ -330,7 +351,10 @@ export default function MeetingComposer({
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !pending) setOpen(false);
+      if (event.key === "Escape" && !pending) {
+        setOpen(false);
+        onCloseRef.current?.();
+      }
     };
     document.addEventListener("keydown", closeOnEscape);
     return () => {
@@ -347,6 +371,7 @@ export default function MeetingComposer({
     const frame = window.requestAnimationFrame(() => {
       if (!meeting) setValues(defaultValues(presetRef.current));
       setOpen(false);
+      onCloseRef.current?.();
     });
     return () => window.cancelAnimationFrame(frame);
   }, [meeting, router, state]);
@@ -365,7 +390,7 @@ export default function MeetingComposer({
           <Pencil size={14} aria-hidden="true" />
           Sửa
         </button>
-      ) : (
+      ) : hideTrigger ? null : (
         <button type="button" className={triggerClassName} onClick={openDialog}>
           <CalendarPlus size={18} strokeWidth={1.8} aria-hidden="true" />
           {triggerLabel}
@@ -376,7 +401,7 @@ export default function MeetingComposer({
         <div
           className="tf-overlay-enter fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-4"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !pending) setOpen(false);
+            if (event.target === event.currentTarget && !pending) close();
           }}
         >
           <section
@@ -399,7 +424,7 @@ export default function MeetingComposer({
               <button
                 type="button"
                 className="tf-icon-button shrink-0"
-                onClick={() => setOpen(false)}
+                onClick={close}
                 disabled={pending}
                 aria-label="Đóng"
               >
@@ -736,7 +761,7 @@ export default function MeetingComposer({
                 <button
                   type="button"
                   className="tf-button-secondary"
-                  onClick={() => setOpen(false)}
+                  onClick={close}
                   disabled={pending}
                 >
                   Đóng
