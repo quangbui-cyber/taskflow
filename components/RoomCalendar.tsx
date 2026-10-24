@@ -42,7 +42,7 @@ const WEEKDAYS = ["Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sá
 const WEEKDAYS_SHORT = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
 const HOUR_PX = 60;
 const DEFAULT_START = 7 * 60;
-const DEFAULT_END = 19 * 60;
+const DEFAULT_END = 20 * 60;
 const SLOT_MIN = 30;
 
 function dayKeyOf(iso: string) {
@@ -142,7 +142,7 @@ export default function RoomCalendar({
     return { left: `calc(${lane * widthPct}% + 4px)`, width: `calc(${widthPct}% - 6px)` };
   };
 
-  // Khung giờ hiển thị: 7:00–19:00, nới ra nếu có họp sớm/muộn hơn.
+  // Khung giờ hiển thị: 7:00–20:00, nới ra nếu có họp sớm/muộn hơn.
   const visibleMeetings = roomMeetings.filter((meeting) => days.includes(meeting.day));
   const startMin = Math.min(
     DEFAULT_START,

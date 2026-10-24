@@ -16,6 +16,8 @@ import {
   recordingFileName,
   recordingFileType,
   OVERTIME_EXTEND_MS,
+  SILENCE_TRIM_KEEP_MS,
+  trimChunks,
   SPEECH_RMS_THRESHOLD,
   autoStopMessage,
   autoStopState,
@@ -66,7 +68,7 @@ export default function MeetingRecorder({
   meetingUrl: string | null;
   /** Mở từ thông báo "cuộc họp đã bắt đầu": họp trực tiếp thì ghi ngay, họp online thì nhắc bấm Bắt đầu. */
   autoStart?: boolean;
-  /** Giờ kết thúc theo lịch (ISO): họp trực tiếp quá 10 phút mà chưa dừng thì app tự dừng. */
+  /** Giờ kết thúc theo lịch (ISO): quá 10 phút mà chưa dừng thì app tự dừng. */
   meetingEndsAt?: string | null;
   maxAudioMinutes: number;
   onUploaded: () => void;
@@ -78,10 +80,13 @@ export default function MeetingRecorder({
   // Đặt true khi tab họp đóng / dừng chia sẻ: dừng ghi xong thì tự tạo biên bản.
   const autoSubmitRef = useRef(false);
   const autoSubmitMessageRef = useRef<string | null>(null);
-  // Họp trực tiếp: tự dừng khi quá giờ kết thúc 10 phút hoặc im lặng 10 phút.
+  // Tự dừng khi quá giờ kết thúc 10 phút hoặc im lặng 10 phút (cả họp trực tiếp lẫn online).
   const autoStopEnabledRef = useRef(false);
   const endsAtRef = useRef<number | null>(null);
   const lastSoundAtRef = useRef(0);
+  // Thời lượng đã ghi tại lần cuối có tiếng nói; tự dừng vì im lặng thì cắt bản ghi tại đây (+30 giây).
+  const soundAtDurationRef = useRef(0);
+  const trimToMsRef = useRef<number | null>(null);
   const [autoStopInfo, setAutoStopInfo] = useState<{ overtimeLeftMs: number | null; silenceLeftMs: number | null }>({
     overtimeLeftMs: null,
     silenceLeftMs: null,
@@ -106,6 +111,8 @@ export default function MeetingRecorder({
   const displayStreamRef = useRef<MediaStream | null>(null);
   const mixCtxRef = useRef<AudioContext | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  // Thời lượng đã ghi lúc nhận từng đoạn, dùng để cắt đúng chỗ khi tự dừng vì im lặng.
+  const chunkEndsRef = useRef<number[]>([]);
   const seqRef = useRef(0);
   const metaRef = useRef<RecordingMeta | null>(null);
   const accumulatedRef = useRef(0);
@@ -236,7 +243,10 @@ export default function MeetingRecorder({
       silent.gain.value = 0;
       processor.onaudioprocess = (event) => {
         const level = rms(event.inputBuffer.getChannelData(0));
-        if (level > SPEECH_RMS_THRESHOLD) lastSoundAtRef.current = Date.now();
+        if (level > SPEECH_RMS_THRESHOLD) {
+          lastSoundAtRef.current = Date.now();
+          soundAtDurationRef.current = currentDuration();
+        }
         setLevel(Math.min(1, level * 4));
       };
       source.connect(processor);
@@ -335,6 +345,7 @@ export default function MeetingRecorder({
     recorderRef.current = recorder;
     setLiveLabel(source === "online" ? (streamRef.current ? "tab họp + micro" : "chỉ tab họp") : null);
     chunksRef.current = [];
+    chunkEndsRef.current = [];
     seqRef.current = 0;
     accumulatedRef.current = 0;
     runStartRef.current = performance.now();
@@ -351,6 +362,7 @@ export default function MeetingRecorder({
     recorder.ondataavailable = (event) => {
       if (!event.data || event.data.size === 0) return;
       chunksRef.current.push(event.data);
+      chunkEndsRef.current.push(currentDuration());
       const seq = seqRef.current++;
       const snapshot = { ...meta, durationMs: currentDuration(), updatedAt: Date.now() };
       void saveRecordingChunk(snapshot, seq, event.data).then((ok) => {
@@ -359,9 +371,21 @@ export default function MeetingRecorder({
     };
     recorder.onerror = () => stopRecording("Ghi âm bị gián đoạn. Phần đã ghi vẫn được giữ.");
     recorder.onstop = () => {
-      const durationMs = accumulatedRef.current;
+      let durationMs = accumulatedRef.current;
+      // Tự dừng vì im lặng: bỏ phần im lặng phía sau để không tốn phí chép lời và tránh AI chép bịa.
+      const trimTo = trimToMsRef.current;
+      trimToMsRef.current = null;
+      if (trimTo !== null && trimTo < durationMs && chunkEndsRef.current.length === chunksRef.current.length) {
+        const trimmed = trimChunks(chunkEndsRef.current, trimTo);
+        if (trimmed.keep < chunksRef.current.length) {
+          chunksRef.current = chunksRef.current.slice(0, trimmed.keep);
+          chunkEndsRef.current = chunkEndsRef.current.slice(0, trimmed.keep);
+          durationMs = Math.min(durationMs, trimmed.durationMs);
+        }
+      }
       releaseDevices();
-      void saveRecordingMeta({ ...meta, durationMs, updatedAt: Date.now() });
+      // Bản lưu tạm trên máy vẫn giữ đủ mọi đoạn, nên ghi thời lượng đầy đủ cho khớp.
+      void saveRecordingMeta({ ...meta, durationMs: accumulatedRef.current, updatedAt: Date.now() });
       const recording: SavedRecording = {
         blob: new Blob(chunksRef.current, { type: recordingFileType(meta.mimeType).type }),
         mimeType: meta.mimeType,
@@ -406,9 +430,12 @@ export default function MeetingRecorder({
     setPhase("recording");
     startMeter(stream);
     void requestWakeLock();
-    autoStopEnabledRef.current = source === "mic";
+    // Cả họp trực tiếp lẫn họp online: lỡ quên dừng (hoặc rời Meet mà không đóng tab) thì app tự dừng.
+    autoStopEnabledRef.current = true;
     endsAtRef.current = initialAutoStopEndsAt(meetingEndsAt ? Date.parse(meetingEndsAt) : null, Date.now());
     lastSoundAtRef.current = Date.now();
+    soundAtDurationRef.current = 0;
+    trimToMsRef.current = null;
     setAutoStopInfo({ overtimeLeftMs: null, silenceLeftMs: null });
     tickRef.current = window.setInterval(() => {
       const duration = currentDuration();
@@ -426,6 +453,7 @@ export default function MeetingRecorder({
       });
       setAutoStopInfo({ overtimeLeftMs: state.overtimeLeftMs, silenceLeftMs: state.silenceLeftMs });
       if (state.stop) {
+        if (state.stop === "silence") trimToMsRef.current = soundAtDurationRef.current + SILENCE_TRIM_KEEP_MS;
         autoSubmitRef.current = true;
         autoSubmitMessageRef.current = autoStopMessage(state.stop);
         stopRecording();
@@ -481,12 +509,14 @@ export default function MeetingRecorder({
     recorder.resume();
     runStartRef.current = performance.now();
     lastSoundAtRef.current = Date.now();
+    soundAtDurationRef.current = currentDuration();
     setPhase("recording");
   }
 
   /** Người tổ chức bấm "Vẫn đang họp": lùi giờ tự dừng và đếm lại thời gian im lặng. */
   function keepRecording() {
     lastSoundAtRef.current = Date.now();
+    soundAtDurationRef.current = currentDuration();
     if (endsAtRef.current !== null && Date.now() >= endsAtRef.current) {
       endsAtRef.current = Date.now() + OVERTIME_EXTEND_MS;
     }
@@ -625,6 +655,10 @@ export default function MeetingRecorder({
                 Chia sẻ.
               </li>
               <li>Cho phép micro để ghi cả giọng của bạn. Giữ cả hai tab mở đến khi họp xong.</li>
+              <li>
+                Họp xong chỉ cần đóng tab họp. Lỡ quên thì app tự dừng khi quá giờ kết thúc 10 phút hoặc im lặng 10 phút,
+                rồi tự tạo biên bản.
+              </li>
             </ol>
           ) : (
             <ul className="list-disc space-y-0.5 pl-5 text-xs leading-5 text-zinc-500">
