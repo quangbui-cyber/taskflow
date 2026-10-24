@@ -9,7 +9,7 @@ import {
   SILENCE_WARN_MS,
   SPEECH_RMS_THRESHOLD,
   autoStopMessage,
-  chunksToKeep,
+  trimChunks,
   autoStopState,
   initialAutoStopEndsAt,
   rms,
@@ -157,13 +157,21 @@ test("starting to record after the scheduled end gives 30 more minutes instead o
 });
 
 test("auto-stop for silence keeps the recording only up to just after the last speech", () => {
-  // 10 phút ghi = 120 đoạn 5 giây; lần cuối có tiếng ở phút thứ 2, giữ thêm 30 giây → 2:30 = 30 đoạn
-  assert.equal(chunksToKeep(120, 150_000, 5_000), 30);
-  // Mốc không chia hết thì làm tròn lên để không cắt mất lời nói
-  assert.equal(chunksToKeep(120, 151_000, 5_000), 31);
-  // Không bao giờ giữ nhiều hơn số đoạn đang có
-  assert.equal(chunksToKeep(10, 600_000, 5_000), 10);
-  // Luôn giữ đoạn đầu (chứa phần đầu file), kể cả khi chưa từng có tiếng nói
-  assert.equal(chunksToKeep(120, 0, 5_000), 1);
-  assert.equal(chunksToKeep(0, 30_000, 5_000), 0);
+  const every5s = Array.from({ length: 120 }, (_, i) => (i + 1) * 5_000);
+  // Lần cuối có tiếng ở phút thứ 2, giữ thêm 30 giây → cắt ở 2:30
+  assert.deepEqual(trimChunks(every5s, 150_000), { keep: 30, durationMs: 150_000 });
+  // Mốc nằm giữa một đoạn thì giữ trọn đoạn đó để không mất lời nói
+  assert.deepEqual(trimChunks(every5s, 151_000), { keep: 31, durationMs: 155_000 });
+  // Mốc sau đoạn cuối thì giữ nguyên
+  assert.deepEqual(trimChunks([5_000, 10_000], 600_000), { keep: 2, durationMs: 10_000 });
+  // Luôn giữ đoạn đầu (chứa phần đầu file)
+  assert.deepEqual(trimChunks(every5s, 0), { keep: 1, durationMs: 5_000 });
+  assert.deepEqual(trimChunks([], 30_000), { keep: 0, durationMs: 0 });
+});
+
+test("trimming follows real chunk lengths when the browser delivers longer chunks", () => {
+  // Tab bị ẩn: trình duyệt gom thành đoạn 60 giây thay vì 5 giây
+  const ends = [5_000, 65_000, 125_000, 185_000, 245_000, 600_000];
+  // Cắt ở 2:30 → giữ tới đoạn kết thúc 3:05, báo đúng 185 giây (không phải 4 × 5 = 20 giây)
+  assert.deepEqual(trimChunks(ends, 150_000), { keep: 4, durationMs: 185_000 });
 });

@@ -148,13 +148,20 @@ export function autoStopState({
 export const SILENCE_TRIM_KEEP_MS = 30 * 1000;
 
 /**
- * Số đoạn ghi (mỗi đoạn RECORDING_CHUNK_MS) cần giữ để bản ghi kết thúc ngay sau mốc `keepUntilMs`
- * (tính theo thời lượng đã ghi). Luôn giữ ít nhất đoạn đầu vì đoạn đầu chứa phần đầu file.
+ * Cắt bản ghi khi tự dừng vì im lặng. `chunkEndsMs[i]` là thời lượng đã ghi lúc nhận đoạn thứ i
+ * (trình duyệt có thể gom đoạn dài hơn 5 giây, nhất là khi tab bị ẩn, nên phải dùng mốc thật).
+ * Giữ các đoạn tới đoạn đầu tiên phủ được mốc `keepUntilMs`, luôn giữ đoạn đầu (chứa phần đầu file).
+ * Trả về số đoạn giữ lại và thời lượng thật của phần giữ lại.
  */
-export function chunksToKeep(totalChunks: number, keepUntilMs: number, chunkMs = RECORDING_CHUNK_MS): number {
-  if (totalChunks <= 0) return 0;
-  const needed = Math.ceil(Math.max(keepUntilMs, 0) / chunkMs);
-  return Math.min(totalChunks, Math.max(1, needed));
+export function trimChunks(
+  chunkEndsMs: readonly number[],
+  keepUntilMs: number
+): { keep: number; durationMs: number } {
+  if (chunkEndsMs.length === 0) return { keep: 0, durationMs: 0 };
+  let keep = chunkEndsMs.findIndex((end) => end >= keepUntilMs) + 1;
+  if (keep === 0) keep = chunkEndsMs.length;
+  keep = Math.max(1, keep);
+  return { keep, durationMs: chunkEndsMs[keep - 1] };
 }
 
 export function autoStopMessage(reason: AutoStopReason): string {

@@ -17,7 +17,7 @@ import {
   recordingFileType,
   OVERTIME_EXTEND_MS,
   SILENCE_TRIM_KEEP_MS,
-  chunksToKeep,
+  trimChunks,
   SPEECH_RMS_THRESHOLD,
   autoStopMessage,
   autoStopState,
@@ -111,6 +111,8 @@ export default function MeetingRecorder({
   const displayStreamRef = useRef<MediaStream | null>(null);
   const mixCtxRef = useRef<AudioContext | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  // Thời lượng đã ghi lúc nhận từng đoạn, dùng để cắt đúng chỗ khi tự dừng vì im lặng.
+  const chunkEndsRef = useRef<number[]>([]);
   const seqRef = useRef(0);
   const metaRef = useRef<RecordingMeta | null>(null);
   const accumulatedRef = useRef(0);
@@ -343,6 +345,7 @@ export default function MeetingRecorder({
     recorderRef.current = recorder;
     setLiveLabel(source === "online" ? (streamRef.current ? "tab họp + micro" : "chỉ tab họp") : null);
     chunksRef.current = [];
+    chunkEndsRef.current = [];
     seqRef.current = 0;
     accumulatedRef.current = 0;
     runStartRef.current = performance.now();
@@ -359,6 +362,7 @@ export default function MeetingRecorder({
     recorder.ondataavailable = (event) => {
       if (!event.data || event.data.size === 0) return;
       chunksRef.current.push(event.data);
+      chunkEndsRef.current.push(currentDuration());
       const seq = seqRef.current++;
       const snapshot = { ...meta, durationMs: currentDuration(), updatedAt: Date.now() };
       void saveRecordingChunk(snapshot, seq, event.data).then((ok) => {
@@ -371,10 +375,13 @@ export default function MeetingRecorder({
       // Tự dừng vì im lặng: bỏ phần im lặng phía sau để không tốn phí chép lời và tránh AI chép bịa.
       const trimTo = trimToMsRef.current;
       trimToMsRef.current = null;
-      if (trimTo !== null && trimTo < durationMs) {
-        const keep = chunksToKeep(chunksRef.current.length, trimTo);
-        chunksRef.current = chunksRef.current.slice(0, keep);
-        durationMs = Math.min(durationMs, keep * RECORDING_CHUNK_MS);
+      if (trimTo !== null && trimTo < durationMs && chunkEndsRef.current.length === chunksRef.current.length) {
+        const trimmed = trimChunks(chunkEndsRef.current, trimTo);
+        if (trimmed.keep < chunksRef.current.length) {
+          chunksRef.current = chunksRef.current.slice(0, trimmed.keep);
+          chunkEndsRef.current = chunkEndsRef.current.slice(0, trimmed.keep);
+          durationMs = Math.min(durationMs, trimmed.durationMs);
+        }
       }
       releaseDevices();
       // Bản lưu tạm trên máy vẫn giữ đủ mọi đoạn, nên ghi thời lượng đầy đủ cho khớp.
