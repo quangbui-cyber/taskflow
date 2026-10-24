@@ -8,6 +8,7 @@ import type { MeetingComposerData } from "@/lib/meetingComposerData";
 import {
   addDaysToKey,
   formatWeekLabel,
+  layoutOverlaps,
   minuteToTime,
   vnMinuteOfDay,
 } from "@/lib/meetingCalendar";
@@ -39,7 +40,7 @@ const ROOM_COLORS = [
 ];
 const WEEKDAYS = ["Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy", "Chủ nhật"];
 const WEEKDAYS_SHORT = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
-const HOUR_PX = 56;
+const HOUR_PX = 60;
 const DEFAULT_START = 7 * 60;
 const DEFAULT_END = 19 * 60;
 const SLOT_MIN = 30;
@@ -47,6 +48,12 @@ const SLOT_MIN = 30;
 function dayKeyOf(iso: string) {
   // Ngày theo giờ VN của một thời điểm
   return new Date(new Date(iso).getTime() + 7 * 3600_000).toISOString().slice(0, 10);
+}
+
+/** Tên ngắn cho khối họp hẹp: hai chữ cuối ("Huỳnh Thị Hồng Nhung" → "Hồng Nhung") */
+function shortName(name: string) {
+  const words = name.trim().split(/\s+/);
+  return words.length > 2 ? words.slice(-2).join(" ") : name;
 }
 
 function shortDate(key: string) {
@@ -72,8 +79,9 @@ export default function RoomCalendar({
   viewerId: string;
   composerProps: MeetingComposerData;
 }) {
+  // "" = xem tất cả phòng; bấm một phòng để xem riêng, bấm lại phòng đó để về tất cả.
   const [roomId, setRoomId] = useState(
-    rooms.some((room) => room.id === initialRoomId) ? initialRoomId! : (rooms[0]?.id ?? "")
+    rooms.some((room) => room.id === initialRoomId) ? initialRoomId! : ""
   );
   // Đồng hồ chạy theo phút để ô đã qua giờ, vạch giờ hiện tại và họp đã xong luôn đúng khi để trang mở lâu.
   const [nowMs, setNowMs] = useState(() => Date.parse(nowIso));
@@ -101,17 +109,18 @@ export default function RoomCalendar({
   const scrollRef = useRef<HTMLDivElement>(null);
   const slotSeq = useRef(0);
 
-  const roomIndex = Math.max(
-    rooms.findIndex((room) => room.id === roomId),
-    0
-  );
-  const color = ROOM_COLORS[roomIndex % ROOM_COLORS.length];
-  const room = rooms[roomIndex];
+  const colorOfRoom = (id: string) => {
+    const index = rooms.findIndex((item) => item.id === id);
+    return ROOM_COLORS[Math.max(index, 0) % ROOM_COLORS.length];
+  };
+  const room = rooms.find((item) => item.id === roomId) ?? null;
+  const visibleRooms = room ? [room] : rooms;
+  const color = colorOfRoom(roomId);
 
   const roomMeetings = useMemo(
     () =>
       meetings
-        .filter((meeting) => meeting.roomId === roomId)
+        .filter((meeting) => !roomId || meeting.roomId === roomId)
         .map((meeting) => {
           const start = new Date(meeting.startAt);
           const end = new Date(meeting.endAt);
@@ -163,10 +172,12 @@ export default function RoomCalendar({
   }, [selected]);
 
   function chooseRoom(id: string) {
-    setRoomId(id);
+    const next = id === roomId ? "" : id;
+    setRoomId(next);
     setSelected(null);
     const url = new URL(window.location.href);
-    url.searchParams.set("room", id);
+    if (next) url.searchParams.set("room", next);
+    else url.searchParams.delete("room");
     window.history.replaceState(null, "", url);
   }
 
@@ -178,17 +189,31 @@ export default function RoomCalendar({
     return query ? `/meetings?${query}` : "/meetings";
   }
 
+  function roomBusy(id: string, day: string, minute: number) {
+    return roomMeetings.some(
+      (meeting) =>
+        meeting.roomId === id && meeting.day === day && meeting.startMin < minute + SLOT_MIN && meeting.endMin > minute
+    );
+  }
+
+  /** Phòng sẽ được điền sẵn khi bấm ô trống: phòng đang xem, hoặc phòng đầu tiên còn trống. */
+  function freeRoomAt(day: string, minute: number) {
+    return visibleRooms.find((item) => !roomBusy(item.id, day, minute)) ?? null;
+  }
+
   function openSlot(day: string, minute: number) {
+    const target = freeRoomAt(day, minute);
+    if (!target) return;
     // Mặc định 1 tiếng, nhưng không lấn sang cuộc họp kế tiếp trong phòng.
     const next = roomMeetings
-      .filter((meeting) => meeting.day === day && meeting.startMin >= minute + SLOT_MIN)
+      .filter((meeting) => meeting.roomId === target.id && meeting.day === day && meeting.startMin >= minute + SLOT_MIN)
       .reduce((min, meeting) => Math.min(min, meeting.startMin), minute + 60);
     setSlot({
       key: ++slotSeq.current,
       date: day,
       startTime: minuteToTime(minute),
       endTime: minuteToTime(Math.min(next, minute + 60)),
-      roomId,
+      roomId: target.id,
     });
   }
 
@@ -197,11 +222,6 @@ export default function RoomCalendar({
     return !at || at.getTime() < now.getTime();
   }
 
-  function isTakenSlot(day: string, minute: number) {
-    return roomMeetings.some(
-      (meeting) => meeting.day === day && meeting.startMin < minute + SLOT_MIN && meeting.endMin > minute
-    );
-  }
 
   if (rooms.length === 0) {
     return (
@@ -240,7 +260,7 @@ export default function RoomCalendar({
           </Link>
         </div>
 
-        <div className="order-first flex w-full flex-wrap justify-center gap-2 lg:order-none lg:w-auto" role="tablist" aria-label="Chọn phòng họp">
+        <div className="order-first flex w-full justify-center gap-2 lg:order-none lg:w-auto" role="tablist" aria-label="Chọn phòng họp">
           {rooms.map((item, index) => {
             const tone = ROOM_COLORS[index % ROOM_COLORS.length];
             const active = item.id === roomId;
@@ -250,15 +270,18 @@ export default function RoomCalendar({
                 type="button"
                 role="tab"
                 aria-selected={active}
+                title={active ? "Bấm lần nữa để xem tất cả phòng" : `Chỉ xem phòng ${item.name}`}
                 onClick={() => chooseRoom(item.id)}
-                className="tf-pressable inline-flex min-h-10 items-center gap-2 rounded-[8px] border-[1.5px] px-4 transition-colors"
+                className="tf-pressable inline-flex min-h-10 min-w-0 flex-1 items-center justify-center gap-2 rounded-[8px] border-[1.5px] px-2.5 transition-colors sm:flex-none sm:px-4"
                 style={
                   active
                     ? { background: tone.solid, borderColor: tone.solid, color: "#fff" }
                     : { background: "#fff", borderColor: tone.solid, color: tone.solid }
                 }
               >
-                <span className="text-[13px] font-bold uppercase tracking-[0.06em]">{item.name}</span>
+                <span className="truncate text-[12px] font-bold sm:text-[13px] sm:uppercase sm:tracking-[0.06em]">
+                  {item.name}
+                </span>
                 {item.capacity ? (
                   <span className="hidden text-[11px] font-medium normal-case tracking-normal opacity-80 sm:inline">
                     {item.capacity} chỗ
@@ -307,7 +330,7 @@ export default function RoomCalendar({
 
       <div ref={scrollRef} className="relative max-h-[calc(100vh-290px)] min-h-[420px] overflow-y-auto" style={gridStyle}>
         {/* Tiêu đề ngày */}
-        <div className={`sticky top-0 z-20 grid border-b border-zinc-200 bg-white ${columns}`}>
+        <div className={`sticky top-0 z-20 hidden border-b border-zinc-200 bg-white md:grid ${columns}`}>
           <div />
           {days.map((day, index) => {
             const isToday = day === todayKey;
@@ -348,7 +371,7 @@ export default function RoomCalendar({
           {days.map((day, dayIndex) => {
             const isToday = day === todayKey;
             const pastDay = day < todayKey;
-            const dayMeetings = roomMeetings.filter((meeting) => meeting.day === day);
+            const dayMeetings = layoutOverlaps(roomMeetings.filter((meeting) => meeting.day === day));
             const slots = Array.from({ length: (endMin - startMin) / SLOT_MIN }, (_, index) => startMin + index * SLOT_MIN);
             return (
               <div
@@ -372,13 +395,15 @@ export default function RoomCalendar({
 
                 {/* Ô trống: bấm để đặt phòng */}
                 {slots.map((minute) => {
-                  if (isPastSlot(day, minute) || isTakenSlot(day, minute)) return null;
+                  if (isPastSlot(day, minute)) return null;
+                  const target = freeRoomAt(day, minute);
+                  if (!target) return null;
                   return (
                     <button
                       key={minute}
                       type="button"
                       onClick={() => openSlot(day, minute)}
-                      aria-label={`Đặt phòng ${room?.name}, ${WEEKDAYS[dayIndex]} ${shortDate(day)}, ${minuteToTime(minute)}`}
+                      aria-label={`Đặt phòng ${target.name}, ${WEEKDAYS[dayIndex]} ${shortDate(day)}, ${minuteToTime(minute)}`}
                       className="group absolute inset-x-1 z-0 rounded-[6px] text-left outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
                       style={{ top: px(minute) + 1, height: HOUR_PX / 2 - 2 }}
                     >
@@ -393,9 +418,12 @@ export default function RoomCalendar({
                 {/* Cuộc họp */}
                 {dayMeetings.map((meeting) => {
                   const height = Math.max(px(meeting.endMin) - px(meeting.startMin) - 2, 20);
+                  const tone = colorOfRoom(meeting.roomId);
                   const style = meeting.isMine
-                    ? { background: color.solid, color: "#fff", borderColor: color.ink }
-                    : { background: color.soft, color: color.ink, borderColor: color.solid };
+                    ? { background: tone.solid, color: "#fff", borderColor: tone.ink }
+                    : { background: tone.soft, color: tone.ink, borderColor: tone.solid };
+                  // Họp trùng giờ (ở các phòng khác nhau) chia đôi bề ngang ô ngày.
+                  const widthPct = 100 / meeting.columns;
                   return (
                     <button
                       key={meeting.id}
@@ -403,20 +431,62 @@ export default function RoomCalendar({
                       onClick={(event) => {
                         setSelected({ meeting, rect: event.currentTarget.getBoundingClientRect() });
                       }}
-                      className={`absolute inset-x-1 z-10 overflow-hidden rounded-[7px] border-l-4 px-2 py-1 text-left text-xs leading-[1.3] shadow-sm transition-shadow hover:z-20 hover:shadow-md ${
+                      title={[
+                        `${minuteToTime(meeting.startMin)} – ${minuteToTime(meeting.endMin)}`,
+                        meeting.title,
+                        `Người đặt: ${meeting.organizerName}`,
+                        roomId ? null : `Phòng ${rooms.find((item) => item.id === meeting.roomId)?.name ?? ""}`,
+                      ]
+                        .filter(Boolean)
+                        .join("\n")}
+                      className={`absolute z-10 overflow-hidden rounded-[7px] border-l-4 px-2 py-[3px] text-left text-xs leading-[1.3] shadow-sm transition-shadow hover:z-20 hover:shadow-md ${
                         meeting.done ? "opacity-55" : ""
                       }`}
-                      style={{ ...style, top: px(meeting.startMin) + 1, height }}
+                      style={{
+                        ...style,
+                        top: px(meeting.startMin) + 1,
+                        height,
+                        left: `calc(${meeting.column * widthPct}% + 4px)`,
+                        width: `calc(${widthPct}% - 6px)`,
+                      }}
                     >
-                      <span className="block text-[11px] font-bold tabular-nums">
-                        {minuteToTime(meeting.startMin)} – {minuteToTime(meeting.endMin)}
-                      </span>
-                      {height >= 38 && (
-                        <span className={`block text-xs font-semibold ${height >= 64 ? "line-clamp-2" : "truncate"}`}>
-                          {meeting.title}
+                      {meeting.columns > 1 ? (
+                        // Khối hẹp (họp trùng giờ ở phòng khác): giờ bắt đầu + tên ngắn người đặt.
+                        <>
+                          <span className="block truncate text-[11px] font-bold leading-[14px] tabular-nums">
+                            {minuteToTime(meeting.startMin)}
+                          </span>
+                          <span className="block truncate text-[11px] font-semibold leading-[14px]">
+                            {shortName(meeting.organizerName)}
+                          </span>
+                          {height >= 56 && (
+                            <span className="block truncate text-[11px] leading-[14px] opacity-85">{meeting.title}</span>
+                          )}
+                        </>
+                      ) : height < 38 ? (
+                        // Họp ngắn (30 phút): một dòng giờ bắt đầu + người đặt.
+                        <span className="block truncate text-[11px] leading-[16px]">
+                          <span className="font-bold tabular-nums">{minuteToTime(meeting.startMin)}</span>
+                          <span className="font-semibold"> · {meeting.organizerName}</span>
                         </span>
+                      ) : (
+                        <>
+                          <span className="block truncate text-[11px] font-bold leading-[14px] tabular-nums">
+                            {minuteToTime(meeting.startMin)} – {minuteToTime(meeting.endMin)}
+                          </span>
+                          <span
+                            className={`block text-xs font-semibold leading-[16px] ${
+                              height >= 84 ? "line-clamp-2" : "truncate"
+                            }`}
+                          >
+                            {meeting.title}
+                          </span>
+                          <span className="flex min-w-0 items-center gap-1 text-[11px] leading-[14px] opacity-90">
+                            <UserRound size={11} className="shrink-0" aria-hidden="true" />
+                            <span className="truncate">{meeting.organizerName}</span>
+                          </span>
+                        </>
                       )}
-                      {height >= 80 && <span className="block truncate text-xs opacity-85">{meeting.organizerName}</span>}
                     </button>
                   );
                 })}
@@ -437,18 +507,36 @@ export default function RoomCalendar({
       </div>
 
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-zinc-200 px-4 py-2.5 text-xs text-zinc-500">
-        <span className="inline-flex items-center gap-1.5">
-          <i className="inline-block h-2.5 w-3.5 rounded-[3px]" style={{ background: color.solid }} />
-          Họp của bạn
+        {room ? (
+          <>
+            <span className="inline-flex items-center gap-1.5">
+              <i className="inline-block h-2.5 w-3.5 rounded-[3px]" style={{ background: color.solid }} />
+              Họp của bạn
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <i
+                className="inline-block h-2.5 w-3.5 rounded-[3px] border-l-[3px]"
+                style={{ background: color.soft, borderColor: color.solid }}
+              />
+              Người khác đã đặt
+            </span>
+          </>
+        ) : (
+          <>
+            {rooms.map((item) => (
+              <span key={item.id} className="inline-flex items-center gap-1.5">
+                <i className="inline-block h-2.5 w-3.5 rounded-[3px]" style={{ background: colorOfRoom(item.id).solid }} />
+                {item.name}
+              </span>
+            ))}
+            <span>Màu đậm là họp của bạn</span>
+          </>
+        )}
+        <span className="hidden sm:inline">
+          {room
+            ? "Bấm lại tên phòng để xem tất cả phòng."
+            : "Bấm tên phòng để xem riêng phòng đó. Bấm vào ô trống để đặt phòng."}
         </span>
-        <span className="inline-flex items-center gap-1.5">
-          <i
-            className="inline-block h-2.5 w-3.5 rounded-[3px] border-l-[3px]"
-            style={{ background: color.soft, borderColor: color.solid }}
-          />
-          Người khác đã đặt
-        </span>
-        <span className="hidden sm:inline">Bấm vào ô trống để đặt phòng, bấm vào cuộc họp để xem chi tiết.</span>
       </div>
 
       {selected && (
@@ -456,7 +544,7 @@ export default function RoomCalendar({
           ref={popoverRef}
           meeting={selected.meeting}
           rect={selected.rect}
-          roomName={room?.name ?? ""}
+          roomName={rooms.find((item) => item.id === selected.meeting.roomId)?.name ?? ""}
           dayLabel={(() => {
             const key = dayKeyOf(selected.meeting.startAt);
             const index = Math.round(
