@@ -175,3 +175,35 @@ test("trimming follows real chunk lengths when the browser delivers longer chunk
   // Cắt ở 2:30 → giữ tới đoạn kết thúc 3:05, báo đúng 185 giây (không phải 4 × 5 = 20 giây)
   assert.deepEqual(trimChunks(ends, 150_000), { keep: 4, durationMs: 185_000 });
 });
+
+test("micOptions keeps only microphones and names hidden ones", async () => {
+  const { micOptions } = await import("../lib/meetingRecorder");
+  assert.deepEqual(
+    micOptions([
+      { kind: "audioinput", deviceId: "default", label: "Mặc định - MacBook Pro Microphone" },
+      { kind: "audiooutput", deviceId: "spk", label: "Loa" },
+      { kind: "audioinput", deviceId: "communications", label: "Communications" },
+      { kind: "audioinput", deviceId: "", label: "" },
+      { kind: "audioinput", deviceId: "abc", label: "" },
+    ]),
+    [
+      { deviceId: "default", label: "Mặc định - MacBook Pro Microphone" },
+      { deviceId: "abc", label: "Micro 2" },
+    ]
+  );
+});
+
+test("preferredMicId keeps the saved mic and avoids virtual defaults", async () => {
+  const { preferredMicId, isVirtualMic } = await import("../lib/meetingRecorder");
+  const real = { deviceId: "mbp", label: "MacBook Pro Microphone" };
+  const zoomDefault = { deviceId: "default", label: "Default - ZoomAudioDevice (Virtual)" };
+  const zoom = { deviceId: "zoom", label: "ZoomAudioDevice (Virtual)" };
+  assert.equal(isVirtualMic("Microsoft Teams Audio"), true);
+  assert.equal(isVirtualMic("BlackHole 2ch"), true);
+  assert.equal(isVirtualMic("AirPods Pro"), false);
+  assert.equal(preferredMicId([zoomDefault, zoom, real], "zoom"), "zoom");
+  assert.equal(preferredMicId([zoomDefault, zoom, real], "unplugged"), "mbp");
+  assert.equal(preferredMicId([{ deviceId: "default", label: "Default - AirPods" }, real], null), "");
+  assert.equal(preferredMicId([zoomDefault, zoom], null), "");
+  assert.equal(preferredMicId([], null), "");
+});

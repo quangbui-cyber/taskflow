@@ -87,6 +87,39 @@ export function displayCaptureErrorMessage(error: unknown): string {
   return "Không chia sẻ được tab cuộc họp. Tải lại trang rồi thử lại.";
 }
 
+// ---------- Chọn micro ----------
+
+export type MicOption = { deviceId: string; label: string };
+
+/** Micro ảo của phần mềm họp/ghi màn hình: thường không có giọng mình, đừng tự chọn. */
+const VIRTUAL_MIC = /zoom|teams|blackhole|loopback|soundflower|virtual|\bobs\b|\bndi\b|aggregate|ecamm|camo/i;
+
+export function isVirtualMic(label: string): boolean {
+  return VIRTUAL_MIC.test(label);
+}
+
+/** Danh sách micro để chọn. Trước khi cho phép micro, trình duyệt giấu tên nên đặt tên tạm "Micro 1, 2…". */
+export function micOptions(
+  devices: readonly { kind: string; deviceId: string; label: string }[]
+): MicOption[] {
+  return devices
+    .filter((device) => device.kind === "audioinput" && device.deviceId && device.deviceId !== "communications")
+    .map((device, index) => ({ deviceId: device.deviceId, label: device.label.trim() || `Micro ${index + 1}` }));
+}
+
+/**
+ * Micro sẽ dùng: micro đã chọn lần trước nếu còn cắm; nếu không thì micro mặc định,
+ * trừ khi micro mặc định là micro ảo (Zoom, Teams, BlackHole…) thì lấy micro thật đầu tiên.
+ * Trả về "" nghĩa là để trình duyệt dùng micro mặc định.
+ */
+export function preferredMicId(options: readonly MicOption[], savedId: string | null): string {
+  if (savedId && options.some((option) => option.deviceId === savedId)) return savedId;
+  const fallback = options.find((option) => option.deviceId === "default") ?? options[0];
+  if (!fallback || !isVirtualMic(fallback.label)) return "";
+  const real = options.find((option) => option.deviceId !== "default" && !isVirtualMic(option.label));
+  return real?.deviceId ?? "";
+}
+
 /** Họp online kết thúc (tab họp đóng) thì tự tạo biên bản — trừ bản ghi quá ngắn, thường là bấm nhầm. */
 export const AUTO_SUBMIT_MIN_MS = 30_000;
 
