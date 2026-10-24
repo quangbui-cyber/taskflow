@@ -11,6 +11,7 @@ import {
   minuteToTime,
   vnMinuteOfDay,
 } from "@/lib/meetingCalendar";
+import { toDateInputVN } from "@/lib/dates";
 import { vnDateTimeToUtc } from "@/lib/meetings";
 
 export type CalendarRoom = { id: string; name: string; capacity: number | null };
@@ -55,7 +56,6 @@ function shortDate(key: string) {
 
 export default function RoomCalendar({
   weekStart,
-  todayKey,
   nowIso,
   rooms,
   meetings,
@@ -65,7 +65,6 @@ export default function RoomCalendar({
 }: {
   /** Thứ Hai của tuần đang xem (yyyy-MM-dd, giờ VN) */
   weekStart: string;
-  todayKey: string;
   nowIso: string;
   rooms: CalendarRoom[];
   meetings: CalendarMeeting[];
@@ -76,6 +75,14 @@ export default function RoomCalendar({
   const [roomId, setRoomId] = useState(
     rooms.some((room) => room.id === initialRoomId) ? initialRoomId! : (rooms[0]?.id ?? "")
   );
+  // Đồng hồ chạy theo phút để ô đã qua giờ, vạch giờ hiện tại và họp đã xong luôn đúng khi để trang mở lâu.
+  const [nowMs, setNowMs] = useState(() => Date.parse(nowIso));
+  useEffect(() => {
+    const tick = window.setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => window.clearInterval(tick);
+  }, []);
+  const now = useMemo(() => new Date(nowMs), [nowMs]);
+  const todayKey = toDateInputVN(now);
   const hasWeekendMeetings = meetings.some((meeting) => {
     const key = dayKeyOf(meeting.startAt);
     return key >= addDaysToKey(weekStart, 5);
@@ -94,7 +101,6 @@ export default function RoomCalendar({
   const scrollRef = useRef<HTMLDivElement>(null);
   const slotSeq = useRef(0);
 
-  const now = useMemo(() => new Date(nowIso), [nowIso]);
   const roomIndex = Math.max(
     rooms.findIndex((room) => room.id === roomId),
     0

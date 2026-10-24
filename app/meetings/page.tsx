@@ -291,16 +291,20 @@ export default async function MeetingsPage({
     status: "SCHEDULED",
     endAt: { gte: now },
   };
+  const pastWhere: Prisma.MeetingWhereInput = {
+    AND: [
+      mineWhere,
+      { OR: [{ status: "CANCELLED" }, { endAt: { lt: now } }] },
+      { startAt: { gte: new Date(now.getTime() - PAST_WINDOW_MS) } },
+    ],
+  };
   const listWhere: Prisma.MeetingWhereInput =
     view === "past"
-        ? {
-            AND: [
-              mineWhere,
-              { OR: [{ status: "CANCELLED" }, { endAt: { lt: now } }] },
-              { startAt: { gte: new Date(now.getTime() - PAST_WINDOW_MS) } },
-            ],
-          }
-        : { ...upcomingWhere, ...mineWhere };
+      ? params.focus
+        ? // Mở một cuộc họp cụ thể (từ lịch phòng, thông báo) thì vẫn hiện dù đã quá 60 ngày.
+          { OR: [pastWhere, { AND: [mineWhere, { id: params.focus }] }] }
+        : pastWhere
+      : { ...upcomingWhere, ...mineWhere };
 
   const weekStart = resolveCalendarWeek(params.week, now);
   const week = calendarWeekRange(weekStart);
@@ -431,7 +435,6 @@ export default async function MeetingsPage({
               <RoomCalendar
                 key={weekStart}
                 weekStart={weekStart}
-                todayKey={toDateInputVN(now)}
                 nowIso={now.toISOString()}
                 rooms={rooms}
                 meetings={calendarMeetings}
