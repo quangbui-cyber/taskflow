@@ -1,7 +1,7 @@
 "use server";
 
 import bcrypt from "bcryptjs";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import {
@@ -11,6 +11,7 @@ import {
   recordFailedLogin,
 } from "@/lib/loginRateLimit";
 import { createSession, destroySession, getSession } from "@/lib/session";
+import { googleLinkCookieName, verifyGoogleLink } from "@/lib/googleAuth";
 
 export type AuthState = { error?: string };
 
@@ -51,6 +52,22 @@ export async function login(
   }
 
   await clearLoginRateLimit(rateLimitKeys);
+  const cookieStore = await cookies();
+  const pendingLink = cookieStore.get(googleLinkCookieName())?.value;
+  if (pendingLink) {
+    cookieStore.delete(googleLinkCookieName());
+    try {
+      const link = await verifyGoogleLink(pendingLink);
+      if (link.email === email) {
+        await prisma.user.updateMany({
+          where: { id: user.id, googleSub: null, isActive: true },
+          data: { googleSub: link.sub },
+        });
+      }
+    } catch {
+      // A stale or invalid link never prevents normal password sign-in.
+    }
+  }
   await createSession(user.id, user.sessionVersion);
   redirect("/");
 }

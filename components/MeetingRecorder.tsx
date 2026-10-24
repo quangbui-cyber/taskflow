@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ExternalLink, Mic, Pause, Play, Square, Trash2, Upload, Video } from "lucide-react";
+import { ChevronDown, ExternalLink, Mic, Pause, Play, Square, Trash2, Upload, Video } from "lucide-react";
 import { useInteraction } from "@/components/InteractionProvider";
 import { formatClock } from "@/lib/meetingRecap";
 import {
@@ -24,6 +24,9 @@ import {
   initialAutoStopEndsAt,
   rms,
   shouldAutoSubmitRecording,
+  micOptions,
+  preferredMicId,
+  type MicOption,
   type RecordingSource,
 } from "@/lib/meetingRecorder";
 import { formatLimit, friendlyUploadError, uploadRecapAudio } from "@/lib/recapUploadClient";
@@ -54,6 +57,27 @@ const MIC_CONSTRAINTS: MediaTrackConstraints = {
   autoGainControl: true,
   channelCount: 1,
 };
+const MIC_STORAGE_KEY = "taskflow-mic-id";
+
+function micConstraints(deviceId: string): MediaTrackConstraints {
+  return deviceId ? { ...MIC_CONSTRAINTS, deviceId: { exact: deviceId } } : MIC_CONSTRAINTS;
+}
+
+function readSavedMic(): string | null {
+  try {
+    return window.localStorage.getItem(MIC_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function saveMic(deviceId: string) {
+  try {
+    window.localStorage.setItem(MIC_STORAGE_KEY, deviceId);
+  } catch {
+    // Không lưu được thì lần sau chọn lại.
+  }
+}
 
 export default function MeetingRecorder({
   meetingId,
@@ -105,11 +129,19 @@ export default function MeetingRecorder({
   const [notice, setNotice] = useState<string | null>(null);
   const [storageOk, setStorageOk] = useState(true);
   const [progress, setProgress] = useState(0);
+  // Micro đang chọn ("" = micro mặc định của máy) và danh sách micro trên máy.
+  const [mics, setMics] = useState<MicOption[]>([]);
+  const [micId, setMicId] = useState("");
+  const [micLevel, setMicLevel] = useState(0);
+  const [switchingMic, setSwitchingMic] = useState(false);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const displayStreamRef = useRef<MediaStream | null>(null);
   const mixCtxRef = useRef<AudioContext | null>(null);
+  const mixDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
+  // Nhánh micro trong bộ trộn (họp online), tách riêng để đổi micro ngay lúc đang ghi.
+  const micNodesRef = useRef<AudioNode[]>([]);
   const chunksRef = useRef<Blob[]>([]);
   // Thời lượng đã ghi lúc nhận từng đoạn, dùng để cắt đúng chỗ khi tự dừng vì im lặng.
   const chunkEndsRef = useRef<number[]>([]);
@@ -156,6 +188,31 @@ export default function MeetingRecorder({
     };
   }, [meetingId, meetingUrl]);
 
+  const refreshMics = useCallback(async (): Promise<MicOption[]> => {
+    try {
+      const options = micOptions(await navigator.mediaDevices.enumerateDevices());
+      setMics(options);
+      setMicId((current) =>
+        current && options.some((option) => option.deviceId === current) ? current : preferredMicId(options, readSavedMic())
+      );
+      return options;
+    } catch {
+      return [];
+    }
+  }, []);
+
+  // Danh sách micro: lúc mở trang và mỗi khi cắm/rút micro, tai nghe.
+  useEffect(() => {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    const onChange = () => void refreshMics();
+    const first = window.setTimeout(onChange, 0);
+    navigator.mediaDevices.addEventListener?.("devicechange", onChange);
+    return () => {
+      window.clearTimeout(first);
+      navigator.mediaDevices.removeEventListener?.("devicechange", onChange);
+    };
+  }, [refreshMics]);
+
   const stopMeter = useCallback(() => {
     audioCtxRef.current?.close().catch(() => {});
     audioCtxRef.current = null;
@@ -186,6 +243,9 @@ export default function MeetingRecorder({
     displayStreamRef.current = null;
     mixCtxRef.current?.close().catch(() => {});
     mixCtxRef.current = null;
+    mixDestRef.current = null;
+    micNodesRef.current = [];
+    setMicLevel(0);
     stopMeter();
     releaseWakeLock();
   }, [releaseWakeLock, stopMeter]);
@@ -258,14 +318,107 @@ export default function MeetingRecorder({
     }
   }
 
+  /**
+   * Mở micro đã chọn; micro đó đã bị rút thì dùng micro mặc định. Lần đầu cho phép micro trình duyệt mới
+   * cho biết tên: nếu micro mặc định là micro ảo (Zoom, Teams, BlackHole…) thì đổi sang micro thật.
+   */
+  async function openMic(deviceId: string): Promise<MediaStream> {
+    let id = deviceId;
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(id) });
+    } catch (err) {
+      if (!id) throw err;
+      id = "";
+      stream = await navigator.mediaDevices.getUserMedia({ audio: micConstraints("") });
+    }
+    const options = await refreshMics();
+    if (!id) {
+      const better = preferredMicId(options, null);
+      if (better) {
+        try {
+          const real = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(better) });
+          stream.getTracks().forEach((track) => track.stop());
+          stream = real;
+          id = better;
+        } catch {
+          // Giữ micro mặc định.
+        }
+      }
+    }
+    setMicId(id);
+    return stream;
+  }
+
   async function acquireMicStream(): Promise<MediaStream | null> {
     try {
-      const mic = await navigator.mediaDevices.getUserMedia({ audio: MIC_CONSTRAINTS });
+      const mic = await openMic(micId);
       streamRef.current = mic;
       return mic;
     } catch (err) {
       setError(microphoneErrorMessage(err));
       return null;
+    }
+  }
+
+  /** Nối micro vào bộ trộn (họp online) kèm thanh âm lượng riêng của micro. */
+  function attachMicToMix(mic: MediaStream) {
+    const ctx = mixCtxRef.current;
+    const dest = mixDestRef.current;
+    if (!ctx || !dest) return;
+    micNodesRef.current.forEach((node) => node.disconnect());
+    const source = ctx.createMediaStreamSource(mic);
+    source.connect(dest);
+    const nodes: AudioNode[] = [source];
+    try {
+      const processor = ctx.createScriptProcessor(2048, 1, 1);
+      const silent = ctx.createGain();
+      silent.gain.value = 0;
+      processor.onaudioprocess = (event) => setMicLevel(Math.min(1, rms(event.inputBuffer.getChannelData(0)) * 4));
+      source.connect(processor);
+      processor.connect(silent);
+      silent.connect(ctx.destination);
+      nodes.push(processor, silent);
+    } catch {
+      // Không đo được âm lượng micro thì vẫn ghi bình thường.
+    }
+    micNodesRef.current = nodes;
+  }
+
+  /** Chọn micro khác. Đang ghi họp online thì đổi ngay, bản ghi không bị ngắt. */
+  async function chooseMic(deviceId: string) {
+    setMicId(deviceId);
+    saveMic(deviceId);
+    const ctx = mixCtxRef.current;
+    if (source !== "online" || !ctx) return;
+    setSwitchingMic(true);
+    try {
+      const next = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(deviceId) });
+      // Đã dừng ghi hoặc rời trang trong lúc chờ micro mới: tắt micro mới luôn.
+      if (mixCtxRef.current !== ctx) {
+        next.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = next;
+      attachMicToMix(next);
+      setLiveLabel("tab họp + micro");
+      setNotice(null);
+    } catch (err) {
+      setError(microphoneErrorMessage(err));
+    } finally {
+      setSwitchingMic(false);
+    }
+  }
+
+  /** Chưa cho phép micro thì trình duyệt giấu tên micro: xin quyền một lần rồi tắt ngay để hiện danh sách. */
+  async function revealMics() {
+    try {
+      const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
+      probe.getTracks().forEach((track) => track.stop());
+      await refreshMics();
+    } catch (err) {
+      setError(microphoneErrorMessage(err));
     }
   }
 
@@ -297,10 +450,10 @@ export default function MeetingRecorder({
 
     let mic: MediaStream | null = null;
     try {
-      mic = await navigator.mediaDevices.getUserMedia({ audio: MIC_CONSTRAINTS });
+      mic = await openMic(micId);
       streamRef.current = mic;
     } catch {
-      setNotice("Không bật được micro nên chỉ ghi tiếng từ tab cuộc họp (không có giọng của bạn).");
+      setNotice("Không bật được micro nên chỉ ghi tiếng từ tab cuộc họp (không có giọng của bạn). Chọn micro khác ở dưới.");
     }
 
     try {
@@ -308,8 +461,9 @@ export default function MeetingRecorder({
       await ctx.resume().catch(() => {});
       const mixed = ctx.createMediaStreamDestination();
       ctx.createMediaStreamSource(new MediaStream(display.getAudioTracks())).connect(mixed);
-      if (mic) ctx.createMediaStreamSource(mic).connect(mixed);
       mixCtxRef.current = ctx;
+      mixDestRef.current = mixed;
+      if (mic) attachMicToMix(mic);
       return mixed.stream;
     } catch {
       releaseDevices();
@@ -575,6 +729,34 @@ export default function MeetingRecorder({
   }
 
   const live = phase === "recording" || phase === "paused";
+  const micValue = micId || mics[0]?.deviceId || "";
+  const micPicker = mics.length > 0 ? (
+    <div className="relative min-w-0">
+      <select
+        aria-label="Micro dùng để ghi"
+        value={micValue}
+        disabled={phase === "requesting" || switchingMic}
+        onChange={(event) => void chooseMic(event.target.value)}
+        className="tf-field appearance-none !pr-11"
+      >
+        {mics.map((mic) => (
+          <option key={mic.deviceId} value={mic.deviceId}>
+            {mic.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown
+        size={16}
+        className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500"
+        aria-hidden="true"
+      />
+    </div>
+  ) : (
+    <button type="button" onClick={() => void revealMics()} className="tf-button-secondary !min-h-9 !px-3 text-xs">
+      <Mic size={14} aria-hidden="true" />
+      Chọn micro
+    </button>
+  );
 
   return (
     <div className="space-y-3">
@@ -590,13 +772,8 @@ export default function MeetingRecorder({
             <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Loại cuộc họp">
               {(
                 [
-                  { key: "mic", icon: Mic, title: "Họp trực tiếp", text: "Thu bằng micro của máy này." },
-                  {
-                    key: "online",
-                    icon: Video,
-                    title: "Họp online (Meet, Zoom…)",
-                    text: "Thu tiếng tab cuộc họp và micro của bạn.",
-                  },
+                  { key: "mic", icon: Mic, title: "Họp trực tiếp" },
+                  { key: "online", icon: Video, title: "Họp online (Meet, Zoom…)" },
                 ] as const
               ).map((option) => (
                 <button
@@ -606,17 +783,14 @@ export default function MeetingRecorder({
                   aria-checked={source === option.key}
                   disabled={phase === "requesting"}
                   onClick={() => setSource(option.key)}
-                  className={`flex items-start gap-2.5 rounded-[8px] border px-3 py-2.5 text-left transition-colors ${
+                  className={`flex items-center gap-2.5 rounded-[8px] border px-3 py-2.5 text-left transition-colors ${
                     source === option.key
                       ? "border-brand-400 bg-brand-50/60 ring-1 ring-brand-300"
                       : "border-zinc-200 hover:border-zinc-300"
                   }`}
                 >
-                  <option.icon size={18} className="mt-0.5 shrink-0 text-zinc-500" aria-hidden="true" />
-                  <span>
-                    <span className="block text-sm font-medium text-zinc-900">{option.title}</span>
-                    <span className="block text-xs leading-5 text-zinc-500">{option.text}</span>
-                  </span>
+                  <option.icon size={18} className="shrink-0 text-zinc-500" aria-hidden="true" />
+                  <span className="text-sm font-medium text-zinc-900">{option.title}</span>
                 </button>
               ))}
             </div>
@@ -667,6 +841,10 @@ export default function MeetingRecorder({
               <li>Bản ghi được lưu dần trên máy này, lỡ đóng tab vẫn còn. File ghi âm bị xoá ngay sau khi chép lời.</li>
             </ul>
           )}
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-zinc-700">Micro</p>
+            {micPicker}
+          </div>
           {startPrompt && (
             <p className="rounded-[7px] bg-brand-50 px-3 py-2 text-sm leading-6 text-brand-900">
               Cuộc họp đã bắt đầu. Bấm <strong>Bắt đầu ghi âm</strong>, chọn tab cuộc họp và bật{" "}
@@ -705,6 +883,20 @@ export default function MeetingRecorder({
           <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white" aria-hidden="true">
             <div className="h-full rounded-full bg-red-400 transition-[width] duration-75" style={{ width: `${Math.round(level * 100)}%` }} />
           </div>
+          {source === "online" && (
+            <div className="mt-3 space-y-1.5">
+              <div className="flex items-center gap-2">
+                <span className="w-24 shrink-0 text-xs text-zinc-600">Giọng của bạn</span>
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white" aria-hidden="true">
+                  <div
+                    className="h-full rounded-full bg-brand-500 transition-[width] duration-75"
+                    style={{ width: `${Math.round(micLevel * 100)}%` }}
+                  />
+                </div>
+              </div>
+              {micPicker}
+            </div>
+          )}
           <p className="mt-2 text-xs text-zinc-600">
             {liveLabel
               ? "Đừng đóng tab này và tab cuộc họp trong lúc ghi. Thanh đỏ nhấp nháy theo tiếng nói nghĩa là đang thu."

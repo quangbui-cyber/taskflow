@@ -346,3 +346,40 @@ Nên đặt thêm **trần chi tiêu ở phía nhà cung cấp** — lớp bảo
    Trần có hiệu lực sau khoảng 10 phút.
 3. **Vercel:** gói Hobby tự dừng khi vượt mức miễn phí, không tính thêm tiền. Gói Pro: bật
    **Spend Management** (Settings → Billing) để nhận cảnh báo hoặc tạm dừng dự án.
+
+## Đăng nhập bằng Google
+
+- Tạo OAuth client loại **Web application** trong Google Cloud Console. Nếu muốn nhận mọi tài khoản Google,
+  chọn đối tượng **External**; không giới hạn theo Google Workspace.
+- Khai báo **Authorized redirect URI** cho từng tên miền dùng để đăng nhập, ví dụ
+  `https://taskflow-vert-psi.vercel.app/api/auth/google/callback` và
+  `http://localhost:3000/api/auth/google/callback` khi chạy local.
+- Đặt `GOOGLE_CLIENT_ID` và `GOOGLE_CLIENT_SECRET` trong môi trường chạy app rồi redeploy. Chỉ đặt
+  Client Secret ở server, không dùng biến `NEXT_PUBLIC_`.
+- Chạy migration `20261023160000_add_google_login` trước khi mở nút Google. Quy trình build production
+  hiện có chạy `prisma migrate deploy`.
+- Người đăng nhập Google phải có tài khoản đang hoạt động trong app, cùng địa chỉ email. Gmail và
+  Google Workspace được liên kết ở lần đăng nhập đầu; tài khoản Google dùng địa chỉ email từ dịch vụ
+  khác cần nhập mật khẩu app một lần để liên kết an toàn. Các lần sau dùng Google trực tiếp.
+- Cách đăng nhập bằng email và mật khẩu hiện có tiếp tục hoạt động.
+
+## Tạo link Google Meet khi đặt lịch họp
+
+Dùng chung OAuth client với mục "Đăng nhập bằng Google" (cùng `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`).
+Chưa đặt hai biến đó thì nút tạo link Meet được ẩn; vẫn dán link thủ công được.
+
+- Trong Google Cloud Console (cùng project với OAuth client): **APIs & Services → Library** → bật
+  **Google Meet REST API**.
+- **OAuth consent screen → Data access**: thêm scope
+  `https://www.googleapis.com/auth/meetings.space.created` (chỉ cho phép tạo phòng Meet, không đọc lịch hay email).
+- Khai báo thêm **Authorized redirect URI** cho từng tên miền, ví dụ
+  `https://taskflow-vert-psi.vercel.app/api/google/meet/callback` và
+  `http://localhost:3000/api/google/meet/callback` khi chạy local.
+- Đối tượng **External**: khi app còn ở chế độ *Testing*, chỉ các tài khoản trong danh sách *Test users*
+  kết nối được, và Google tự gỡ quyền sau 7 ngày. Muốn dùng lâu dài thì gửi app cho Google xác minh
+  (scope này thuộc loại cần xác minh). Đối tượng **Internal** (Google Workspace) không cần xác minh.
+- Chạy migration `20261024100000_add_google_meet_token`. Refresh token được mã hoá bằng khoá suy ra từ
+  `SESSION_SECRET`; đổi `SESSION_SECRET` thì mọi người phải bấm kết nối lại một lần.
+- Cách dùng: trong form đặt lịch, bấm **Kết nối Google để tạo link Meet** (chỉ lần đầu, mở cửa sổ Google),
+  sau đó mỗi lần bấm **Tạo link Google Meet** app điền sẵn link phòng mới vào ô link họp. Phòng thuộc tài khoản
+  Google của người bấm.

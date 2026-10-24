@@ -558,11 +558,7 @@ export default function MeetingRecapPanel({
               </details>
             ) : (
               <>
-                <h2 className="text-base font-semibold text-zinc-950">Tạo biên bản cuộc họp</h2>
-                <p className="mb-4 mt-1 text-sm leading-6 text-zinc-500">
-                  Ghi âm ngay tại đây hoặc tải file ghi âm có sẵn. AI sẽ chép lời tiếng Việt và viết biên bản gồm
-                  tóm tắt, nội dung theo từng chủ đề, quyết định và việc cần làm (gắn sẵn người phụ trách). Bạn đọc lại, sửa nếu cần, rồi mới gửi cho người tham dự.
-                </p>
+                <h2 className="mb-4 text-base font-semibold text-zinc-950">Tạo biên bản cuộc họp</h2>
                 {earlyNote && (
                   <p className="mb-4 rounded-[7px] bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-800">{earlyNote}</p>
                 )}

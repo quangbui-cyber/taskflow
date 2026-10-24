@@ -18,6 +18,7 @@ import {
   type MeetingActionState,
 } from "@/app/actions/meetings";
 import Avatar from "@/components/Avatar";
+import GoogleMeetLinkButton from "@/components/GoogleMeetLinkButton";
 import { useActionFeedback } from "@/components/InteractionProvider";
 import { formatHour, toDateInputVN } from "@/lib/dates";
 import {
@@ -602,6 +603,7 @@ export default function MeetingComposer({
                     className="tf-field"
                   />
                 </label>
+                <GoogleMeetLinkButton disabled={pending} onLink={(url) => set("meetingUrl", url)} />
 
                 <fieldset>
                   <legend className="tf-label">
