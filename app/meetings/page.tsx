@@ -403,9 +403,6 @@ export default async function MeetingsPage({
                 </span>
                 <h1 className="tf-page-title">Lịch họp</h1>
               </div>
-              <p className="tf-page-subtitle">
-                Xem phòng nào còn trống và bấm vào ô trống trên lịch để đặt họp.
-              </p>
             </div>
             <MeetingComposer {...composerProps} organizerId={user.id} />
           </header>
