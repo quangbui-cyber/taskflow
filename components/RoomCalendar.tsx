@@ -636,7 +636,7 @@ function MeetingPopover({
         </li>
         <li className="flex items-center gap-2">
           <UsersRound size={15} className="shrink-0 text-zinc-400" aria-hidden="true" />
-          {meeting.attendeeCount} người được mời
+          {meeting.attendeeCount ? `${meeting.attendeeCount} người được mời` : "Không mời đồng nghiệp (họp với khách)"}
         </li>
       </ul>
       {meeting.isMine ? (
