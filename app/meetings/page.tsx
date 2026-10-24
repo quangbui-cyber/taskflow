@@ -187,8 +187,9 @@ function MeetingCard({
             ))}
           </ul>
           <span className="text-xs text-zinc-500">
-            {meeting.attendees.length > 8 ? `+${meeting.attendees.length - 8} · ` : ""}
-            {accepted}/{meeting.attendees.length} người đã nhận lời
+            {meeting.attendees.length === 0
+              ? "Không mời đồng nghiệp (họp với khách)"
+              : `${meeting.attendees.length > 8 ? `+${meeting.attendees.length - 8} · ` : ""}${accepted}/${meeting.attendees.length} người đã nhận lời`}
           </span>
           {myInvite && !open && (
             <span className={`tf-badge ${RESPONSE_STYLES[myInvite.response] ?? RESPONSE_STYLES.PENDING}`}>

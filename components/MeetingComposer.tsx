@@ -379,7 +379,6 @@ export default function MeetingComposer({
   const canSubmit =
     values.title.trim().length >= 2 &&
     timeValid &&
-    values.attendeeIds.length > 0 &&
     !selectedRoomClash;
   const dialogTitleId = meeting ? `meeting-dialog-${meeting.id}` : "meeting-dialog-new";
 
@@ -716,6 +715,11 @@ export default function MeetingComposer({
                       )}
                     </div>
                   </div>
+                  {values.attendeeIds.length === 0 && (
+                    <p className="mt-2 text-xs text-zinc-500">
+                      Chưa mời ai: cuộc họp chỉ có mình bạn, phù hợp khi họp với khách. Bạn vẫn giữ phòng và ghi biên bản được.
+                    </p>
+                  )}
                   {busySelectedCount > 0 && (
                     <p className="mt-2 text-xs text-amber-700">
                       {busySelectedCount} người đã chọn đang có cuộc họp khác trong khung giờ này.
@@ -777,7 +781,13 @@ export default function MeetingComposer({
                   ) : (
                     <CalendarPlus size={17} aria-hidden="true" />
                   )}
-                  {pending ? "Đang lưu…" : meeting ? "Lưu thay đổi" : "Đặt lịch và gửi lời mời"}
+                  {pending
+                    ? "Đang lưu…"
+                    : meeting
+                      ? "Lưu thay đổi"
+                      : values.attendeeIds.length
+                        ? "Đặt lịch và gửi lời mời"
+                        : "Đặt lịch"}
                 </button>
               </div>
             </form>

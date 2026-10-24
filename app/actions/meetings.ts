@@ -80,9 +80,7 @@ function parseMeetingForm(
     return { error: "Không thể đặt lịch họp trong quá khứ." };
   }
 
-  if (attendeeIds.length === 0) {
-    return { error: "Hãy chọn ít nhất một người tham dự." };
-  }
+  // Không mời ai cũng được: họp một mình với khách vẫn cần giữ phòng và ghi biên bản.
   if (attendeeIds.length > MEETING_MAX_ATTENDEES) {
     return { error: `Một cuộc họp tối đa ${MEETING_MAX_ATTENDEES} người tham dự.` };
   }
@@ -326,7 +324,11 @@ export async function createMeeting(
     meetingId
   );
   revalidateMeetings();
-  return { success: `Đã đặt lịch họp và gửi lời mời.${busyWarning(busy)}` };
+  return {
+    success: attendees.length
+      ? `Đã đặt lịch họp và gửi lời mời.${busyWarning(busy)}`
+      : `Đã đặt lịch họp.${busyWarning(busy)}`,
+  };
 }
 
 export async function updateMeeting(
