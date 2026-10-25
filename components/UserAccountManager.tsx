@@ -3,12 +3,13 @@
 import { useMemo, useState } from "react";
 import UserRow, { type UserItem } from "@/components/UserRow";
 
-type FilterKey = "ALL" | "ADMIN" | "ACCOUNT" | "USER" | "INACTIVE";
+type FilterKey = "ALL" | "ADMIN" | "ACCOUNT" | "ACCOUNTANT" | "USER" | "INACTIVE";
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "ALL", label: "Tất cả" },
   { key: "ADMIN", label: "Admin" },
   { key: "ACCOUNT", label: "Account" },
+  { key: "ACCOUNTANT", label: "Kế toán" },
   { key: "USER", label: "User" },
   { key: "INACTIVE", label: "Vô hiệu hóa" },
 ];
@@ -29,6 +30,7 @@ export default function UserAccountManager({
       ALL: users.length,
       ADMIN: users.filter((user) => user.role === "ADMIN").length,
       ACCOUNT: users.filter((user) => user.role === "ACCOUNT").length,
+      ACCOUNTANT: users.filter((user) => user.role === "ACCOUNTANT").length,
       USER: users.filter((user) => user.role === "USER").length,
       INACTIVE: users.filter((user) => !user.isActive).length,
     }),

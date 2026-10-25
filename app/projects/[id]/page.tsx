@@ -5,6 +5,7 @@ import {
   Building2,
   CalendarDays,
   FileText,
+  ShieldCheck,
   UsersRound,
 } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
@@ -31,6 +32,8 @@ import {
   type TaskDTO,
 } from "@/lib/types";
 import { formatExecutionRange, toDateInputVN } from "@/lib/dates";
+import { FINANCE_APPROVER_ROLES, canSetFinanceApprovers } from "@/lib/financePolicy";
+import { ROLE_LABELS, isUserRole } from "@/lib/roles";
 
 function extractProjectMetadata(description: string | null) {
   if (!description) return { poNumber: null, poDate: null };
@@ -69,6 +72,8 @@ export default async function ProjectPage({
           team: { select: { id: true, name: true } },
         },
       },
+      icApprover: { select: { name: true } },
+      acApprover: { select: { name: true } },
       members: {
         include: {
           user: {
@@ -127,7 +132,10 @@ export default async function ProjectPage({
   if (!isMember && user.role !== "ADMIN") redirect("/");
 
   const showMeetings = meetingsEnabled();
-  const [sidebarProjects, clients, accounts, availableUsers, memberGroups, teams, meetingData] = await Promise.all([
+  const canEditApprovers =
+    (project.ownerId === user.id || user.role === "ADMIN") &&
+    canSetFinanceApprovers(user.role);
+  const [sidebarProjects, clients, accounts, availableUsers, memberGroups, teams, meetingData, approverUsers] = await Promise.all([
     prisma.project.findMany({
       where: { members: { some: { userId: user.id } } },
       select: {
@@ -187,6 +195,17 @@ export default async function ProjectPage({
     prisma.salesTeam.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
     // Phần họp đang tắt (ví dụ production) thì không tải dữ liệu và không hiện nút.
     showMeetings ? loadMeetingComposerData() : null,
+    canEditApprovers
+      ? prisma.user.findMany({
+          where: {
+            isActive: true,
+            deletedAt: null,
+            role: { in: [...FINANCE_APPROVER_ROLES] },
+          },
+          select: { id: true, name: true, email: true, avatarUrl: true, role: true },
+          orderBy: { name: "asc" },
+        })
+      : [],
   ]);
   // Chọn sẵn thành viên dự án đang hoạt động; người tổ chức (người đang xem) không tự mời mình.
   const meetingAttendeeIds = project.members
@@ -303,7 +322,17 @@ export default async function ProjectPage({
                       project.account?.user?.name ??
                       project.account?.name ??
                       null,
+                    icApproverId: project.icApproverId,
+                    acApproverId: project.acApproverId,
                   }}
+                  approverOptions={approverUsers.map((approver) => ({
+                    id: approver.id,
+                    name: approver.name,
+                    email: approver.email,
+                    avatarUrl: approver.avatarUrl,
+                    meta: isUserRole(approver.role) ? ROLE_LABELS[approver.role] : null,
+                  }))}
+                  canEditApprovers={canEditApprovers}
                   clients={clients}
                   responsibilityOptions={{
                     teams,
@@ -384,6 +413,13 @@ export default async function ProjectPage({
                   >
                     <BriefcaseBusiness size={14} aria-hidden="true" />
                     {accountName ?? "Cần gán Account"}
+                  </span>
+                )}
+                {canViewRevenue && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <ShieldCheck size={14} aria-hidden="true" />
+                    Duyệt IC: {project.icApprover?.name ?? "chưa chọn"} · Duyệt AC:{" "}
+                    {project.acApprover?.name ?? "chưa chọn"}
                   </span>
                 )}
               </div>

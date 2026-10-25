@@ -492,6 +492,7 @@ export default function UserRow({
                       >
                         <option value="ADMIN">Admin</option>
                         <option value="ACCOUNT">Account</option>
+                        <option value="ACCOUNTANT">Kế toán</option>
                         <option value="USER">User</option>
                       </select>
                       <ChevronDown

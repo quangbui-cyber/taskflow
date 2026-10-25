@@ -8,6 +8,7 @@ import ProjectResponsibilitySelect from "@/components/ProjectResponsibilitySelec
 import { responsibilityValue, type ProjectResponsibility, type ResponsibilityOptions } from "@/lib/projectResponsibility";
 import ClientSelect, { type ClientOption } from "@/components/ClientSelect";
 import ProjectAccountSelect, { preventMissingProjectAccount, type ProjectAccountOption } from "@/components/ProjectAccountSelect";
+import UserPicker, { type UserPickerOption } from "@/components/UserPicker";
 import { useInteraction } from "@/components/InteractionProvider";
 import {
   PROJECT_CATEGORIES,
@@ -20,8 +21,10 @@ export default function ProjectEditButton({
   clients,
   accounts,
   responsibilityOptions,
+  approverOptions,
   canEdit,
   canEditRevenue,
+  canEditApprovers,
 }: {
   project: ProjectResponsibility & {
     id: string;
@@ -37,12 +40,16 @@ export default function ProjectEditButton({
     clientName: string | null;
     accountId: string | null;
     accountName: string | null;
+    icApproverId: string | null;
+    acApproverId: string | null;
   };
   clients: ClientOption[];
   accounts: ProjectAccountOption[];
   responsibilityOptions: ResponsibilityOptions;
+  approverOptions: UserPickerOption[];
   canEdit: boolean;
   canEditRevenue: boolean;
+  canEditApprovers: boolean;
 }) {
   const { notify } = useInteraction();
   const [open, setOpen] = useState(false);
@@ -251,6 +258,49 @@ export default function ProjectEditButton({
                 />
               )}
             </div>
+
+            {category === "CLIENT" && canEditApprovers && (
+              <fieldset className="space-y-3 border-t border-zinc-100 pt-4">
+                <legend className="text-sm font-semibold text-zinc-900">
+                  Duyệt tài chính
+                </legend>
+                <p className="-mt-1 text-xs text-zinc-500">
+                  Người duyệt IC và AC của dự án, có thể là hai người khác nhau. Người được chọn sẽ tự được thêm vào dự án.
+                </p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <span className="text-xs font-medium text-zinc-500">
+                      Người duyệt IC
+                    </span>
+                    <UserPicker
+                      name="icApproverId"
+                      options={approverOptions}
+                      defaultValue={project.icApproverId ?? ""}
+                      emptyLabel="Chưa chọn"
+                      placeholder="Chưa chọn"
+                      ariaLabel="Người duyệt IC"
+                      disabled={pending}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-xs font-medium text-zinc-500">
+                      Người duyệt AC
+                    </span>
+                    <UserPicker
+                      name="acApproverId"
+                      options={approverOptions}
+                      defaultValue={project.acApproverId ?? ""}
+                      emptyLabel="Chưa chọn"
+                      placeholder="Chưa chọn"
+                      ariaLabel="Người duyệt AC"
+                      disabled={pending}
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+              </fieldset>
+            )}
 
             {state.error && (
               <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">

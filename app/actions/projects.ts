@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { canCreateProjects, canViewRevenue, getMembership, requireUser } from "@/lib/auth";
 import { readProjectBusinessFields } from "@/lib/projectPolicy";
+import { FINANCE_APPROVER_ROLES, readFinanceApprovers } from "@/lib/financePolicy";
 import { readProjectResponsibility, type ProjectResponsibility } from "@/lib/projectResponsibility";
 import {
   sendGoogleChat,
@@ -85,6 +86,21 @@ async function findValidClient(clientId: string | null) {
     where: { id: clientId },
     select: { id: true },
   });
+}
+
+/** Người duyệt IC/AC phải là Admin hoặc Account đang hoạt động. */
+async function invalidFinanceApprover(ids: (string | null)[]) {
+  const wanted = [...new Set(ids.filter((id): id is string => Boolean(id)))];
+  if (wanted.length === 0) return false;
+  const found = await prisma.user.count({
+    where: {
+      id: { in: wanted },
+      isActive: true,
+      deletedAt: null,
+      role: { in: [...FINANCE_APPROVER_ROLES] },
+    },
+  });
+  return found !== wanted.length;
 }
 
 async function validateResponsibility(assignment: ProjectResponsibility) {
@@ -259,6 +275,17 @@ export async function updateProject(
   if ("error" in assignment) return assignment;
   const assignmentError = await validateResponsibility(assignment);
   if (assignmentError) return assignmentError;
+  const approvers = readFinanceApprovers(formData, user.role, category, project);
+  if ("error" in approvers) return approvers;
+  const approversChanged =
+    approvers.icApproverId !== project.icApproverId ||
+    approvers.acApproverId !== project.acApproverId;
+  if (
+    approversChanged &&
+    (await invalidFinanceApprover([approvers.icApproverId, approvers.acApproverId]))
+  ) {
+    return { error: "Người duyệt IC/AC phải là Admin hoặc Account đang hoạt động." };
+  }
   const execution = parseExecutionFields(formData, category);
   if ("error" in execution) return execution;
   const [account, client] = await Promise.all([
@@ -285,12 +312,20 @@ export async function updateProject(
         revenue: canViewRevenue(user.role) ? revenue : undefined,
         clientId,
         accountId,
+        icApproverId: approvers.icApproverId,
+        acApproverId: approvers.acApproverId,
       },
     });
-    if (account?.userId) {
+    // Account và người duyệt cần mở được dự án, nên tự thêm họ làm thành viên.
+    const memberIds = new Set(
+      [account?.userId, approvers.icApproverId, approvers.acApproverId].filter(
+        (id): id is string => Boolean(id),
+      ),
+    );
+    for (const userId of memberIds) {
       await tx.projectMember.upsert({
-        where: { projectId_userId: { projectId, userId: account.userId } },
-        create: { projectId, userId: account.userId },
+        where: { projectId_userId: { projectId, userId } },
+        create: { projectId, userId },
         update: {},
       });
     }

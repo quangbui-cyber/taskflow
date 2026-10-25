@@ -8,52 +8,56 @@ datasource db {
 }
 
 model User {
-  id                   String              @id @default(cuid())
-  email                String              @unique
-  googleSub            String?             @unique
+  id                   String                   @id @default(cuid())
+  email                String                   @unique
+  googleSub            String?                  @unique
   googleMeetToken      String? // refresh token Google (đã mã hoá) để tạo link Meet; null = chưa kết nối
   name                 String
   avatarUrl            String?
   passwordHash         String
-  sessionVersion       Int                 @default(0)
-  role                 String              @default("USER") // "ADMIN" | "ACCOUNT" | "USER"
-  isActive             Boolean             @default(true)
+  sessionVersion       Int                      @default(0)
+  role                 String                   @default("USER") // "ADMIN" | "ACCOUNT" | "ACCOUNTANT" | "USER"
+  isActive             Boolean                  @default(true)
   deactivatedAt        DateTime?
   // Xoá tài khoản chỉ đánh dấu dòng này để tên vẫn còn trên dự án đã đóng,
   // task đã xong và bình luận; tài khoản bị ẩn khỏi danh sách và không đăng nhập được.
   deletedAt            DateTime?
   managerId            String? // người quản lý trực tiếp
-  manager              User?               @relation("TeamManager", fields: [managerId], references: [id], onDelete: SetNull)
-  reports              User[]              @relation("TeamManager") // nhân viên dưới quyền
-  createdAt            DateTime            @default(now())
+  manager              User?                    @relation("TeamManager", fields: [managerId], references: [id], onDelete: SetNull)
+  reports              User[]                   @relation("TeamManager") // nhân viên dưới quyền
+  createdAt            DateTime                 @default(now())
   memberships          ProjectMember[]
-  ownedProjects        Project[]           @relation("ProjectOwner")
-  assignedTasks        Task[]              @relation("TaskAssignee")
-  createdTasks         Task[]              @relation("TaskCreator")
+  ownedProjects        Project[]                @relation("ProjectOwner")
+  assignedTasks        Task[]                   @relation("TaskAssignee")
+  createdTasks         Task[]                   @relation("TaskCreator")
   comments             Comment[]
   notifications        Notification[]
   pushSubscriptions    PushSubscription[]
   taskFollows          TaskFollower[]
   accountProfile       Account?
   groupMemberships     MemberGroupMember[]
-  uploadedFiles        ProjectFile[]       @relation("ProjectFileUploader")
-  uploadedTaskFiles    TaskFile[]          @relation("TaskFileUploader")
-  recognitionsSent     Recognition[]       @relation("RecognitionSender")
-  recognitionsReceived Recognition[]       @relation("RecognitionRecipient")
-  organizedMeetings    Meeting[]           @relation("MeetingOrganizer")
-  recordedMeetings     Meeting[]           @relation("MeetingRecorder")
+  uploadedFiles        ProjectFile[]            @relation("ProjectFileUploader")
+  uploadedTaskFiles    TaskFile[]               @relation("TaskFileUploader")
+  recognitionsSent     Recognition[]            @relation("RecognitionSender")
+  recognitionsReceived Recognition[]            @relation("RecognitionRecipient")
+  organizedMeetings    Meeting[]                @relation("MeetingOrganizer")
+  recordedMeetings     Meeting[]                @relation("MeetingRecorder")
   meetingInvites       MeetingAttendee[]
-  createdMeetingRecaps MeetingRecap[]      @relation("MeetingRecapCreator")
+  createdMeetingRecaps MeetingRecap[]           @relation("MeetingRecapCreator")
   recapActionItems     MeetingRecapActionItem[] @relation("MeetingRecapActionOwner")
   kpiPlanChanges       KpiPlanChange[]
-  uploadedDocuments    DocumentFile[]      @relation("DocumentFileUploader")
-  createdDocumentLinks DocumentLink[]      @relation("DocumentLinkCreator")
-  annualLeaveDays      Float               @default(12) // số ngày phép năm do Admin đặt
+  uploadedDocuments    DocumentFile[]           @relation("DocumentFileUploader")
+  createdDocumentLinks DocumentLink[]           @relation("DocumentLinkCreator")
+  annualLeaveDays      Float                    @default(12) // số ngày phép năm do Admin đặt
   // Quản lý nghỉ phép: duyệt đơn của người chưa có quản lý, nhận thông báo kết quả mọi đơn
-  isLeaveManager       Boolean             @default(false)
-  leaveRequests        LeaveRequest[]      @relation("LeaveRequester")
-  leaveDecisions       LeaveRequest[]      @relation("LeaveDecider")
+  isLeaveManager       Boolean                  @default(false)
+  leaveRequests        LeaveRequest[]           @relation("LeaveRequester")
+  leaveDecisions       LeaveRequest[]           @relation("LeaveDecider")
   leaveAdjustments     LeaveUsageAdjustment[]
+  icApprovals          Project[]                @relation("ProjectIcApprover")
+  acApprovals          Project[]                @relation("ProjectAcApprover")
+  createdSuppliers     Supplier[]               @relation("SupplierCreator")
+  updatedSuppliers     Supplier[]               @relation("SupplierUpdater")
 
   @@index([isActive])
 }
@@ -102,6 +106,11 @@ model Project {
   responsibleTeam      SalesTeam?      @relation(fields: [responsibleTeamId], references: [id], onDelete: SetNull)
   responsibleGroupId   String?
   responsibleGroup     MemberGroup?    @relation(fields: [responsibleGroupId], references: [id], onDelete: SetNull)
+  // Người duyệt IC và AC đặt riêng cho từng dự án (có thể là hai người khác nhau).
+  icApproverId         String?
+  icApprover           User?           @relation("ProjectIcApprover", fields: [icApproverId], references: [id], onDelete: SetNull)
+  acApproverId         String?
+  acApprover           User?           @relation("ProjectAcApprover", fields: [acApproverId], references: [id], onDelete: SetNull)
   members              ProjectMember[]
   tasks                Task[]
   files                ProjectFile[]
@@ -115,6 +124,33 @@ model Project {
   @@index([executionStartAt])
   @@index([responsibleTeamId])
   @@index([responsibleGroupId])
+  @@index([icApproverId])
+  @@index([acApproverId])
+}
+
+// Danh bạ nhà cung cấp dùng chung cho IC, AC và phiếu đề nghị chi.
+// Mọi người xem được, kể cả thông tin chuyển khoản.
+model Supplier {
+  id            String   @id @default(cuid())
+  name          String   @unique // tên đầy đủ, vd "CÔNG TY TNHH IN ẤN TÂN HOÀNG VIỆT"
+  shortName     String?  @unique // tên gọi trong cột SUP của IC/AC, vd "TÂN HOÀNG VIỆT", "HUY"
+  kind          String   @default("COMPANY") // "COMPANY" | "PERSON"
+  taxCode       String?
+  phone         String?
+  email         String?
+  bankAccount   String?
+  bankName      String?
+  accountHolder String?
+  note          String?
+  createdById   String?
+  createdBy     User?    @relation("SupplierCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById   String?
+  updatedBy     User?    @relation("SupplierUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([createdById])
+  @@index([updatedById])
 }
 
 // Danh mục khách hàng — do admin tạo sẵn
@@ -260,28 +296,28 @@ model ProjectFile {
 }
 
 model Task {
-  id            String         @id @default(cuid())
-  title         String
-  description   String?
-  result        String? // kết quả/bàn giao sau khi hoàn thành công việc
-  status        String         @default("TODO") // "TODO" | "IN_PROGRESS" | "DONE"
-  priority      String         @default("MEDIUM") // "LOW" | "MEDIUM" | "HIGH"
-  dueDate       DateTime?
-  completedAt   DateTime? // thời điểm chuyển sang DONE — dùng tính đúng hạn/trễ hạn
-  order         Float          @default(0)
-  projectId     String
-  project       Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  assigneeId    String?
-  assignee      User?          @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
-  creatorId     String
-  creator       User           @relation("TaskCreator", fields: [creatorId], references: [id], onDelete: Cascade)
-  comments      Comment[]
-  followers     TaskFollower[]
-  notifications Notification[]
-  files         TaskFile[]
+  id              String                  @id @default(cuid())
+  title           String
+  description     String?
+  result          String? // kết quả/bàn giao sau khi hoàn thành công việc
+  status          String                  @default("TODO") // "TODO" | "IN_PROGRESS" | "DONE"
+  priority        String                  @default("MEDIUM") // "LOW" | "MEDIUM" | "HIGH"
+  dueDate         DateTime?
+  completedAt     DateTime? // thời điểm chuyển sang DONE — dùng tính đúng hạn/trễ hạn
+  order           Float                   @default(0)
+  projectId       String
+  project         Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assigneeId      String?
+  assignee        User?                   @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  creatorId       String
+  creator         User                    @relation("TaskCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  comments        Comment[]
+  followers       TaskFollower[]
+  notifications   Notification[]
+  files           TaskFile[]
   recapActionItem MeetingRecapActionItem? // việc cần làm trong biên bản họp đã tạo ra task này
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
 }
 
 // Tệp đính kèm của task — BRIEF khi giao việc, RESULT khi bàn giao kết quả
@@ -521,10 +557,10 @@ model MeetingAttendee {
 // Biên bản họp: Groq chép lời file ghi âm, Gemini viết biên bản tiếng Việt.
 // File ghi âm chỉ nằm tạm trên Vercel Blob và bị xoá ngay khi chép lời xong.
 model MeetingRecap {
-  id                  String    @id @default(cuid())
-  meetingId           String    @unique
-  meeting             Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-  status              String    @default("PROCESSING") // "PROCESSING" | "READY" | "FAILED"
+  id                  String                   @id @default(cuid())
+  meetingId           String                   @unique
+  meeting             Meeting                  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  status              String                   @default("PROCESSING") // "PROCESSING" | "READY" | "FAILED"
   stage               String? // khi đang xử lý: "TRANSCRIBING" | "SUMMARIZING"
   error               String?
   audioName           String? // tên file gốc người tổ chức tải lên
@@ -533,15 +569,15 @@ model MeetingRecap {
   transcript          String? // bản chép lời có mốc thời gian
   content             String? // biên bản (AI viết, người tổ chức có thể sửa)
   publishedSnapshot   Json? // bản đã gửi; không đổi khi sửa hoặc viết lại bản nháp
-  actionSuggestions   Json      @default("[]") // đề xuất AI chờ người tổ chức chọn bổ sung
+  actionSuggestions   Json                     @default("[]") // đề xuất AI chờ người tổ chức chọn bổ sung
   createdById         String?
-  createdBy           User?     @relation("MeetingRecapCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy           User?                    @relation("MeetingRecapCreator", fields: [createdById], references: [id], onDelete: SetNull)
   processingStartedAt DateTime?
   sentAt              DateTime? // lúc người tổ chức gửi cho người tham dự; trước đó chỉ người tổ chức/admin xem được
   projectFileId       String? // file biên bản (.docx) đã lưu vào tài liệu dự án, để lần gửi sau thay bản mới
   actionItems         MeetingRecapActionItem[]
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
 
   @@index([status, processingStartedAt])
   @@index([createdById])

@@ -24,8 +24,10 @@ test("USER can create projects without acquiring financial access", () => {
   assert.equal(canCreateProjects("USER"), true);
   assert.equal(canViewRevenue("USER"), false);
   assert.equal(canCreateProjects("unknown"), false);
-  for (const role of ["ADMIN", "ACCOUNT"])
+  for (const role of ["ADMIN", "ACCOUNT", "ACCOUNTANT"]) {
+    assert.equal(canCreateProjects(role), true);
     assert.equal(canViewRevenue(role), true);
+  }
 });
 
 test("internal projects discard customer metadata and financial input", () => {
