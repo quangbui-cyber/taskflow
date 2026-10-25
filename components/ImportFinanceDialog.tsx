@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, FileSpreadsheet, Info, Upload, X, XCircle } from "lucide-react";
@@ -8,6 +8,9 @@ import { useInteraction } from "@/components/InteractionProvider";
 import { costAmount, formatMargin, formatVndNumber, sellAmount } from "@/lib/financeCalc";
 import { financeHeaderRows } from "@/lib/financeHeader";
 import type { FinanceImportResult, ImportSeverity } from "@/lib/financeImport";
+import { MAX_PROJECT_FILE_SIZE } from "@/lib/projectFiles";
+import { formatFileSize, postFormWithProgress } from "@/lib/uploadWithProgress";
+import { slimXlsx, type SlimResult } from "@/lib/xlsxSlim";
 
 type Preview = {
   fileName: string;
@@ -21,14 +24,37 @@ const SEVERITY: Record<ImportSeverity, { label: string; className: string; Icon:
   info: { label: "Gợi ý", className: "border-sky-200 bg-sky-50 text-sky-900", Icon: Info },
 };
 
-async function postFile(projectId: string, file: File, confirm: boolean) {
+// File gốc lớn hơn mức này thì không làm gọn trên trình duyệt (tránh treo máy).
+const MAX_ORIGINAL_SIZE = 30 * 1024 * 1024;
+const PREVIEW_TIMEOUT_MS = 60_000;
+const SAVE_TIMEOUT_MS = 120_000;
+
+type Stage = "idle" | "slimming" | "uploading" | "reading" | "saving";
+
+async function postFile(
+  projectId: string,
+  file: File,
+  confirm: boolean,
+  callbacks: { onProgress: (value: number) => void; onUploaded: () => void },
+) {
   const body = new FormData();
   body.append("file", file);
   if (confirm) body.append("confirm", "1");
-  const response = await fetch(`/api/projects/${projectId}/finance/import`, { method: "POST", body });
-  const data = (await response.json().catch(() => ({}))) as { error?: string } & Partial<Preview>;
-  if (!response.ok) throw new Error(data.error || "Không đọc được file. Vui lòng thử lại.");
-  return data;
+  const response = await postFormWithProgress<Partial<Preview>>(`/api/projects/${projectId}/finance/import`, body, {
+    ...callbacks,
+    timeoutMs: confirm ? SAVE_TIMEOUT_MS : PREVIEW_TIMEOUT_MS,
+  });
+  if (!response.ok) {
+    throw new Error(
+      response.data.error ||
+        (response.status === 413
+          ? "File quá lớn để gửi lên. Bỏ bớt ảnh hoặc sheet không cần rồi thử lại."
+          : response.status === 504
+            ? "Máy chủ xử lý quá lâu. Thử lại sau ít phút."
+            : "Không đọc được file. Vui lòng thử lại."),
+    );
+  }
+  return response.data;
 }
 
 export default function ImportFinanceDialog({
@@ -45,45 +71,90 @@ export default function ImportFinanceDialog({
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [error, setError] = useState("");
-  const [pending, startTransition] = useTransition();
+  const [stage, setStage] = useState<Stage>("idle");
+  const [progress, setProgress] = useState(0);
+  const [uploadSize, setUploadSize] = useState(0);
+  const [slim, setSlim] = useState<SlimResult | null>(null);
+  // Lưu file gốc (đủ ảnh) vào Tài liệu, hay bản đã bỏ ảnh cho nhanh.
+  const [keepOriginal, setKeepOriginal] = useState(true);
+  const pending = stage !== "idle";
 
   function close() {
     if (pending) return;
     setOpen(false);
     setFile(null);
+    setSlim(null);
     setPreview(null);
     setError("");
     if (inputRef.current) inputRef.current.value = "";
   }
 
-  function readFile(selected: File) {
+  const uploadCallbacks = (next: Stage) => ({
+    onProgress: setProgress,
+    onUploaded: () => setStage(next),
+  });
+
+  async function readFile(selected: File) {
     setFile(selected);
+    setSlim(null);
     setPreview(null);
     setError("");
-    startTransition(async () => {
-      try {
-        const data = await postFile(projectId, selected, false);
-        setPreview(data as Preview);
-      } catch (caught) {
-        setError(caught instanceof Error ? caught.message : "Không đọc được file.");
+    if (!selected.name.toLowerCase().endsWith(".xlsx")) {
+      setError("Chỉ nhận file .xlsx. File .xls đời cũ hãy mở bằng Excel và lưu lại thành .xlsx.");
+      return;
+    }
+    if (selected.size > MAX_ORIGINAL_SIZE) {
+      setError(`File lớn quá (${formatFileSize(selected.size)}). Hãy lưu một bản chỉ giữ sheet IC/AC rồi thử lại.`);
+      return;
+    }
+    try {
+      setStage("slimming");
+      // Không làm gọn được (vd file đặt mật khẩu) thì gửi nguyên file để máy chủ báo lỗi cụ thể.
+      const slimmed = await slimXlsx(selected).catch(
+        (): SlimResult => ({ file: selected, originalSize: selected.size, slimSize: selected.size, removedImages: 0 }),
+      );
+      if (slimmed.file.size > MAX_PROJECT_FILE_SIZE) {
+        throw new Error(
+          `Sau khi bỏ ảnh file vẫn còn ${formatFileSize(slimmed.file.size)} (tối đa 4 MB). Hãy lưu một bản chỉ giữ sheet IC/AC.`,
+        );
       }
-    });
+      setSlim(slimmed);
+      setKeepOriginal(selected.size <= MAX_PROJECT_FILE_SIZE);
+      setProgress(0);
+      setUploadSize(slimmed.file.size);
+      setStage("uploading");
+      const data = await postFile(projectId, slimmed.file, false, uploadCallbacks("reading"));
+      setPreview(data as Preview);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Không đọc được file.");
+    } finally {
+      setStage("idle");
+    }
   }
 
-  function confirmImport() {
-    if (!file || !preview) return;
-    startTransition(async () => {
-      try {
-        await postFile(projectId, file, true);
-        notify({ message: "Đã nhập IC từ file. File gốc được lưu ở tab Tài liệu.", tone: "success" });
-        setOpen(false);
-        setFile(null);
-        setPreview(null);
-        router.refresh();
-      } catch (caught) {
-        setError(caught instanceof Error ? caught.message : "Không lưu được IC.");
-      }
-    });
+  async function confirmImport() {
+    if (!file || !slim || !preview) return;
+    const original = slim.removedImages > 0 && keepOriginal && file.size <= MAX_PROJECT_FILE_SIZE;
+    const toSend = original ? file : slim.file;
+    setError("");
+    setProgress(0);
+    setUploadSize(toSend.size);
+    setStage("uploading");
+    try {
+      // Bản gọn đã gửi ở bước xem trước rất nhẹ nên gửi lại gần như tức thì;
+      // chỉ khi chọn lưu file gốc thì mới gửi file đầy đủ ảnh, đúng một lần.
+      await postFile(projectId, toSend, true, uploadCallbacks("saving"));
+      notify({ message: "Đã nhập IC từ file. File được lưu ở tab Tài liệu.", tone: "success" });
+      setStage("idle");
+      setOpen(false);
+      setFile(null);
+      setSlim(null);
+      setPreview(null);
+      router.refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Không lưu được IC.");
+      setStage("idle");
+    }
   }
 
   const result = preview?.result;
@@ -138,7 +209,9 @@ export default function ImportFinanceDialog({
               <span className="text-sm font-semibold">
                 {file ? file.name : "Chọn file IC hoặc AC (.xlsx)"}
               </span>
-              <span className="text-xs text-zinc-500">Tối đa 4 MB · File đặt mật khẩu cần bỏ mật khẩu trước</span>
+              <span className="text-xs text-zinc-500">
+                Ảnh dán trong file được bỏ tự động trước khi gửi cho nhanh · File đặt mật khẩu cần bỏ mật khẩu trước
+              </span>
               <input
                 ref={inputRef}
                 type="file"
@@ -152,12 +225,8 @@ export default function ImportFinanceDialog({
               />
             </label>
 
-            {pending && !preview && (
-              <p className="flex items-center gap-2 text-sm text-zinc-600" aria-live="polite">
-                <span className="tf-spinner" aria-hidden="true" /> Đang đọc file…
-              </p>
-            )}
-            {error && (
+            {pending && !preview && <UploadProgress stage={stage} progress={progress} size={uploadSize} />}
+            {error && !preview && (
               <p role="alert" className="rounded-[8px] bg-red-50 px-3 py-2 text-sm text-red-700">
                 {error}
               </p>
@@ -168,6 +237,11 @@ export default function ImportFinanceDialog({
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-zinc-600">
                   <span>Sheet: <b className="text-zinc-900">{result.sheetName}</b></span>
                   <span>{result.sections.length} nhóm · {lineCount} hạng mục · {costCount} dòng chi phí</span>
+                  {slim && slim.removedImages > 0 && (
+                    <span className="text-zinc-500">
+                      Đã bỏ {slim.removedImages} ảnh trước khi gửi: {formatFileSize(slim.originalSize)} → {formatFileSize(slim.slimSize)}
+                    </span>
+                  )}
                   {result.hasAcceptance && (
                     <span className="text-zinc-500">
                       File có khối Nghiệm thu/AC{result.acCostTotal !== null ? ` (AC ${formatVndNumber(result.acCostTotal)})` : ""} — sẽ dùng khi làm phần AC
@@ -268,6 +342,35 @@ export default function ImportFinanceDialog({
                   </p>
                 ) : null}
 
+                {slim && slim.removedImages > 0 && !preview.existing?.locked && (
+                  <label className="flex items-start gap-2.5 rounded-[8px] border border-zinc-200 px-3 py-2.5 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 accent-brand-700"
+                      checked={keepOriginal && slim.originalSize <= MAX_PROJECT_FILE_SIZE}
+                      disabled={pending || slim.originalSize > MAX_PROJECT_FILE_SIZE}
+                      onChange={(event) => setKeepOriginal(event.target.checked)}
+                    />
+                    <span>
+                      <span className="font-medium">
+                        Lưu file gốc đủ {slim.removedImages} ảnh ({formatFileSize(slim.originalSize)}) vào tab Tài liệu
+                      </span>
+                      <span className="block text-zinc-500">
+                        {slim.originalSize > MAX_PROJECT_FILE_SIZE
+                          ? `File gốc lớn hơn 4 MB nên chỉ lưu được bản đã bỏ ảnh (${formatFileSize(slim.slimSize)}).`
+                          : `Bỏ chọn để lưu bản đã bỏ ảnh (${formatFileSize(slim.slimSize)}) — lưu nhanh hơn, số liệu giống hệt.`}
+                      </span>
+                    </span>
+                  </label>
+                )}
+
+                {pending && <UploadProgress stage={stage} progress={progress} size={uploadSize} />}
+                {error && (
+                  <p role="alert" className="rounded-[8px] bg-red-50 px-3 py-2 text-sm text-red-700">
+                    {error}
+                  </p>
+                )}
+
                 <div className="flex flex-wrap justify-end gap-2">
                   <button type="button" onClick={close} disabled={pending} className="tf-button-secondary">
                     Huỷ
@@ -325,5 +428,38 @@ function FragmentRows({ section }: { section: FinanceImportResult["sections"][nu
         </tr>
       ))}
     </>
+  );
+}
+
+function UploadProgress({ stage, progress, size }: { stage: Stage; progress: number; size: number }) {
+  if (stage === "slimming" || stage === "reading" || stage === "saving") {
+    return (
+      <p className="flex items-center gap-2 text-sm text-zinc-600" aria-live="polite">
+        <span className="tf-spinner" aria-hidden="true" />
+        {stage === "slimming"
+          ? "Đang làm gọn file (bỏ ảnh)…"
+          : stage === "reading"
+            ? "Đã gửi xong, máy chủ đang đọc file…"
+            : "Đã gửi xong, đang lưu IC…"}
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-1.5" aria-live="polite">
+      <div className="flex justify-between text-sm text-zinc-600">
+        <span>Đang tải lên {formatFileSize(size)}…</span>
+        <span className="tabular-nums">{progress}%</span>
+      </div>
+      <div
+        role="progressbar"
+        aria-label="Tiến độ tải file lên"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={progress}
+        className="h-2 overflow-hidden rounded-full bg-zinc-100"
+      >
+        <div className="h-full rounded-full bg-brand-600 transition-[width] duration-200" style={{ width: `${progress}%` }} />
+      </div>
+    </div>
   );
 }
