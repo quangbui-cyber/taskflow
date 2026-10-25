@@ -259,10 +259,11 @@ function SupplierForm({
           </label>
           <label className="block">
             <span className="tf-label">
-              {kind === "COMPANY" ? "Mã số thuế" : "MST / CCCD"}
+              {kind === "COMPANY" ? "Mã số thuế (bắt buộc)" : "MST / CCCD"}
             </span>
             <input
               name="taxCode"
+              required={kind === "COMPANY"}
               inputMode="numeric"
               maxLength={20}
               value={taxCode}
@@ -307,9 +308,10 @@ function SupplierForm({
           </legend>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block">
-              <span className="tf-label">Số tài khoản</span>
+              <span className="tf-label">Số tài khoản (bắt buộc)</span>
               <input
                 name="bankAccount"
+                required
                 inputMode="numeric"
                 maxLength={40}
                 value={bankAccount}
@@ -320,9 +322,10 @@ function SupplierForm({
               />
             </label>
             <label className="block">
-              <span className="tf-label">Ngân hàng</span>
+              <span className="tf-label">Ngân hàng (bắt buộc)</span>
               <input
                 name="bankName"
+                required
                 maxLength={120}
                 defaultValue={supplier?.bankName ?? ""}
                 placeholder="VD: ACB, Techcombank"

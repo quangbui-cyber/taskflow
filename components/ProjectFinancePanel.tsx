@@ -4,7 +4,12 @@ import CreateFinanceSheetButton from "@/components/CreateFinanceSheetButton";
 import FinanceSheetEditor from "@/components/FinanceSheetEditor";
 import ImportFinanceDialog from "@/components/ImportFinanceDialog";
 import type { CcCandidate, FinanceApprovalProps } from "@/components/FinanceApprovalBar";
-import { canDecideFinanceSheet, canViewFinanceSell, canWithdrawFinanceSheet } from "@/lib/financePolicy";
+import {
+  canDecideFinanceSheet,
+  canManageSuppliers,
+  canViewFinanceSell,
+  canWithdrawFinanceSheet,
+} from "@/lib/financePolicy";
 import { ROLE_LABELS, isUserRole } from "@/lib/roles";
 
 /** Tab "Tài chính" của trang dự án: bảng Báo giá + IC. */
@@ -18,7 +23,7 @@ export default async function ProjectFinancePanel({
   const [{ sheet, permissions }, suppliers, project, people] = await Promise.all([
     loadFinanceSheet(projectId, viewer),
     prisma.supplier.findMany({
-      select: { id: true, name: true, shortName: true },
+      select: { id: true, name: true, shortName: true, taxCode: true, bankAccount: true },
       orderBy: { name: "asc" },
     }),
     prisma.project.findUnique({
@@ -111,6 +116,7 @@ export default async function ProjectFinancePanel({
       permissions={permissions}
       suppliers={sortedSuppliers}
       approval={approval}
+      canManageSuppliers={canManageSuppliers(viewer.role)}
       toolbar={
         permissions.canEdit && !permissions.locked ? <ImportFinanceDialog projectId={projectId} /> : null
       }

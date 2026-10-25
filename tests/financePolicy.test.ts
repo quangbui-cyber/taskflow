@@ -108,20 +108,36 @@ test("supplier input is tidied: spaces collapsed, account digits joined", () => 
   assert.equal(input.phone, null);
 });
 
+const BANK = { bankAccount: "123456789", bankName: "ACB" };
+
 test("supplier input rejects missing name, bad tax code, account without bank", () => {
-  assert.ok("error" in readSupplierInput(form({ name: "  ", kind: "COMPANY" })));
+  assert.ok("error" in readSupplierInput(form({ name: "  ", kind: "COMPANY", taxCode: "0312345678", ...BANK })));
   assert.ok(
-    "error" in readSupplierInput(form({ name: "A", kind: "COMPANY", taxCode: "123" })),
+    "error" in readSupplierInput(form({ name: "A", kind: "COMPANY", taxCode: "123", ...BANK })),
   );
   assert.ok(
     "error" in readSupplierInput(form({ name: "A", kind: "PERSON", bankAccount: "123456" })),
   );
-  assert.ok("error" in readSupplierInput(form({ name: "A", kind: "OTHER" })));
+  assert.ok("error" in readSupplierInput(form({ name: "A", kind: "OTHER", ...BANK })));
+});
+
+test("a company needs a tax code; everyone needs bank details", () => {
+  const company = readSupplierInput(form({ name: "Cty A", kind: "COMPANY", ...BANK }));
+  assert.ok("error" in company && /mã số thuế/.test(company.error));
+  const noBank = readSupplierInput(form({ name: "Cty A", kind: "COMPANY", taxCode: "0312345678" }));
+  assert.ok("error" in noBank && /tài khoản/.test(noBank.error));
+  const personNoBank = readSupplierInput(form({ name: "Huy", kind: "PERSON" }));
+  assert.ok("error" in personNoBank && /tài khoản/.test(personNoBank.error));
+  // Cá nhân không cần MST; chủ tài khoản để trống được.
+  assert.ok(!("error" in readSupplierInput(form({ name: "Huy", kind: "PERSON", ...BANK }))));
+  assert.ok(
+    !("error" in readSupplierInput(form({ name: "Cty A", kind: "COMPANY", taxCode: "0312345678", ...BANK }))),
+  );
 });
 
 test("personal tax code may be a 12-digit citizen ID; branch codes allowed", () => {
   for (const taxCode of ["079200001234", "0312345678-001"]) {
-    const input = readSupplierInput(form({ name: "A", kind: "PERSON", taxCode }));
+    const input = readSupplierInput(form({ name: "A", kind: "PERSON", taxCode, ...BANK }));
     assert.ok(!("error" in input), taxCode);
   }
 });

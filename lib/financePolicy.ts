@@ -238,5 +238,13 @@ export function readSupplierInput(
   if (input.bankAccount && !input.bankName) {
     return { error: "Có số tài khoản thì cần ghi tên ngân hàng." };
   }
+  // Công ty phải có MST để xuất hoá đơn; cá nhân thì không cần.
+  if (kind === "COMPANY" && !input.taxCode) {
+    return { error: "Công ty cần có mã số thuế." };
+  }
+  // Ai cũng cần thông tin chuyển khoản để thanh toán (chủ tài khoản để trống = trùng tên).
+  if (!input.bankAccount || !input.bankName) {
+    return { error: "Cần nhập số tài khoản và ngân hàng để chuyển khoản." };
+  }
   return input;
 }
