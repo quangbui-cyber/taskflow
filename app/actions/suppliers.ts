@@ -127,7 +127,20 @@ export async function deleteSupplier(id: string): Promise<SupplierState> {
     select: { name: true },
   });
   if (!supplier) return { error: "Nhà cung cấp không còn tồn tại." };
-  await prisma.supplier.delete({ where: { id } });
+  try {
+    await prisma.supplier.delete({ where: { id } });
+  } catch (error) {
+    // Database chặn xoá khi nhà cung cấp đang được chọn trong IC/AC của dự án nào đó.
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      (error.code === "P2003" || error.code === "P2014")
+    ) {
+      return {
+        error: `${supplier.name} đang được dùng trong IC/AC của dự án, nên không xoá được.`,
+      };
+    }
+    throw error;
+  }
   revalidatePath("/suppliers");
   return { success: `Đã xoá ${supplier.name}.` };
 }

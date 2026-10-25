@@ -87,7 +87,7 @@ export function defaultFinanceHeader(project: {
 
 /** Đọc thông tin chung từ form (ngày dạng yyyy-MM-dd theo giờ Việt Nam). */
 export function readFinanceHeader(
-  formData: FormData,
+  formData: { get(name: string): unknown },
 ): FinanceHeader | { error: string } {
   const text = (field: keyof typeof FINANCE_HEADER_LIMITS) =>
     clean(String(formData.get(field) ?? ""));

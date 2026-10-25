@@ -58,6 +58,8 @@ model User {
   acApprovals          Project[]                @relation("ProjectAcApprover")
   createdSuppliers     Supplier[]               @relation("SupplierCreator")
   updatedSuppliers     Supplier[]               @relation("SupplierUpdater")
+  createdFinanceSheets FinanceSheet[]           @relation("FinanceSheetCreator")
+  updatedFinanceSheets FinanceSheet[]           @relation("FinanceSheetUpdater")
 
   @@index([isActive])
 }
@@ -115,6 +117,7 @@ model Project {
   tasks                Task[]
   files                ProjectFile[]
   meetings             Meeting[]
+  financeSheets        FinanceSheet[]
   onProcessAt          DateTime? // thời điểm đầu tiên chuyển sang ON_PROCESS - dùng ghi nhận doanh thu
   completedAt          DateTime? // thời điểm chuyển sang DONE
   createdAt            DateTime        @default(now())
@@ -152,9 +155,104 @@ model Supplier {
   updatedBy     User?    @relation("SupplierUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  icCostLines   CostLine[] @relation("CostLineIcSupplier")
+  acCostLines   CostLine[] @relation("CostLineAcSupplier")
 
   @@index([createdById])
   @@index([updatedById])
+}
+
+// Bảng tài chính của dự án, giống một file IC/AC: khối Báo giá, Nghiệm thu, IC, AC
+// nằm trên cùng các dòng. Mỗi phiên bản là một bảng; bản đang dùng có superseded = false.
+model FinanceSheet {
+  id             String           @id @default(cuid())
+  projectId      String
+  project        Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version        Int              @default(1)
+  icStatus       String           @default("DRAFT") // "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED"
+  acStatus       String           @default("NONE") // "NONE" | "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED"
+  superseded     Boolean          @default(false)
+  // Thông tin chung — mục trống tự ẩn khi xuất file
+  clientName     String?
+  programName    String?
+  headcount      String? // ghi tự do, vd "240 khách"
+  location       String?
+  eventStart     DateTime?
+  eventEnd       DateTime?
+  sellVatRate    Decimal          @default(0.08) @db.Decimal(5, 4)
+  // Tổng lưu sẵn để hiển thị nhanh (luôn tính lại bằng code khi lưu)
+  sellSubtotal   Decimal          @default(0) @db.Decimal(18, 0)
+  icCostSubtotal Decimal          @default(0) @db.Decimal(18, 0)
+  createdById    String?
+  createdBy      User?            @relation("FinanceSheetCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById    String?
+  updatedBy      User?            @relation("FinanceSheetUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  sections       FinanceSection[]
+
+  @@unique([projectId, version])
+  @@index([createdById])
+  @@index([updatedById])
+}
+
+model FinanceSection {
+  id        String       @id @default(cuid())
+  sheetId   String
+  sheet     FinanceSheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  order     Int
+  name      String // "I. SẢN XUẤT"
+  sellLines SellLine[]
+
+  @@index([sheetId, order])
+}
+
+// Một hạng mục bán (khối Báo giá + Nghiệm thu); có thể có nhiều dòng chi phí.
+model SellLine {
+  id                String         @id @default(cuid())
+  sectionId         String
+  section           FinanceSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  order             Int
+  stt               String? // số thứ tự ghi trên file, vd "1", "2a"
+  name              String
+  description       String?
+  unit              String?
+  quantity          Decimal?       @db.Decimal(14, 3)
+  unitPrice         Decimal?       @db.Decimal(18, 2) // null = "-" (không tính tiền riêng)
+  note              String?
+  acceptedQuantity  Decimal?       @db.Decimal(14, 3) // Nghiệm thu
+  acceptedUnitPrice Decimal?       @db.Decimal(18, 2)
+  acceptedNote      String?
+  costs             CostLine[]
+
+  @@index([sectionId, order])
+}
+
+// Một dòng chi phí (khối IC + AC).
+model CostLine {
+  id           String    @id @default(cuid())
+  sellLineId   String
+  sellLine     SellLine  @relation(fields: [sellLineId], references: [id], onDelete: Cascade)
+  order        Int
+  description  String?
+  unit         String?
+  icQuantity   Decimal?  @db.Decimal(14, 3)
+  icUnitPrice  Decimal?  @db.Decimal(18, 2)
+  icVatRate    Decimal?  @db.Decimal(5, 4) // null = không có VAT đầu vào
+  icSupplierId String?
+  icSupplier   Supplier? @relation("CostLineIcSupplier", fields: [icSupplierId], references: [id], onDelete: Restrict)
+  icNote       String?
+  acQuantity   Decimal?  @db.Decimal(14, 3)
+  acUnitPrice  Decimal?  @db.Decimal(18, 2)
+  acVatRate    Decimal?  @db.Decimal(5, 4)
+  acSupplierId String?
+  acSupplier   Supplier? @relation("CostLineAcSupplier", fields: [acSupplierId], references: [id], onDelete: Restrict)
+  acNote       String?
+  addedInAc    Boolean   @default(false) // dòng phát sinh, không có trong IC
+
+  @@index([sellLineId, order])
+  @@index([icSupplierId])
+  @@index([acSupplierId])
 }
 
 // Danh mục khách hàng — do admin tạo sẵn
