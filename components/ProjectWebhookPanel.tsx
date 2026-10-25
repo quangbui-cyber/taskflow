@@ -68,7 +68,7 @@ export default function ProjectWebhookPanel({
             <Webhook size={20} aria-hidden="true" />
           </span>
           <div>
-            <h2 className="font-semibold text-zinc-950">Google Chat</h2>
+            <h2 className="font-semibold text-zinc-950">Thông báo vào Google Chat (webhook)</h2>
             <p className="text-sm text-zinc-500">
               Chỉ chủ dự án hoặc admin được cấu hình webhook.
             </p>
@@ -86,7 +86,7 @@ export default function ProjectWebhookPanel({
             <Webhook size={20} aria-hidden="true" />
           </span>
           <div>
-            <h2 className="font-semibold text-zinc-950">Google Chat</h2>
+            <h2 className="font-semibold text-zinc-950">Thông báo vào Google Chat (webhook)</h2>
             <p className="text-sm text-zinc-500">
               Gửi thông báo của dự án vào một Space riêng.
             </p>

@@ -5,6 +5,7 @@ import {
   Building2,
   CalendarDays,
   FileText,
+  MessagesSquare,
   ShieldCheck,
   UsersRound,
 } from "lucide-react";
@@ -18,6 +19,8 @@ import ProjectEditButton from "@/components/ProjectEditButton";
 import ProjectActionsMenu from "@/components/ProjectActionsMenu";
 import ProjectDescriptionDisclosure from "@/components/ProjectDescriptionDisclosure";
 import ProjectWebhookPanel from "@/components/ProjectWebhookPanel";
+import ProjectChatSpacePanel from "@/components/ProjectChatSpacePanel";
+import { canManageChatSpaces, googleWorkspaceConfigured } from "@/lib/googleWorkspace";
 import ProjectFilesPanel from "@/components/ProjectFilesPanel";
 import ProjectFinancePanel from "@/components/ProjectFinancePanel";
 import ProjectStatusSelect from "@/components/ProjectStatusSelect";
@@ -54,15 +57,16 @@ export default async function ProjectPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string; task?: string }>;
+  searchParams: Promise<{ tab?: string; task?: string; google?: string }>;
 }) {
   const { id } = await params;
-  const { tab, task: requestedTaskId } = await searchParams;
+  const { tab, task: requestedTaskId, google: googleResult } = await searchParams;
   const user = await requireUser();
   const project = await prisma.project.findUnique({
     where: { id },
     include: {
       client: { select: { id: true, name: true } },
+      googleChatSpaceBy: { select: { name: true } },
       responsibleTeam: { select: { id: true, name: true } },
       responsibleGroup: { select: { id: true, name: true } },
       account: {
@@ -260,6 +264,13 @@ export default async function ProjectPage({
           ? "finance"
           : "tasks";
   const canManageWebhook = isMember || user.role === "ADMIN";
+  const viewerGoogle =
+    activeTab === "webhook"
+      ? await prisma.user.findUnique({
+          where: { id: user.id },
+          select: { googleToken: true, googleScopes: true },
+        })
+      : null;
   const canViewRevenue = hasRevenueAccess(user.role) && project.category === "CLIENT";
   const categoryInfo = projectCategoryInfo(project.category);
   const projectMetadata = extractProjectMetadata(project.description);
@@ -369,6 +380,17 @@ export default async function ProjectPage({
                     triggerLabel="Tạo cuộc họp"
                     triggerClassName="tf-button-secondary !min-h-9 !px-3 !py-1.5 text-sm"
                   />
+                )}
+                {project.googleChatSpaceUri && (
+                  <a
+                    href={project.googleChatSpaceUri}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="tf-button-secondary !min-h-9 !px-3 !py-1.5 text-sm"
+                  >
+                    <MessagesSquare size={15} strokeWidth={1.8} aria-hidden="true" />
+                    Nhóm Chat
+                  </a>
                 )}
                 {isOwner && <ProjectActionsMenu projectId={project.id} />}
               </div>
@@ -519,13 +541,27 @@ export default async function ProjectPage({
                   : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
               }`}
             >
-              Webhook
+              Google Chat
             </Link>
           </nav>
         </header>
 
         {activeTab === "webhook" ? (
-          <div className="flex-1 overflow-auto bg-[#f7f8fa] p-4 sm:p-6">
+          <div className="flex-1 space-y-4 overflow-auto bg-[#f7f8fa] p-4 sm:p-6">
+            <ProjectChatSpacePanel
+              projectId={project.id}
+              space={
+                project.googleChatSpaceUri
+                  ? { uri: project.googleChatSpaceUri, creatorName: project.googleChatSpaceBy?.name ?? null }
+                  : null
+              }
+              memberCount={project.members.length}
+              canManage={canManageWebhook}
+              canUnlink={isOwner || user.role === "ADMIN" || project.googleChatSpaceById === user.id}
+              viewerConnected={Boolean(viewerGoogle?.googleToken && canManageChatSpaces(viewerGoogle.googleScopes))}
+              configured={googleWorkspaceConfigured()}
+              googleResult={googleResult ?? null}
+            />
             <ProjectWebhookPanel
               projectId={project.id}
               configured={Boolean(project.googleChatWebhookUrl)}

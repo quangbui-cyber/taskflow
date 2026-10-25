@@ -136,7 +136,7 @@ export async function submitFinanceSheet(
     toIds: [approver.id],
     // Người gửi cũng nằm trong CC để theo dõi cùng luồng thư.
     ccIds: [...ccIds, user.id],
-    replyToId: user.id,
+    senderId: user.id,
     messageId,
     event: {
       kind: "SUBMITTED",
@@ -271,7 +271,7 @@ export async function withdrawFinanceSheet(
       projectId: project.id,
       toIds: [approver.id],
       ccIds: [...sheet.icCcUserIds, user.id],
-      replyToId: user.id,
+      senderId: user.id,
       inReplyTo: sheet.icEmailMessageId,
       event: {
         kind: "WITHDRAWN",
@@ -317,7 +317,7 @@ async function notifyDecision(
     projectId: project.id,
     toIds: submitterId ? [submitterId] : [user.id],
     ccIds: [...sheet.icCcUserIds, user.id],
-    replyToId: user.id,
+    senderId: user.id,
     inReplyTo: sheet.icEmailMessageId,
     event: {
       kind,

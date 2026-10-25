@@ -396,11 +396,12 @@ Mỗi luật có ví dụ thật từ file mẫu nếu có.
 
 **Email duyệt (Q17)** — áp dụng cho IC, sau này cả AC và các phiếu đề nghị:
 - Bấm "Gửi duyệt" mở hộp gửi: **Gửi tới** = người duyệt của dự án (cố định); **CC** = chọn thêm người trong app (gợi ý sẵn Account phụ trách, chủ dự án; nhớ danh sách CC lần trước của dự án); kèm **lời nhắn** tuỳ chọn.
-- Email gửi từ hộp thư chung của app (SMTP đang dùng cho nghỉ phép), **Reply-To là người gửi** để trả lời thẳng cho họ.
+- Người bấm đã **"Kết nối Google"** (trang Tài khoản của tôi; một lần cho phép gồm `gmail.send` — chỉ gửi, không đọc thư — và quyền tạo nhóm Google Chat; phải trùng email đăng nhập) thì email đi **từ hộp thư của chính họ**. Chưa kết nối hoặc gửi lỗi thì gửi từ hộp thư chung của app (SMTP), **Reply-To là người bấm**.
 - Nội dung: dự án, khách hàng, phiên bản IC, tổng giá vốn, số cảnh báo chưa xử lý, lời nhắn, nút **"Mở IC để duyệt"** (vào app mới duyệt được, giống email nghỉ phép — không duyệt bằng một cú bấm trong email).
 - Giá bán, lợi nhuận, margin chỉ có trong email khi **mọi người nhận** đều có quyền xem số liệu tài chính; có người không có quyền thì email bỏ các số đó.
 - Duyệt / từ chối → email trả lời **trong cùng luồng** tới người gửi + danh sách CC (từ chối kèm lý do).
 - Chuông thông báo trong app vẫn giữ; **không gửi Google Chat** cho luồng duyệt.
+- **Nhóm Google Chat theo dự án:** tab "Google Chat" của dự án có nút **Tạo nhóm Google Chat** (tên trùng tên dự án, thêm sẵn thành viên dự án; người mới vào dự án tự được thêm). App chỉ tạo nhóm và thêm người, không đọc tin nhắn. Đăng tin thông báo vào nhóm (bot hay tên người bấm) — chưa chốt.
 
 - Gửi duyệt IC/AC/phiếu → người duyệt của dự án (chuông + Google Chat).
 - Duyệt xong → Kế toán (chờ chi) + người lập. Từ chối → người lập kèm lý do.

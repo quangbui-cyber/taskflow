@@ -1,11 +1,15 @@
 import { after } from "next/server";
 import { emailAppUrl, emailSenderAddress, isEmailConfigured, sendEmail } from "./email";
+import { sendViaGmail } from "./googleGmail";
+import { canSendGmail, googleWorkspaceConfigured, GoogleNotConnectedError } from "./googleWorkspace";
 import { buildFinanceApprovalEmail, type FinanceEmailEvent } from "./financeApprovalEmail";
 import { canViewFinanceSell } from "./financePolicy";
 import { prisma } from "./prisma";
 
 // Gửi email duyệt sau khi thao tác đã lưu xong (không làm chậm nút bấm, lỗi email
 // không làm hỏng thao tác chính) — giống email nghỉ phép.
+// Người bấm đã kết nối Gmail thì thư đi từ hộp thư của họ; chưa kết nối hoặc gửi lỗi
+// thì gửi bằng hộp thư chung của app, Reply-To về người bấm.
 
 /** Message-ID cho email gửi duyệt, cùng tên miền với hộp thư gửi. */
 export function newFinanceMessageId(sheetId: string) {
@@ -20,17 +24,18 @@ export function queueFinanceApprovalEmail(options: {
   projectId: string;
   toIds: string[];
   ccIds: string[];
-  replyToId: string | null;
+  /** Người bấm gửi / duyệt / từ chối / rút lại. */
+  senderId: string;
   messageId?: string;
   inReplyTo?: string | null;
 }) {
-  if (!isEmailConfigured()) return;
+  if (!isEmailConfigured() && !googleWorkspaceConfigured()) return;
   after(async () => {
     try {
-      const ids = [...new Set([...options.toIds, ...options.ccIds, options.replyToId].filter(Boolean))] as string[];
+      const ids = [...new Set([...options.toIds, ...options.ccIds, options.senderId])];
       const people = await prisma.user.findMany({
         where: { id: { in: ids }, isActive: true, deletedAt: null },
-        select: { id: true, email: true, role: true },
+        select: { id: true, name: true, email: true, role: true, googleToken: true, googleScopes: true },
       });
       const byId = new Map(people.map((person) => [person.id, person]));
       const to = [...new Set(options.toIds.map((id) => byId.get(id)?.email).filter(Boolean))] as string[];
@@ -49,14 +54,32 @@ export function queueFinanceApprovalEmail(options: {
         sell: everyoneSeesSell ? options.event.sell : null,
         link: appUrl ? `${appUrl}/projects/${options.projectId}?tab=finance` : null,
       });
-      const result = await sendEmail({
+      const sender = byId.get(options.senderId);
+      const message = {
         to,
         cc,
-        replyTo: options.replyToId ? byId.get(options.replyToId)?.email : undefined,
         messageId: options.messageId,
         inReplyTo: options.inReplyTo ?? undefined,
         ...content,
-      });
+      };
+
+      if (sender?.googleToken && canSendGmail(sender.googleScopes) && googleWorkspaceConfigured()) {
+        try {
+          // Thư từ hộp thư của chính mình: không cần CC lại bản thân hay Reply-To.
+          await sendViaGmail(sender.id, {
+            ...message,
+            fromName: sender.name,
+            cc: cc.filter((email) => email !== sender.email),
+          });
+          return;
+        } catch (error) {
+          if (!(error instanceof GoogleNotConnectedError)) {
+            console.warn("Gmail send failed, falling back to the shared mailbox.");
+          }
+        }
+      }
+      if (!isEmailConfigured()) return;
+      const result = await sendEmail({ ...message, replyTo: sender?.email });
       if (!result.ok) console.warn("Finance approval email could not be delivered.");
     } catch {
       console.warn("Finance approval email could not be delivered.");
