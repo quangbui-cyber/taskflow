@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { parseCommentMentions } from "@/lib/commentMentions";
 import {
+  ArrowLeft,
   BriefcaseBusiness,
   Building2,
   CalendarDays,
@@ -285,6 +286,51 @@ export default async function ProjectPage({
     ? requestedTaskId ?? null
     : null;
 
+  // Tab Tài chính mở toàn màn hình (không thanh bên, đầu trang gọn) để bảng IC có đủ chỗ.
+  if (activeTab === "finance") {
+    const tabLinks = [
+      { href: `/projects/${project.id}`, label: "Task" },
+      { href: `/projects/${project.id}?tab=files`, label: "Tài liệu" },
+      { href: `/projects/${project.id}?tab=webhook`, label: "Google Chat" },
+    ];
+    return (
+      <div className="flex min-h-screen flex-col bg-[#f7f8fa] md:h-screen md:max-h-screen md:overflow-hidden">
+        <header className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-zinc-200 bg-white px-4 py-2.5 sm:px-5">
+          <Link
+            href={`/projects/${project.id}`}
+            className="inline-flex items-center gap-1.5 rounded-[6px] px-2 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950"
+          >
+            <ArrowLeft size={16} aria-hidden="true" />
+            Về dự án
+          </Link>
+          <span aria-hidden="true" className="hidden h-6 w-px bg-zinc-200 sm:block" />
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+            <span
+              className="h-2.5 w-2.5 shrink-0 rounded-full"
+              style={{ backgroundColor: projectStatusColor(project.status) }}
+            />
+            <h1 className="truncate text-base font-semibold text-zinc-950 sm:text-lg">
+              {project.name}
+              <span className="font-normal text-zinc-500"> · Báo giá &amp; IC</span>
+            </h1>
+          </div>
+          <nav aria-label="Các tab khác của dự án" className="flex gap-1">
+            {tabLinks.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="rounded-[7px] px-3 py-1.5 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+        </header>
+        <ProjectFinancePanel projectId={project.id} viewer={{ id: user.id, role: user.role }} />
+      </div>
+    );
+  }
+
   return (
     <div className="tf-shell">
       <Sidebar user={user} projects={sidebarProjects} activeProjectId={id} />
@@ -509,11 +555,7 @@ export default async function ProjectPage({
             {hasFinanceTab && (
               <Link
                 href={`/projects/${project.id}?tab=finance`}
-                className={`rounded-[7px] px-3 py-1.5 text-sm font-medium transition-colors ${
-                  activeTab === "finance"
-                    ? "bg-brand-50 text-brand-800"
-                    : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
-                }`}
+                className="rounded-[7px] px-3 py-1.5 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
               >
                 Tài chính
               </Link>
@@ -566,13 +608,6 @@ export default async function ProjectPage({
               projectId={project.id}
               configured={Boolean(project.googleChatWebhookUrl)}
               canManage={canManageWebhook}
-            />
-          </div>
-        ) : activeTab === "finance" ? (
-          <div className="flex-1 overflow-auto bg-[#f7f8fa] p-4 sm:p-6">
-            <ProjectFinancePanel
-              projectId={project.id}
-              viewer={{ id: user.id, role: user.role }}
             />
           </div>
         ) : activeTab === "files" ? (
