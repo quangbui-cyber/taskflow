@@ -80,6 +80,12 @@ export function buildFinanceApprovalEmail(event: FinanceEmailEvent) {
   }
 
   const headline = HEADLINE[event.kind](event);
+  // Trả lời thư duyệt/từ chối thì về người duyệt; thư gửi/rút lại thì về người gửi.
+  const replyTarget =
+    event.kind === "APPROVED" || event.kind === "REJECTED"
+      ? `${event.actorName} (người duyệt)`
+      : `${event.submitterName} (người gửi IC)`;
+  const footer = `Email tự động từ myCreative. Bấm Trả lời để gửi thư cho ${replyTarget}.`;
   const text = [
     headline,
     "",
@@ -87,7 +93,7 @@ export function buildFinanceApprovalEmail(event: FinanceEmailEvent) {
     ...(notes.length ? ["", ...notes] : []),
     ...(event.link ? ["", `${BUTTON[event.kind]}: ${event.link}`] : []),
     "",
-    "Email tự động từ myCreative. Trả lời email này để gửi thư cho người gửi IC.",
+    footer,
   ].join("\n");
 
   const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d1d1f;max-width:560px">
@@ -100,7 +106,7 @@ export function buildFinanceApprovalEmail(event: FinanceEmailEvent) {
     .join("")}</table>
 ${notes.map((note) => `<p style="margin:12px 0 0;padding:10px 12px;background:#f5f6f8;border-radius:6px">${escapeHtml(note)}</p>`).join("\n")}
 ${event.link ? `<p style="margin:20px 0 0"><a href="${escapeHtml(event.link)}" style="display:inline-block;background:#a8d431;color:#182008;text-decoration:none;font-weight:700;padding:10px 16px;border-radius:6px">${escapeHtml(BUTTON[event.kind])}</a></p>` : ""}
-<p style="margin:20px 0 0;color:#767b86;font-size:12px">Email tự động từ myCreative. Trả lời email này để gửi thư cho người gửi IC.</p>
+<p style="margin:20px 0 0;color:#767b86;font-size:12px">${escapeHtml(footer)}</p>
 </div>`;
 
   return { subject, text, html };
