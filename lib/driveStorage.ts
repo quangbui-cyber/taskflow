@@ -189,26 +189,31 @@ export async function pushPendingFiles(options: { projectId?: string; limit?: nu
 
   const projectFiles = await prisma.projectFile.findMany({
     where: { ...pendingWhere(), ...(options.projectId ? { projectId: options.projectId } : {}) },
-    select: { id: true },
+    select: { id: true, projectId: true },
     orderBy: { createdAt: "asc" },
     take: limit,
   });
   const taskFiles = await prisma.taskFile.findMany({
     where: { ...pendingWhere(), ...(options.projectId ? { task: { projectId: options.projectId } } : {}) },
-    select: { id: true },
+    select: { id: true, task: { select: { projectId: true } } },
     orderBy: { createdAt: "asc" },
     take: Math.max(0, limit - projectFiles.length),
   });
 
   const jobs = [
-    ...projectFiles.map((row) => () => pushProjectFile(row.id)),
-    ...taskFiles.map((row) => () => pushTaskFile(row.id)),
+    ...projectFiles.map((row) => ({ projectId: row.projectId, run: () => pushProjectFile(row.id) })),
+    ...taskFiles.map((row) => ({ projectId: row.task.projectId, run: () => pushTaskFile(row.id) })),
   ];
+  // Dự án có file vừa lên Drive (thư mục có thể mới tạo) thì share quyền xem ngay.
+  const touchedProjects = new Set<string>();
   let lastError: string | null = null;
   for (const job of jobs) {
     if (Date.now() > deadline) break;
     try {
-      if (await job()) result.pushed += 1;
+      if (await job.run()) {
+        result.pushed += 1;
+        touchedProjects.add(job.projectId);
+      }
     } catch (error) {
       if (error instanceof DriveNotConnectedError) return { ...result, notConnected: true };
       result.failed += 1;
@@ -217,7 +222,7 @@ export async function pushPendingFiles(options: { projectId?: string; limit?: nu
     }
   }
   if (lastError) await recordDriveError(`Không đẩy được ${result.failed} file lên Drive: ${lastError}`);
-  if (result.pushed > 0) await syncProjectSharingSafe(options.projectId);
+  for (const projectId of touchedProjects) await syncProjectSharingSafe(projectId);
   return result;
 }
 
