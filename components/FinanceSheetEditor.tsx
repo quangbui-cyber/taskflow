@@ -3,9 +3,13 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Plus, Save, Trash2, Undo2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, ChevronDown, ChevronUp, Plus, Save, Trash2, Undo2 } from "lucide-react";
 import { saveFinanceSheet } from "@/app/actions/finance";
 import FinanceApprovalBar, { type FinanceApprovalProps } from "@/components/FinanceApprovalBar";
+import SupplierPicker from "@/components/SupplierPicker";
+import { ImportedSuppliersDialog, SupplierCreateDialog, type FileSupplierGroup } from "@/components/SupplierDialogs";
+import type { SupplierOption } from "@/components/SupplierQuickForm";
+import { searchKey } from "@/lib/supplierMatch";
 import { useInteraction } from "@/components/InteractionProvider";
 import {
   costAmount,
@@ -25,7 +29,26 @@ import type {
 } from "@/lib/financeSheet";
 import { formatViNumber, parseViNumber } from "@/lib/viNumber";
 
-export type SupplierOption = { id: string; name: string; shortName: string | null };
+export type { SupplierOption } from "@/components/SupplierQuickForm";
+
+// Dòng nhập từ Excel mà NCC chưa có trong danh bạ: ghi chú giữ "NCC trong file: <tên>".
+const FILE_SUPPLIER_NOTE = /NCC trong file:\s*([^·]+?)\s*(?:·|$)/;
+
+function fileSupplierName(cost: { icSupplierId: string | null; icNote: string | null }) {
+  if (cost.icSupplierId || !cost.icNote) return null;
+  return FILE_SUPPLIER_NOTE.exec(cost.icNote)?.[1]?.trim() || null;
+}
+
+/** Bỏ phần "NCC trong file: …" khỏi ghi chú khi đã chọn được NCC. */
+function withoutFileSupplierNote(note: string | null) {
+  if (!note) return note;
+  const rest = note
+    .split("·")
+    .map((part) => part.trim())
+    .filter((part) => part && !/^NCC trong file:/.test(part))
+    .join(" · ");
+  return rest || null;
+}
 
 // Dòng chưa lưu có khoá tạm "new-…"; khi gửi lên máy chủ thì bỏ id để máy chủ tạo mới.
 type EditCost = CostLineView & { key: string };
@@ -334,6 +357,7 @@ export default function FinanceSheetEditor({
   suppliers,
   approval,
   toolbar,
+  canManageSuppliers = false,
 }: {
   projectId: string;
   sheet: FinanceSheetView;
@@ -342,6 +366,8 @@ export default function FinanceSheetEditor({
   approval: FinanceApprovalProps;
   /** Nút phụ hiện bên phải dãy số tổng (vd "Nhập từ Excel"). */
   toolbar?: React.ReactNode;
+  /** Được thêm NCC mới vào danh bạ (Admin, Account, Kế toán). */
+  canManageSuppliers?: boolean;
 }) {
   const router = useRouter();
   const { notify } = useInteraction();
@@ -417,15 +443,77 @@ export default function FinanceSheetEditor({
     [sections, sellVatRate],
   );
 
+  // NCC tạo mới ngay trong bảng được thêm vào đây, không cần tải lại trang.
+  const [supplierList, setSupplierList] = useState<SupplierOption[]>(suppliers);
+  const [createTarget, setCreateTarget] = useState<{
+    sectionKey: string;
+    lineKey: string;
+    costKey: string;
+    text: string;
+  } | null>(null);
+  const [fileSuppliersOpen, setFileSuppliersOpen] = useState(false);
+
+  function addSuppliers(created: SupplierOption[]) {
+    setSupplierList((current) =>
+      [...current.filter((item) => !created.some((supplier) => supplier.id === item.id)), ...created].sort((a, b) =>
+        (a.shortName ?? a.name).localeCompare(b.shortName ?? b.name, "vi", { sensitivity: "base" }),
+      ),
+    );
+  }
+
+  /** Gán NCC cho mọi dòng chi phí chưa có NCC mà file ghi tên khớp (tên đã chuẩn hoá → id). */
+  function assignByFileName(assignments: Map<string, string>) {
+    const matches = (cost: CostLineView) => {
+      const name = fileSupplierName(cost);
+      return Boolean(name && assignments.has(searchKey(name)));
+    };
+    const count = sections.reduce(
+      (sum, section) => sum + section.lines.reduce((inner, line) => inner + line.costs.filter(matches).length, 0),
+      0,
+    );
+    edit((current) =>
+      current.map((section) => ({
+        ...section,
+        lines: section.lines.map((line) => ({
+          ...line,
+          costs: line.costs.map((cost) => {
+            const name = fileSupplierName(cost);
+            const id = name ? assignments.get(searchKey(name)) : undefined;
+            if (!id) return cost;
+            return { ...cost, icSupplierId: id, icNote: withoutFileSupplierNote(cost.icNote) };
+          }),
+        })),
+      })),
+    );
+    return count;
+  }
+
+  // Các tên NCC trong file chưa gán, gom theo tên (để thêm cả loạt).
+  const fileSupplierGroups = useMemo<FileSupplierGroup[]>(() => {
+    const groups = new Map<string, FileSupplierGroup>();
+    for (const section of sections)
+      for (const line of section.lines)
+        for (const cost of line.costs) {
+          const name = fileSupplierName(cost);
+          if (!name) continue;
+          const key = searchKey(name);
+          const group = groups.get(key) ?? { fileName: name, lineCount: 0 };
+          group.lineCount += 1;
+          groups.set(key, group);
+        }
+    return [...groups.values()];
+  }, [sections]);
+  const unassignedCostCount = fileSupplierGroups.reduce((sum, group) => sum + group.lineCount, 0);
+
   const supplierLabel = useMemo(() => {
     const map = new Map(
-      suppliers.map((supplier) => [
+      supplierList.map((supplier) => [
         supplier.id,
         supplier.shortName ? `${supplier.shortName}` : supplier.name,
       ]),
     );
     return (id: string | null) => (id ? map.get(id) ?? "(đã xoá)" : "");
-  }, [suppliers]);
+  }, [supplierList]);
 
   function edit(updater: (sections: EditSection[]) => EditSection[]) {
     setSections((current) => updater(current));
@@ -719,6 +807,18 @@ export default function FinanceSheetEditor({
       </section>
 
       <div className="flex flex-col px-4 pb-3 pt-3 sm:px-5 md:min-h-0 md:flex-1">
+        {!readOnly && fileSupplierGroups.length > 0 && (
+          <div className="mb-3 flex shrink-0 flex-wrap items-center gap-3 rounded-[8px] border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
+            <AlertTriangle size={17} aria-hidden="true" className="shrink-0" />
+            <span className="min-w-0 flex-1">
+              <b>{unassignedCostCount} dòng chi phí chưa có NCC.</b> File ghi {fileSupplierGroups.length} NCC chưa có trong danh bạ:{" "}
+              {fileSupplierGroups.map((group) => group.fileName).join(", ")}.
+            </span>
+            <button type="button" disabled={pending} onClick={() => setFileSuppliersOpen(true)} className="tf-button-primary !min-h-9 !py-1.5">
+              {canManageSuppliers ? `Thêm nhanh ${fileSupplierGroups.length} NCC` : "Chọn NCC có sẵn"}
+            </button>
+          </div>
+        )}
         <div className="tf-panel overflow-auto md:min-h-0 md:flex-1">
           <div className="text-sm" style={{ minWidth: tableMinWidth }}>
             <div
@@ -873,20 +973,24 @@ export default function FinanceSheetEditor({
                                       (readOnly ? (
                                         <span className="truncate px-2 text-sm font-medium text-brand-800">{supplierLabel(costLine.icSupplierId) || "—"}</span>
                                       ) : (
-                                        <select
-                                          aria-label="Nhà cung cấp"
-                                          value={costLine.icSupplierId ?? ""}
+                                        <SupplierPicker
+                                          value={costLine.icSupplierId}
+                                          suppliers={supplierList}
+                                          fileName={fileSupplierName(costLine)}
                                           disabled={pending}
-                                          onChange={(event) => editCost(section.key, line.key, costLine.key, { icSupplierId: event.target.value || null })}
+                                          onChange={(id) =>
+                                            editCost(section.key, line.key, costLine.key, {
+                                              icSupplierId: id,
+                                              ...(id ? { icNote: withoutFileSupplierNote(costLine.icNote) } : {}),
+                                            })
+                                          }
+                                          onCreate={
+                                            canManageSuppliers
+                                              ? (text) => setCreateTarget({ sectionKey: section.key, lineKey: line.key, costKey: costLine.key, text })
+                                              : undefined
+                                          }
                                           className={`${CELL_INPUT} border-transparent font-medium text-brand-800`}
-                                        >
-                                          <option value="">— Chọn nhà cung cấp —</option>
-                                          {suppliers.map((supplier) => (
-                                            <option key={supplier.id} value={supplier.id}>
-                                              {supplier.shortName ? `${supplier.shortName} · ${supplier.name}` : supplier.name}
-                                            </option>
-                                          ))}
-                                        </select>
+                                        />
                                       ))}
                                     {col === "unit" && <TextField label="Đơn vị tính chi phí" value={costLine.unit} disabled={disabled} onChange={(value) => editCost(section.key, line.key, costLine.key, { unit: blankToNull(value) })} />}
                                     {col === "qty" && <NumberField fieldKey={`${costLine.key}:icQuantity`} onValidityChange={markInvalid} label="Số lượng chi phí" decimals={3} value={costLine.icQuantity} disabled={disabled} onChange={(value) => editCost(section.key, line.key, costLine.key, { icQuantity: value })} />}
@@ -1013,6 +1117,45 @@ export default function FinanceSheetEditor({
             </div>
           </div>
         </div>
+      )}
+
+      {createTarget && (
+        <SupplierCreateDialog
+          initialText={createTarget.text}
+          suppliers={supplierList}
+          sameFileLines={Math.max(
+            0,
+            (fileSupplierGroups.find((group) => searchKey(group.fileName) === searchKey(createTarget.text))?.lineCount ?? 0) -
+              1,
+          )}
+          onClose={() => setCreateTarget(null)}
+          onDone={(supplier, { created, assignSameFile }) => {
+            if (created) addSuppliers([supplier]);
+            const target = createTarget;
+            setCreateTarget(null);
+            if (assignSameFile) assignByFileName(new Map([[searchKey(target.text), supplier.id]]));
+            editCost(target.sectionKey, target.lineKey, target.costKey, { icSupplierId: supplier.id });
+            notify({
+              message: `${created ? "Đã thêm vào danh bạ và chọn" : "Đã chọn"} ${supplier.shortName ?? supplier.name}. Bấm "Lưu IC" để lưu bảng.`,
+              tone: "success",
+            });
+          }}
+        />
+      )}
+
+      {fileSuppliersOpen && (
+        <ImportedSuppliersDialog
+          groups={fileSupplierGroups}
+          suppliers={supplierList}
+          canCreate={canManageSuppliers}
+          onClose={() => setFileSuppliersOpen(false)}
+          onCreated={addSuppliers}
+          onDone={(assignments) => {
+            setFileSuppliersOpen(false);
+            const count = assignByFileName(assignments);
+            notify({ message: `Đã gán NCC cho ${count} dòng chi phí. Bấm "Lưu IC" để lưu bảng.`, tone: "success" });
+          }}
+        />
       )}
     </div>
   );
