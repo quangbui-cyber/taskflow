@@ -1,9 +1,11 @@
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { pushPendingFiles } from "@/lib/driveStorage";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { followerIds, notify } from "@/lib/notify";
 import { readProjectUpload } from "@/lib/projectFiles";
 import { findAccessibleTask, isTaskFileKind } from "@/lib/taskFiles";
+import { notifyTaskFileAdded } from "@/lib/taskFileNotify";
 
 export const runtime = "nodejs";
 
@@ -60,26 +62,11 @@ export async function POST(
       },
     });
 
-    // Tệp giao việc → báo người làm; tệp kết quả → báo người giao và người theo dõi.
-    const recipients =
-      kind === "BRIEF"
-        ? [task.assigneeId]
-        : [task.creatorId, ...(await followerIds(taskId))];
-    await notify(
-      recipients.filter((id) => id !== user.id),
-      {
-        type: "TASK_UPDATED",
-        message:
-          kind === "BRIEF"
-            ? `${user.name} đính kèm tệp giao việc “${upload.name}” vào task “${task.title}”.`
-            : `${user.name} đã nộp tệp kết quả “${upload.name}” cho task “${task.title}”.`,
-        taskId,
-        projectId: task.projectId,
-      }
-    );
+    await notifyTaskFileAdded(task, user, kind, upload.name);
+    after(() => pushPendingFiles({ projectId: task.projectId }));
 
     revalidatePath(`/projects/${task.projectId}`);
-    return Response.json({ file });
+    return Response.json({ file: { ...file, driveUrl: null } });
   } catch (error) {
     return Response.json(
       {

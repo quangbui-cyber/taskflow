@@ -10,6 +10,8 @@ import { sendGoogleChat } from "@/lib/googleChat";
 import { taskGoogleChatMessage, type TaskChatInput } from "@/lib/taskGoogleChat";
 import { PRIORITIES, STATUSES } from "@/lib/types";
 import { readTaskCreationFiles } from "@/lib/taskCreationFiles";
+import { driveFolderKeys, queueDrivePush, renameDriveFolderSafe, trashTaskFolderSafe } from "@/lib/driveStorage";
+import { after } from "next/server";
 
 async function projectChat(projectId: string) {
   const project = await prisma.project.findUnique({
@@ -181,6 +183,7 @@ export async function createTask(
     actorName: user.name, dueDate: task.dueDate,
   });
 
+  if (attachments.length > 0) queueDrivePush(projectId);
   revalidatePath(`/projects/${projectId}`);
   return {};
 }
@@ -331,6 +334,9 @@ export async function updateTask(
     });
   }
 
+  if (data.title !== undefined && data.title !== task.title) {
+    after(() => renameDriveFolderSafe(driveFolderKeys.task(taskId), updatedTask.title));
+  }
   revalidatePath(`/projects/${task.projectId}`);
   revalidatePath("/");
 }
@@ -407,6 +413,7 @@ export async function deleteTask(taskId: string) {
   await assertMember(task.projectId);
 
   await prisma.task.delete({ where: { id: taskId } });
+  after(() => trashTaskFolderSafe(taskId));
   revalidatePath(`/projects/${task.projectId}`);
   revalidatePath("/");
 }

@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/meeting-starts",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/drive-sync",
+      "schedule": "0 19 * * *"
     }
   ]
 }

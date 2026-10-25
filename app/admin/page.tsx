@@ -12,6 +12,10 @@ import SalesTeamManager from "@/components/SalesTeamManager";
 import AccountCatalogManager from "@/components/AccountCatalogManager";
 import ClientCatalogManager from "@/components/ClientCatalogManager";
 import MeetingRoomManager from "@/components/MeetingRoomManager";
+import DriveStorageSettings from "@/components/DriveStorageSettings";
+import { googleAuthConfigured } from "@/lib/googleAuth";
+import { expectedDriveAccount, sharedDriveId } from "@/lib/googleDrive";
+import { pendingDriveFileCounts } from "@/lib/driveStorage";
 
 const SETTINGS_TABS = [
   { key: "create-user", label: "Tạo tài khoản" },
@@ -20,6 +24,7 @@ const SETTINGS_TABS = [
   { key: "client", label: "Client" },
   { key: "account", label: "Team & Account" },
   { key: "rooms", label: "Phòng họp" },
+  { key: "storage", label: "Lưu trữ" },
 ] as const;
 
 type SettingsTab = (typeof SETTINGS_TABS)[number]["key"];
@@ -31,11 +36,42 @@ function isSettingsTab(value: string | undefined): value is SettingsTab {
 async function SettingsContent({
   activeTab,
   adminId,
+  driveResult,
 }: {
   activeTab: SettingsTab;
   adminId: string;
+  driveResult?: string;
 }) {
   if (activeTab === "create-user") return <CreateUserForm />;
+
+  if (activeTab === "storage") {
+    const [connection, counts] = await Promise.all([
+      prisma.googleDriveConnection.findUnique({
+        where: { id: "default" },
+        select: { email: true, connectedAt: true, lastError: true, lastErrorAt: true },
+      }),
+      pendingDriveFileCounts(),
+    ]);
+    return (
+      <DriveStorageSettings
+        configured={googleAuthConfigured()}
+        connection={
+          connection
+            ? {
+                email: connection.email,
+                connectedAt: connection.connectedAt.toISOString(),
+                lastError: connection.lastError,
+                lastErrorAt: connection.lastErrorAt?.toISOString() ?? null,
+              }
+            : null
+        }
+        expectedAccount={expectedDriveAccount()}
+        sharedDriveId={sharedDriveId()}
+        counts={counts}
+        result={driveResult}
+      />
+    );
+  }
 
   if (activeTab === "users") {
     const users = await prisma.user.findMany({
@@ -238,7 +274,7 @@ async function SettingsContent({
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; drive?: string }>;
 }) {
   const [admin, params] = await Promise.all([requireAdmin(), searchParams]);
   const requestedTab = params.tab === "team" ? "account" : params.tab;
@@ -272,7 +308,7 @@ export default async function AdminPage({
             <div>
               <h1 className="tf-page-title">Cài đặt</h1>
               <p className="tf-page-subtitle">
-                Quản lý tài khoản, nhóm nhân sự, danh mục kinh doanh và phòng họp.
+                Quản lý tài khoản, nhóm nhân sự, danh mục kinh doanh, phòng họp và lưu trữ.
               </p>
             </div>
             <Link href="/team" prefetch={false} className="tf-button-secondary">
@@ -304,7 +340,7 @@ export default async function AdminPage({
             ))}
           </nav>
 
-          <SettingsContent activeTab={activeTab} adminId={admin.id} />
+          <SettingsContent activeTab={activeTab} adminId={admin.id} driveResult={params.drive} />
         </div>
       </main>
     </div>

@@ -2,12 +2,10 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Paperclip, Trash2, Upload } from "lucide-react";
+import { Download, ExternalLink, Paperclip, Trash2, Upload } from "lucide-react";
 import { useInteraction } from "@/components/InteractionProvider";
-import {
-  MAX_PROJECT_FILE_SIZE,
-  formatProjectFileSize,
-} from "@/lib/projectFiles";
+import { uploadStoredFile } from "@/lib/fileUploadClient";
+import { MAX_DRIVE_FILE_SIZE, formatProjectFileSize } from "@/lib/projectFiles";
 import type { TaskFileDTO, TaskFileKind } from "@/lib/types";
 
 const ACCEPT =
@@ -44,32 +42,25 @@ export default function TaskFileSection({
   const isResult = kind === "RESULT";
 
   async function uploadFiles(selected: File[]) {
-    const tooLarge = selected.filter((f) => f.size > MAX_PROJECT_FILE_SIZE);
+    const tooLarge = selected.filter((f) => f.size > MAX_DRIVE_FILE_SIZE);
     if (tooLarge.length > 0) {
       notify({
-        message: `“${tooLarge[0].name}” lớn hơn 4 MB — chưa tải lên.`,
+        message: `“${tooLarge[0].name}” lớn hơn 100 MB — chưa tải lên.`,
         tone: "error",
       });
     }
-    const accepted = selected.filter((f) => f.size <= MAX_PROJECT_FILE_SIZE);
+    const accepted = selected.filter((f) => f.size <= MAX_DRIVE_FILE_SIZE);
     if (accepted.length === 0) return;
 
     setUploading(true);
     let uploaded = 0;
     for (const file of accepted) {
-      const body = new FormData();
-      body.append("kind", kind);
-      body.append("file", file);
       try {
-        const response = await fetch(`/api/tasks/${taskId}/files`, {
-          method: "POST",
-          body,
-        });
-        if (!response.ok) {
-          throw new Error(await readError(response, "Không thể tải tệp lên."));
-        }
-        const result = (await response.json()) as { file: TaskFileDTO };
-        setFiles((current) => [...current, result.file]);
+        const saved = await uploadStoredFile<TaskFileDTO>(
+          { target: "task", taskId, kind },
+          file
+        );
+        setFiles((current) => [...current, saved]);
         uploaded += 1;
       } catch (error) {
         notify({
@@ -134,6 +125,18 @@ export default function TaskFileSection({
                   {file.uploader && ` · ${file.uploader.name}`}
                 </p>
               </div>
+              {file.driveUrl && (
+                <a
+                  href={file.driveUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="tf-icon-button !h-8 !min-h-8 !w-8 shrink-0"
+                  aria-label={`Mở ${file.name} trên Google Drive`}
+                  title="Mở trên Google Drive"
+                >
+                  <ExternalLink size={15} aria-hidden="true" />
+                </a>
+              )}
               <a
                 href={`/api/tasks/${taskId}/files/${file.id}`}
                 className="tf-icon-button !h-8 !min-h-8 !w-8 shrink-0"
@@ -195,7 +198,7 @@ export default function TaskFileSection({
           : isResult
             ? "Đính kèm tệp kết quả"
             : "Đính kèm tệp giao việc"}
-        <span className="text-zinc-400">· tối đa 4 MB</span>
+        <span className="text-zinc-400">· tối đa 100 MB</span>
       </button>
     </div>
   );

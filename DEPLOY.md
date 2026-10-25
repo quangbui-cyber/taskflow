@@ -363,6 +363,22 @@ Nên đặt thêm **trần chi tiêu ở phía nhà cung cấp** — lớp bảo
   khác cần nhập mật khẩu app một lần để liên kết an toàn. Các lần sau dùng Google trực tiếp.
 - Cách đăng nhập bằng email và mật khẩu hiện có tiếp tục hoạt động.
 
+## Lưu tài liệu dự án trên Google Drive (tuỳ chọn)
+
+Tài liệu dự án, tệp giao việc / kết quả của task và biên bản họp (thành Google Doc) lưu trên Shared Drive
+"myCreative – Dự án", xếp theo `năm / dự án / Tài liệu, Công việc / task`. Chưa kết nối thì app lưu file trong
+database như cũ (tối đa 4 MB).
+
+1. Google Cloud (dự án của OAuth client đăng nhập Google) đã bật **Google Drive API**.
+2. Tài khoản `noreply@creativestation.vn` là Manager của Shared Drive (mã mặc định `0AL-5HJ8czOkOUk9PVA`;
+   đổi bằng `GOOGLE_DRIVE_SHARED_DRIVE_ID`, đổi tài khoản bằng `GOOGLE_DRIVE_ACCOUNT`).
+3. Admin vào **Cài đặt → Lưu trữ → Kết nối Google Drive**, đăng nhập `noreply@` và cho quyền Google Drive.
+   Google có thể báo "ứng dụng chưa được xác minh": chọn **Nâng cao → Tiếp tục**.
+4. Bấm **Chuyển file cũ lên Drive** để đưa file đang nằm trong database lên Drive.
+
+Thành viên dự án và Admin được share quyền xem thư mục dự án tự động (không gửi email). Cron `/api/cron/drive-sync`
+chạy 2h sáng đẩy file còn sót và đối chiếu quyền.
+
 ## Tạo link Google Meet khi đặt lịch họp
 
 Dùng chung OAuth client với mục "Đăng nhập bằng Google" (cùng `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`).

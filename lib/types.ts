@@ -32,6 +32,8 @@ export type TaskFileDTO = {
   mimeType: string;
   size: number;
   createdAt: string;
+  /** Link mở trên Google Drive; null khi file còn lưu trong app. */
+  driveUrl: string | null;
   uploader: { id: string; name: string } | null;
 };
 

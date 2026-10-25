@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { queueDrivePush } from "@/lib/driveStorage";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { FinanceImportError } from "@/lib/financeImport";
@@ -67,6 +68,8 @@ export async function POST(
       input: importToSheetInput(result),
       file: upload,
     });
+    // File Excel gốc lưu vào tài liệu dự án: đẩy lên Drive sau khi trả kết quả.
+    queueDrivePush(project.id);
     revalidatePath(`/projects/${project.id}`);
     return Response.json({ ok: true });
   } catch (error) {

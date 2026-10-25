@@ -25,9 +25,13 @@
 | Q12 | **Thông tin chung chuẩn hoá** cho Báo giá, IC, AC: **Khách hàng · Tên chương trình · Số lượng · Địa điểm · Thời gian**. Mục nào để trống thì **tự ẩn khi xuất Excel/PDF**. |
 | Q13 | **Chứng từ gắn theo nhà cung cấp** (không gắn theo từng dòng). **Không phân loại** chứng từ: chỉ cần biết NCC **có hay chưa có** chứng từ và **tên file** đã tải lên. Bảng tài chính có **2 cách xem: theo hạng mục và theo nhà cung cấp**. |
 | Q14 | **Xem chứng từ ngay trong app, không cần tải về**: ảnh và PDF mở trực tiếp; Excel hiện dạng bảng chỉ đọc; loại khác thì tải về. |
-| Q15 | **Sao lưu chứng từ**: thùng rác 30 ngày trong app + sao lưu hằng đêm sang Google Shared Drive. **Không** gửi bộ hồ sơ qua email. |
+| Q15 | ~~Sao lưu chứng từ: thùng rác 30 ngày trong app + sao lưu hằng đêm sang Google Shared Drive~~ → thay bằng Q18 (lưu thẳng trên Shared Drive, thùng rác Drive 30 ngày). **Không** gửi bộ hồ sơ qua email. |
 | Q16 | Một người **được** vừa duyệt vừa bấm "Đã chi" cùng một phiếu, nhưng app **ghi lại trong lịch sử và hiện cảnh báo** (mục Phân quyền). Admin kiêm kế toán giữ vai trò Admin + bật ô "Nhận việc kế toán". |
 | Q17 | **Thông báo duyệt gửi qua email thay cho Google Chat.** Khi gửi duyệt, người gửi chọn người nhận: **To** = người duyệt, **CC** = người liên quan tự chọn. Kết quả duyệt/từ chối trả lời trong cùng luồng email. |
+| Q18 | **Hồ sơ lưu trên Google Shared Drive của công ty** (đã chốt 2026-10-25, thay cho Vercel Blob + sao lưu hằng đêm). App kết nối Drive bằng tài khoản `noreply@creativestation.vn`; chỉ tài khoản này là thành viên (Manager) của Shared Drive. |
+| Q19 | **Mọi hồ sơ xếp theo từng dự án**, kể cả chứng từ NCC: mở thư mục một dự án là thấy đủ IC, AC, phiếu và chứng từ của mọi NCC trong dự án đó. |
+| Q20 | **Quyền xem trên Drive do app cấp và thu hồi tự động** theo thành viên dự án và vai trò (Admin, Kế toán, người duyệt). |
+| Q21 | **Mọi file tải lên trong dự án cũng lưu trên Shared Drive** (chốt 2026-10-25): tab Tài liệu dự án và tệp giao việc / kết quả của task, không chỉ hồ sơ tài chính. File cũ đang nằm trong database được chuyển sang Drive một lần rồi xoá khỏi database. |
 
 ### Chứng từ và cách xem (Q13, Q14)
 
@@ -40,7 +44,7 @@
   - các dòng chi phí của NCC đó;
   - lịch sử tạm ứng, và nút lập phiếu tiếp theo với số tiền đã tính sẵn.
 - NCC chưa có chứng từ: **chỉ nhắc** (dòng vàng đầu bảng), không chặn lập phiếu hay gửi duyệt.
-- File lưu chung kho file của dự án (tab Tài liệu cũng thấy), giới hạn 4 MB mỗi file như hiện tại.
+- File lưu trên Shared Drive trong thư mục `Chứng từ NCC/<NCC>` của dự án (Q18, Q19); tab Tài liệu của dự án cũng thấy.
 - **Không có giá bán** trong 2 màn hình này, nên USER xem được (Q3).
 
 **Xem file trong app (Q14, demo màn 9)**: bấm "Xem" mở khung xem toàn màn hình, có nút qua file trước/sau, "Mở tab mới", "Tải về".
@@ -52,25 +56,76 @@
 | Excel (.xlsx, .xls, .csv) | Máy chủ đọc file và hiện **dạng bảng chỉ đọc**, có chuyển sheet; giữ chữ, số, ô gộp. Không hiện biểu đồ, ảnh chèn, màu ô |
 | Loại khác (Word…) | Báo "chưa xem trước được" và cho tải về |
 
-**Lưu file chứng từ (để app không nặng):**
-- Lưu file chứng từ trên **Vercel Blob (chế độ riêng tư)**, giống file ghi âm cuộc họp. **Không lưu vào database** như tab Tài liệu đang làm (`ProjectFile.data`). Database chỉ giữ tên file, dung lượng, người tải và đường dẫn.
-- Ảnh chụp từ điện thoại được **thu nhỏ ngay trên trình duyệt** trước khi tải lên (khoảng 1–2 MB, vẫn đọc rõ chữ).
-- Excel: đọc **một lần lúc tải lên**, lưu sẵn bảng xem trước. Mở xem không phải đọc lại file.
-- Danh sách chứng từ chỉ tải thông tin file, không tải nội dung file.
-- Xoá dự án hoặc xoá file thì xoá luôn file trên Blob (sau khi qua thùng rác, xem dưới).
+**Lưu hồ sơ trên Google Shared Drive (Q18–Q20):**
 
-**Sao lưu chứng từ** (Vercel Blob không có sao lưu, thùng rác hay khôi phục; xoá là mất hẳn):
+- **Nơi lưu chính** là Shared Drive của công ty (không dùng "Drive của tôi" của một người, để file thuộc về công ty). Database chỉ giữ tên file, dung lượng, người tải, `driveFileId` và đường dẫn.
+- App kết nối Drive **một lần** bằng tài khoản `noreply@creativestation.vn` (Admin bấm "Kết nối Google Drive" ở trang Cài đặt). Token được mã hoá như kết nối Gmail/Meet đang có. Mất kết nối (đổi mật khẩu, thu hồi quyền) thì app báo Admin kết nối lại.
+- Quyền xin: **toàn quyền Google Drive (`drive`) trên riêng tài khoản `noreply@`** (đổi 2026-10-28). Quyền hẹp `drive.file` không cho tạo thư mục trong Shared Drive có sẵn. Rủi ro thấp vì `noreply@` chỉ là thành viên của Shared Drive này, không giữ file nào khác. Nhân viên không phải cấp quyền gì.
+- Thành viên của cả Shared Drive **chỉ có noreply** (đã chốt 2026-10-25, không thêm Admin). Mọi người khác, kể cả Admin, được app share **từng thư mục dự án** theo bảng phân quyền dưới.
 
-| Lớp | Cách làm | Chống được |
-|---|---|---|
-| 1. Thùng rác 30 ngày | Xoá file trong app chỉ ẩn đi; Admin/Kế toán khôi phục được trong 30 ngày, sau đó mới xoá thật | Xoá nhầm (hay gặp nhất) |
-| 2. Sao lưu tự động sang **Google Shared Drive** của công ty | Mỗi đêm (dùng cron có sẵn) chép file mới sang thư mục `Chứng từ/<năm>/<dự án>/<NCC>/`. File xoá trong app **không** bị xoá trên Drive | Mất dữ liệu trên Vercel, lỗi app, tài khoản Vercel gặp sự cố |
+**Cấu trúc thư mục — tất cả theo dự án (Q19):**
 
+```
+myCreative – Dự án/                (Shared Drive)
+  2026/
+    <Mã dự án> – <Tên dự án>/
+      Tài liệu/                      ← tab Tài liệu dự án (PO, brief, thông tin khách hàng) — thành viên dự án
+      Công việc/                     ← thành viên dự án
+        <Tên task>/   tệp giao việc và tệp kết quả của task
+      Tài chính/                     ← chỉ Admin, Kế toán, người duyệt của dự án
+        Báo giá, IC, AC (mỗi loại một file, xuất lại thì ghi đè; Drive giữ lịch sử phiên bản)
+        Phiếu/  ĐNTU, ĐNTT, ĐNHTU
+      Chứng từ NCC/                  ← thành viên dự án
+        <Tên NCC>/   hoá đơn, minh chứng của NCC đó trong dự án này
+```
 
-- **Đã chốt (Q15): chỉ dùng lớp 1 và 2, không gửi bộ hồ sơ qua email.**
-- Google Drive phù hợp vì công ty đã dùng Google Workspace (đăng nhập Google, Google Meet). Người có quyền mở xem được ngay trên Drive, không cần app. Cần một tài khoản dịch vụ (service account) được thêm vào Shared Drive.
-- Phương án thay Drive: một kho lưu trữ đám mây thứ hai (Cloudflare R2, Backblaze B2). Rẻ, nhưng nhân viên khó tự mở xem.
-- Trang Cài đặt hiện **lần sao lưu gần nhất** và số file lỗi; sao lưu lỗi thì báo Admin.
+- Trong app, chứng từ vẫn gắn theo cặp **(dự án, NCC)** như `SupplierDocument`. Thư mục `Chứng từ NCC/<NCC>` tạo khi NCC có file đầu tiên.
+- Muốn xem mọi dự án của một NCC thì xem trong app (trang NCC lọc theo `supplierId`), không cần thư mục riêng trên Drive.
+- File IC/AC/phiếu do app xuất (luôn có logo, mẫu CS.2024) được đẩy lên Drive ngay khi tạo/duyệt. Chứng từ người dùng tải lên được trình duyệt đẩy thẳng lên Drive (tải lên nối tiếp, không giới hạn 4 MB), ảnh điện thoại vẫn thu nhỏ trước khi tải.
+
+**File dự án và file task (Q21):**
+
+Hiện nay (2026-10-25) cả hai loại file lưu **nguyên nội dung trong database** (`ProjectFile.data`, `TaskFile.data`, tối đa 4 MB mỗi file). Database Neon gói miễn phí chỉ khoảng 0,5 GB nên về lâu dài sẽ đầy, và mỗi lần đọc file đều đi qua database.
+
+- **File mới**: trình duyệt xin máy chủ một phiên tải lên Drive (máy chủ kiểm quyền thành viên dự án, tạo thư mục nếu chưa có), rồi đẩy thẳng file lên Drive. Xong thì máy chủ lưu bản ghi `ProjectFile` / `TaskFile` gồm tên, loại, dung lượng, người tải và `driveFileId`; **không còn cột `data`**.
+- **Bỏ giới hạn 4 MB**, đặt trần mới (đề xuất 100 MB mỗi file). Thêm được loại file thiết kế (AI, PSD, ZIP, MP4…) nếu cần, quyết khi code.
+- **Mở xem**: mở bằng trình xem của Google Drive (cả Word, PowerPoint, Excel). Người không mở được Drive (Gmail cá nhân khi công ty chặn chia sẻ ra ngoài) vẫn **tải về qua app** như hiện nay: đường dẫn trong app kiểm quyền rồi lấy file từ Drive trả về.
+- **Xoá** trong app: chuyển file trên Drive vào thùng rác (30 ngày), giữ quy tắc ai được xoá như hiện tại.
+- **Thư mục task** tạo khi task có file đầu tiên; đổi tên task thì đổi tên thư mục; xoá task thì chuyển thư mục vào thùng rác.
+- Các chỗ code đang đọc/ghi nội dung file phải đổi theo: `app/api/projects/[id]/files/*`, `app/api/tasks/[taskId]/files/*`, `app/actions/projects.ts`, `lib/financeImportSave.ts` (file Excel IC nhập vào), `lib/recapProject.ts` (biên bản họp lưu vào tài liệu dự án).
+
+**Chuyển file cũ sang Drive (làm một lần):**
+1. Thêm cột `driveFileId` (cho phép trống) vào `ProjectFile` và `TaskFile`; tạm giữ cột `data`.
+2. Chạy script chuyển: đọc từng file còn `driveFileId` trống, tạo thư mục dự án / task, tải lên Drive, ghi `driveFileId`. Chạy lại được nhiều lần, file đã chuyển thì bỏ qua; file lỗi ghi lại để chạy lại.
+3. Trong lúc chuyển, app đọc file từ Drive nếu đã có `driveFileId`, chưa có thì đọc từ `data` như cũ, nên **không phải tạm dừng app**.
+4. Kiểm tra: số file và tổng dung lượng trên Drive khớp với database; mở thử vài file mỗi loại.
+5. Sau khi Admin xác nhận, migration thứ hai **xoá cột `data`** để giải phóng database. Trước bước này, sao lưu database (Neon branch hoặc bản dump).
+6. Share thư mục cho thành viên các dự án hiện có (chạy cùng lúc đối chiếu quyền hằng đêm).
+
+**Phân quyền share tự động (Q20):**
+
+| Sự kiện trong app | Việc app làm trên Drive |
+|---|---|
+| Thêm người vào dự án | Share thư mục dự án (trừ `Tài chính/`) quyền **Xem** |
+| Gỡ người khỏi dự án, khoá hoặc xoá tài khoản | Thu hồi quyền ở thư mục dự án |
+| Vai trò Admin / Kế toán, người duyệt IC/AC của dự án | Share thêm `Tài chính/` quyền **Xem** (Kế toán: **Chỉnh sửa**) |
+| Đổi người duyệt | Thu hồi người cũ, cấp người mới |
+
+- Share không gửi email thông báo của Google (`sendNotificationEmail=false`).
+- Trang dự án có mục **"Ai đang có quyền trên Drive"**, Admin thêm/gỡ thủ công được.
+- Mỗi đêm cron đối chiếu quyền trên Drive với app và sửa chỗ lệch (ví dụ ai đó share tay).
+- Chỉ share được cho tài khoản Google. Email ngoài `@creativestation.vn` (Gmail cá nhân) chỉ được nếu Workspace cho phép chia sẻ ra ngoài tên miền.
+
+**Xoá và khôi phục:**
+- Xoá file trong app: chuyển vào thùng rác của Drive (giữ 30 ngày, Admin khôi phục được), không xoá hẳn.
+- Kết quả kiểm tra 2026-10-25: tài khoản `quang.bui@creativestation.vn` đã thấy một Shared Drive (tạo 2024-10-15) và có quyền thêm file, nên gói Workspace của công ty **có hỗ trợ Shared Drive**.
+
+**Việc cần làm một lần trước khi code:**
+1. ✅ (2026-10-25) Đã tạo Shared Drive "myCreative – Dự án" bằng tài khoản `noreply@creativestation.vn` (Manager). ID: `0AL-5HJ8czOkOUk9PVA` — dùng làm biến môi trường `GOOGLE_DRIVE_SHARED_DRIVE_ID`.
+2. ✅ (2026-10-25) Đã bật **Google Drive API** trong dự án Google Cloud "My First Project" (`arched-aleph-512615-p1`, số 723564408506), là dự án của OAuth client "myCreative web".
+   ✅ (2026-10-25) Cũng đã bật **Google Sheets API** và **Google Docs API** trong cùng dự án, để app tạo/sửa IC, AC dạng Google Sheets và văn bản dạng Google Docs. Dùng chung quyền Drive của tài khoản `noreply@`.
+3. Bật xác minh 2 bước cho `noreply@`.
+4. Kiểm tra chính sách chia sẻ ra ngoài tên miền trong Admin Console.
 
 Cách làm kỹ thuật:
 - Đường dẫn file hiện nay luôn trả về dạng **tải xuống**. Thêm chế độ **xem** (`?view=1`) trả về dạng mở trực tiếp, **chỉ cho ảnh và PDF**. Kèm header chống chạy mã (`X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox`), vẫn kiểm quyền như cũ.
@@ -327,7 +382,7 @@ model SupplierDocument {              // 1 file chứng từ của 1 NCC trong 1
   id          String   @id @default(cuid())
   projectId   String
   supplierId  String
-  fileId      String   @unique       // ProjectFile (tên file, loại, dung lượng, người tải lấy từ đây)
+  fileId      String   @unique       // ProjectFile (tên file, loại, dung lượng, người tải, driveFileId lấy từ đây)
   createdAt   DateTime @default(now())
   @@index([projectId, supplierId])
 }
@@ -412,6 +467,7 @@ Mỗi luật có ví dụ thật từ file mẫu nếu có.
 | Giai đoạn | Nội dung |
 |---|---|
 | 1 ✅ | Vai trò Kế toán, người duyệt theo dự án, danh bạ NCC (có tên gọi tắt), logo `public/brand/` — *đã làm 25/10/2026, đã commit trên branch finance-phase-1* |
+| 1b ✅ | Kết nối Google Drive (tài khoản noreply), tạo thư mục theo dự án, share quyền tự động; chuyển **tài liệu dự án và file task** sang Drive (Q21), gồm script chuyển file cũ và xoá cột `data`. Làm trước giai đoạn 6 để chứng từ NCC dùng chung cách lưu. — *đã làm 28/10/2026 trên branch drive-storage: kết nối Drive ở Cài đặt → Lưu trữ, file mới tự lên Drive, tải thẳng tới 100 MB, biên bản họp thành Google Doc, share tự động, cron 2h sáng, nút chuyển file cũ. Chưa xoá cột `data` (bước 5 của mục chuyển file cũ).* |
 | 2 | Bảng tài chính: khối Báo giá + IC, sửa tay, tính tổng, ẩn theo vai trò, gửi/duyệt IC, xuất Excel/PDF có logo — *2a (nhập tay, tính tổng, ẩn giá bán với USER) đã làm trên branch finance-phase-2a; 2b (gửi/duyệt/từ chối/rút lại/phiên bản mới, email To–CC–Reply-To cùng luồng, thông báo trong app) đã làm trên branch finance-phase-2b; còn 2c xuất file* |
 | 3 | Nhập từ Excel (đọc 4 khối theo tiêu đề cột) + kiểm lỗi bằng code — *đã làm trên branch finance-phase-3 (nhập Báo giá + IC; khối Nghiệm thu/AC mới được nhận diện, sẽ nhập khi làm AC)* |
 | 4 | Báo giá xuất cho khách |

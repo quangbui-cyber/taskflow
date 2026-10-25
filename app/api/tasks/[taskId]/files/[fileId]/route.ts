@@ -1,6 +1,8 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth";
-import { attachmentDisposition } from "@/lib/contentDisposition";
+import { after } from "next/server";
+import { trashDriveFileSafe } from "@/lib/driveStorage";
+import { storedFileResponse } from "@/lib/storedFileResponse";
 import { prisma } from "@/lib/prisma";
 import { findAccessibleTask } from "@/lib/taskFiles";
 
@@ -40,14 +42,7 @@ export async function GET(_request: Request, context: Context) {
   if ("error" in result) return result.error;
   const { file } = result;
 
-  return new Response(file.data, {
-    headers: {
-      "Content-Type": file.mimeType,
-      "Content-Length": String(file.size),
-      "Content-Disposition": attachmentDisposition(file.name),
-      "Cache-Control": "private, no-store",
-    },
-  });
+  return storedFileResponse(file);
 }
 
 export async function DELETE(_request: Request, context: Context) {
@@ -68,6 +63,7 @@ export async function DELETE(_request: Request, context: Context) {
   }
 
   await prisma.taskFile.delete({ where: { id: file.id } });
+  after(() => trashDriveFileSafe(file.driveFileId));
   revalidatePath(`/projects/${task.projectId}`);
   return Response.json({ success: true });
 }
