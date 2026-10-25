@@ -35,9 +35,6 @@ export default function ProjectResponsibilitySelect({
           </optgroup>
         )}
       </select>
-      <span className="mt-1 block text-xs text-zinc-500">
-        Chọn nhóm quản lý dự án. Thêm người tham gia tại mục Thành viên.
-      </span>
       {teams.length === 0 && groups.length === 0 && (
         <span className="mt-1 block text-xs text-amber-600">
           Chưa có nhóm để chọn. Admin có thể thêm tại Cài đặt.

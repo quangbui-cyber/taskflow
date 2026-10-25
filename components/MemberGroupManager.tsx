@@ -154,9 +154,6 @@ export default function MemberGroupManager({
           </span>
           <div>
             <h2 className="font-semibold">Phòng ban / Nhóm</h2>
-            <p className="text-xs text-zinc-400">
-              Nhóm nhân sự theo phòng ban, dùng lại khi thêm thành viên vào dự án.
-            </p>
           </div>
         </div>
       </div>

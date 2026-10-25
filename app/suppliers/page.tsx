@@ -53,11 +53,6 @@ export default async function SuppliersPage() {
               </span>
               <h1 className="tf-page-title">Nhà cung cấp</h1>
             </div>
-            <p className="tf-page-subtitle">
-              {canManage
-                ? "Danh bạ dùng chung cho IC, AC và phiếu đề nghị chi. Mọi người đều xem được thông tin chuyển khoản; Admin, Account và Kế toán được thêm và sửa."
-                : "Danh bạ nhà cung cấp dùng chung, kèm thông tin chuyển khoản. Cần thêm hoặc sửa, hãy nhờ Account hoặc Kế toán."}
-            </p>
           </div>
 
           <SupplierDirectory

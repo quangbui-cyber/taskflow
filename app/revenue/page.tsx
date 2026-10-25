@@ -301,9 +301,6 @@ export default async function RevenuePage({
                 Doanh số
               </h1>
             </div>
-            {!isAdmin && (
-              <p className="tf-page-subtitle">Chỉ tính các dự án bạn tham gia.</p>
-            )}
           </div>
 
           <nav className="flex flex-wrap gap-2" aria-label="Năm xem doanh số">
@@ -337,9 +334,6 @@ export default async function RevenuePage({
               <p className="mt-2 text-xl font-semibold tabular-nums text-zinc-950">
                 {formatVND(earned)}
               </p>
-              <p className="mt-1 text-xs text-zinc-400">
-                On Process + Done
-              </p>
             </section>
             <section className="tf-metric-item">
               <p className="text-xs font-medium text-zinc-500">Giá trị Bidding</p>
@@ -364,7 +358,6 @@ export default async function RevenuePage({
               <p className="mt-2 text-xl font-semibold tabular-nums text-zinc-950">
                 {activeProjectCount}
               </p>
-              <p className="mt-1 text-xs text-zinc-400">Bidding + On Process</p>
             </section>
           </div>
 

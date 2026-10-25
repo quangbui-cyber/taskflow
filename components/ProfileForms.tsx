@@ -56,9 +56,6 @@ export function ProfileInfoForm({
     <section className="tf-panel overflow-hidden">
       <div className="border-b border-zinc-100 px-5 py-3">
         <h2 className="font-semibold">Thông tin cá nhân</h2>
-        <p className="mt-0.5 text-xs text-zinc-400">
-          Tên và ảnh đại diện hiện ở công việc, bình luận và thông báo.
-        </p>
       </div>
       <form action={formAction} className="space-y-4 p-5">
         <AvatarUploader id={userId} displayName={name} defaultValue={avatarUrl} />
@@ -98,9 +95,6 @@ export function ProfilePasswordForm() {
     <section className="tf-panel overflow-hidden">
       <div className="border-b border-zinc-100 px-5 py-3">
         <h2 className="font-semibold">Đổi mật khẩu</h2>
-        <p className="mt-0.5 text-xs text-zinc-400">
-          Sau khi đổi, các thiết bị khác đang đăng nhập sẽ bị đăng xuất.
-        </p>
       </div>
       <form ref={formRef} action={formAction} className="space-y-4 p-5">
         <label className="block">

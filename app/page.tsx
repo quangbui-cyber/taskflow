@@ -494,9 +494,6 @@ export default async function DashboardPage({
                     <h2 id="following-heading" className="text-base font-semibold text-zinc-900">
                       Đang theo dõi ({visibleFollowing.length})
                     </h2>
-                    <p className="mt-1 text-xs text-zinc-400">
-                      Các công việc bạn theo dõi nhưng không trực tiếp làm hoặc giao.
-                    </p>
                   </div>
                   {visibleFollowing.length > 0 ? (
                     <div>

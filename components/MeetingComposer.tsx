@@ -148,7 +148,6 @@ export default function MeetingComposer({
   schedules,
   organizerId,
   meeting,
-  emailEnabled,
   initialAttendeeIds,
   projectId,
   triggerLabel = "Đặt lịch họp",
@@ -415,11 +414,6 @@ export default function MeetingComposer({
                 <h2 id={dialogTitleId} className="text-xl font-semibold text-zinc-900">
                   {meeting ? "Sửa lịch họp" : "Đặt lịch họp"}
                 </h2>
-                <p className="mt-1 text-sm text-zinc-500">
-                  {emailEnabled
-                    ? "Người tham dự sẽ nhận thông báo trong app và email kèm lịch."
-                    : "Người tham dự sẽ nhận thông báo trong app."}
-                </p>
               </div>
               <button
                 type="button"
@@ -717,11 +711,6 @@ export default function MeetingComposer({
                       )}
                     </div>
                   </div>
-                  {values.attendeeIds.length === 0 && (
-                    <p className="mt-2 text-xs text-zinc-500">
-                      Chưa mời ai: cuộc họp chỉ có mình bạn, phù hợp khi họp với khách. Bạn vẫn giữ phòng và ghi biên bản được.
-                    </p>
-                  )}
                   {busySelectedCount > 0 && (
                     <p className="mt-2 text-xs text-amber-700">
                       {busySelectedCount} người đã chọn đang có cuộc họp khác trong khung giờ này.

@@ -231,10 +231,6 @@ export default async function KpiPage({
                   KPI doanh số
                 </h1>
               </div>
-              <p className="tf-page-subtitle">
-                Doanh số ghi nhận (On Process + Done) của dự án khách hàng, tính
-                vào tháng dự án chuyển sang On Process. Không tính dự án nội bộ.
-              </p>
             </div>
             <nav className="flex flex-wrap gap-2" aria-label="Năm kế hoạch">
               {years.map((y) => (
@@ -322,19 +318,6 @@ export default async function KpiPage({
                         ))}
                       </nav>
                     )}
-                    {isAdmin && (
-                      <p className="text-xs text-zinc-500">
-                        Manager của team (người chia KPI team) được chỉ định ở{" "}
-                        <Link
-                          href="/admin?tab=account"
-                          prefetch={false}
-                          className="font-medium text-blue-700 hover:underline"
-                        >
-                          Cài đặt → Team &amp; Account
-                        </Link>
-                        .
-                      </p>
-                    )}
                     <KpiTeamAllocationEditor
                       key={`${year}-${selectedTeam.id}`}
                       locked={locked}
@@ -358,9 +341,6 @@ export default async function KpiPage({
                 <section className="tf-panel overflow-hidden">
                   <div className="border-b border-zinc-100 px-5 py-3">
                     <h2 className="font-semibold">Lịch sử thay đổi</h2>
-                    <p className="mt-0.5 text-xs text-zinc-400">
-                      20 thay đổi gần nhất của kế hoạch năm {year}.
-                    </p>
                   </div>
                   <ul className="divide-y divide-zinc-50">
                     {overview.changes.map((change) => (
@@ -457,9 +437,6 @@ export default async function KpiPage({
                       <p className="mt-2 text-xl font-semibold tabular-nums text-zinc-950">
                         {contribution.joinedCount}
                       </p>
-                      <p className="mt-1 text-xs text-zinc-400">
-                        Dự án khách hàng trong năm {year}
-                      </p>
                     </section>
                     <section className="tf-metric-item">
                       <p className="text-xs font-medium text-zinc-500">
@@ -467,9 +444,6 @@ export default async function KpiPage({
                       </p>
                       <p className="mt-2 text-xl font-semibold tabular-nums text-zinc-950">
                         {contribution.failedCount}
-                      </p>
-                      <p className="mt-1 text-xs text-zinc-400">
-                        Trạng thái Fail
                       </p>
                     </section>
                     <section className="tf-metric-item">
@@ -479,9 +453,6 @@ export default async function KpiPage({
                       <p className="mt-2 text-xl font-semibold tabular-nums text-zinc-950">
                         {formatCompactVND(contribution.total)}
                       </p>
-                      <p className="mt-1 text-xs text-zinc-400">
-                        Từ các dự án bạn là thành viên
-                      </p>
                     </section>
                     <section className="tf-metric-item">
                       <p className="text-xs font-medium text-zinc-500">
@@ -489,9 +460,6 @@ export default async function KpiPage({
                       </p>
                       <p className="mt-2 text-xl font-semibold tabular-nums text-zinc-950">
                         {contribution.projects.length}
-                      </p>
-                      <p className="mt-1 text-xs text-zinc-400">
-                        On Process + Done trong năm {year}
                       </p>
                     </section>
                   </div>
@@ -532,9 +500,6 @@ export default async function KpiPage({
                 <section className="tf-panel overflow-hidden">
                   <div className="border-b border-zinc-100 px-5 py-3">
                     <h2 className="font-semibold">KPI theo team</h2>
-                    <p className="mt-0.5 text-xs text-zinc-400">
-                      Bấm vào team để xem chỉ số và biểu đồ của team đó.
-                    </p>
                   </div>
                   {scopeTeams.length === 0 ? (
                     <p className="px-5 py-4 text-sm text-zinc-400">

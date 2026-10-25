@@ -294,9 +294,6 @@ export default function AccountCatalogManager({
     <div className="tf-panel overflow-hidden xl:col-span-2">
       <div className="border-b border-zinc-100 px-5 py-3">
         <h2 className="font-semibold">Account</h2>
-        <p className="mt-0.5 text-xs text-zinc-400">
-          Chọn người dùng Admin hoặc Account và bắt buộc gán vào một Team.
-        </p>
       </div>
 
       <form

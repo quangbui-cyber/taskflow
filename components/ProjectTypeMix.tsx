@@ -72,9 +72,6 @@ export default function ProjectTypeMix({
     <section className="tf-panel p-5">
       <div>
         <h2 className="font-semibold">Doanh số theo loại hình</h2>
-        <p className="mt-1 text-xs text-zinc-400">
-          Tỷ trọng doanh số ghi nhận (On Process + Done) theo loại hình dự án.
-        </p>
       </div>
 
       <div className="mt-6 grid items-center gap-8 sm:grid-cols-[200px_minmax(0,1fr)]">

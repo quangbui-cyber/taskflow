@@ -14,7 +14,7 @@ import {
 import { createPortal } from "react-dom";
 import { ChevronDown, Plus, X } from "lucide-react";
 import { createTask, type ActionState } from "@/app/actions/tasks";
-import { PRIORITIES, STATUSES, type MemberDTO } from "@/lib/types";
+import { PRIORITIES, type MemberDTO } from "@/lib/types";
 import DeadlineField from "@/components/DeadlineField";
 import UserPicker from "@/components/UserPicker";
 import { useInteraction } from "@/components/InteractionProvider";
@@ -91,7 +91,6 @@ export default function NewTaskInline({
     {}
   );
   const totalFileSize = [...briefFiles, ...resultFiles].reduce((size, file) => size + file.size, 0);
-  const statusLabel = STATUSES.find((item) => item.key === status)?.label ?? status;
   function resetDraft() {
     setTitle("");
     setAssigneeId("");
@@ -316,12 +315,10 @@ export default function NewTaskInline({
     />
   );
 
-  const fileNote = (
-    <p className="text-xs text-zinc-500">
-      Tệp sẽ được tải lên khi bấm Tạo task. Tổng dung lượng tối đa 4 MB
-      {totalFileSize > 0 && ` · đã chọn ${formatProjectFileSize(totalFileSize)}`}.
-    </p>
-  );
+  const fileNote =
+    totalFileSize > 0 ? (
+      <p className="text-xs text-zinc-500">Đã chọn {formatProjectFileSize(totalFileSize)} / 4 MB</p>
+    ) : null;
 
   const errorMessage = state.error && (
     <p role="alert" className="text-xs text-red-600">{state.error}</p>
@@ -369,9 +366,6 @@ export default function NewTaskInline({
                 <h2 id={headingId} className="text-base font-semibold text-zinc-900">
                   Tạo task mới
                 </h2>
-                <p className="mt-0.5 text-xs text-zinc-500">
-                  Thêm vào cột <span className="font-medium text-zinc-700">{statusLabel}</span>
-                </p>
               </div>
               <button
                 type="button"

@@ -121,7 +121,6 @@ export function SupplierCreateDialog({
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 id="supplier-create-title" className="text-lg font-semibold">Tạo nhà cung cấp</h2>
-          <p className="mt-1 text-sm text-zinc-500">Lưu vào danh bạ chung và chọn luôn cho dòng chi phí này.</p>
         </div>
         <button type="button" onClick={onClose} disabled={saving} className="tf-icon-button !h-9 !min-h-9 !w-9" aria-label="Đóng">
           <X size={17} aria-hidden="true" />
@@ -259,9 +258,6 @@ export function ImportedSuppliersDialog({
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 id="imported-suppliers-title" className="text-lg font-semibold">Thêm nhà cung cấp từ file</h2>
-          <p className="mt-1 text-sm text-zinc-500">
-            Mỗi tên trong cột SUP của file: tạo NCC mới, hoặc chọn NCC đã có nếu chỉ là tên gọi khác. Công ty cần mã số thuế; ai cũng cần số tài khoản và ngân hàng.
-          </p>
         </div>
         <button type="button" onClick={onClose} disabled={saving} className="tf-icon-button !h-9 !min-h-9 !w-9" aria-label="Đóng">
           <X size={17} aria-hidden="true" />

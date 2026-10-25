@@ -194,7 +194,6 @@ function AudioUploader({
         />
       </label>
 
-      <p className="text-xs text-zinc-500">File ghi âm bị xoá ngay sau khi chép lời.</p>
 
       {error && (
         <p role="alert" className="rounded-[7px] bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -350,11 +349,6 @@ export default function MeetingRecapPanel({
           <>
             <RecapContent content={content} />
             {actionItems}
-            {recap?.sentAt && (
-              <p className="mt-5 border-t border-zinc-100 pt-3 text-xs text-zinc-500">
-                Biên bản do AI viết từ file ghi âm, người tổ chức đã đọc lại và gửi lúc {formatDateTime(recap.sentAt)}.
-              </p>
-            )}
           </>
         ) : (
           <p className="py-6 text-center text-sm text-zinc-500">
@@ -374,9 +368,6 @@ export default function MeetingRecapPanel({
           <div>
             <p className="font-medium text-zinc-900">
               {recap?.stage === "SUMMARIZING" ? "AI đang viết biên bản…" : "Đang chép lời file ghi âm…"}
-            </p>
-            <p className="mt-1 text-sm text-zinc-500">
-              Thường mất 1–3 phút. Bạn có thể rời trang, khi xong app sẽ báo.
             </p>
           </div>
         </section>
@@ -509,10 +500,6 @@ export default function MeetingRecapPanel({
                 className="tf-field w-full font-mono text-sm leading-6"
                 aria-label="Nội dung biên bản"
               />
-              <p className="text-xs text-zinc-500">
-                Dòng bắt đầu bằng “## ” là mục lớn, “### ” là chủ đề, “- ” là gạch đầu dòng. Việc cần làm sửa ở danh
-                sách bên dưới.
-              </p>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"

@@ -88,13 +88,11 @@ export default function ProjectFilesPanel({
   currentUserId,
   canManageAll,
   initialFiles,
-  driveEnabled = false,
 }: {
   projectId: string;
   currentUserId: string;
   canManageAll: boolean;
   initialFiles: ProjectFileDTO[];
-  driveEnabled?: boolean;
 }) {
   const { notify } = useInteraction();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -161,9 +159,6 @@ export default function ProjectFilesPanel({
           </span>
           <div className="min-w-0">
             <h2 className="font-semibold text-zinc-950">Tài liệu dự án</h2>
-            <p className="text-sm text-zinc-500">
-              Lưu PO, brief và thông tin khách hàng cùng dự án.
-            </p>
           </div>
         </div>
 
@@ -200,10 +195,6 @@ export default function ProjectFilesPanel({
           </span>
           <p className="mt-3 text-sm font-medium text-zinc-700">
             Chưa có tài liệu
-          </p>
-          <p className="mt-1 text-xs leading-5 text-zinc-500">
-            Hỗ trợ PDF, hình ảnh, Word, Excel, PowerPoint, TXT và CSV, tối đa
-            {driveEnabled ? " 100 MB, lưu trên Google Drive của công ty." : " 4 MB."}
           </p>
         </div>
       ) : (

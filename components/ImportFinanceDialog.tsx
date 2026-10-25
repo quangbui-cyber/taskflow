@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, FileSpreadsheet, Info, Upload, X, XCircle } from "lucide-react";
 import { useInteraction } from "@/components/InteractionProvider";
@@ -195,9 +194,6 @@ export default function ImportFinanceDialog({
                 <h2 id="import-finance-title" className="text-lg font-semibold">
                   Nhập IC từ file Excel
                 </h2>
-                <p className="mt-1 text-sm text-zinc-500">
-                  App đọc file theo tiêu đề cột (HẠNG MỤC, ĐVT, ĐƠN GIÁ…), tự tính lại mọi số và chỉ ra chỗ sai. Chưa lưu gì cho tới khi bạn bấm xác nhận.
-                </p>
               </div>
               <button type="button" onClick={close} className="tf-icon-button !h-9 !min-h-9 !w-9" aria-label="Đóng">
                 <X size={17} aria-hidden="true" />
@@ -208,9 +204,6 @@ export default function ImportFinanceDialog({
               <Upload size={24} className="text-brand-700" aria-hidden="true" />
               <span className="text-sm font-semibold">
                 {file ? file.name : "Chọn file IC hoặc AC (.xlsx)"}
-              </span>
-              <span className="text-xs text-zinc-500">
-                Ảnh dán trong file được bỏ tự động trước khi gửi cho nhanh · File đặt mật khẩu cần bỏ mật khẩu trước
               </span>
               <input
                 ref={inputRef}
@@ -303,15 +296,6 @@ export default function ImportFinanceDialog({
                       );
                     })}
                   </ul>
-                  {result.unmatchedSuppliers.length > 0 && (
-                    <p className="text-xs text-zinc-600">
-                      Muốn tự gắn nhà cung cấp khi nhập?{" "}
-                      <Link href="/suppliers" target="_blank" className="font-semibold text-brand-800 underline-offset-2 hover:underline">
-                        Thêm {result.unmatchedSuppliers.join(", ")} vào danh bạ
-                      </Link>{" "}
-                      (dùng đúng tên ghi ở cột SUP làm tên gọi tắt), rồi chọn lại file.
-                    </p>
-                  )}
                 </section>
 
                 <div className="overflow-x-auto rounded-[8px] border border-zinc-200">

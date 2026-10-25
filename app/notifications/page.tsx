@@ -92,9 +92,6 @@ export default async function NotificationsPage({
               </span>
               <h1 className="tf-page-title">Thông báo</h1>
             </div>
-            <p className="tf-page-subtitle">
-              Theo dõi các cập nhật mới và mở từng thông báo khi bạn sẵn sàng xử lý.
-            </p>
           </div>
 
           <PushNotificationSettings publicKey={pushConfiguration()?.publicKey ?? null} />

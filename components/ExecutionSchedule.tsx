@@ -111,7 +111,7 @@ export default function ExecutionSchedule({ rows }: { rows: ScheduleRow[] }) {
 
       {rows.length === 0 ? (
         <p className="px-5 py-4 text-sm text-zinc-400">
-          Chưa có dự án nào đặt ngày thực hiện. Mở dự án → nút Sửa để thêm.
+          Chưa có dự án nào đặt ngày thực hiện.
         </p>
       ) : (
         <>

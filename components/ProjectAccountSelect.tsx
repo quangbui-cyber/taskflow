@@ -44,9 +44,6 @@ export default function ProjectAccountSelect({
         <p className="tf-field flex items-center bg-zinc-50 text-zinc-600" aria-live="polite">
           {account?.teamName ?? "Chọn Account để xác định Team"}
         </p>
-        <p className="mt-1 text-xs text-zinc-500">
-          Dự án tự xếp vào Team kinh doanh của Account đã chọn.
-        </p>
       </div>
       {accounts.length === 0 && (
         <p className="text-xs text-amber-600">

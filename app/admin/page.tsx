@@ -14,7 +14,6 @@ import ClientCatalogManager from "@/components/ClientCatalogManager";
 import MeetingRoomManager from "@/components/MeetingRoomManager";
 import DriveStorageSettings from "@/components/DriveStorageSettings";
 import { googleAuthConfigured } from "@/lib/googleAuth";
-import { expectedDriveAccount, sharedDriveId } from "@/lib/googleDrive";
 import { pendingDriveFileCounts } from "@/lib/driveStorage";
 
 const SETTINGS_TABS = [
@@ -65,8 +64,6 @@ async function SettingsContent({
               }
             : null
         }
-        expectedAccount={expectedDriveAccount()}
-        sharedDriveId={sharedDriveId()}
         counts={counts}
         result={driveResult}
       />
@@ -307,9 +304,6 @@ export default async function AdminPage({
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h1 className="tf-page-title">Cài đặt</h1>
-              <p className="tf-page-subtitle">
-                Quản lý tài khoản, nhóm nhân sự, danh mục kinh doanh, phòng họp và lưu trữ.
-              </p>
             </div>
             <Link href="/team" prefetch={false} className="tf-button-secondary">
               <BarChart3 size={16} aria-hidden="true" />

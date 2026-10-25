@@ -504,11 +504,6 @@ export default function UserRow({
                       />
                     </div>
                   </label>
-                  {isSelf && (
-                    <p className="text-xs leading-5 text-zinc-400">
-                      Admin có thể tham gia Team trong tab Account mà không cần đổi vai trò.
-                    </p>
-                  )}
                   <button
                     type="button"
                     onClick={saveProfile}
@@ -535,7 +530,6 @@ export default function UserRow({
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <h4 className="text-sm font-semibold">Mật khẩu</h4>
-                    <p className="mt-1 text-xs text-zinc-400">Đặt mật khẩu mới cho tài khoản này.</p>
                   </div>
                   {!resetting && (
                     <button
