@@ -14,7 +14,7 @@ import {
   normalizeRecapContent,
 } from "@/lib/meetingRecap";
 import { formatMeetingWhen, vnDateTimeToUtc } from "@/lib/meetings";
-import { sendGoogleChat } from "@/lib/googleChat";
+import { hasProjectChat, sendProjectChat } from "@/lib/projectChatMessage";
 import { taskGoogleChatMessage } from "@/lib/taskGoogleChat";
 import { findRecapMeeting, loadRecapUsage } from "@/lib/meetingRecapData";
 import { recapLimits, summaryLimitReason } from "@/lib/meetingRecapLimits";
@@ -320,7 +320,7 @@ export async function createTaskFromRecapActionItem(
 
   const project = await prisma.project.findUnique({
     where: { id: String(projectId ?? "") },
-    select: { id: true, name: true, googleChatWebhookUrl: true },
+    select: { id: true, name: true, googleChatWebhookUrl: true, googleChatSpaceName: true },
   });
   if (!project) return { error: "Hãy chọn dự án để tạo task." };
   if (user.role !== "ADMIN" && !(await getMembership(project.id, user.id))) {
@@ -347,10 +347,10 @@ export async function createTaskFromRecapActionItem(
       projectId: project.id,
     });
   }
-  if (project.googleChatWebhookUrl) {
+  if (hasProjectChat(project)) {
     const base = emailAppUrl();
-    await sendGoogleChat(
-      project.googleChatWebhookUrl,
+    await sendProjectChat(
+      project,
       taskGoogleChatMessage({
         event: "created", taskId: task.id, projectName: project.name,
         title: task.title, status: task.status,

@@ -17,10 +17,6 @@ import { canCreateProjects, canViewRevenue, getMembership, requireUser } from "@
 import { readProjectBusinessFields } from "@/lib/projectPolicy";
 import { FINANCE_APPROVER_ROLES, readFinanceApprovers } from "@/lib/financePolicy";
 import { readProjectResponsibility, type ProjectResponsibility } from "@/lib/projectResponsibility";
-import {
-  sendGoogleChat,
-  validateGoogleChatWebhookUrl,
-} from "@/lib/googleChat";
 import { readProjectUpload } from "@/lib/projectFiles";
 import { parsePurchaseOrderPdf } from "@/lib/purchaseOrderPdf";
 import { projectStatusColor, type ProjectCategory } from "@/lib/types";
@@ -412,79 +408,6 @@ export async function deleteProject(projectId: string) {
   after(() => trashProjectFolderSafe(projectId, taskIds));
   revalidatePath("/");
   redirect("/");
-}
-
-async function manageableProject(projectId: string) {
-  const user = await requireUser();
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: {
-      id: true,
-      name: true,
-      ownerId: true,
-      googleChatWebhookUrl: true,
-    },
-  });
-
-  if (!project) return { error: "Project không tồn tại." } as const;
-  const membership =
-    user.role === "ADMIN" ? true : await getMembership(projectId, user.id);
-  if (!membership) {
-    return {
-      error: "Chỉ thành viên dự án hoặc admin được cấu hình Google Chat.",
-    } as const;
-  }
-  return { project } as const;
-}
-
-export async function saveProjectGoogleChatWebhook(
-  projectId: string,
-  webhookUrl: string
-) {
-  const access = await manageableProject(projectId);
-  if ("error" in access) return access;
-
-  const normalizedUrl = webhookUrl.trim();
-  if (!validateGoogleChatWebhookUrl(normalizedUrl)) {
-    return {
-      error: "URL không đúng định dạng webhook của Google Chat.",
-    };
-  }
-
-  await prisma.project.update({
-    where: { id: projectId },
-    data: { googleChatWebhookUrl: normalizedUrl },
-  });
-
-  revalidatePath(`/projects/${projectId}`);
-  return { success: "Đã kết nối dự án với Google Chat." };
-}
-
-export async function testProjectGoogleChatWebhook(projectId: string) {
-  const access = await manageableProject(projectId);
-  if ("error" in access) return access;
-  if (!access.project.googleChatWebhookUrl) {
-    return { error: "Dự án chưa có webhook Google Chat." };
-  }
-
-  const result = await sendGoogleChat(
-    access.project.googleChatWebhookUrl,
-    `*${access.project.name}*\nKết nối Google Chat thành công.`
-  );
-  if (!result.ok) return { error: result.error };
-  return { success: "Đã gửi tin thử vào Google Chat." };
-}
-
-export async function disconnectProjectGoogleChatWebhook(projectId: string) {
-  const access = await manageableProject(projectId);
-  if ("error" in access) return access;
-
-  await prisma.project.update({
-    where: { id: projectId },
-    data: { googleChatWebhookUrl: null },
-  });
-  revalidatePath(`/projects/${projectId}`);
-  return { success: "Đã ngắt kết nối Google Chat." };
 }
 
 export async function addMember(

@@ -15,7 +15,9 @@ export const CHAT_SPACE_SCOPES = [
   "https://www.googleapis.com/auth/chat.spaces.create",
   "https://www.googleapis.com/auth/chat.memberships",
 ] as const;
-const REQUESTED_SCOPES = ["openid", "email", GMAIL_SEND_SCOPE, ...CHAT_SPACE_SCOPES];
+/** Thêm Chat app "myCreative" vào nhóm để app gửi thông báo thay cho webhook. */
+export const CHAT_APP_MEMBERSHIP_SCOPE = "https://www.googleapis.com/auth/chat.memberships.app";
+const REQUESTED_SCOPES = ["openid", "email", GMAIL_SEND_SCOPE, ...CHAT_SPACE_SCOPES, CHAT_APP_MEMBERSHIP_SCOPE];
 
 const COOKIE = "google_workspace_oauth";
 const COOKIE_PATH = "/api/google/gmail";
@@ -27,6 +29,10 @@ export function googleWorkspaceConfigured() {
 
 export function canSendGmail(scopes: readonly string[]) {
   return scopes.includes(GMAIL_SEND_SCOPE);
+}
+
+export function canAddChatApp(scopes: readonly string[]) {
+  return scopes.includes(CHAT_APP_MEMBERSHIP_SCOPE);
 }
 
 export function canManageChatSpaces(scopes: readonly string[]) {

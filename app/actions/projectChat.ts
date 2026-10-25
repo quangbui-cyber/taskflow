@@ -4,12 +4,14 @@ import { revalidatePath } from "next/cache";
 import { getMembership, requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
+  addChatAppToSpace,
   addChatMembers,
   chatSpaceDisplayName,
   createChatSpace,
   GoogleChatSetupError,
 } from "@/lib/googleChatSpace";
 import { canManageChatSpaces, GoogleNotConnectedError, googleWorkspaceConfigured } from "@/lib/googleWorkspace";
+import { chatAppConfigured, sendChatAppMessage } from "@/lib/googleChatApp";
 
 export type ProjectChatState = { error?: string; success?: string; needsConnect?: boolean };
 
@@ -51,6 +53,26 @@ function refresh(projectId: string) {
   revalidatePath(`/projects/${projectId}`);
 }
 
+/**
+ * Thêm Chat app "myCreative" vào nhóm để app gửi thông báo task vào nhóm.
+ * Trả về câu ghi chú (rỗng nếu thêm được) để nối vào thông báo cho người bấm.
+ */
+async function ensureChatApp(spaceName: string, actorIds: string[]): Promise<string> {
+  if (!chatAppConfigured()) return " Máy chủ chưa cài Chat app nên nhóm chưa nhận được thông báo task.";
+  for (const actorId of actorIds) {
+    try {
+      await addChatAppToSpace(actorId, spaceName);
+      return "";
+    } catch (error) {
+      if (error instanceof GoogleNotConnectedError) continue;
+      if (error instanceof GoogleChatSetupError) return " Google Chat API chưa cấu hình xong nên chưa thêm được myCreative vào nhóm.";
+      console.error("Adding the Chat app to the space failed", error);
+      return " Chưa thêm được myCreative vào nhóm, bấm “Thêm người còn thiếu” để thử lại.";
+    }
+  }
+  return " Để nhóm nhận thông báo task, hãy bấm Kết nối Google lại (cho phép thêm myCreative vào nhóm) rồi bấm “Thêm người còn thiếu”.";
+}
+
 /** Tạo nhóm Google Chat tên trùng tên dự án, thêm sẵn mọi thành viên dự án. */
 export async function createProjectChatSpace(projectId: string): Promise<ProjectChatState> {
   if (!googleWorkspaceConfigured()) return { error: "Chức năng Google chưa được cấu hình." };
@@ -69,16 +91,22 @@ export async function createProjectChatSpace(projectId: string): Promise<Project
     // Hai người bấm cùng lúc: chỉ lưu nhóm tạo trước.
     const saved = await prisma.project.updateMany({
       where: { id: project.id, googleChatSpaceName: null },
-      data: { googleChatSpaceName: space.name, googleChatSpaceUri: space.uri, googleChatSpaceById: user.id },
+      // Có nhóm rồi thì thông báo đi qua Chat app, bỏ webhook cũ (nếu có).
+      data: {
+        googleChatSpaceName: space.name,
+        googleChatSpaceUri: space.uri,
+        googleChatSpaceById: user.id,
+        googleChatWebhookUrl: null,
+      },
     });
     if (saved.count === 0) {
       refresh(project.id);
       return { error: "Người khác vừa tạo nhóm cho dự án này. Bạn có thể xoá nhóm thừa trong Google Chat." };
     }
-    let note = "";
+    let note = await ensureChatApp(space.name, [user.id]);
     if (space.pending.length > 0) {
       const extra = await addChatMembers(user.id, space.name, space.pending);
-      if (extra.failed.length > 0) note = ` ${extra.failed.length} người chưa thêm được, bấm "Thêm người còn thiếu" để thử lại.`;
+      if (extra.failed.length > 0) note += ` ${extra.failed.length} người chưa thêm được, bấm "Thêm người còn thiếu" để thử lại.`;
     }
     refresh(project.id);
     return { success: `Đã tạo nhóm Google Chat và thêm các thành viên dự án.${note}` };
@@ -101,6 +129,8 @@ export async function addMissingChatMembers(projectId: string): Promise<ProjectC
   const candidates = [project.googleChatSpaceById, user.id].filter(
     (id, index, list): id is string => Boolean(id) && list.indexOf(id) === index,
   );
+  // Nhóm tạo trước khi có Chat app: thêm myCreative để nhóm nhận thông báo task.
+  const appNote = await ensureChatApp(project.googleChatSpaceName, candidates);
   for (const actorId of candidates) {
     if (!(await userCanManageChat(actorId))) continue;
     try {
@@ -108,11 +138,10 @@ export async function addMissingChatMembers(projectId: string): Promise<ProjectC
       if (result.failed.length > 0 && actorId !== candidates[candidates.length - 1]) continue;
       refresh(project.id);
       if (result.failed.length > 0) {
-        return { error: `Thêm được ${result.added} người, ${result.failed.length} người chưa thêm được (có thể không dùng tài khoản công ty).` };
+        return { error: `Thêm được ${result.added} người, ${result.failed.length} người chưa thêm được (có thể không dùng tài khoản công ty).${appNote}` };
       }
-      return {
-        success: result.added > 0 ? `Đã thêm ${result.added} người vào nhóm Chat.` : "Mọi thành viên dự án đã có trong nhóm Chat.",
-      };
+      const base = result.added > 0 ? `Đã thêm ${result.added} người vào nhóm Chat.` : "Mọi thành viên dự án đã có trong nhóm Chat.";
+      return appNote ? { error: `${base}${appNote}` } : { success: base };
     } catch (error) {
       if (error instanceof GoogleChatSetupError) return { error: SETUP_ERROR };
       if (error instanceof GoogleNotConnectedError) continue;
@@ -136,4 +165,15 @@ export async function unlinkProjectChatSpace(projectId: string): Promise<Project
   });
   refresh(project.id);
   return { success: "Đã bỏ liên kết. Nhóm trong Google Chat vẫn còn, bạn có thể xoá trong Google Chat nếu muốn." };
+}
+
+/** Gửi một tin thử vào nhóm Chat của dự án dưới tên myCreative. */
+export async function testProjectChat(projectId: string): Promise<ProjectChatState> {
+  const access = await chatProject(projectId);
+  if ("error" in access) return access;
+  const { project } = access;
+  if (!project.googleChatSpaceName) return { error: "Dự án chưa có nhóm Google Chat." };
+  if (!chatAppConfigured()) return { error: "Máy chủ chưa cài Chat app (biến GOOGLE_CHAT_SERVICE_ACCOUNT)." };
+  const result = await sendChatAppMessage(project.googleChatSpaceName, `*${project.name}*\nKết nối Google Chat thành công.`);
+  return result.ok ? { success: "Đã gửi tin thử vào nhóm Google Chat." } : { error: result.error };
 }
