@@ -1,3 +1,4 @@
+import { financeEnabled } from "@/lib/features";
 import Link from "next/link";
 import {
   Archive,
@@ -388,6 +389,7 @@ export default async function Sidebar({
   });
   const canCreate = canCreateProjects(user.role ?? "");
   const showRevenue = canViewRevenue(user.role ?? "");
+  const showSuppliers = financeEnabled();
   const showMeetings = meetingsEnabled();
   const activeProjects = projects.filter(
     (project) => !isArchivedProjectStatus(project.status)
@@ -419,7 +421,7 @@ export default async function Sidebar({
               )}
               <MenuLink href="/kpi" label="KPI" icon={Target} active={activeSection === "kpi"} />
               <MenuLink href="/documents" label="Tài liệu" icon={FolderOpen} active={activeSection === "documents"} />
-              <MenuLink href="/suppliers" label="Nhà cung cấp" icon={Truck} active={activeSection === "suppliers"} />
+              {showSuppliers && <MenuLink href="/suppliers" label="Nhà cung cấp" icon={Truck} active={activeSection === "suppliers"} />}
               <MenuLink href="/leave" label="Nghỉ phép" icon={CalendarDays} active={activeSection === "leave"} />
             </nav>
 
@@ -495,7 +497,7 @@ export default async function Sidebar({
               {showRevenue && <MenuLink href="/revenue" label="Doanh số" icon={CircleDollarSign} active={activeSection === "revenue"} />}
               <MenuLink href="/kpi" label="KPI" icon={Target} active={activeSection === "kpi"} />
               <MenuLink href="/documents" label="Tài liệu" icon={FolderOpen} active={activeSection === "documents"} />
-              <MenuLink href="/suppliers" label="Nhà cung cấp" icon={Truck} active={activeSection === "suppliers"} />
+              {showSuppliers && <MenuLink href="/suppliers" label="Nhà cung cấp" icon={Truck} active={activeSection === "suppliers"} />}
               <MenuLink href="/leave" label="Nghỉ phép" icon={CalendarDays} active={activeSection === "leave"} />
             </div>
             <div className="my-3 border-t border-zinc-200" />

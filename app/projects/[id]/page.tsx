@@ -26,7 +26,7 @@ import ProjectFilesPanel from "@/components/ProjectFilesPanel";
 import ProjectFinancePanel from "@/components/ProjectFinancePanel";
 import ProjectStatusSelect from "@/components/ProjectStatusSelect";
 import MeetingComposer from "@/components/MeetingComposer";
-import { meetingsEnabled } from "@/lib/features";
+import { financeEnabled, meetingsEnabled } from "@/lib/features";
 import { loadMeetingComposerData } from "@/lib/meetingComposerData";
 import {
   formatVND,
@@ -141,7 +141,9 @@ export default async function ProjectPage({
   if (!isMember && user.role !== "ADMIN") redirect("/");
 
   const showMeetings = meetingsEnabled();
+  const showFinance = financeEnabled();
   const canEditApprovers =
+    showFinance &&
     (project.ownerId === user.id || user.role === "ADMIN") &&
     canSetFinanceApprovers(user.role);
   const [sidebarProjects, clients, accounts, availableUsers, memberGroups, teams, meetingData, approverUsers] = await Promise.all([
@@ -259,7 +261,7 @@ export default async function ProjectPage({
 
   const isOwner = project.ownerId === user.id;
   // Tab Tài chính chỉ có ở dự án Khách hàng (dự án Nội bộ không có báo giá/IC).
-  const hasFinanceTab = project.category === "CLIENT";
+  const hasFinanceTab = showFinance && project.category === "CLIENT";
   const activeTab =
     tab === "webhook"
       ? "webhook"
@@ -496,7 +498,7 @@ export default async function ProjectPage({
                     {accountName ?? "Cần gán Account"}
                   </span>
                 )}
-                {canViewRevenue && (
+                {canViewRevenue && showFinance && (
                   <span className="inline-flex items-center gap-1.5">
                     <ShieldCheck size={14} aria-hidden="true" />
                     Duyệt IC: {project.icApprover?.name ?? "chưa chọn"} · Duyệt AC:{" "}

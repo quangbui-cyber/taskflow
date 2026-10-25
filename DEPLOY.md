@@ -240,6 +240,9 @@ Lỗi gửi mail được ghi trong runtime logs bằng mã lỗi, không ghi m�
 Đây là gửi trực tiếp theo từng sự kiện, chưa có hàng đợi gửi lại khi máy chủ mail gặp lỗi.
 Lịch họp bật mặc định ở mọi môi trường. Muốn tạm ẩn thì đặt `MEETINGS_ENABLED=false` rồi Redeploy.
 
+Tài chính (tab Tài chính của dự án, duyệt IC) và danh bạ Nhà cung cấp đang **tạm ẩn** mặc định. Muốn bật lại thì đặt
+`FINANCE_ENABLED=true` rồi Redeploy; dữ liệu đã nhập vẫn còn nguyên.
+
 - **Giới hạn của Gmail:** khoảng 500 người nhận/ngày với Gmail thường (2.000 với
   Google Workspace). Vượt mức, Google tạm khoá gửi khoảng 24 giờ.
 - **Phản hồi tham dự** tính theo nút *Tham dự / Từ chối* trong app. Nút Yes/No trong
