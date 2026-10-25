@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { after } from "next/server";
 import { deliverPush } from "@/lib/webPush";
 import { prisma } from "@/lib/prisma";
-import { sendGoogleChat } from "@/lib/googleChat";
+import { hasProjectChat, sendProjectChat } from "@/lib/projectChatMessage";
 import { daysUntil, formatDue, isOverdue } from "@/lib/dates";
 import { meetingsEnabled } from "@/lib/features";
 import { cleanupMeetingRecaps } from "@/lib/meetingRecapJob";
@@ -123,6 +123,7 @@ export async function GET(request: Request) {
           id: true,
           name: true,
           googleChatWebhookUrl: true,
+          googleChatSpaceName: true,
           tasks: {
             where: { status: { not: "DONE" }, dueDate: { not: null } },
             select: {
@@ -219,13 +220,13 @@ export async function GET(request: Request) {
       }
 
       const message = buildMessage(project.name, overdue, dueToday);
-      if (!message || !project.googleChatWebhookUrl) {
+      if (!message || !hasProjectChat(project)) {
         skipped += 1;
         continue;
       }
 
-      const result = await sendGoogleChat(project.googleChatWebhookUrl, message);
-      if (result.ok) sent += 1;
+      const result = await sendProjectChat(project, message);
+      if (result?.ok) sent += 1;
       else failed += 1;
     }
 

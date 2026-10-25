@@ -1,4 +1,5 @@
 import {
+  canAddChatApp,
   canManageChatSpaces,
   clearGoogleConnection,
   googleAccessToken,
@@ -115,4 +116,18 @@ export async function addChatMembers(userId: string, spaceName: string, memberEm
     else failed.push(member);
   }
   return { added, already, failed };
+}
+
+/**
+ * Thêm Chat app "myCreative" vào nhóm (bằng tài khoản Google của người quản lý nhóm), để app gửi
+ * thông báo task vào nhóm. Đã có trong nhóm thì coi như xong.
+ */
+export async function addChatAppToSpace(userId: string, spaceName: string): Promise<void> {
+  if (!isChatSpaceName(spaceName)) throw new Error("Invalid Google Chat space.");
+  const { accessToken } = await googleAccessToken(userId, canAddChatApp);
+  const { response } = await chatFetch(userId, accessToken, `${spaceName}/members`, {
+    member: { name: "users/app", type: "BOT" },
+  });
+  if (response.ok || response.status === 409) return;
+  throw new Error(`Adding the Chat app failed (${response.status}).`);
 }

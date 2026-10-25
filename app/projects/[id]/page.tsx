@@ -19,9 +19,9 @@ import MembersBar from "@/components/MembersBar";
 import ProjectEditButton from "@/components/ProjectEditButton";
 import ProjectActionsMenu from "@/components/ProjectActionsMenu";
 import ProjectDescriptionDisclosure from "@/components/ProjectDescriptionDisclosure";
-import ProjectWebhookPanel from "@/components/ProjectWebhookPanel";
+import { chatAppConfigured } from "@/lib/googleChatApp";
 import ProjectChatSpacePanel from "@/components/ProjectChatSpacePanel";
-import { canManageChatSpaces, googleWorkspaceConfigured } from "@/lib/googleWorkspace";
+import { canAddChatApp, canManageChatSpaces, googleWorkspaceConfigured } from "@/lib/googleWorkspace";
 import ProjectFilesPanel from "@/components/ProjectFilesPanel";
 import ProjectFinancePanel from "@/components/ProjectFinancePanel";
 import ProjectStatusSelect from "@/components/ProjectStatusSelect";
@@ -605,14 +605,15 @@ export default async function ProjectPage({
               memberCount={project.members.length}
               canManage={canManageWebhook}
               canUnlink={isOwner || user.role === "ADMIN" || project.googleChatSpaceById === user.id}
-              viewerConnected={Boolean(viewerGoogle?.googleToken && canManageChatSpaces(viewerGoogle.googleScopes))}
+              viewerConnected={Boolean(
+                viewerGoogle?.googleToken &&
+                  canManageChatSpaces(viewerGoogle.googleScopes) &&
+                  (!chatAppConfigured() || canAddChatApp(viewerGoogle.googleScopes))
+              )}
               configured={googleWorkspaceConfigured()}
               googleResult={googleResult ?? null}
-            />
-            <ProjectWebhookPanel
-              projectId={project.id}
-              configured={Boolean(project.googleChatWebhookUrl)}
-              canManage={canManageWebhook}
+              chatAppReady={chatAppConfigured()}
+              legacyWebhook={Boolean(project.googleChatWebhookUrl)}
             />
           </div>
         ) : activeTab === "files" ? (

@@ -2,10 +2,11 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ExternalLink, Link2, MessagesSquare, Unlink, UserPlus } from "lucide-react";
+import { ExternalLink, Link2, MessagesSquare, Send, Unlink, UserPlus } from "lucide-react";
 import {
   addMissingChatMembers,
   createProjectChatSpace,
+  testProjectChat,
   unlinkProjectChatSpace,
   type ProjectChatState,
 } from "@/app/actions/projectChat";
@@ -21,6 +22,8 @@ export default function ProjectChatSpacePanel({
   viewerConnected,
   configured,
   googleResult,
+  chatAppReady,
+  legacyWebhook,
 }: {
   projectId: string;
   space: { uri: string; creatorName: string | null } | null;
@@ -31,6 +34,10 @@ export default function ProjectChatSpacePanel({
   viewerConnected: boolean;
   configured: boolean;
   googleResult: string | null;
+  /** Máy chủ đã cài Chat app "myCreative" để gửi thông báo vào nhóm. */
+  chatAppReady: boolean;
+  /** Dự án cũ còn gửi thông báo qua webhook (chưa tạo nhóm từ app). */
+  legacyWebhook: boolean;
 }) {
   const router = useRouter();
   const { notify } = useInteraction();
@@ -57,8 +64,8 @@ export default function ProjectChatSpacePanel({
             <h2 className="font-semibold text-zinc-950">Nhóm Google Chat của dự án</h2>
             <p className="text-sm text-zinc-500">
               {space
-                ? `Đã có nhóm${space.creatorName ? `, do ${space.creatorName} tạo` : ""}. Người mới vào dự án được tự thêm vào nhóm.`
-                : `Tạo nhóm Chat tên trùng tên dự án và thêm sẵn ${memberCount} thành viên dự án.`}
+                ? `Đã có nhóm${space.creatorName ? `, do ${space.creatorName} tạo` : ""}. Người mới vào dự án được tự thêm vào nhóm, thông báo task gửi vào nhóm dưới tên myCreative.`
+                : `Tạo nhóm Chat tên trùng tên dự án, thêm sẵn ${memberCount} thành viên dự án và myCreative để nhận thông báo task.`}
             </p>
           </div>
         </div>
@@ -69,6 +76,17 @@ export default function ProjectChatSpacePanel({
           </a>
         )}
       </div>
+
+      {legacyWebhook && !space && (
+        <p className="mt-4 rounded-[8px] bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Dự án đang nhận thông báo qua webhook cũ. Tạo nhóm Google Chat để chuyển sang cách mới; webhook cũ sẽ tự bỏ.
+        </p>
+      )}
+      {space && !chatAppReady && (
+        <p className="mt-4 rounded-[8px] bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Máy chủ chưa cài Chat app nên nhóm chưa nhận được thông báo task. Nhờ quản trị viên xem mục Google Chat trong DEPLOY.md.
+        </p>
+      )}
 
       {banner && googleResult !== "connected" && (
         <p role="status" className="mt-4 rounded-[8px] bg-red-50 px-3 py-2 text-sm text-red-800">
@@ -113,6 +131,23 @@ export default function ProjectChatSpacePanel({
               <UserPlus size={16} aria-hidden="true" />
               Thêm người còn thiếu
             </button>
+          )}
+          {space && chatAppReady && (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => run(() => testProjectChat(projectId))}
+              className="tf-button-secondary"
+            >
+              <Send size={16} aria-hidden="true" />
+              Gửi tin thử
+            </button>
+          )}
+          {space && !viewerConnected && configured && (
+            <a href={connectHref} className="tf-button-secondary">
+              <Link2 size={16} aria-hidden="true" />
+              Kết nối Google
+            </a>
           )}
           {space && canUnlink && (
             <button

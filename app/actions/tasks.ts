@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getMembership, requireUser } from "@/lib/auth";
 import { followerIds, notify } from "@/lib/notify";
 import { parseCommentMentions } from "@/lib/commentMentions";
-import { sendGoogleChat } from "@/lib/googleChat";
+import { hasProjectChat, sendProjectChat } from "@/lib/projectChatMessage";
 import { taskGoogleChatMessage, type TaskChatInput } from "@/lib/taskGoogleChat";
 import { PRIORITIES, STATUSES } from "@/lib/types";
 import { readTaskCreationFiles } from "@/lib/taskCreationFiles";
@@ -16,7 +16,7 @@ import { after } from "next/server";
 async function projectChat(projectId: string) {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    select: { name: true, googleChatWebhookUrl: true },
+    select: { name: true, googleChatWebhookUrl: true, googleChatSpaceName: true },
   });
   return project;
 }
@@ -56,10 +56,10 @@ async function sendTaskChat(
   input: Omit<TaskChatInput, "taskId" | "projectName" | "url"> | string[]
 ) {
   const chat = await projectChat(projectId);
-  if (!chat?.googleChatWebhookUrl) return;
+  if (!chat || !hasProjectChat(chat)) return;
   const url = await taskLink(projectId, taskId);
-  await sendGoogleChat(
-    chat.googleChatWebhookUrl,
+  await sendProjectChat(
+    chat,
     Array.isArray(input)
       ? [`*${chat.name}*`, ...input, `<${url}|Mở job>`].join("\n")
       : taskGoogleChatMessage({ ...input, taskId, projectName: chat.name, url })
