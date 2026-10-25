@@ -7,7 +7,8 @@ import { getMembership, requireUser } from "@/lib/auth";
 import { followerIds, notify } from "@/lib/notify";
 import { parseCommentMentions } from "@/lib/commentMentions";
 import { hasProjectChat, sendProjectChat } from "@/lib/projectChatMessage";
-import { taskGoogleChatMessage, type TaskChatInput } from "@/lib/taskGoogleChat";
+import { taskCommentChatMessage, taskGoogleChatMessage, type TaskChatInput } from "@/lib/taskGoogleChat";
+import type { GoogleChatMessage } from "@/lib/googleChat";
 import { PRIORITIES, STATUSES } from "@/lib/types";
 import { readTaskCreationFiles } from "@/lib/taskCreationFiles";
 import { driveFolderKeys, queueDrivePush, renameDriveFolderSafe, trashTaskFolderSafe } from "@/lib/driveStorage";
@@ -53,15 +54,17 @@ async function taskLink(projectId: string, taskId: string) {
 async function sendTaskChat(
   projectId: string,
   taskId: string,
-  input: Omit<TaskChatInput, "taskId" | "projectName" | "url"> | string[]
+  input:
+    | Omit<TaskChatInput, "taskId" | "projectName" | "url">
+    | ((context: { projectName: string; url: string }) => GoogleChatMessage)
 ) {
   const chat = await projectChat(projectId);
   if (!chat || !hasProjectChat(chat)) return;
   const url = await taskLink(projectId, taskId);
   await sendProjectChat(
     chat,
-    Array.isArray(input)
-      ? [`*${chat.name}*`, ...input, `<${url}|Mở job>`].join("\n")
+    typeof input === "function"
+      ? input({ projectName: chat.name, url })
       : taskGoogleChatMessage({ ...input, taskId, projectName: chat.name, url })
   );
 }
@@ -485,14 +488,15 @@ export async function addComment(
     projectId: task.projectId,
   });
 
-  const chatSnippet =
-    body.length > 300 ? `${body.slice(0, 300).trimEnd()}…` : body;
-  await sendTaskChat(task.projectId, taskId, [
-    `Bình luận mới: *${task.title}*`,
-    `Người bình luận: ${user.name}`,
-    `Nội dung: ${chatSnippet}`,
-    `Người được giao: ${task.assignee?.name ?? "Chưa giao"}`,
-  ]);
+  await sendTaskChat(task.projectId, taskId, ({ projectName, url }) =>
+    taskCommentChatMessage({
+      taskId, projectName, url,
+      title: task.title,
+      authorName: user.name,
+      comment: body,
+      assigneeName: task.assignee?.name ?? null,
+    })
+  );
 
   revalidatePath(`/projects/${task.projectId}`);
   revalidatePath("/notifications");

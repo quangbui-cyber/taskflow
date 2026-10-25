@@ -3,6 +3,8 @@ import { after } from "next/server";
 import { deliverPush } from "@/lib/webPush";
 import { prisma } from "@/lib/prisma";
 import { hasProjectChat, sendProjectChat } from "@/lib/projectChatMessage";
+import { deadlineDigestChatMessage } from "@/lib/taskGoogleChat";
+import { emailAppUrl } from "@/lib/email";
 import { daysUntil, formatDue, isOverdue } from "@/lib/dates";
 import { meetingsEnabled } from "@/lib/features";
 import { cleanupMeetingRecaps } from "@/lib/meetingRecapJob";
@@ -68,40 +70,6 @@ function vietnamDateKey(date = new Date()) {
   const month = String(vietnamTime.getUTCMonth() + 1).padStart(2, "0");
   const day = String(vietnamTime.getUTCDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
-}
-
-function taskLine(task: DigestTask) {
-  const who = task.assignee?.name ?? "chưa gán";
-  const due = task.dueDate ? formatDue(task.dueDate) : "chưa đặt hạn";
-  return `• ${task.title} — ${who} (${due})`;
-}
-
-/** Soạn tin nhắn cho một dự án; trả null nếu không có gì đáng báo. */
-function buildMessage(
-  projectName: string,
-  overdue: DigestTask[],
-  dueToday: DigestTask[]
-): string | null {
-  if (overdue.length === 0 && dueToday.length === 0) return null;
-
-  const parts = [`*${projectName}* — nhắc việc hàng ngày`];
-
-  if (overdue.length > 0) {
-    parts.push(
-      "",
-      `🔴 Quá hạn (${overdue.length})`,
-      ...overdue.map(taskLine)
-    );
-  }
-  if (dueToday.length > 0) {
-    parts.push(
-      "",
-      `🟡 Đến hạn hôm nay (${dueToday.length})`,
-      ...dueToday.map(taskLine)
-    );
-  }
-
-  return parts.join("\n");
 }
 
 export async function GET(request: Request) {
@@ -219,7 +187,16 @@ export async function GET(request: Request) {
         });
       }
 
-      const message = buildMessage(project.name, overdue, dueToday);
+      const toChat = (task: DigestTask) => ({
+        id: task.id, title: task.title, assigneeName: task.assignee?.name ?? null, dueDate: task.dueDate!,
+      });
+      const message = deadlineDigestChatMessage({
+        projectId: project.id,
+        projectName: project.name,
+        overdue: overdue.map(toChat),
+        dueToday: dueToday.map(toChat),
+        baseUrl: emailAppUrl(),
+      });
       if (!message || !hasProjectChat(project)) {
         skipped += 1;
         continue;

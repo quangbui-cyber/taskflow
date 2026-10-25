@@ -1,4 +1,12 @@
-import type { GoogleChatMessage, GoogleChatWidget } from "./googleChat";
+import type { GoogleChatIcon, GoogleChatMessage, GoogleChatSection, GoogleChatWidget } from "./googleChat";
+import { daysUntil, hasTime } from "./dates";
+
+/**
+ * Thẻ Google Chat gửi vào nhóm của dự án. Bố cục chung:
+ *   dòng đầu = chuyện gì vừa xảy ra, dòng phụ = tên dự án;
+ *   tên task in đậm, to nhất; mỗi thông tin một dòng có biểu tượng; một nút bấm nền xanh.
+ * Google Chat tự chọn font (Google Sans / Roboto), thẻ chỉ chỉnh được đậm nhạt, màu, biểu tượng.
+ */
 
 export type TaskChatInput = {
   event: "created" | "status_changed" | "assignee_changed";
@@ -14,7 +22,7 @@ export type TaskChatInput = {
   meetingTitle?: string;
 };
 
-function escapeHtml(value: string) {
+export function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (char) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   })[char]!);
@@ -33,59 +41,184 @@ function statusText(value: string, html: boolean) {
   return html ? `<b><font color="${style.color}">${text}</font></b>` : text;
 }
 
-/** One card layout for task creation, assignment and status changes. */
+const TIME = new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Ho_Chi_Minh" });
+const WEEKDAY = new Intl.DateTimeFormat("vi-VN", { weekday: "long", timeZone: "Asia/Ho_Chi_Minh" });
+const DAY = new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Asia/Ho_Chi_Minh" });
+/** "28/10" (ngày/tháng, giờ Việt Nam). */
+const SHORT_DAY = { format: (date: Date) => DAY.format(date).slice(0, 5) };
+
+const capitalize = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
+
+/** "17:00 · Thứ Năm 30/10/2026" (giờ Việt Nam). */
+export function chatDeadline(date: Date) {
+  return `${TIME.format(date)} · ${capitalize(WEEKDAY.format(date))} ${DAY.format(date)}`;
+}
+
+function field(icon: GoogleChatIcon, topLabel: string, text: string): GoogleChatWidget {
+  return { decoratedText: { startIcon: { knownIcon: icon }, topLabel, text, wrapText: true } };
+}
+
+function titleWidget(title: string): GoogleChatWidget {
+  return { textParagraph: { text: `<b>${escapeHtml(title)}</b>` } };
+}
+
+function buttonSection(text: string, url: string | null): GoogleChatSection[] {
+  return url ? [{ widgets: [{ buttonList: { buttons: [{ text, type: "FILLED", onClick: { openLink: { url } } }] } }] }] : [];
+}
+
+function card(id: string, title: string, subtitle: string, sections: GoogleChatSection[], fallback: string[]): GoogleChatMessage {
+  return {
+    fallbackText: fallback.join("\n"),
+    cardsV2: [{ cardId: id, card: { header: { title, subtitle }, sections } }],
+  };
+}
+
+function taskHeadline(input: TaskChatInput) {
+  if (input.event === "created") return "🆕 Công việc mới";
+  if (input.event === "assignee_changed") return "👤 Đổi người phụ trách";
+  if (input.status === "DONE") return "✅ Đã hoàn thành";
+  if (input.status === "IN_PROGRESS") return "▶️ Bắt đầu làm";
+  return "🔄 Cập nhật trạng thái";
+}
+
+/** Thẻ khi tạo task, đổi trạng thái hoặc đổi người phụ trách. */
 export function taskGoogleChatMessage(input: TaskChatInput): GoogleChatMessage {
-  const subtitle = {
-    created: "Công việc mới",
-    status_changed: "Cập nhật trạng thái",
-    assignee_changed: "Cập nhật người phụ trách",
-  }[input.event];
+  const headline = taskHeadline(input);
   const assignee = input.assigneeName ?? "Chưa giao";
   const actorLabel = input.event === "created" ? "Người tạo" : "Cập nhật bởi";
-  const deadline = input.dueDate
-    ? new Intl.DateTimeFormat("vi-VN", {
-        day: "2-digit", month: "2-digit", year: "numeric",
-        hour: "2-digit", minute: "2-digit", hour12: false,
-        timeZone: "Asia/Ho_Chi_Minh",
-      }).format(input.dueDate)
-    : null;
+  const deadline = input.dueDate ? chatDeadline(input.dueDate) : null;
   const status = (html: boolean) => [
-    ...(input.event === "status_changed" && input.previousStatus
-      ? [statusText(input.previousStatus, html)] : []),
+    ...(input.event === "status_changed" && input.previousStatus ? [statusText(input.previousStatus, html)] : []),
     statusText(input.status, html),
   ].join(" → ");
-  const field = (topLabel: string, text: string): GoogleChatWidget => ({
-    decoratedText: { topLabel, text, wrapText: true },
-  });
+
+  const assigneeField =
+    input.event === "assignee_changed"
+      ? field("PERSON", "Người phụ trách mới", `<b>${escapeHtml(assignee)}</b>`)
+      : field("PERSON", "Người phụ trách", escapeHtml(assignee));
+  const statusField = field("BOOKMARK", "Trạng thái", status(true));
   const widgets: GoogleChatWidget[] = [
-    { textParagraph: { text: `<b>${escapeHtml(input.title)}</b>` } },
-    field("Trạng thái", status(true)),
-    field("Người phụ trách", escapeHtml(assignee)),
-    field(actorLabel, escapeHtml(input.actorName)),
-    ...(deadline ? [field("Hạn chót (giờ Việt Nam)", deadline)] : []),
-    ...(input.meetingTitle ? [field("Từ biên bản họp", escapeHtml(input.meetingTitle))] : []),
+    titleWidget(input.title),
+    ...(input.event === "assignee_changed" ? [assigneeField, statusField] : [statusField, assigneeField]),
+    ...(deadline ? [field("CLOCK", "Hạn chót", deadline)] : []),
+    // Đổi người phụ trách: người làm thao tác không quan trọng bằng người mới nhận việc.
+    ...(input.event === "assignee_changed" ? [] : [field("MEMBERSHIP", actorLabel, escapeHtml(input.actorName))]),
+    ...(input.meetingTitle ? [field("DESCRIPTION", "Từ biên bản họp", escapeHtml(input.meetingTitle))] : []),
   ];
 
-  return {
-    fallbackText: [
-      input.projectName, `${subtitle}: ${input.title}`,
-      `Trạng thái: ${status(false)}`, `Người phụ trách: ${assignee}`,
+  return card(
+    `task-${input.event}-${input.taskId}`,
+    headline,
+    input.projectName,
+    [{ widgets }, ...buttonSection("Mở job", input.url)],
+    [
+      `${headline} · ${input.projectName}`,
+      input.title,
+      `Trạng thái: ${status(false)}`,
+      `Người phụ trách: ${assignee}`,
+      ...(deadline ? [`Hạn chót: ${deadline}`] : []),
       `${actorLabel}: ${input.actorName}`,
-      ...(deadline ? [`Hạn chót (giờ Việt Nam): ${deadline}`] : []),
       ...(input.meetingTitle ? [`Từ biên bản họp: ${input.meetingTitle}`] : []),
       ...(input.url ? [input.url] : []),
-    ].join("\n"),
-    cardsV2: [{
-      cardId: `task-${input.event}-${input.taskId}`,
-      card: {
-        header: { title: input.projectName, subtitle },
-        sections: [
-          { widgets },
-          ...(input.url ? [{ widgets: [{ buttonList: { buttons: [{
-            text: "Mở job ↗", onClick: { openLink: { url: input.url } },
-          }] } }] }] : []),
+    ]
+  );
+}
+
+/** Thẻ khi có bình luận mới trên task. */
+export function taskCommentChatMessage(input: {
+  taskId: string;
+  projectName: string;
+  title: string;
+  authorName: string;
+  comment: string;
+  assigneeName: string | null;
+  url: string | null;
+}): GoogleChatMessage {
+  const headline = `💬 ${input.authorName} bình luận`;
+  const comment = input.comment.length > 500 ? `${input.comment.slice(0, 500).trimEnd()}…` : input.comment;
+  const assignee = input.assigneeName ?? "Chưa giao";
+  return card(
+    `comment-${input.taskId}-${Date.now()}`,
+    headline,
+    input.projectName,
+    [
+      {
+        widgets: [
+          titleWidget(input.title),
+          { textParagraph: { text: `<i>“${escapeHtml(comment).replace(/\n/g, "<br>")}”</i>` } },
+          field("PERSON", "Người phụ trách", escapeHtml(assignee)),
         ],
       },
-    }],
+      ...buttonSection("Trả lời trong app", input.url),
+    ],
+    [`${headline} · ${input.projectName}`, input.title, `“${comment}”`, `Người phụ trách: ${assignee}`, ...(input.url ? [input.url] : [])]
+  );
+}
+
+export type DigestChatTask = { id: string; title: string; assigneeName: string | null; dueDate: Date };
+
+const DIGEST_SECTION_LIMIT = 15;
+
+function overdueLabel(dueDate: Date) {
+  const day = SHORT_DAY.format(dueDate);
+  const days = -daysUntil(dueDate);
+  return days > 0 ? `hạn ${day}, quá ${days} ngày` : `hạn ${hasTime(dueDate) ? TIME.format(dueDate) : day}, đã quá giờ`;
+}
+
+/** Thẻ nhắc việc 9h sáng: việc quá hạn và việc đến hạn hôm nay của một dự án. */
+export function deadlineDigestChatMessage(input: {
+  projectId: string;
+  projectName: string;
+  overdue: DigestChatTask[];
+  dueToday: DigestChatTask[];
+  baseUrl: string;
+  now?: Date;
+}): GoogleChatMessage | null {
+  if (input.overdue.length === 0 && input.dueToday.length === 0) return null;
+  const now = input.now ?? new Date();
+  const taskUrl = (id: string) => (input.baseUrl ? `${input.baseUrl}/projects/${input.projectId}?task=${id}` : null);
+
+  const section = (header: string, tasks: DigestChatTask[], detail: (task: DigestChatTask) => string): GoogleChatSection => {
+    const shown = tasks.slice(0, DIGEST_SECTION_LIMIT);
+    const widgets: GoogleChatWidget[] = shown.map((task) => {
+      const url = taskUrl(task.id);
+      return {
+        decoratedText: {
+          // Bấm cả dòng để mở đúng task; tên task màu xanh cho biết bấm được.
+          text: url ? `<font color="#1a73e8"><b>${escapeHtml(task.title)}</b></font>` : `<b>${escapeHtml(task.title)}</b>`,
+          bottomLabel: `${task.assigneeName ?? "Chưa giao"} · ${detail(task)}`,
+          wrapText: true,
+          ...(url ? { onClick: { openLink: { url } } } : {}),
+        },
+      };
+    });
+    if (tasks.length > shown.length) {
+      widgets.push({ textParagraph: { text: `<font color="#5f6368">và ${tasks.length - shown.length} việc khác</font>` } });
+    }
+    return { header, widgets };
   };
+
+  const sections: GoogleChatSection[] = [
+    ...(input.overdue.length > 0
+      ? [section(`🔴 Quá hạn · ${input.overdue.length} việc`, input.overdue, (task) => overdueLabel(task.dueDate))]
+      : []),
+    ...(input.dueToday.length > 0
+      ? [section(`🟡 Đến hạn hôm nay · ${input.dueToday.length} việc`, input.dueToday, (task) => TIME.format(task.dueDate))]
+      : []),
+    ...buttonSection("Mở dự án", input.baseUrl ? `${input.baseUrl}/projects/${input.projectId}` : null),
+  ];
+  const today = `${capitalize(WEEKDAY.format(now))} ${SHORT_DAY.format(now)}`;
+  const line = (task: DigestChatTask, detail: string) => `• ${task.title} — ${task.assigneeName ?? "Chưa giao"} (${detail})`;
+
+  return card(
+    `digest-${input.projectId}-${SHORT_DAY.format(now)}`,
+    "⏰ Nhắc việc hôm nay",
+    `${input.projectName} · ${today}`,
+    sections,
+    [
+      `⏰ Nhắc việc hôm nay · ${input.projectName}`,
+      ...(input.overdue.length > 0 ? [`Quá hạn (${input.overdue.length})`, ...input.overdue.map((task) => line(task, overdueLabel(task.dueDate)))] : []),
+      ...(input.dueToday.length > 0 ? [`Đến hạn hôm nay (${input.dueToday.length})`, ...input.dueToday.map((task) => line(task, TIME.format(task.dueDate)))] : []),
+    ]
+  );
 }
