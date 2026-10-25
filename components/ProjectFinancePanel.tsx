@@ -39,6 +39,7 @@ export default async function ProjectFinancePanel({
 
   if (!sheet) {
     return (
+      <div className="p-4 sm:p-6">
       <section className="tf-panel mx-auto max-w-2xl p-6 text-center">
         <h2 className="text-lg font-semibold">Dự án chưa có IC</h2>
         <p className="mt-2 text-sm text-zinc-500">
@@ -58,6 +59,7 @@ export default async function ProjectFinancePanel({
           </p>
         )}
       </section>
+      </div>
     );
   }
 
@@ -101,13 +103,7 @@ export default async function ProjectFinancePanel({
   };
 
   return (
-    <>
-      {permissions.canEdit && !permissions.locked && (
-        <div className="mb-4 flex justify-end">
-          <ImportFinanceDialog projectId={projectId} />
-        </div>
-      )}
-      <FinanceSheetEditor
+    <FinanceSheetEditor
       // Lưu xong thì máy chủ trả bản mới (có id thật) và bảng được dựng lại từ đầu.
       key={sheet.updatedAt}
       projectId={projectId}
@@ -115,7 +111,9 @@ export default async function ProjectFinancePanel({
       permissions={permissions}
       suppliers={sortedSuppliers}
       approval={approval}
-      />
-    </>
+      toolbar={
+        permissions.canEdit && !permissions.locked ? <ImportFinanceDialog projectId={projectId} /> : null
+      }
+    />
   );
 }
