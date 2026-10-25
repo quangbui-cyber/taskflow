@@ -1,6 +1,7 @@
 import { del, issueSignedToken, presignUrl } from "@vercel/blob";
 import { randomUUID } from "node:crypto";
 import { archivePublishedRecap } from "@/lib/recapProject";
+import { pushPendingFiles } from "@/lib/driveStorage";
 import { completeRecapDraft } from "@/lib/recapWorkflow";
 import { formatMeetingWhen } from "@/lib/meetings";
 import {
@@ -316,7 +317,13 @@ export async function saveRecapToProject(
   publication?: import("@/lib/recapPublication").PublishedRecap
 ): Promise<boolean> {
   try {
-    return await archivePublishedRecap(prisma, meetingId, uploader, publication, sentAt);
+    const archived = await archivePublishedRecap(prisma, meetingId, uploader, publication, sentAt);
+    if (archived) {
+      // Lên Google Drive thành Google Doc trong thư mục Tài liệu của dự án (Drive chưa kết nối thì bỏ qua).
+      const meeting = await prisma.meeting.findUnique({ where: { id: meetingId }, select: { projectId: true } });
+      if (meeting?.projectId) await pushPendingFiles({ projectId: meeting.projectId }).catch(() => undefined);
+    }
+    return archived;
   } catch (error) {
     console.error("Could not save the meeting recap to project documents", error);
     return false;

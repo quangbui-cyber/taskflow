@@ -3,6 +3,14 @@
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { queueChatMemberSync } from "@/lib/projectChatSync";
+import {
+  driveFolderKeys,
+  queueDrivePush,
+  queueDriveSharingSync,
+  renameDriveFolderSafe,
+  trashProjectFolderSafe,
+} from "@/lib/driveStorage";
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { canCreateProjects, canViewRevenue, getMembership, requireUser } from "@/lib/auth";
@@ -247,6 +255,7 @@ export async function createProject(
     throw error;
   }
 
+  if (projectFile) queueDrivePush(project.id);
   revalidatePath("/", "layout");
   redirect(`/projects/${project.id}`);
 }
@@ -332,6 +341,8 @@ export async function updateProject(
     }
   });
 
+  after(() => renameDriveFolderSafe(driveFolderKeys.project(projectId), name));
+  queueDriveSharingSync(projectId);
   revalidatePath("/", "layout");
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/revenue");
@@ -395,7 +406,10 @@ export async function deleteProject(projectId: string) {
   if (!project || project.ownerId !== user.id) {
     return { error: "Chỉ chủ project mới được xoá." };
   }
+  const taskIds = (await prisma.task.findMany({ where: { projectId }, select: { id: true } })).map((task) => task.id);
   await prisma.project.delete({ where: { id: projectId } });
+  // Thư mục dự án trên Drive vào thùng rác (khôi phục được 30 ngày).
+  after(() => trashProjectFolderSafe(projectId, taskIds));
   revalidatePath("/");
   redirect("/");
 }
@@ -507,6 +521,7 @@ export async function addMember(
     data: { projectId, userId: invitee.id, role: "member" },
   });
   queueChatMemberSync(projectId, [invitee.id]);
+  queueDriveSharingSync(projectId);
 
   revalidatePath(`/projects/${projectId}`);
   return {};
@@ -554,6 +569,7 @@ export async function addMemberGroup(
     skipDuplicates: true,
   });
   queueChatMemberSync(projectId, newMemberIds);
+  queueDriveSharingSync(projectId);
 
   revalidatePath(`/projects/${projectId}`);
   return {
@@ -597,6 +613,7 @@ export async function removeMember(projectId: string, memberUserId: string) {
       where: { projectId, userId: memberUserId },
     });
   });
+  queueDriveSharingSync(projectId);
 
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/");

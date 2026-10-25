@@ -42,7 +42,9 @@ async function archiveRecap(tx: Prisma.TransactionClient, meetingId: string, upl
     where: { id: recap.projectFileId, projectId: meeting.projectId }, select: { id: true },
   }) : null;
   const saved = existing
-    ? await tx.projectFile.update({ where: { id: existing.id }, data: file, select: { id: true } })
+    // Bản mới ghi vào database; nếu đang đẩy bản cũ lên Drive thì lượt đó không được xoá bản mới.
+    // Lần đẩy sau sẽ thay nội dung Google Doc cũ (giữ nguyên link).
+    ? await tx.projectFile.update({ where: { id: existing.id }, data: { ...file, driveSyncStartedAt: null }, select: { id: true } })
     : await tx.projectFile.create({ data: { ...file, projectId: meeting.projectId, uploaderId: uploader.id }, select: { id: true } });
   await tx.meetingRecap.update({ where: { id: recap.id }, data: { projectFileId: saved.id } });
   return true;

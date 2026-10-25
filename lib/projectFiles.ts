@@ -62,6 +62,7 @@ function fileExtension(name: string) {
 }
 
 export function projectFileTypeLabel(mimeType: string) {
+  if (mimeType === "application/vnd.google-apps.document") return "Google Doc";
   return ALLOWED_FILE_TYPES.get(mimeType) ?? "Tài liệu";
 }
 
@@ -71,19 +72,25 @@ export function formatProjectFileSize(size: number) {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export async function readProjectUpload(
-  value: FormDataEntryValue | null
-): Promise<ProjectUpload | null> {
-  if (!(value instanceof File) || value.size === 0) return null;
+/** File lớn tải thẳng lên Google Drive (khi Drive đã kết nối). */
+export const MAX_DRIVE_FILE_SIZE = 100 * 1024 * 1024;
 
-  if (value.size > MAX_PROJECT_FILE_SIZE) {
-    throw new Error("Tài liệu phải nhỏ hơn 4 MB.");
+export type UploadMeta = { name: string; mimeType: string; size: number };
+
+/** Kiểm tra tên, loại và dung lượng file trước khi nhận (dùng chung cho tải qua app và tải thẳng lên Drive). */
+export function validateUploadMeta(
+  input: { name: string; type: string; size: number },
+  maxSize = MAX_PROJECT_FILE_SIZE
+): UploadMeta {
+  if (!Number.isFinite(input.size) || input.size <= 0) throw new Error("Vui lòng chọn một tài liệu.");
+  if (input.size > maxSize) {
+    throw new Error(`Tài liệu phải nhỏ hơn ${Math.round(maxSize / (1024 * 1024))} MB.`);
   }
 
-  const extension = fileExtension(value.name);
+  const extension = fileExtension(input.name);
   const mimeType =
-    ALLOWED_FILE_TYPES.has(value.type) && value.type
-      ? value.type
+    ALLOWED_FILE_TYPES.has(input.type) && input.type
+      ? input.type
       : MIME_BY_EXTENSION.get(extension);
 
   if (!mimeType || !ALLOWED_FILE_TYPES.has(mimeType)) {
@@ -92,18 +99,20 @@ export async function readProjectUpload(
     );
   }
 
-  const name = value.name
+  const name = input.name
     .replace(/[\\/\u0000-\u001f\u007f]+/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 180);
 
   if (!name) throw new Error("Tên tài liệu không hợp lệ.");
+  return { name, mimeType, size: input.size };
+}
 
-  return {
-    name,
-    mimeType,
-    size: value.size,
-    data: new Uint8Array(await value.arrayBuffer()),
-  };
+export async function readProjectUpload(
+  value: FormDataEntryValue | null
+): Promise<ProjectUpload | null> {
+  if (!(value instanceof File) || value.size === 0) return null;
+  const meta = validateUploadMeta(value);
+  return { ...meta, data: new Uint8Array(await value.arrayBuffer()) };
 }

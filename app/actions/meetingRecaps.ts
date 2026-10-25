@@ -25,6 +25,7 @@ import { prisma } from "@/lib/prisma";
 import { createLinkedRecapTask, lockRecap, publishRecap, resolveRecapSuggestion } from "@/lib/recapWorkflow";
 import { readPublishedRecap } from "@/lib/recapPublication";
 import { attachMeetingProject } from "@/lib/recapProject";
+import { queueDrivePush } from "@/lib/driveStorage";
 
 export type MeetingRecapActionState = { error?: string; success?: string };
 
@@ -49,6 +50,7 @@ export async function attachProjectToMeeting(meetingId: string, projectId: strin
   }
   const result = await attachMeetingProject(prisma, meetingId, projectId, user);
   if ("error" in result) return { error: result.error };
+  if (result.archived) queueDrivePush(result.projectId);
   refresh(meetingId);
   revalidatePath(`/projects/${result.projectId}`);
   return { success: result.archived

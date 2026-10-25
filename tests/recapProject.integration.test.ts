@@ -50,6 +50,7 @@ test("attach standalone meetings to projects and archive only published recaps",
       assert.ok("archived" in result && result.archived);
       const file = await db.projectFile.findFirstOrThrow({ where: { projectId: projects[0].id } });
       assert.match(file.name, /\.docx$/);
+      assert.ok(file.data, "the recap stays in the database until it is pushed to Drive");
       const docx = Buffer.from(file.data).toString("utf8");
       assert.match(docx, /PUBLIC_APPROVED_VERSION/);
       assert.doesNotMatch(docx, /PRIVATE_UNSENT_DRAFT/);
