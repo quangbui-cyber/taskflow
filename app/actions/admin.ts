@@ -8,10 +8,9 @@ import { requireAdmin } from "@/lib/auth";
 import { parseAvatarDataUrl } from "@/lib/avatarImage";
 import { passwordLengthError } from "@/lib/password";
 import { OPEN_PROJECT_STATUSES } from "@/lib/types";
+import { canHoldAccountProfile, isUserRole } from "@/lib/roles";
 
 export type AdminState = { error?: string; success?: string };
-
-const USER_ROLES = ["ADMIN", "ACCOUNT", "USER"] as const;
 
 export async function createUser(
   _prev: AdminState,
@@ -25,7 +24,7 @@ export async function createUser(
     .toLowerCase();
   const password = String(formData.get("password") ?? "");
   const rawRole = String(formData.get("role") ?? "USER");
-  const role = ["ADMIN", "ACCOUNT"].includes(rawRole) ? rawRole : "USER";
+  const role = isUserRole(rawRole) ? rawRole : "USER";
   const avatar = parseAvatarDataUrl(formData.get("avatarUrl"));
 
   if (!name || !email || !password) {
@@ -257,10 +256,10 @@ export async function updateUserProfile(
 
   if (!normalizedName) return { error: "Tên tài khoản không được để trống." };
   if (avatar.error) return { error: avatar.error };
-  if (!USER_ROLES.includes(role as (typeof USER_ROLES)[number])) {
+  if (!isUserRole(role)) {
     return { error: "Vai trò tài khoản không hợp lệ." };
   }
-  const normalizedRole = role as (typeof USER_ROLES)[number];
+  const normalizedRole = role;
 
   const target = await prisma.user.findUnique({
     where: { id: userId },
@@ -282,9 +281,9 @@ export async function updateUserProfile(
     }
   }
 
-  if (normalizedRole === "USER" && target.accountProfile) {
+  if (!canHoldAccountProfile(normalizedRole) && target.accountProfile) {
     return {
-      error: "Tài khoản đang được dùng làm Account. Hãy xoá liên kết Account trước khi chuyển thành User.",
+      error: "Tài khoản đang được dùng làm Account. Hãy xoá liên kết Account trước khi chuyển sang vai trò này.",
     };
   }
 

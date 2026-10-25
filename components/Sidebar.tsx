@@ -14,6 +14,7 @@ import {
   Settings,
   Star,
   Target,
+  Truck,
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
@@ -52,6 +53,7 @@ type ActiveSection =
   | "revenue"
   | "kpi"
   | "documents"
+  | "suppliers"
   | "leave"
   | "profile"
   | "admin";
@@ -417,6 +419,7 @@ export default async function Sidebar({
               )}
               <MenuLink href="/kpi" label="KPI" icon={Target} active={activeSection === "kpi"} />
               <MenuLink href="/documents" label="Tài liệu" icon={FolderOpen} active={activeSection === "documents"} />
+              <MenuLink href="/suppliers" label="Nhà cung cấp" icon={Truck} active={activeSection === "suppliers"} />
               <MenuLink href="/leave" label="Nghỉ phép" icon={CalendarDays} active={activeSection === "leave"} />
             </nav>
 
@@ -492,6 +495,7 @@ export default async function Sidebar({
               {showRevenue && <MenuLink href="/revenue" label="Doanh số" icon={CircleDollarSign} active={activeSection === "revenue"} />}
               <MenuLink href="/kpi" label="KPI" icon={Target} active={activeSection === "kpi"} />
               <MenuLink href="/documents" label="Tài liệu" icon={FolderOpen} active={activeSection === "documents"} />
+              <MenuLink href="/suppliers" label="Nhà cung cấp" icon={Truck} active={activeSection === "suppliers"} />
               <MenuLink href="/leave" label="Nghỉ phép" icon={CalendarDays} active={activeSection === "leave"} />
             </div>
             <div className="my-3 border-t border-zinc-200" />
