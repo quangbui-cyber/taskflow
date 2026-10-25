@@ -11,7 +11,7 @@ import {
   GoogleChatSetupError,
 } from "@/lib/googleChatSpace";
 import { canManageChatSpaces, GoogleNotConnectedError, googleWorkspaceConfigured } from "@/lib/googleWorkspace";
-import { chatAppConfigured, sendChatAppMessage } from "@/lib/googleChatApp";
+import { chatAppConfigured, chatAppProblem, sendChatAppMessage } from "@/lib/googleChatApp";
 
 export type ProjectChatState = { error?: string; success?: string; needsConnect?: boolean };
 
@@ -173,7 +173,7 @@ export async function testProjectChat(projectId: string): Promise<ProjectChatSta
   if ("error" in access) return access;
   const { project } = access;
   if (!project.googleChatSpaceName) return { error: "Dự án chưa có nhóm Google Chat." };
-  if (!chatAppConfigured()) return { error: "Máy chủ chưa cài Chat app (biến GOOGLE_CHAT_SERVICE_ACCOUNT)." };
+  if (!chatAppConfigured()) return { error: chatAppProblem() ?? "Máy chủ chưa cài Chat app." };
   const result = await sendChatAppMessage(project.googleChatSpaceName, `*${project.name}*\nKết nối Google Chat thành công.`);
   return result.ok ? { success: "Đã gửi tin thử vào nhóm Google Chat." } : { error: result.error };
 }

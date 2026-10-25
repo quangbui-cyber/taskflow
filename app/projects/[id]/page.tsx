@@ -19,7 +19,7 @@ import MembersBar from "@/components/MembersBar";
 import ProjectEditButton from "@/components/ProjectEditButton";
 import ProjectActionsMenu from "@/components/ProjectActionsMenu";
 import ProjectDescriptionDisclosure from "@/components/ProjectDescriptionDisclosure";
-import { chatAppConfigured } from "@/lib/googleChatApp";
+import { chatAppConfigured, chatAppProblem } from "@/lib/googleChatApp";
 import ProjectChatSpacePanel from "@/components/ProjectChatSpacePanel";
 import { canAddChatApp, canManageChatSpaces, googleWorkspaceConfigured } from "@/lib/googleWorkspace";
 import ProjectFilesPanel from "@/components/ProjectFilesPanel";
@@ -613,6 +613,7 @@ export default async function ProjectPage({
               configured={googleWorkspaceConfigured()}
               googleResult={googleResult ?? null}
               chatAppReady={chatAppConfigured()}
+              chatAppProblem={chatAppProblem()}
               legacyWebhook={Boolean(project.googleChatWebhookUrl)}
             />
           </div>
