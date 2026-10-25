@@ -255,7 +255,7 @@ export default function ProjectFilesPanel({
 
                 {file.driveUrl && (
                   <a
-                    href={file.driveUrl}
+                    href={`/api/projects/${projectId}/files/${file.id}?open=1`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="tf-icon-button shrink-0"

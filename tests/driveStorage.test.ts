@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { googleDocName, projectYear, sharingChanges } from "../lib/driveStorage";
 import { parseUploadRequest } from "../lib/driveUpload";
-import { GOOGLE_DOC_MIME_TYPE, driveFolderName, driveViewUrl } from "../lib/googleDrive";
+import { GOOGLE_DOC_MIME_TYPE, driveFolderName, driveViewUrl, needsReaderShare } from "../lib/googleDrive";
 import { MAX_DRIVE_FILE_SIZE, MAX_PROJECT_FILE_SIZE, validateUploadMeta } from "../lib/projectFiles";
 import { downloadName, storedFileDriveUrl } from "../lib/storedFileResponse";
 
@@ -61,4 +61,14 @@ test("Drive links and download names", () => {
   assert.equal(driveViewUrl("doc1", GOOGLE_DOC_MIME_TYPE), "https://docs.google.com/document/d/doc1/edit");
   assert.equal(downloadName({ name: "Bien ban hop", mimeType: GOOGLE_DOC_MIME_TYPE }), "Bien ban hop.docx");
   assert.equal(downloadName({ name: "PO.pdf", mimeType: "application/pdf" }), "PO.pdf");
+});
+
+test("opening a Drive file shares it only with people who have no access yet", () => {
+  const permissions = [
+    { email: "noreply@creativestation.vn" },
+    { email: "lan@creativestation.vn" }, // thừa hưởng từ thư mục dự án
+  ];
+  assert.equal(needsReaderShare(permissions, "Lan@CreativeStation.vn"), false);
+  assert.equal(needsReaderShare(permissions, "quang.bui@creativestation.vn"), true);
+  assert.equal(needsReaderShare([], "quang.bui@creativestation.vn"), true);
 });

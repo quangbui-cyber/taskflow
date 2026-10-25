@@ -339,3 +339,22 @@ export async function unshareDriveItem(fileId: string, permissionId: string) {
     throw error;
   }
 }
+
+/**
+ * Bảo đảm một người xem được một file trên Drive: đã có quyền (trực tiếp hoặc thừa hưởng từ thư mục)
+ * thì thôi, chưa có thì share quyền xem cho riêng file đó. Dùng khi bấm "Mở trên Google Drive",
+ * để không phụ thuộc lượt share thư mục chạy nền (có thể chưa chạy hoặc đã lỗi).
+ */
+export async function ensureDriveReader(fileId: string, email: string) {
+  const target = email.trim().toLowerCase();
+  if (!target || target === expectedDriveAccount()) return;
+  const permissions = await listDirectPermissions(fileId);
+  if (!needsReaderShare(permissions, target)) return;
+  await shareDriveItem(fileId, target, "reader");
+}
+
+/** Người này đã có quyền nào trên file chưa (kể cả quyền thừa hưởng từ thư mục)? */
+export function needsReaderShare(permissions: { email: string }[], email: string) {
+  const target = email.trim().toLowerCase();
+  return !permissions.some((permission) => permission.email.toLowerCase() === target);
+}

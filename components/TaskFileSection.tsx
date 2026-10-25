@@ -127,7 +127,7 @@ export default function TaskFileSection({
               </div>
               {file.driveUrl && (
                 <a
-                  href={file.driveUrl}
+                  href={`/api/tasks/${taskId}/files/${file.id}?open=1`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="tf-icon-button !h-8 !min-h-8 !w-8 shrink-0"

@@ -1,5 +1,12 @@
 import { attachmentDisposition } from "@/lib/contentDisposition";
-import { DriveNotConnectedError, GOOGLE_DOC_MIME_TYPE, downloadDriveFile, driveViewUrl } from "@/lib/googleDrive";
+import {
+  DriveNotConnectedError,
+  GOOGLE_DOC_MIME_TYPE,
+  downloadDriveFile,
+  driveViewUrl,
+  ensureDriveReader,
+  recordDriveError,
+} from "@/lib/googleDrive";
 import { MAX_PROJECT_FILE_SIZE } from "@/lib/projectFiles";
 
 type StoredFile = {
@@ -52,5 +59,25 @@ export async function storedFileResponse(file: StoredFile): Promise<Response> {
     }
     console.error("Drive download failed", error);
     return Response.json({ error: "Không lấy được tệp từ Google Drive. Thử lại sau." }, { status: 502 });
+  }
+}
+
+/**
+ * "Mở trên Google Drive": người đã được app kiểm quyền thì được share quyền xem file ngay lúc bấm,
+ * rồi chuyển sang Drive. Google từ chối share (vd Shared Drive chặn người ngoài) thì tải file
+ * qua app thay vì để người dùng gặp trang "You need access".
+ */
+export async function openStoredFileResponse(file: StoredFile, viewerEmail: string): Promise<Response> {
+  if (!file.driveFileId) return storedFileResponse(file);
+  try {
+    await ensureDriveReader(file.driveFileId, viewerEmail);
+    return Response.redirect(driveViewUrl(file.driveFileId, file.mimeType), 302);
+  } catch (error) {
+    if (!(error instanceof DriveNotConnectedError)) {
+      console.error("Drive share on open failed", error);
+      const reason = error instanceof Error ? error.message : "Không rõ lỗi";
+      await recordDriveError(`Không share được file cho ${viewerEmail} khi mở: ${reason}`).catch(() => undefined);
+    }
+    return storedFileResponse(file);
   }
 }
