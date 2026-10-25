@@ -10,6 +10,12 @@ import {
 } from "@/app/actions/suppliers";
 import { useInteraction } from "@/components/InteractionProvider";
 import { SUPPLIER_KINDS, type SupplierKind } from "@/lib/financePolicy";
+import {
+  findSameBankAccount,
+  findSameTaxCode,
+  findSimilarSuppliers,
+  searchKey,
+} from "@/lib/supplierMatch";
 
 export type SupplierItem = {
   id: string;
@@ -34,16 +40,6 @@ const KIND_LABEL: Record<SupplierKind, string> = {
   PERSON: "Cá nhân",
 };
 
-/** Bỏ dấu tiếng Việt để tìm "tan hoang viet" vẫn ra "Tân Hoàng Việt". */
-function searchKey(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/đ/g, "d")
-    .replace(/Đ/g, "D")
-    .toLowerCase();
-}
-
 function formatDate(iso: string) {
   return new Intl.DateTimeFormat("vi-VN", {
     timeZone: "Asia/Ho_Chi_Minh",
@@ -53,15 +49,82 @@ function formatDate(iso: string) {
   }).format(new Date(iso));
 }
 
+/** Một nhà cung cấp đã có, hiện trong khung gợi ý kèm nút mở ra sửa. */
+function ExistingSupplierHint({
+  supplier,
+  note,
+  onOpen,
+}: {
+  supplier: SupplierItem;
+  note?: string;
+  onOpen: () => void;
+}) {
+  return (
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5">
+      <span className="min-w-0 flex-[1_1_200px]">
+        <span className="font-medium text-zinc-900">{supplier.name}</span>
+        {supplier.shortName && (
+          <span className="ml-1.5 tf-badge bg-brand-50 text-brand-800">
+            {supplier.shortName}
+          </span>
+        )}
+        <span className="block text-xs text-zinc-500">
+          {note ??
+            (supplier.bankAccount
+              ? `${supplier.bankName ?? ""} · ${supplier.bankAccount}`
+              : "Chưa có số tài khoản")}
+        </span>
+      </span>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="tf-button-secondary !min-h-8 !px-2.5 !py-1 text-xs"
+      >
+        Mở NCC này
+      </button>
+    </li>
+  );
+}
+
 function SupplierForm({
   supplier,
+  others,
+  onOpenExisting,
   onClose,
 }: {
   supplier: SupplierItem | null;
+  /** Danh bạ hiện có, để báo khi tên/số tài khoản/MST đã có. */
+  others: SupplierItem[];
+  onOpenExisting: (supplier: SupplierItem) => void;
   onClose: () => void;
 }) {
   const { notify } = useInteraction();
   const [kind, setKind] = useState<SupplierKind>(supplier?.kind ?? "COMPANY");
+  const [name, setName] = useState(supplier?.name ?? "");
+  const [shortName, setShortName] = useState(supplier?.shortName ?? "");
+  const [taxCode, setTaxCode] = useState(supplier?.taxCode ?? "");
+  const [bankAccount, setBankAccount] = useState(supplier?.bankAccount ?? "");
+
+  const nameMatches = useMemo(() => {
+    const byName = findSimilarSuppliers(name, others, { excludeId: supplier?.id });
+    const byShort = findSimilarSuppliers(shortName, others, { excludeId: supplier?.id })
+      .filter((match) => match.exact);
+    const seen = new Set<string>();
+    return [...byShort, ...byName].filter((match) => {
+      if (seen.has(match.supplier.id)) return false;
+      seen.add(match.supplier.id);
+      return true;
+    });
+  }, [name, shortName, others, supplier?.id]);
+  const exactNameMatch = nameMatches.some((match) => match.exact);
+  const sameAccount = useMemo(
+    () => findSameBankAccount(bankAccount, others, supplier?.id),
+    [bankAccount, others, supplier?.id],
+  );
+  const sameTaxCode = useMemo(
+    () => findSameTaxCode(taxCode, others, supplier?.id),
+    [taxCode, others, supplier?.id],
+  );
   const [state, formAction, pending] = useActionState<SupplierState, FormData>(
     async (prev, formData) => {
       const result = supplier
@@ -137,7 +200,10 @@ function SupplierForm({
               name="name"
               required
               maxLength={200}
-              defaultValue={supplier?.name ?? ""}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              autoComplete="off"
+              aria-describedby="supplier-name-matches"
               placeholder={
                 kind === "COMPANY"
                   ? "VD: Công ty TNHH In ấn Tân Hoàng Việt"
@@ -146,12 +212,44 @@ function SupplierForm({
               className="tf-field"
             />
           </label>
+          <div id="supplier-name-matches" aria-live="polite" className="sm:col-span-2 empty:hidden">
+            {nameMatches.length > 0 && (
+              <div
+                className={`-mt-1 rounded-[8px] border px-3 py-2 text-sm ${
+                  exactNameMatch
+                    ? "border-amber-200 bg-amber-50"
+                    : "border-zinc-200 bg-zinc-50"
+                }`}
+              >
+                <p
+                  className={`text-xs font-semibold ${
+                    exactNameMatch ? "text-amber-800" : "text-zinc-600"
+                  }`}
+                >
+                  {exactNameMatch
+                    ? "Tên này đã có trong danh bạ. Hãy mở nhà cung cấp đó thay vì thêm mới."
+                    : "Có thể nhà cung cấp này đã có:"}
+                </p>
+                <ul className="divide-y divide-zinc-200/70">
+                  {nameMatches.map(({ supplier: match }) => (
+                    <ExistingSupplierHint
+                      key={match.id}
+                      supplier={match}
+                      onOpen={() => onOpenExisting(match)}
+                    />
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
           <label className="block">
             <span className="tf-label">Tên gọi tắt</span>
             <input
               name="shortName"
               maxLength={60}
-              defaultValue={supplier?.shortName ?? ""}
+              value={shortName}
+              onChange={(event) => setShortName(event.target.value)}
+              autoComplete="off"
               placeholder="VD: TÂN HOÀNG VIỆT"
               className="tf-field"
             />
@@ -167,9 +265,19 @@ function SupplierForm({
               name="taxCode"
               inputMode="numeric"
               maxLength={20}
-              defaultValue={supplier?.taxCode ?? ""}
+              value={taxCode}
+              onChange={(event) => setTaxCode(event.target.value)}
+              autoComplete="off"
+              aria-describedby="supplier-tax-matches"
               className="tf-field"
             />
+            <span id="supplier-tax-matches" aria-live="polite">
+              {sameTaxCode.length > 0 && (
+                <span className="mt-1 block text-xs font-medium text-amber-800">
+                  Mã số thuế này đã có ở {sameTaxCode.map((item) => item.name).join(", ")}.
+                </span>
+              )}
+            </span>
           </label>
           <label className="block">
             <span className="tf-label">Số điện thoại</span>
@@ -204,7 +312,10 @@ function SupplierForm({
                 name="bankAccount"
                 inputMode="numeric"
                 maxLength={40}
-                defaultValue={supplier?.bankAccount ?? ""}
+                value={bankAccount}
+                onChange={(event) => setBankAccount(event.target.value)}
+                autoComplete="off"
+                aria-describedby="supplier-account-matches"
                 className="tf-field"
               />
             </label>
@@ -228,6 +339,25 @@ function SupplierForm({
                 className="tf-field"
               />
             </label>
+          </div>
+          <div id="supplier-account-matches" aria-live="polite" className="empty:hidden">
+            {sameAccount.length > 0 && (
+              <div className="rounded-[8px] border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
+                <p className="text-xs font-semibold text-amber-800">
+                  Số tài khoản này đã có trong danh bạ. Kiểm tra trước khi lưu để tránh trùng nhà cung cấp.
+                </p>
+                <ul className="divide-y divide-amber-200/70">
+                  {sameAccount.map((match) => (
+                    <ExistingSupplierHint
+                      key={match.id}
+                      supplier={match}
+                      note={`${match.bankName ?? ""} · ${match.bankAccount} · ${match.accountHolder ?? match.name}`}
+                      onOpen={() => onOpenExisting(match)}
+                    />
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </fieldset>
 
@@ -517,6 +647,16 @@ export default function SupplierDirectory({
         <SupplierForm
           key={editing === "new" ? "new" : editing.id}
           supplier={editing === "new" ? null : editing}
+          others={suppliers}
+          onOpenExisting={(match) => {
+            if (
+              editing === "new" &&
+              !confirm(`Bỏ thông tin đang nhập và mở "${match.name}"?`)
+            ) {
+              return;
+            }
+            setEditing(match);
+          }}
           onClose={() => setEditing(null)}
         />
       )}
