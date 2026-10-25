@@ -2,7 +2,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth";
 import { after } from "next/server";
 import { trashDriveFileSafe } from "@/lib/driveStorage";
-import { storedFileResponse } from "@/lib/storedFileResponse";
+import { openStoredFileResponse, storedFileResponse } from "@/lib/storedFileResponse";
 import { prisma } from "@/lib/prisma";
 import { findAccessibleTask } from "@/lib/taskFiles";
 
@@ -37,11 +37,14 @@ async function loadFile(context: Context) {
   return { user, task, file };
 }
 
-export async function GET(_request: Request, context: Context) {
+export async function GET(request: Request, context: Context) {
   const result = await loadFile(context);
   if ("error" in result) return result.error;
-  const { file } = result;
+  const { file, user } = result;
 
+  if (new URL(request.url).searchParams.get("open") === "1") {
+    return openStoredFileResponse(file, user.email);
+  }
   return storedFileResponse(file);
 }
 

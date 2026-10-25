@@ -2,7 +2,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth";
 import { after } from "next/server";
 import { trashDriveFileSafe } from "@/lib/driveStorage";
-import { storedFileResponse } from "@/lib/storedFileResponse";
+import { openStoredFileResponse, storedFileResponse } from "@/lib/storedFileResponse";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -38,7 +38,7 @@ async function findAccessibleFile(
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   {
     params,
   }: { params: Promise<{ id: string; fileId: string }> }
@@ -65,6 +65,9 @@ export async function GET(
     );
   }
 
+  if (new URL(request.url).searchParams.get("open") === "1") {
+    return openStoredFileResponse(file, user.email);
+  }
   return storedFileResponse(file);
 }
 
