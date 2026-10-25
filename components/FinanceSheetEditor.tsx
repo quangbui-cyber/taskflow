@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, Plus, Save, Trash2, Undo2 } from "lucide-react";
@@ -93,6 +93,8 @@ const blankToNull = (value: string) => (value.trim() ? value : null);
 function NumberField({
   value,
   onChange,
+  fieldKey,
+  onValidityChange,
   decimals = 2,
   label,
   disabled,
@@ -100,6 +102,10 @@ function NumberField({
 }: {
   value: number | null;
   onChange: (value: number | null) => void;
+  /** Mã riêng của ô, để bảng biết ô nào đang sai. */
+  fieldKey: string;
+  /** Báo cho bảng biết ô đang chứa chữ không phải số, để chặn bấm Lưu. */
+  onValidityChange?: (fieldKey: string, invalid: boolean) => void;
   decimals?: number;
   label: string;
   disabled?: boolean;
@@ -107,14 +113,34 @@ function NumberField({
 }) {
   const [text, setText] = useState(formatViNumber(value, decimals));
   const [invalid, setInvalid] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [shownValue, setShownValue] = useState(value);
+
+  // Giá trị đổi từ bên ngoài (vd bấm "Huỷ thay đổi") thì hiện lại cho khớp.
+  if (value !== shownValue) {
+    setShownValue(value);
+    if (!focused) {
+      setText(formatViNumber(value, decimals));
+      setInvalid(false);
+    }
+  }
+
+  useEffect(() => {
+    onValidityChange?.(fieldKey, invalid);
+  }, [fieldKey, invalid, onValidityChange]);
+  // Ô bị xoá (xoá dòng) thì không còn chặn Lưu nữa.
+  useEffect(() => () => onValidityChange?.(fieldKey, false), [fieldKey, onValidityChange]);
+
   return (
     <input
       type="text"
       inputMode="decimal"
       aria-label={label}
       aria-invalid={invalid || undefined}
+      title={invalid ? "Số không hợp lệ. Dùng dấu chấm ngăn hàng nghìn, dấu phẩy cho phần lẻ." : undefined}
       disabled={disabled}
       value={text}
+      onFocus={() => setFocused(true)}
       onChange={(event) => {
         setText(event.target.value);
         const parsed = parseViNumber(event.target.value);
@@ -123,9 +149,11 @@ function NumberField({
           return;
         }
         setInvalid(false);
+        setShownValue(parsed);
         onChange(parsed);
       }}
       onBlur={() => {
+        setFocused(false);
         if (!invalid) setText(formatViNumber(value, decimals));
       }}
       className={`h-9 w-full min-w-0 rounded-[6px] border bg-white px-2 text-right text-sm tabular-nums outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:bg-zinc-50 disabled:text-zinc-600 ${
@@ -235,13 +263,47 @@ export default function FinanceSheetEditor({
   const [sellVatRate, setSellVatRate] = useState(sheet.sellVatRate);
   const [sections, setSections] = useState<EditSection[]>(() => toEditSections(sheet));
   const [dirty, setDirty] = useState(false);
+  const [revision, setRevision] = useState(0);
+  // Ô số đang gõ sai (vd "12a"): còn ô nào thì không cho Lưu.
+  const [invalidFields, setInvalidFields] = useState<ReadonlySet<string>>(() => new Set());
+  const markInvalid = useCallback((fieldKey: string, invalid: boolean) => {
+    setInvalidFields((current) => {
+      if (current.has(fieldKey) === invalid) return current;
+      const next = new Set(current);
+      if (invalid) next.add(fieldKey);
+      else next.delete(fieldKey);
+      return next;
+    });
+  }, []);
+  const hasInvalid = invalidFields.size > 0;
 
-  // Nhắc khi rời trang mà chưa lưu.
+  // Nhắc khi rời trang mà chưa lưu: đóng/tải lại tab trình duyệt…
   useEffect(() => {
     if (!dirty) return;
     const warn = (event: BeforeUnloadEvent) => event.preventDefault();
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
+  // …và bấm link trong app (tab khác của dự án, thanh bên): hỏi trước khi đi.
+  useEffect(() => {
+    if (!dirty) return;
+    const guard = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const link = (event.target as Element | null)?.closest?.("a[href]");
+      if (!(link instanceof HTMLAnchorElement)) return;
+      if (link.target && link.target !== "_self") return;
+      const url = new URL(link.href, window.location.href);
+      if (url.origin !== window.location.origin) return;
+      if (url.pathname === window.location.pathname && url.search === window.location.search) return;
+      if (confirm("IC có thay đổi chưa lưu. Rời trang và bỏ các thay đổi này?")) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    // Bắt ở pha capture để chặn trước khi Next.js chuyển trang.
+    document.addEventListener("click", guard, true);
+    return () => document.removeEventListener("click", guard, true);
   }, [dirty]);
 
   const totals = useMemo(
@@ -301,10 +363,20 @@ export default function FinanceSheetEditor({
     setHeader(sheet.header);
     setSellVatRate(sheet.sellVatRate);
     setSections(toEditSections(sheet));
+    setInvalidFields(new Set());
+    // Dựng lại toàn bộ ô nhập để chữ đang gõ dở (kể cả số sai) cũng về như cũ.
+    setRevision((value) => value + 1);
     setDirty(false);
   }
 
   function save() {
+    if (hasInvalid) {
+      notify({
+        message: `Còn ${invalidFields.size} ô số không hợp lệ (viền đỏ). Sửa lại trước khi lưu.`,
+        tone: "error",
+      });
+      return;
+    }
     const payload = {
       header,
       sellVatRate,
@@ -454,7 +526,7 @@ export default function FinanceSheetEditor({
         const sectionTotal = totals.sections[sectionIndex];
         return (
           <section
-            key={section.key}
+            key={`${revision}-${section.key}`}
             aria-label={`Nhóm ${section.name || sectionIndex + 1}`}
             className="tf-panel overflow-hidden"
           >
@@ -521,9 +593,9 @@ export default function FinanceSheetEditor({
                       <TextField label="Tên hạng mục" value={line.name} disabled={disabled} placeholder="Tên hạng mục" onChange={(value) => editLine(section.key, line.key, { name: value })} className="font-medium" />
                       <TextField label="Mô tả hạng mục" value={line.description} disabled={disabled} onChange={(value) => editLine(section.key, line.key, { description: blankToNull(value) })} />
                       <TextField label="Đơn vị tính" value={line.unit} disabled={disabled} onChange={(value) => editLine(section.key, line.key, { unit: blankToNull(value) })} />
-                      <NumberField label="Số lượng bán" decimals={3} value={line.quantity} disabled={disabled} onChange={(value) => editLine(section.key, line.key, { quantity: value })} />
+                      <NumberField fieldKey={`${line.key}:quantity`} onValidityChange={markInvalid} label="Số lượng bán" decimals={3} value={line.quantity} disabled={disabled} onChange={(value) => editLine(section.key, line.key, { quantity: value })} />
                       {showSell && (
-                        <NumberField label="Đơn giá bán" value={line.unitPrice} disabled={disabled} onChange={(value) => editLine(section.key, line.key, { unitPrice: value })} />
+                        <NumberField fieldKey={`${line.key}:unitPrice`} onValidityChange={markInvalid} label="Đơn giá bán" value={line.unitPrice} disabled={disabled} onChange={(value) => editLine(section.key, line.key, { unitPrice: value })} />
                       )}
                       {showSell && (
                         <span className="pr-1 text-right text-sm font-semibold tabular-nums">
@@ -601,8 +673,8 @@ export default function FinanceSheetEditor({
                               </select>
                             )}
                             <TextField label="Đơn vị tính chi phí" value={cost.unit} disabled={disabled} onChange={(value) => editCost(section.key, line.key, cost.key, { unit: blankToNull(value) })} />
-                            <NumberField label="Số lượng chi phí" decimals={3} value={cost.icQuantity} disabled={disabled} onChange={(value) => editCost(section.key, line.key, cost.key, { icQuantity: value })} />
-                            <NumberField label="Đơn giá vốn" value={cost.icUnitPrice} disabled={disabled} onChange={(value) => editCost(section.key, line.key, cost.key, { icUnitPrice: value })} />
+                            <NumberField fieldKey={`${cost.key}:icQuantity`} onValidityChange={markInvalid} label="Số lượng chi phí" decimals={3} value={cost.icQuantity} disabled={disabled} onChange={(value) => editCost(section.key, line.key, cost.key, { icQuantity: value })} />
+                            <NumberField fieldKey={`${cost.key}:icUnitPrice`} onValidityChange={markInvalid} label="Đơn giá vốn" value={cost.icUnitPrice} disabled={disabled} onChange={(value) => editCost(section.key, line.key, cost.key, { icUnitPrice: value })} />
                             <select
                               aria-label="VAT đầu vào"
                               value={cost.icVatRate === null ? "" : String(cost.icVatRate)}
@@ -701,8 +773,17 @@ export default function FinanceSheetEditor({
       {!readOnly && (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-200 bg-white/95 px-4 py-3 backdrop-blur md:left-64">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
-            <span className={`text-sm ${dirty ? "font-medium text-amber-700" : "text-zinc-500"}`} aria-live="polite">
-              {pending ? "Đang lưu…" : dirty ? "Có thay đổi chưa lưu" : "Đã lưu mọi thay đổi"}
+            <span
+              className={`text-sm ${hasInvalid ? "font-medium text-red-700" : dirty ? "font-medium text-amber-700" : "text-zinc-500"}`}
+              aria-live="polite"
+            >
+              {pending
+                ? "Đang lưu…"
+                : hasInvalid
+                  ? `Còn ${invalidFields.size} ô số không hợp lệ (viền đỏ)`
+                  : dirty
+                    ? "Có thay đổi chưa lưu"
+                    : "Đã lưu mọi thay đổi"}
             </span>
             <div className="flex gap-2">
               <button type="button" disabled={!dirty || pending} onClick={resetChanges} className="tf-button-secondary">
