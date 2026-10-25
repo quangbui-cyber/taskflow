@@ -402,7 +402,7 @@ Mỗi luật có ví dụ thật từ file mẫu nếu có.
 |---|---|
 | 1 ✅ | Vai trò Kế toán, người duyệt theo dự án, danh bạ NCC (có tên gọi tắt), logo `public/brand/` — *đã làm 25/10/2026, đã commit trên branch finance-phase-1* |
 | 2 | Bảng tài chính: khối Báo giá + IC, sửa tay, tính tổng, ẩn theo vai trò, gửi/duyệt IC, xuất Excel/PDF có logo — *2a (nhập tay, tính tổng, ẩn giá bán với USER) đã làm trên branch finance-phase-2a; còn 2b gửi/duyệt, 2c xuất file* |
-| 3 | Nhập từ Excel (đọc 4 khối theo tiêu đề cột) + kiểm lỗi bằng code |
+| 3 | Nhập từ Excel (đọc 4 khối theo tiêu đề cột) + kiểm lỗi bằng code — *đã làm trên branch finance-phase-3 (nhập Báo giá + IC; khối Nghiệm thu/AC mới được nhận diện, sẽ nhập khi làm AC)* |
 | 4 | Báo giá xuất cho khách |
 | 5 | ĐNTU: lập theo NCC/dòng IC (số tiền do người lập nhập), duyệt, Kế toán chi, in mẫu ĐNTU-CS.2024, nhắc hạn |
 | 6 | AC: Nghiệm thu + chi phí thực tế + chứng từ theo NCC + xem file trong app (Q14), so IC, duyệt, cập nhật doanh thu |

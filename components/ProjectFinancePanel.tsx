@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { loadFinanceSheet, type FinanceViewer } from "@/lib/financeSheet";
 import CreateFinanceSheetButton from "@/components/CreateFinanceSheetButton";
 import FinanceSheetEditor from "@/components/FinanceSheetEditor";
+import ImportFinanceDialog from "@/components/ImportFinanceDialog";
 
 /** Tab "Tài chính" của trang dự án: bảng Báo giá + IC. */
 export default async function ProjectFinancePanel({
@@ -29,11 +30,16 @@ export default async function ProjectFinancePanel({
             : "Account phụ trách sẽ lập IC cho dự án này."}
         </p>
         {permissions.canEdit && (
-          <div className="mt-5 flex justify-center">
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            <ImportFinanceDialog projectId={projectId} variant="primary" />
             <CreateFinanceSheetButton projectId={projectId} />
           </div>
         )}
-        <p className="mt-4 text-xs text-zinc-400">Nhập IC từ file Excel sẽ có ở bước tiếp theo.</p>
+        {permissions.canEdit && (
+          <p className="mt-4 text-xs text-zinc-500">
+            Có sẵn file IC/AC Excel thì nhập từ file; không có thì tạo IC trống và nhập tay.
+          </p>
+        )}
       </section>
     );
   }
@@ -43,13 +49,20 @@ export default async function ProjectFinancePanel({
   );
 
   return (
-    <FinanceSheetEditor
+    <>
+      {permissions.canEdit && !permissions.locked && (
+        <div className="mb-4 flex justify-end">
+          <ImportFinanceDialog projectId={projectId} />
+        </div>
+      )}
+      <FinanceSheetEditor
       // Lưu xong thì máy chủ trả bản mới (có id thật) và bảng được dựng lại từ đầu.
       key={sheet.updatedAt}
       projectId={projectId}
       sheet={sheet}
       permissions={permissions}
       suppliers={sortedSuppliers}
-    />
+      />
+    </>
   );
 }
