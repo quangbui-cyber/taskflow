@@ -12,6 +12,8 @@ import { canEditFinanceSheet, canViewFinanceSell, isFinanceSheetLocked } from "@
 import { findFinanceProject } from "@/lib/financeSheet";
 
 export const runtime = "nodejs";
+// Đọc file Excel thường mất dưới 1 giây; chặn trên để không treo lâu khi có sự cố.
+export const maxDuration = 60;
 
 /**
  * Nhập IC từ file Excel.
