@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { queueDrivePush } from "@/lib/driveStorage";
 import { getCurrentUser } from "@/lib/auth";
+import { financeEnabled } from "@/lib/features";
 import { prisma } from "@/lib/prisma";
 import { FinanceImportError } from "@/lib/financeImport";
 import {
@@ -25,6 +26,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  if (!financeEnabled()) {
+    return Response.json({ error: "Chức năng tài chính đang tạm ẩn." }, { status: 404 });
+  }
   const user = await getCurrentUser();
   if (!user) {
     return Response.json({ error: "Phiên đăng nhập đã hết hạn." }, { status: 401 });

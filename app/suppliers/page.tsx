@@ -1,6 +1,8 @@
 import { Truck } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
+import { financeEnabled } from "@/lib/features";
 import Sidebar from "@/components/Sidebar";
 import SupplierDirectory from "@/components/SupplierDirectory";
 import {
@@ -11,6 +13,7 @@ import {
 
 export default async function SuppliersPage() {
   const user = await requireUser();
+  if (!financeEnabled()) notFound();
   const canManage = canManageSuppliers(user.role);
   const canDelete = canDeleteSuppliers(user.role);
 

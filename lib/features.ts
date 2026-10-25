@@ -29,3 +29,13 @@ export function meetingRecapsEnabled(env: NodeJS.ProcessEnv = process.env): bool
 
 export const MEETING_RECAPS_DISABLED_MESSAGE =
   "Chức năng biên bản họp chưa được cấu hình. Nhờ quản trị viên xem mục Biên bản họp trong DEPLOY.md.";
+
+/**
+ * Tài chính (tab Tài chính của dự án: Báo giá, IC/AC, duyệt IC) và danh bạ Nhà cung cấp.
+ * Đang tạm ẩn: tắt mặc định ở mọi môi trường. Muốn bật lại, đặt FINANCE_ENABLED=true (hoặc 1)
+ * rồi deploy lại. Khi ẩn, không dữ liệu nào bị xoá.
+ */
+export function financeEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const flag = env.FINANCE_ENABLED?.trim().toLowerCase();
+  return flag === "true" || flag === "1";
+}
