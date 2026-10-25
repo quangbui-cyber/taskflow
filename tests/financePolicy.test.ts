@@ -8,6 +8,7 @@ import {
   readFinanceApprovers,
   readSupplierInput,
   supplierKey,
+  supplierKeys,
 } from "../lib/financePolicy";
 import { canHoldAccountProfile, isUserRole, ROLE_LABELS } from "../lib/roles";
 
@@ -127,4 +128,16 @@ test("personal tax code may be a 12-digit citizen ID; branch codes allowed", () 
 
 test("supplier keys compare names case-insensitively", () => {
   assert.equal(supplierKey("Tân Hoàng  Việt"), supplierKey("TÂN HOÀNG VIỆT"));
+});
+
+test("stored keys make case variants collide in the unique index", () => {
+  assert.deepEqual(supplierKeys({ name: "CÔNG TY ARTECH", shortName: "ARTECH" }), {
+    nameKey: "công ty artech",
+    shortNameKey: "artech",
+  });
+  assert.equal(
+    supplierKeys({ name: "Công ty Artech", shortName: null }).nameKey,
+    supplierKeys({ name: "CÔNG TY ARTECH", shortName: null }).nameKey,
+  );
+  assert.equal(supplierKeys({ name: "A", shortName: null }).shortNameKey, null);
 });

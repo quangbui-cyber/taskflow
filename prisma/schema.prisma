@@ -132,8 +132,12 @@ model Project {
 // Mọi người xem được, kể cả thông tin chuyển khoản.
 model Supplier {
   id            String   @id @default(cuid())
-  name          String   @unique // tên đầy đủ, vd "CÔNG TY TNHH IN ẤN TÂN HOÀNG VIỆT"
-  shortName     String?  @unique // tên gọi trong cột SUP của IC/AC, vd "TÂN HOÀNG VIỆT", "HUY"
+  name          String // tên đầy đủ, vd "CÔNG TY TNHH IN ẤN TÂN HOÀNG VIỆT"
+  shortName     String? // tên gọi trong cột SUP của IC/AC, vd "TÂN HOÀNG VIỆT", "HUY"
+  // Khoá chữ thường của name/shortName (supplierKey) để database tự chặn trùng
+  // không phân biệt hoa thường, kể cả khi hai người lưu cùng lúc.
+  nameKey       String   @unique
+  shortNameKey  String?  @unique
   kind          String   @default("COMPANY") // "COMPANY" | "PERSON"
   taxCode       String?
   phone         String?

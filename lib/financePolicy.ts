@@ -113,6 +113,14 @@ export function supplierKey(value: string) {
   return normalizeSupplierText(value).toLocaleLowerCase("vi");
 }
 
+/** Giá trị cột nameKey/shortNameKey (có ràng buộc unique trong database). */
+export function supplierKeys(input: Pick<SupplierInput, "name" | "shortName">) {
+  return {
+    nameKey: supplierKey(input.name),
+    shortNameKey: input.shortName ? supplierKey(input.shortName) : null,
+  };
+}
+
 function optionalText(formData: FormData, field: keyof typeof LIMITS) {
   const raw = formData.get(field);
   if (raw === null) return null;

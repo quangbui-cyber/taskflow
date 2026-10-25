@@ -8,25 +8,30 @@ import {
   canDeleteSuppliers,
   canManageSuppliers,
   readSupplierInput,
+  supplierKeys,
   type SupplierInput,
 } from "@/lib/financePolicy";
 
 export type SupplierState = { error?: string; success?: string; savedId?: string };
 
-/** Tên và tên gọi tắt không được trùng nhà cung cấp khác (không phân biệt hoa thường). */
+/**
+ * Báo trùng sớm với thông báo dễ hiểu. Chặn thật nằm ở ràng buộc unique của
+ * nameKey/shortNameKey trong database (an toàn cả khi hai người lưu cùng lúc).
+ */
 async function duplicateError(input: SupplierInput, excludeId?: string) {
+  const keys = supplierKeys(input);
   const sameName = await prisma.supplier.findFirst({
     where: {
-      name: { equals: input.name, mode: "insensitive" },
+      nameKey: keys.nameKey,
       ...(excludeId ? { NOT: { id: excludeId } } : {}),
     },
     select: { id: true },
   });
   if (sameName) return `Đã có nhà cung cấp tên "${input.name}".`;
-  if (input.shortName) {
+  if (keys.shortNameKey) {
     const sameShort = await prisma.supplier.findFirst({
       where: {
-        shortName: { equals: input.shortName, mode: "insensitive" },
+        shortNameKey: keys.shortNameKey,
         ...(excludeId ? { NOT: { id: excludeId } } : {}),
       },
       select: { name: true },
@@ -60,7 +65,12 @@ export async function createSupplier(
 
   try {
     const supplier = await prisma.supplier.create({
-      data: { ...input, createdById: user.id, updatedById: user.id },
+      data: {
+        ...input,
+        ...supplierKeys(input),
+        createdById: user.id,
+        updatedById: user.id,
+      },
       select: { id: true },
     });
     revalidatePath("/suppliers");
@@ -95,7 +105,7 @@ export async function updateSupplier(
   try {
     await prisma.supplier.update({
       where: { id },
-      data: { ...input, updatedById: user.id },
+      data: { ...input, ...supplierKeys(input), updatedById: user.id },
     });
     revalidatePath("/suppliers");
     return { success: `Đã lưu ${input.name}.`, savedId: id };
