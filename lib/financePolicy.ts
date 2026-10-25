@@ -18,6 +18,52 @@ export function isFinanceSheetLocked(icStatus: string) {
   return icStatus === "SUBMITTED" || icStatus === "APPROVED";
 }
 
+/** Gửi duyệt được khi IC là bản nháp hoặc vừa bị từ chối. */
+export function canSubmitIcStatus(icStatus: string) {
+  return icStatus === "DRAFT" || icStatus === "REJECTED";
+}
+
+/** Duyệt / từ chối IC: người duyệt IC của dự án hoặc Admin. */
+export function canDecideFinanceSheet(
+  viewer: { id: string; role: string },
+  icApproverId: string | null,
+) {
+  return viewer.role === "ADMIN" || (icApproverId !== null && viewer.id === icApproverId);
+}
+
+/** Rút lại IC đang chờ duyệt: chính người gửi hoặc Admin. */
+export function canWithdrawFinanceSheet(
+  viewer: { id: string; role: string },
+  submittedById: string | null,
+) {
+  return viewer.role === "ADMIN" || (submittedById !== null && viewer.id === submittedById);
+}
+
+/** Lời nhắn khi gửi duyệt / lý do từ chối: gọn, bỏ khoảng trắng thừa. */
+export function readApprovalNote(value: unknown, limit = 1000): string | null | { error: string } {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") return { error: "Nội dung không hợp lệ." };
+  const text = value.normalize("NFC").trim();
+  if (!text) return null;
+  if (text.length > limit) return { error: `Nội dung dài quá ${limit} ký tự.` };
+  return text;
+}
+
+/** Danh sách CC: bỏ trùng, bỏ người duyệt (đã ở ô Gửi tới), tối đa 20 người. */
+export function readCcUserIds(
+  value: unknown,
+  approverId: string,
+): string[] | { error: string } {
+  if (!Array.isArray(value)) return { error: "Danh sách CC không hợp lệ." };
+  const ids = [
+    ...new Set(
+      value.filter((id): id is string => typeof id === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(id)),
+    ),
+  ].filter((id) => id !== approverId);
+  if (ids.length > 20) return { error: "CC tối đa 20 người." };
+  return ids;
+}
+
 /** Người được chọn làm người duyệt IC/AC của dự án. */
 export const FINANCE_APPROVER_ROLES = ["ADMIN", "ACCOUNT"] as const;
 

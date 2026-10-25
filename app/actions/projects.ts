@@ -2,6 +2,7 @@
 
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { queueChatMemberSync } from "@/lib/projectChatSync";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { canCreateProjects, canViewRevenue, getMembership, requireUser } from "@/lib/auth";
@@ -505,6 +506,7 @@ export async function addMember(
   await prisma.projectMember.create({
     data: { projectId, userId: invitee.id, role: "member" },
   });
+  queueChatMemberSync(projectId, [invitee.id]);
 
   revalidatePath(`/projects/${projectId}`);
   return {};
@@ -551,6 +553,7 @@ export async function addMemberGroup(
     })),
     skipDuplicates: true,
   });
+  queueChatMemberSync(projectId, newMemberIds);
 
   revalidatePath(`/projects/${projectId}`);
   return {

@@ -4,6 +4,13 @@ export type EmailResult = { ok: true } | { ok: false; error: string };
 
 export type EmailMessage = {
   to: string[];
+  cc?: string[];
+  /** Người nhận bấm "Trả lời" thì thư về địa chỉ này (vd người gửi duyệt). */
+  replyTo?: string;
+  /** Đặt Message-ID riêng để email sau trả lời đúng luồng thư. */
+  messageId?: string;
+  /** Message-ID của email gốc: Gmail/Outlook gom vào cùng luồng. */
+  inReplyTo?: string;
   subject: string;
   text: string;
   html: string;
@@ -78,6 +85,11 @@ export async function sendEmail(message: EmailMessage): Promise<EmailResult> {
         address: sender,
       },
       to: message.to,
+      cc: message.cc?.length ? message.cc : undefined,
+      replyTo: message.replyTo,
+      messageId: message.messageId,
+      inReplyTo: message.inReplyTo,
+      references: message.inReplyTo,
       subject: message.subject,
       text: message.text,
       html: message.html,

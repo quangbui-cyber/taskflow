@@ -39,6 +39,9 @@ export function parsePushRegistration(value: unknown): PushRegistration | null {
 
 export function notificationDestination(data: { type?: string; projectId?: string; taskId?: string; recognitionId?: string; meetingId?: string }) {
   if (data.type?.startsWith("LEAVE_")) return "/leave";
+  if (data.type?.startsWith("FINANCE_") && data.projectId) {
+    return `/projects/${encodeURIComponent(data.projectId)}?tab=finance`;
+  }
   if (data.recognitionId) return `/recognition?focus=${encodeURIComponent(data.recognitionId)}#recognition-${encodeURIComponent(data.recognitionId)}`;
   if (data.meetingId && data.type === "MEETING_RECAP_PROMPT") return `/meetings/${encodeURIComponent(data.meetingId)}/recap?record=1`;
   if (data.meetingId && data.type?.startsWith("MEETING_RECAP_")) return `/meetings/${encodeURIComponent(data.meetingId)}/recap`;

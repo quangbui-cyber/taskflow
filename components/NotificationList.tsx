@@ -60,6 +60,8 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   MEETING_RECAP_PROMPT: Mic,
   LEAVE_REQUEST: CalendarDays,
   LEAVE_DECISION: CalendarDays,
+  FINANCE_APPROVAL_REQUEST: FileText,
+  FINANCE_APPROVAL_DECISION: FileText,
 };
 
 function timeAgo(value: string): string {
@@ -140,6 +142,8 @@ export default function NotificationList({
 
     const destination = notification.type.startsWith("LEAVE_")
       ? "/leave"
+      : notification.type.startsWith("FINANCE_") && notification.projectId
+      ? `/projects/${notification.projectId}?tab=finance`
       : notification.recognitionId
       ? `/recognition?focus=${notification.recognitionId}#recognition-${notification.recognitionId}`
       : notification.meetingId && notification.type === "MEETING_RECAP_PROMPT"

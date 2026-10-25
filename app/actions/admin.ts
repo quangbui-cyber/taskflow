@@ -173,6 +173,9 @@ export async function deleteUser(
         // Giải phóng tài khoản Google để tài khoản mới cùng email liên kết lại được.
         googleSub: null,
         googleMeetToken: null,
+        googleToken: null,
+        googleEmail: null,
+        googleScopes: [],
         passwordHash: lockedPasswordHash,
         sessionVersion: { increment: 1 },
         managerId: null,

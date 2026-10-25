@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, Plus, Save, Trash2, Undo2 } from "lucide-react";
 import { saveFinanceSheet } from "@/app/actions/finance";
+import FinanceApprovalBar, { type FinanceApprovalProps } from "@/components/FinanceApprovalBar";
 import { useInteraction } from "@/components/InteractionProvider";
 import {
   costAmount,
@@ -247,11 +248,13 @@ export default function FinanceSheetEditor({
   sheet,
   permissions,
   suppliers,
+  approval,
 }: {
   projectId: string;
   sheet: FinanceSheetView;
   permissions: FinancePermissions;
   suppliers: SupplierOption[];
+  approval: FinanceApprovalProps;
 }) {
   const router = useRouter();
   const { notify } = useInteraction();
@@ -423,9 +426,12 @@ export default function FinanceSheetEditor({
 
   return (
     <div className="space-y-4 pb-24">
+      <FinanceApprovalBar sheet={sheet} dirty={dirty} props={approval} />
       {permissions.locked && (
         <p className="rounded-[8px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          IC đang chờ duyệt hoặc đã duyệt nên chỉ xem được, không sửa được.
+          {sheet.icStatus === "APPROVED"
+            ? "IC đã duyệt nên chỉ xem được. Cần sửa thì bấm \"Tạo phiên bản mới\"."
+            : "IC đang chờ duyệt nên chỉ xem được. Cần sửa thì rút lại hoặc chờ người duyệt từ chối."}
         </p>
       )}
       {!showSell && (

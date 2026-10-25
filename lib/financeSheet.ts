@@ -33,12 +33,31 @@ export type SellLineView = {
 
 export type SectionView = { id: string; name: string; lines: SellLineView[] };
 
+export type ApprovalEventView = {
+  id: string;
+  action: string;
+  actorName: string | null;
+  note: string | null;
+  selfApproval: boolean;
+  createdAt: string;
+};
+
 export type FinanceSheetView = {
   id: string;
   version: number;
   icStatus: string;
   updatedAt: string;
   updatedByName: string | null;
+  approval: {
+    submittedById: string | null;
+    submittedByName: string | null;
+    submittedAt: string | null;
+    approvedByName: string | null;
+    approvedAt: string | null;
+    rejectReason: string | null;
+    ccUserIds: string[];
+    events: ApprovalEventView[];
+  };
   header: {
     clientName: string;
     programName: string;
@@ -90,6 +109,13 @@ export async function loadFinanceSheet(
     orderBy: { version: "desc" },
     include: {
       updatedBy: { select: { name: true } },
+      icSubmittedBy: { select: { name: true } },
+      icApprovedBy: { select: { name: true } },
+      approvalEvents: {
+        orderBy: { createdAt: "desc" },
+        take: 30,
+        include: { actor: { select: { name: true } } },
+      },
       sections: {
         orderBy: { order: "asc" },
         include: {
@@ -116,6 +142,23 @@ export async function loadFinanceSheet(
       icStatus: sheet.icStatus,
       updatedAt: sheet.updatedAt.toISOString(),
       updatedByName: sheet.updatedBy?.name ?? null,
+      approval: {
+        submittedById: sheet.icSubmittedById,
+        submittedByName: sheet.icSubmittedBy?.name ?? null,
+        submittedAt: sheet.icSubmittedAt?.toISOString() ?? null,
+        approvedByName: sheet.icApprovedBy?.name ?? null,
+        approvedAt: sheet.icApprovedAt?.toISOString() ?? null,
+        rejectReason: sheet.icRejectReason,
+        ccUserIds: sheet.icCcUserIds,
+        events: sheet.approvalEvents.map((event) => ({
+          id: event.id,
+          action: event.action,
+          actorName: event.actor?.name ?? null,
+          note: event.note,
+          selfApproval: event.selfApproval,
+          createdAt: event.createdAt.toISOString(),
+        })),
+      },
       header: {
         clientName: sheet.clientName ?? "",
         programName: sheet.programName ?? "",

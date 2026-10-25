@@ -8,58 +8,65 @@ datasource db {
 }
 
 model User {
-  id                   String                   @id @default(cuid())
-  email                String                   @unique
-  googleSub            String?                  @unique
-  googleMeetToken      String? // refresh token Google (đã mã hoá) để tạo link Meet; null = chưa kết nối
-  name                 String
-  avatarUrl            String?
-  passwordHash         String
-  sessionVersion       Int                      @default(0)
-  role                 String                   @default("USER") // "ADMIN" | "ACCOUNT" | "ACCOUNTANT" | "USER"
-  isActive             Boolean                  @default(true)
-  deactivatedAt        DateTime?
+  id                     String                   @id @default(cuid())
+  email                  String                   @unique
+  googleSub              String?                  @unique
+  googleMeetToken        String? // refresh token Google (đã mã hoá) để tạo link Meet; null = chưa kết nối
+  googleToken            String? // refresh token Google Workspace (đã mã hoá): gửi email, tạo nhóm Chat; null = chưa kết nối
+  googleEmail            String? // tài khoản Google đã kết nối (trùng email đăng nhập)
+  googleScopes           String[]                 @default([]) // quyền người dùng đã cho phép
+  createdChatSpaces      Project[]                @relation("ProjectChatSpaceCreator")
+  name                   String
+  avatarUrl              String?
+  passwordHash           String
+  sessionVersion         Int                      @default(0)
+  role                   String                   @default("USER") // "ADMIN" | "ACCOUNT" | "ACCOUNTANT" | "USER"
+  isActive               Boolean                  @default(true)
+  deactivatedAt          DateTime?
   // Xoá tài khoản chỉ đánh dấu dòng này để tên vẫn còn trên dự án đã đóng,
   // task đã xong và bình luận; tài khoản bị ẩn khỏi danh sách và không đăng nhập được.
-  deletedAt            DateTime?
-  managerId            String? // người quản lý trực tiếp
-  manager              User?                    @relation("TeamManager", fields: [managerId], references: [id], onDelete: SetNull)
-  reports              User[]                   @relation("TeamManager") // nhân viên dưới quyền
-  createdAt            DateTime                 @default(now())
-  memberships          ProjectMember[]
-  ownedProjects        Project[]                @relation("ProjectOwner")
-  assignedTasks        Task[]                   @relation("TaskAssignee")
-  createdTasks         Task[]                   @relation("TaskCreator")
-  comments             Comment[]
-  notifications        Notification[]
-  pushSubscriptions    PushSubscription[]
-  taskFollows          TaskFollower[]
-  accountProfile       Account?
-  groupMemberships     MemberGroupMember[]
-  uploadedFiles        ProjectFile[]            @relation("ProjectFileUploader")
-  uploadedTaskFiles    TaskFile[]               @relation("TaskFileUploader")
-  recognitionsSent     Recognition[]            @relation("RecognitionSender")
-  recognitionsReceived Recognition[]            @relation("RecognitionRecipient")
-  organizedMeetings    Meeting[]                @relation("MeetingOrganizer")
-  recordedMeetings     Meeting[]                @relation("MeetingRecorder")
-  meetingInvites       MeetingAttendee[]
-  createdMeetingRecaps MeetingRecap[]           @relation("MeetingRecapCreator")
-  recapActionItems     MeetingRecapActionItem[] @relation("MeetingRecapActionOwner")
-  kpiPlanChanges       KpiPlanChange[]
-  uploadedDocuments    DocumentFile[]           @relation("DocumentFileUploader")
-  createdDocumentLinks DocumentLink[]           @relation("DocumentLinkCreator")
-  annualLeaveDays      Float                    @default(12) // số ngày phép năm do Admin đặt
+  deletedAt              DateTime?
+  managerId              String? // người quản lý trực tiếp
+  manager                User?                    @relation("TeamManager", fields: [managerId], references: [id], onDelete: SetNull)
+  reports                User[]                   @relation("TeamManager") // nhân viên dưới quyền
+  createdAt              DateTime                 @default(now())
+  memberships            ProjectMember[]
+  ownedProjects          Project[]                @relation("ProjectOwner")
+  assignedTasks          Task[]                   @relation("TaskAssignee")
+  createdTasks           Task[]                   @relation("TaskCreator")
+  comments               Comment[]
+  notifications          Notification[]
+  pushSubscriptions      PushSubscription[]
+  taskFollows            TaskFollower[]
+  accountProfile         Account?
+  groupMemberships       MemberGroupMember[]
+  uploadedFiles          ProjectFile[]            @relation("ProjectFileUploader")
+  uploadedTaskFiles      TaskFile[]               @relation("TaskFileUploader")
+  recognitionsSent       Recognition[]            @relation("RecognitionSender")
+  recognitionsReceived   Recognition[]            @relation("RecognitionRecipient")
+  organizedMeetings      Meeting[]                @relation("MeetingOrganizer")
+  recordedMeetings       Meeting[]                @relation("MeetingRecorder")
+  meetingInvites         MeetingAttendee[]
+  createdMeetingRecaps   MeetingRecap[]           @relation("MeetingRecapCreator")
+  recapActionItems       MeetingRecapActionItem[] @relation("MeetingRecapActionOwner")
+  kpiPlanChanges         KpiPlanChange[]
+  uploadedDocuments      DocumentFile[]           @relation("DocumentFileUploader")
+  createdDocumentLinks   DocumentLink[]           @relation("DocumentLinkCreator")
+  annualLeaveDays        Float                    @default(12) // số ngày phép năm do Admin đặt
   // Quản lý nghỉ phép: duyệt đơn của người chưa có quản lý, nhận thông báo kết quả mọi đơn
-  isLeaveManager       Boolean                  @default(false)
-  leaveRequests        LeaveRequest[]           @relation("LeaveRequester")
-  leaveDecisions       LeaveRequest[]           @relation("LeaveDecider")
-  leaveAdjustments     LeaveUsageAdjustment[]
-  icApprovals          Project[]                @relation("ProjectIcApprover")
-  acApprovals          Project[]                @relation("ProjectAcApprover")
-  createdSuppliers     Supplier[]               @relation("SupplierCreator")
-  updatedSuppliers     Supplier[]               @relation("SupplierUpdater")
-  createdFinanceSheets FinanceSheet[]           @relation("FinanceSheetCreator")
-  updatedFinanceSheets FinanceSheet[]           @relation("FinanceSheetUpdater")
+  isLeaveManager         Boolean                  @default(false)
+  leaveRequests          LeaveRequest[]           @relation("LeaveRequester")
+  leaveDecisions         LeaveRequest[]           @relation("LeaveDecider")
+  leaveAdjustments       LeaveUsageAdjustment[]
+  icApprovals            Project[]                @relation("ProjectIcApprover")
+  acApprovals            Project[]                @relation("ProjectAcApprover")
+  createdSuppliers       Supplier[]               @relation("SupplierCreator")
+  updatedSuppliers       Supplier[]               @relation("SupplierUpdater")
+  createdFinanceSheets   FinanceSheet[]           @relation("FinanceSheetCreator")
+  updatedFinanceSheets   FinanceSheet[]           @relation("FinanceSheetUpdater")
+  submittedFinanceSheets FinanceSheet[]           @relation("FinanceSheetSubmitter")
+  approvedFinanceSheets  FinanceSheet[]           @relation("FinanceSheetApprover")
+  financeApprovalEvents  FinanceApprovalEvent[]
 
   @@index([isActive])
 }
@@ -98,6 +105,10 @@ model Project {
   executionEndAt       DateTime? // ngày kết thúc — null nếu chỉ 1 ngày
   revenue              Float           @default(0) // doanh thu dự kiến/thực tế (VND)
   googleChatWebhookUrl String?
+  googleChatSpaceName  String? // "spaces/AAAA…" — nhóm Google Chat của dự án do app tạo
+  googleChatSpaceUri   String? // link mở nhóm (https://chat.google.com/room/…)
+  googleChatSpaceById  String?
+  googleChatSpaceBy    User?           @relation("ProjectChatSpaceCreator", fields: [googleChatSpaceById], references: [id], onDelete: SetNull)
   ownerId              String
   owner                User            @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   clientId             String?
@@ -128,20 +139,21 @@ model Project {
   @@index([responsibleTeamId])
   @@index([responsibleGroupId])
   @@index([icApproverId])
+  @@index([googleChatSpaceById])
   @@index([acApproverId])
 }
 
 // Danh bạ nhà cung cấp dùng chung cho IC, AC và phiếu đề nghị chi.
 // Mọi người xem được, kể cả thông tin chuyển khoản.
 model Supplier {
-  id            String   @id @default(cuid())
+  id            String     @id @default(cuid())
   name          String // tên đầy đủ, vd "CÔNG TY TNHH IN ẤN TÂN HOÀNG VIỆT"
   shortName     String? // tên gọi trong cột SUP của IC/AC, vd "TÂN HOÀNG VIỆT", "HUY"
   // Khoá chữ thường của name/shortName (supplierKey) để database tự chặn trùng
   // không phân biệt hoa thường, kể cả khi hai người lưu cùng lúc.
-  nameKey       String   @unique
-  shortNameKey  String?  @unique
-  kind          String   @default("COMPANY") // "COMPANY" | "PERSON"
+  nameKey       String     @unique
+  shortNameKey  String?    @unique
+  kind          String     @default("COMPANY") // "COMPANY" | "PERSON"
   taxCode       String?
   phone         String?
   email         String?
@@ -150,11 +162,11 @@ model Supplier {
   accountHolder String?
   note          String?
   createdById   String?
-  createdBy     User?    @relation("SupplierCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy     User?      @relation("SupplierCreator", fields: [createdById], references: [id], onDelete: SetNull)
   updatedById   String?
-  updatedBy     User?    @relation("SupplierUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  updatedBy     User?      @relation("SupplierUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
   icCostLines   CostLine[] @relation("CostLineIcSupplier")
   acCostLines   CostLine[] @relation("CostLineAcSupplier")
 
@@ -165,35 +177,67 @@ model Supplier {
 // Bảng tài chính của dự án, giống một file IC/AC: khối Báo giá, Nghiệm thu, IC, AC
 // nằm trên cùng các dòng. Mỗi phiên bản là một bảng; bản đang dùng có superseded = false.
 model FinanceSheet {
-  id             String           @id @default(cuid())
-  projectId      String
-  project        Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  version        Int              @default(1)
-  icStatus       String           @default("DRAFT") // "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED"
-  acStatus       String           @default("NONE") // "NONE" | "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED"
-  superseded     Boolean          @default(false)
+  id               String                 @id @default(cuid())
+  projectId        String
+  project          Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version          Int                    @default(1)
+  icStatus         String                 @default("DRAFT") // "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED"
+  acStatus         String                 @default("NONE") // "NONE" | "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED"
+  superseded       Boolean                @default(false)
   // Thông tin chung — mục trống tự ẩn khi xuất file
-  clientName     String?
-  programName    String?
-  headcount      String? // ghi tự do, vd "240 khách"
-  location       String?
-  eventStart     DateTime?
-  eventEnd       DateTime?
-  sellVatRate    Decimal          @default(0.08) @db.Decimal(5, 4)
+  clientName       String?
+  programName      String?
+  headcount        String? // ghi tự do, vd "240 khách"
+  location         String?
+  eventStart       DateTime?
+  eventEnd         DateTime?
+  sellVatRate      Decimal                @default(0.08) @db.Decimal(5, 4)
   // Tổng lưu sẵn để hiển thị nhanh (luôn tính lại bằng code khi lưu)
-  sellSubtotal   Decimal          @default(0) @db.Decimal(18, 0)
-  icCostSubtotal Decimal          @default(0) @db.Decimal(18, 0)
-  createdById    String?
-  createdBy      User?            @relation("FinanceSheetCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedById    String?
-  updatedBy      User?            @relation("FinanceSheetUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  sections       FinanceSection[]
+  sellSubtotal     Decimal                @default(0) @db.Decimal(18, 0)
+  icCostSubtotal   Decimal                @default(0) @db.Decimal(18, 0)
+  createdById      String?
+  createdBy        User?                  @relation("FinanceSheetCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById      String?
+  updatedBy        User?                  @relation("FinanceSheetUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  // Duyệt IC
+  icSubmittedAt    DateTime?
+  icSubmittedById  String?
+  icSubmittedBy    User?                  @relation("FinanceSheetSubmitter", fields: [icSubmittedById], references: [id], onDelete: SetNull)
+  icApprovedAt     DateTime?
+  icApprovedById   String?
+  icApprovedBy     User?                  @relation("FinanceSheetApprover", fields: [icApprovedById], references: [id], onDelete: SetNull)
+  icRejectReason   String?
+  // Người được CC trong email duyệt; lần gửi sau của dự án gợi ý lại danh sách này.
+  icCcUserIds      String[]               @default([])
+  // Message-ID của email gửi duyệt, để email kết quả nằm cùng luồng thư.
+  icEmailMessageId String?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  sections         FinanceSection[]
+  approvalEvents   FinanceApprovalEvent[]
 
   @@unique([projectId, version])
   @@index([createdById])
   @@index([updatedById])
+  @@index([icSubmittedById])
+  @@index([icApprovedById])
+}
+
+// Lịch sử duyệt của bảng tài chính: ai gửi, ai duyệt/từ chối, lúc nào, lý do gì.
+model FinanceApprovalEvent {
+  id           String       @id @default(cuid())
+  sheetId      String
+  sheet        FinanceSheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  stage        String       @default("IC") // "IC" | "AC"
+  action       String // "SUBMIT" | "WITHDRAW" | "APPROVE" | "REJECT" | "NEW_VERSION"
+  actorId      String?
+  actor        User?        @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  note         String? // lời nhắn khi gửi, lý do khi từ chối
+  selfApproval Boolean      @default(false) // người duyệt cũng là người gửi (Q16)
+  createdAt    DateTime     @default(now())
+
+  @@index([sheetId, createdAt])
+  @@index([actorId])
 }
 
 model FinanceSection {

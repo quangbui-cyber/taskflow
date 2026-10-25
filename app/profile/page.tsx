@@ -3,12 +3,23 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
 import { ProfileInfoForm, ProfilePasswordForm } from "@/components/ProfileForms";
+import GoogleConnectionCard from "@/components/GoogleConnectionCard";
+import { canManageChatSpaces, canSendGmail, googleWorkspaceConfigured } from "@/lib/googleWorkspace";
 
 const PROFILE_BLUE_DARK = "#1d4ed8";
 const PROFILE_BLUE_SOFT = "#eff6ff";
 
-export default async function ProfilePage() {
-  const user = await requireUser();
+export default async function ProfilePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ google?: string }>;
+}) {
+  const [user, params] = await Promise.all([requireUser(), searchParams]);
+  const google = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { googleToken: true, googleEmail: true, googleScopes: true },
+  });
+  const scopes = google?.googleToken ? google.googleScopes : [];
   const sidebarProjects = await prisma.project.findMany({
     where: { members: { some: { userId: user.id } } },
     select: {
@@ -59,6 +70,14 @@ export default async function ProfilePage() {
             userId={user.id}
             name={user.name}
             avatarUrl={user.avatarUrl ?? null}
+          />
+          <GoogleConnectionCard
+            configured={googleWorkspaceConfigured()}
+            loginEmail={user.email}
+            connectedEmail={google?.googleToken ? google.googleEmail : null}
+            canSendGmail={canSendGmail(scopes)}
+            canManageChat={canManageChatSpaces(scopes)}
+            result={params.google ?? null}
           />
           <ProfilePasswordForm />
         </div>
