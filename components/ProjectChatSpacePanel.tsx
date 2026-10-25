@@ -23,6 +23,7 @@ export default function ProjectChatSpacePanel({
   configured,
   googleResult,
   chatAppReady,
+  chatAppProblem = null,
   legacyWebhook,
 }: {
   projectId: string;
@@ -36,6 +37,8 @@ export default function ProjectChatSpacePanel({
   googleResult: string | null;
   /** Máy chủ đã cài Chat app "myCreative" để gửi thông báo vào nhóm. */
   chatAppReady: boolean;
+  /** Lý do Chat app chưa dùng được (vd khoá dán sai), hiện cho người cài đặt. */
+  chatAppProblem?: string | null;
   /** Dự án cũ còn gửi thông báo qua webhook (chưa tạo nhóm từ app). */
   legacyWebhook: boolean;
 }) {
@@ -84,7 +87,8 @@ export default function ProjectChatSpacePanel({
       )}
       {space && !chatAppReady && (
         <p className="mt-4 rounded-[8px] bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          Máy chủ chưa cài Chat app nên nhóm chưa nhận được thông báo task. Nhờ quản trị viên xem mục Google Chat trong DEPLOY.md.
+          Nhóm chưa nhận được thông báo task: {chatAppProblem ?? "máy chủ chưa cài Chat app."} Nhờ quản trị viên xem mục
+          Google Chat trong DEPLOY.md.
         </p>
       )}
 

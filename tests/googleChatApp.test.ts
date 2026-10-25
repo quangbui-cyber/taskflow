@@ -22,8 +22,8 @@ function withFetch(handler: (url: string, init?: RequestInit) => Response) {
 test("the service account key is read from JSON or base64, escaped newlines included", () => {
   assert.equal(parseServiceAccount(account)?.client_email, "chat-app@demo.iam.gserviceaccount.com");
   assert.equal(parseServiceAccount(Buffer.from(account).toString("base64"))?.private_key, pem);
-  const escaped = JSON.stringify({ client_email: "a@b.c", private_key: "line1\\nline2" });
-  assert.equal(parseServiceAccount(escaped)?.private_key, "line1\nline2");
+  const escaped = JSON.stringify({ client_email: "a@b.c", private_key: "-----BEGIN PRIVATE KEY-----\\nabc" });
+  assert.equal(parseServiceAccount(escaped)?.private_key, "-----BEGIN PRIVATE KEY-----\nabc");
   assert.equal(parseServiceAccount(""), null);
   assert.equal(parseServiceAccount("not a key"), null);
   assert.equal(parseServiceAccount(JSON.stringify({ client_email: "x" })), null);
@@ -79,4 +79,31 @@ test("a Chat app that is not in the space gets a clear message", async (t) => {
   assert.equal(result.ok, false);
   assert.match(!result.ok ? result.error : "", /myCreative chưa có trong nhóm/);
   assert.deepEqual(await sendChatAppMessage("not-a-space", "x"), { ok: false, error: "Nhóm Google Chat không hợp lệ." });
+});
+
+test("common paste mistakes in the key are repaired, and unreadable values say why", async () => {
+  const { chatAppProblem } = await import("../lib/googleChatApp");
+  const pretty = JSON.stringify({ type: "service_account", client_email: "a@b.iam.gserviceaccount.com", private_key: pem }, null, 2);
+  // Ngoặc cong do trình soạn thảo đổi.
+  assert.equal(parseServiceAccount(pretty.replace(/"/g, (_, i) => (i % 2 ? "“" : "”")))?.client_email, "a@b.iam.gserviceaccount.com");
+  // Khoá xuống dòng thật bên trong chuỗi.
+  const rawNewlines = pretty.replace(/\\n/g, "\n");
+  assert.equal(parseServiceAccount(rawNewlines)?.private_key, pem);
+  // Cả khối bị bọc thành một chuỗi.
+  assert.equal(parseServiceAccount(JSON.stringify(pretty))?.client_email, "a@b.iam.gserviceaccount.com");
+
+  const previous = process.env.GOOGLE_CHAT_SERVICE_ACCOUNT;
+  try {
+    delete process.env.GOOGLE_CHAT_SERVICE_ACCOUNT;
+    assert.match(chatAppProblem() ?? "", /Chưa có biến/);
+    process.env.GOOGLE_CHAT_SERVICE_ACCOUNT = '{"client_email": "x"}';
+    assert.match(chatAppProblem() ?? "", /thiếu client_email hoặc private_key/);
+    process.env.GOOGLE_CHAT_SERVICE_ACCOUNT = "{ phần đầu file bị cắt";
+    assert.match(chatAppProblem() ?? "", /không đọc được/);
+    process.env.GOOGLE_CHAT_SERVICE_ACCOUNT = account;
+    assert.equal(chatAppProblem(), null);
+  } finally {
+    if (previous === undefined) delete process.env.GOOGLE_CHAT_SERVICE_ACCOUNT;
+    else process.env.GOOGLE_CHAT_SERVICE_ACCOUNT = previous;
+  }
 });
