@@ -142,7 +142,9 @@ dưới tên Chat app **myCreative**, kèm người được giao và link mở 
 **Cài một lần trên máy chủ**
 
 1. Google Cloud (dự án của OAuth client đăng nhập Google) → **Google Chat API → Configuration**: Chat app
-   tên `myCreative` đã có, trạng thái LIVE.
+   tên `myCreative` đã có, trạng thái LIVE. Ô **Avatar URL** điền
+   `https://taskflow-vert-psi.vercel.app/brand/creative-station-chat-avatar.png` (logo Creative Station bản vuông)
+   → **Save**. Google Chat có thể mất vài phút đến vài giờ mới hiện avatar mới.
 2. **IAM & Admin → Service accounts → Create service account** (ví dụ `mycreative-chat`, không cần cấp vai trò).
 3. Mở tài khoản vừa tạo → **Keys → Add key → JSON** → tải file khoá về.
 4. Vercel → Settings → Environment Variables → thêm `GOOGLE_CHAT_SERVICE_ACCOUNT` = toàn bộ nội dung file JSON
