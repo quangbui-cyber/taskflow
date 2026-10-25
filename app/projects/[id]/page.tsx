@@ -19,6 +19,7 @@ import ProjectActionsMenu from "@/components/ProjectActionsMenu";
 import ProjectDescriptionDisclosure from "@/components/ProjectDescriptionDisclosure";
 import ProjectWebhookPanel from "@/components/ProjectWebhookPanel";
 import ProjectFilesPanel from "@/components/ProjectFilesPanel";
+import ProjectFinancePanel from "@/components/ProjectFinancePanel";
 import ProjectStatusSelect from "@/components/ProjectStatusSelect";
 import MeetingComposer from "@/components/MeetingComposer";
 import { meetingsEnabled } from "@/lib/features";
@@ -248,8 +249,16 @@ export default async function ProjectPage({
   }));
 
   const isOwner = project.ownerId === user.id;
+  // Tab Tài chính chỉ có ở dự án Khách hàng (dự án Nội bộ không có báo giá/IC).
+  const hasFinanceTab = project.category === "CLIENT";
   const activeTab =
-    tab === "webhook" ? "webhook" : tab === "files" ? "files" : "tasks";
+    tab === "webhook"
+      ? "webhook"
+      : tab === "files"
+        ? "files"
+        : tab === "finance" && hasFinanceTab
+          ? "finance"
+          : "tasks";
   const canManageWebhook = isMember || user.role === "ADMIN";
   const canViewRevenue = hasRevenueAccess(user.role) && project.category === "CLIENT";
   const categoryInfo = projectCategoryInfo(project.category);
@@ -475,6 +484,18 @@ export default async function ProjectPage({
             >
               Task
             </Link>
+            {hasFinanceTab && (
+              <Link
+                href={`/projects/${project.id}?tab=finance`}
+                className={`rounded-[7px] px-3 py-1.5 text-sm font-medium transition-colors ${
+                  activeTab === "finance"
+                    ? "bg-brand-50 text-brand-800"
+                    : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
+                }`}
+              >
+                Tài chính
+              </Link>
+            )}
             <Link
               href={`/projects/${project.id}?tab=files`}
               className={`rounded-[7px] px-3 py-1.5 text-sm font-medium transition-colors ${
@@ -509,6 +530,13 @@ export default async function ProjectPage({
               projectId={project.id}
               configured={Boolean(project.googleChatWebhookUrl)}
               canManage={canManageWebhook}
+            />
+          </div>
+        ) : activeTab === "finance" ? (
+          <div className="flex-1 overflow-auto bg-[#f7f8fa] p-4 sm:p-6">
+            <ProjectFinancePanel
+              projectId={project.id}
+              viewer={{ id: user.id, role: user.role }}
             />
           </div>
         ) : activeTab === "files" ? (

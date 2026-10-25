@@ -1,4 +1,22 @@
 import { type ProjectCategory } from "./types";
+import { canViewRevenue } from "./projectPolicy";
+
+// ---- Bảng tài chính (Báo giá + IC) ----
+
+/** Xem giá bán, Báo giá, Nghiệm thu, lợi nhuận, margin. USER chỉ thấy giá vốn (Q3). */
+export function canViewFinanceSell(role: string) {
+  return canViewRevenue(role);
+}
+
+/** Lập và sửa IC: Admin hoặc Account (Account nộp IC — Q1). */
+export function canEditFinanceSheet(role: string) {
+  return role === "ADMIN" || role === "ACCOUNT";
+}
+
+/** IC đang chờ duyệt hoặc đã duyệt thì không sửa được. */
+export function isFinanceSheetLocked(icStatus: string) {
+  return icStatus === "SUBMITTED" || icStatus === "APPROVED";
+}
 
 /** Người được chọn làm người duyệt IC/AC của dự án. */
 export const FINANCE_APPROVER_ROLES = ["ADMIN", "ACCOUNT"] as const;

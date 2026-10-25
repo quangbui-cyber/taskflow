@@ -26,6 +26,7 @@
 | Q13 | **Chứng từ gắn theo nhà cung cấp** (không gắn theo từng dòng). **Không phân loại** chứng từ: chỉ cần biết NCC **có hay chưa có** chứng từ và **tên file** đã tải lên. Bảng tài chính có **2 cách xem: theo hạng mục và theo nhà cung cấp**. |
 | Q14 | **Xem chứng từ ngay trong app, không cần tải về**: ảnh và PDF mở trực tiếp; Excel hiện dạng bảng chỉ đọc; loại khác thì tải về. |
 | Q15 | **Sao lưu chứng từ**: thùng rác 30 ngày trong app + sao lưu hằng đêm sang Google Shared Drive. **Không** gửi bộ hồ sơ qua email. |
+| Q16 | Một người **được** vừa duyệt vừa bấm "Đã chi" cùng một phiếu, nhưng app **ghi lại trong lịch sử và hiện cảnh báo** (mục Phân quyền). Admin kiêm kế toán giữ vai trò Admin + bật ô "Nhận việc kế toán". |
 
 ### Chứng từ và cách xem (Q13, Q14)
 
@@ -149,6 +150,19 @@ Số liệu file Jabil: bán 136.000.000 (146.880.000 gồm VAT) · IC 103.914.2
 | Xem danh bạ NCC (kể cả STK) | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 Ẩn dữ liệu **ở server**: API chỉ trả cột giá bán/lợi nhuận/margin cho vai trò được phép. File Excel xuất cho USER cũng không có các cột này.
+
+**Một người vừa là Admin vừa làm Kế toán:**
+- Mỗi tài khoản chỉ có **một vai trò**. Admin đã có sẵn mọi quyền của Kế toán (xem số liệu, bấm "Đã chi", xoá nhà cung cấp), nên người đó **giữ vai trò Admin**.
+- Thêm một **ô đánh dấu "Nhận việc kế toán"** cho tài khoản, làm giống ô "Quản lý nghỉ phép" đang có. Người có vai trò Kế toán thì luôn nhận việc kế toán; Admin bật ô này thì cũng nhận.
+- Hộp **"Chờ chi"** và thông báo "phiếu đã duyệt, chờ chi" gửi tới **mọi người nhận việc kế toán**, không chỉ người có vai trò Kế toán.
+- Không làm nhiều vai trò cho một tài khoản: phải sửa mọi chỗ kiểm quyền trong app mà không thêm được gì, vì Admin đã bao gồm Kế toán.
+- Làm cùng Giai đoạn 5 (lúc có hộp "Chờ chi").
+
+**Cùng một người vừa duyệt vừa bấm "Đã chi" (Q16): cho phép, nhưng ghi lại và cảnh báo.**
+- Khi người bấm "Đã chi" cũng là người đã duyệt phiếu đó, app hiện hộp xác nhận: *"Bạn cũng là người duyệt phiếu này. Không có người thứ hai kiểm tra trước khi chi. Vẫn xác nhận đã chi?"*
+- Lịch sử phiếu (`ApprovalEvent`) ghi rõ: *"Duyệt và chi cùng một người"*. Phiếu mang nhãn nhỏ **"Tự duyệt – tự chi"** ở hộp "Chờ chi", danh sách phiếu và trang Thanh toán của dự án.
+- Trang Đề nghị chi có bộ lọc **"Tự duyệt – tự chi"** để Admin rà lại định kỳ.
+- Áp dụng cho mọi loại phiếu (ĐNTU, ĐNTT, ĐNHTU).
 
 ## 6. Đề xuất của app (Q11)
 
@@ -387,7 +401,7 @@ Mỗi luật có ví dụ thật từ file mẫu nếu có.
 | Giai đoạn | Nội dung |
 |---|---|
 | 1 ✅ | Vai trò Kế toán, người duyệt theo dự án, danh bạ NCC (có tên gọi tắt), logo `public/brand/` — *đã làm 25/10/2026, đã commit trên branch finance-phase-1* |
-| 2 | Bảng tài chính: khối Báo giá + IC, sửa tay, tính tổng, ẩn theo vai trò, gửi/duyệt IC, xuất Excel/PDF có logo |
+| 2 | Bảng tài chính: khối Báo giá + IC, sửa tay, tính tổng, ẩn theo vai trò, gửi/duyệt IC, xuất Excel/PDF có logo — *2a (nhập tay, tính tổng, ẩn giá bán với USER) đã làm trên branch finance-phase-2a; còn 2b gửi/duyệt, 2c xuất file* |
 | 3 | Nhập từ Excel (đọc 4 khối theo tiêu đề cột) + kiểm lỗi bằng code |
 | 4 | Báo giá xuất cho khách |
 | 5 | ĐNTU: lập theo NCC/dòng IC (số tiền do người lập nhập), duyệt, Kế toán chi, in mẫu ĐNTU-CS.2024, nhắc hạn |
