@@ -94,11 +94,9 @@ export function KpiCompanyPlanEditor({
   return (
     <section className="tf-panel overflow-hidden">
       <div className="border-b border-zinc-100 px-5 py-3">
-        <h2 className="font-semibold">Kế hoạch KPI công ty năm {year}</h2>
-        <p className="mt-0.5 text-xs text-zinc-400">
-          Đơn vị: triệu đồng, số lẻ dùng dấu phẩy. Gõ vào cột “Cả năm” để chia
-          đều 12 tháng, rồi sửa từng tháng nếu cần.
-        </p>
+        <h2 className="font-semibold">
+          Kế hoạch KPI công ty năm {year} <span className="font-normal text-zinc-500">(triệu đồng)</span>
+        </h2>
       </div>
 
       <form
@@ -161,7 +159,7 @@ export function KpiCompanyPlanEditor({
 
         {teams.length === 0 ? (
           <p className="px-5 py-4 text-sm text-zinc-400">
-            Chưa có team kinh doanh. Hãy tạo team trong phần Cài đặt trước.
+            Chưa có team kinh doanh.
           </p>
         ) : (
           <div className="py-3">
@@ -210,12 +208,8 @@ export function KpiTeamAllocationEditor({
     <section className="tf-panel overflow-hidden">
       <div className="border-b border-zinc-100 px-5 py-3">
         <h2 className="font-semibold">
-          Chia KPI {team.name} năm {year}
+          Chia KPI {team.name} năm {year} <span className="font-normal text-zinc-500">(triệu đồng)</span>
         </h2>
-        <p className="mt-0.5 text-xs text-zinc-400">
-          Đơn vị: triệu đồng, số lẻ dùng dấu phẩy. Dòng “Còn lại” cho biết chỉ
-          tiêu team chưa chia (số âm là chia vượt).
-        </p>
       </div>
       {accounts.length === 0 ? (
         <p className="px-5 py-4 text-sm text-zinc-400">
@@ -294,11 +288,6 @@ export function KpiPlanLockBar({
           {locked
             ? `Kế hoạch năm ${year} đã chốt lúc ${lockedAtLabel}`
             : `Kế hoạch năm ${year} đang mở để chỉnh sửa`}
-        </p>
-        <p className="text-xs text-zinc-500">
-          {locked
-            ? "Không ai sửa được chỉ tiêu cho tới khi Admin mở lại."
-            : "Khi đã thống nhất chỉ tiêu, Admin chốt để tránh sửa giữa chừng."}
         </p>
       </div>
       {canToggle && (

@@ -8,10 +8,9 @@ import { useInteraction } from "@/components/InteractionProvider";
 import GroupedProjectPicker from "@/components/GroupedProjectPicker";
 import type { PickerProject } from "@/lib/projectPickerGroups";
 
-export default function MeetingProjectLink({ meetingId, projects, hasPublishedRecap }: {
+export default function MeetingProjectLink({ meetingId, projects }: {
   meetingId: string;
   projects: PickerProject[];
-  hasPublishedRecap: boolean;
 }) {
   const labelId = useId();
   const [open, setOpen] = useState(false);
@@ -26,7 +25,6 @@ export default function MeetingProjectLink({ meetingId, projects, hasPublishedRe
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-zinc-800">Cuộc họp chưa thuộc dự án nào</p>
-          <p className="mt-1 text-xs text-zinc-500">Chọn dự án để lưu trữ biên bản cuộc họp.</p>
         </div>
         {!open && (
           <button type="button" onClick={() => setOpen(true)} className="tf-button-secondary !min-h-9 !px-3 text-sm">
@@ -58,11 +56,6 @@ export default function MeetingProjectLink({ meetingId, projects, hasPublishedRe
                 disabled={pending} labelId={labelId} />
             </div>
           </div>
-          <p className="text-xs leading-5 text-zinc-500">
-            {hasPublishedRecap ? "Bản biên bản đã gửi sẽ được lưu ngay thành file Word trong Tài liệu dự án."
-              : "Biên bản sẽ được lưu vào Tài liệu dự án khi bạn bấm gửi."}
-            {" "}Các task đã tạo giữ nguyên dự án hiện tại.
-          </p>
           {projects.length === 0 && <p className="text-sm text-amber-700">Bạn chưa có dự án để chọn. Hãy tạo hoặc tham gia một dự án trước.</p>}
           {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
           <div className="flex gap-2">

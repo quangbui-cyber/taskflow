@@ -132,11 +132,6 @@ export default function ProjectEditButton({
                   </option>
                 ))}
               </select>
-              {project.hasPurchaseOrder && (
-                <span className="mt-1 block text-xs text-zinc-500">
-                  Dự án có PO giữ mục đích Khách hàng.
-                </span>
-              )}
               {category === "INTERNAL" && (
                 <span className="mt-1 block text-xs text-zinc-500">
                   {project.category === "CLIENT"
@@ -264,9 +259,6 @@ export default function ProjectEditButton({
                 <legend className="text-sm font-semibold text-zinc-900">
                   Duyệt tài chính
                 </legend>
-                <p className="-mt-1 text-xs text-zinc-500">
-                  Người duyệt IC và AC của dự án, có thể là hai người khác nhau. Người được chọn sẽ tự được thêm vào dự án.
-                </p>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <span className="text-xs font-medium text-zinc-500">

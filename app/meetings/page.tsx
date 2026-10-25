@@ -448,11 +448,6 @@ export default async function MeetingsPage({
                 <h2 className="mt-4 text-lg font-semibold text-zinc-800">
                   {view === "past" ? "Chưa có cuộc họp nào đã qua" : "Chưa có lịch họp sắp tới"}
                 </h2>
-                <p className="mt-1 max-w-sm text-sm leading-6 text-zinc-500">
-                  {view === "past"
-                    ? "Các cuộc họp đã kết thúc hoặc đã huỷ trong 60 ngày gần đây sẽ hiện ở đây."
-                    : "Bấm “Đặt lịch họp” để chọn giờ, phòng và gửi lời mời."}
-                </p>
               </div>
             ) : (
               days.map((day) => (

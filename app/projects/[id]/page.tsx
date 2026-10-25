@@ -40,7 +40,6 @@ import { formatExecutionRange, toDateInputVN } from "@/lib/dates";
 import { FINANCE_APPROVER_ROLES, canSetFinanceApprovers } from "@/lib/financePolicy";
 import { ROLE_LABELS, isUserRole } from "@/lib/roles";
 import { storedFileDriveUrl } from "@/lib/storedFileResponse";
-import { driveConnected } from "@/lib/googleDrive";
 
 function extractProjectMetadata(description: string | null) {
   if (!description) return { poNumber: null, poDate: null };
@@ -623,7 +622,6 @@ export default async function ProjectPage({
               projectId={project.id}
               currentUserId={user.id}
               canManageAll={isOwner || user.role === "ADMIN"}
-              driveEnabled={await driveConnected()}
               initialFiles={project.files.map(({ driveFileId, ...file }) => ({
                 ...file,
                 createdAt: file.createdAt.toISOString(),

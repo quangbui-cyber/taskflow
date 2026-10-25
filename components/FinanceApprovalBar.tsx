@@ -371,7 +371,6 @@ function SubmitDialog({
           ))}
           {visible.length === 0 && <li className="px-3 py-3 text-sm text-zinc-500">Không tìm thấy ai.</li>}
         </ul>
-        <p className="mt-1.5 text-xs text-zinc-500">Bạn cũng được CC để theo dõi cùng luồng email. Người nhận bấm Trả lời là thư về bạn.</p>
       </fieldset>
 
       <label className="block">

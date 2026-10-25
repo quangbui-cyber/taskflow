@@ -47,10 +47,6 @@ export default function GoogleConnectionCard({
     <section className="tf-panel overflow-hidden">
       <div className="border-b border-zinc-100 px-5 py-3">
         <h2 className="font-semibold">Kết nối Google</h2>
-        <p className="mt-0.5 text-xs text-zinc-400">
-          Cho phép một lần để app gửi email bằng Gmail của bạn và tạo nhóm Google Chat. App không đọc thư hay tin nhắn
-          của bạn.
-        </p>
       </div>
       <div className="space-y-3 px-5 py-4 text-sm">
         {banner && (

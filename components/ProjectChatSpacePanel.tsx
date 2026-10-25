@@ -16,7 +16,6 @@ import { useInteraction } from "@/components/InteractionProvider";
 export default function ProjectChatSpacePanel({
   projectId,
   space,
-  memberCount,
   canManage,
   canUnlink,
   viewerConnected,
@@ -65,11 +64,11 @@ export default function ProjectChatSpacePanel({
           </span>
           <div>
             <h2 className="font-semibold text-zinc-950">Nhóm Google Chat của dự án</h2>
-            <p className="text-sm text-zinc-500">
-              {space
-                ? `Đã có nhóm${space.creatorName ? `, do ${space.creatorName} tạo` : ""}. Người mới vào dự án được tự thêm vào nhóm, thông báo task gửi vào nhóm dưới tên myCreative.`
-                : `Tạo nhóm Chat tên trùng tên dự án, thêm sẵn ${memberCount} thành viên dự án và myCreative để nhận thông báo task.`}
-            </p>
+            {space && (
+              <p className="text-sm text-zinc-500">
+                {`Đã có nhóm${space.creatorName ? `, do ${space.creatorName} tạo` : ""}.`}
+              </p>
+            )}
           </div>
         </div>
         {space && (
@@ -114,9 +113,6 @@ export default function ProjectChatSpacePanel({
               </button>
             ) : configured ? (
               <div className="space-y-2">
-                <p className="text-sm text-zinc-600">
-                  Cần kết nối Google một lần (cho phép tạo nhóm Chat) rồi mới tạo nhóm được.
-                </p>
                 <a href={connectHref} className="tf-button-primary inline-flex">
                   <Link2 size={16} aria-hidden="true" />
                   Kết nối Google

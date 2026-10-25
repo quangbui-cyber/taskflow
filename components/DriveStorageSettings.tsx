@@ -27,15 +27,11 @@ const dateTime = (value: string) =>
 export default function DriveStorageSettings({
   configured,
   connection,
-  expectedAccount,
-  sharedDriveId,
   counts,
   result,
 }: {
   configured: boolean;
   connection: Connection | null;
-  expectedAccount: string;
-  sharedDriveId: string;
   counts: { pending: number; onDrive: number };
   result?: string;
 }) {
@@ -87,9 +83,6 @@ export default function DriveStorageSettings({
           </span>
           <div className="min-w-0">
             <h2 className="font-semibold text-zinc-950">Lưu trữ Google Drive</h2>
-            <p className="text-sm text-zinc-500">
-              Tài liệu dự án, file task và biên bản họp lưu trên Shared Drive của công ty, xếp theo từng dự án.
-            </p>
           </div>
         </div>
         {connection ? (
@@ -130,12 +123,6 @@ export default function DriveStorageSettings({
                 ? "Chưa kết nối. File mới đang lưu trong app (tối đa 4 MB)."
                 : "Đăng nhập Google chưa được cấu hình nên chưa kết nối được Drive."}
             </p>
-            {configured && (
-              <p className="text-xs text-zinc-500">
-                Khi bấm kết nối, đăng nhập bằng <strong>{expectedAccount}</strong> và cho quyền Google Drive. Google có thể
-                báo &quot;ứng dụng chưa được xác minh&quot;: chọn Nâng cao rồi tiếp tục.
-              </p>
-            )}
           </div>
         )}
 
@@ -168,16 +155,9 @@ export default function DriveStorageSettings({
               {migrating ? <span className="tf-spinner" aria-hidden="true" /> : <CloudUpload size={16} aria-hidden="true" />}
               {migrating ? `Đang chuyển… còn ${pending} file` : `Chuyển ${pending} file cũ lên Drive`}
             </button>
-            <p className="text-xs text-zinc-500">
-              App vẫn dùng bình thường trong lúc chuyển. File nào đã lên Drive thì xoá khỏi database; file lỗi sẽ thử lại ở lần sau.
-            </p>
           </div>
         )}
 
-        <p className="text-xs text-zinc-400">
-          Shared Drive: <code className="rounded bg-zinc-100 px-1">{sharedDriveId}</code> · Thư mục: năm / dự án / Tài liệu,
-          Công việc. Thành viên dự án và Admin được share quyền xem tự động.
-        </p>
       </div>
     </section>
   );

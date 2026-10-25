@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowDown, ArrowUp, ChevronDown, ChevronUp, Plus, Save, Trash2, Undo2 } from "lucide-react";
 import { saveFinanceSheet } from "@/app/actions/finance";
@@ -673,11 +672,6 @@ export default function FinanceSheetEditor({
               : "IC đang chờ duyệt nên chỉ xem được. Cần sửa thì rút lại hoặc chờ người duyệt từ chối."}
           </p>
         )}
-        {!showSell && (
-          <p className="rounded-[8px] border border-zinc-200 bg-white px-4 py-2.5 text-sm text-zinc-600">
-            Bạn đang xem phần giá vốn của IC. Giá bán, lợi nhuận và margin chỉ Admin, Account và Kế toán xem được.
-          </p>
-        )}
 
         <section aria-labelledby="finance-header-title" className="tf-panel px-4 py-2.5">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -689,7 +683,7 @@ export default function FinanceSheetEditor({
                 {headerSummary.length ? headerSummary.join(" · ") : <span className="text-zinc-400">Chưa nhập</span>}
               </p>
             )}
-            {infoOpen && <span className="flex-1 text-xs text-zinc-500">Mục để trống sẽ không in ra file Excel/PDF.</span>}
+            {infoOpen && <span className="flex-1" />}
             <button
               type="button"
               aria-expanded={infoOpen}
@@ -1082,11 +1076,6 @@ export default function FinanceSheetEditor({
             dateStyle: "short",
             timeStyle: "short",
           }).format(new Date(sheet.updatedAt))}
-          . Thiếu nhà cung cấp?{" "}
-          <Link href="/suppliers" target="_blank" className="font-semibold text-brand-800 underline-offset-2 hover:underline">
-            Thêm trong danh bạ
-          </Link>
-          , rồi tải lại trang.
         </p>
       </div>
 

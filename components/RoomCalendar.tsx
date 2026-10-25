@@ -230,9 +230,6 @@ export default function RoomCalendar({
           <DoorOpen size={25} aria-hidden="true" />
         </span>
         <h2 className="mt-4 text-lg font-semibold text-zinc-800">Chưa có phòng họp nào</h2>
-        <p className="mt-1 max-w-sm text-sm leading-6 text-zinc-500">
-          Quản trị viên thêm phòng trong Cài đặt → Phòng họp.
-        </p>
       </div>
     );
   }
@@ -626,11 +623,7 @@ function MeetingPopover({
             Xem chi tiết
           </Link>
         </div>
-      ) : (
-        <p className="mt-3 rounded-[7px] bg-zinc-50 px-2.5 py-2 text-xs leading-5 text-zinc-500">
-          Cần dùng phòng giờ này? Liên hệ {meeting.organizerName}.
-        </p>
-      )}
+      ) : null}
     </div>
   );
 }

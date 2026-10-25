@@ -276,11 +276,6 @@ export default async function LeavePage({
                 <h2 className="font-semibold">
                   Báo cáo nghỉ phép năm {reportYear}
                 </h2>
-                <p className="mt-0.5 text-xs text-zinc-400">
-                  Chỉ tính đơn đã duyệt. Đơn vắt qua hai tháng được tách theo
-                  ngày làm việc của từng tháng. Bấm vào một tháng để xem chi
-                  tiết.
-                </p>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[520px] text-sm">

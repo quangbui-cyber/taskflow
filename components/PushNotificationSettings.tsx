@@ -102,7 +102,6 @@ export default function PushNotificationSettings({ publicKey }: { publicKey: str
   return (
     <section className="tf-panel p-5" aria-labelledby="push-settings-title">
       <h2 id="push-settings-title" className="font-semibold">Thông báo trên thiết bị</h2>
-      <p className="mt-1 text-sm text-zinc-500">Nhận thông báo khi được giao việc, có cập nhật liên quan hoặc nhắc hạn, kể cả khi không mở app.</p>
       <div className="mt-4 space-y-3">
         {!publicKey ? <p className="text-sm text-zinc-500">Tính năng đang chờ Admin hoàn tất cấu hình.</p> : (
           <>

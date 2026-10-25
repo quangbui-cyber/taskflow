@@ -146,9 +146,6 @@ export default function ClientCatalogManager({ clients }: { clients: ClientItem[
     <section className="tf-panel overflow-hidden">
       <div className="border-b border-zinc-100 px-5 py-3">
         <h2 className="font-semibold">Client</h2>
-        <p className="mt-0.5 text-xs text-zinc-400">
-          Quản lý danh sách khách hàng dùng trong dự án.
-        </p>
       </div>
 
       <form

@@ -269,9 +269,6 @@ export default function NotificationList({
           </Link>
         </div>
         <div className="flex items-center gap-3">
-          <p className="hidden text-xs text-zinc-400 lg:block">
-            Nhấn vào thông báo để đánh dấu đã đọc
-          </p>
           <button
             type="button"
             onClick={markAllRead}

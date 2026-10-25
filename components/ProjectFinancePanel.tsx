@@ -47,21 +47,14 @@ export default async function ProjectFinancePanel({
       <div className="p-4 sm:p-6">
       <section className="tf-panel mx-auto max-w-2xl p-6 text-center">
         <h2 className="text-lg font-semibold">Dự án chưa có IC</h2>
-        <p className="mt-2 text-sm text-zinc-500">
-          {permissions.canEdit
-            ? "Tạo IC để nhập báo giá và giá vốn. Thông tin chung được điền sẵn từ dự án."
-            : "Account phụ trách sẽ lập IC cho dự án này."}
-        </p>
+        {!permissions.canEdit && (
+          <p className="mt-2 text-sm text-zinc-500">Account phụ trách sẽ lập IC cho dự án này.</p>
+        )}
         {permissions.canEdit && (
           <div className="mt-5 flex flex-wrap justify-center gap-2">
             <ImportFinanceDialog projectId={projectId} variant="primary" />
             <CreateFinanceSheetButton projectId={projectId} />
           </div>
-        )}
-        {permissions.canEdit && (
-          <p className="mt-4 text-xs text-zinc-500">
-            Có sẵn file IC/AC Excel thì nhập từ file; không có thì tạo IC trống và nhập tay.
-          </p>
         )}
       </section>
       </div>

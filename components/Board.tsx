@@ -190,9 +190,6 @@ export default function Board({
               <p className="text-sm font-semibold text-zinc-800">
                 Dự án chưa có công việc
               </p>
-              <p className="mt-0.5 text-xs leading-5 text-zinc-500">
-                Tạo task đầu tiên để bắt đầu phân công và theo dõi tiến độ.
-              </p>
             </div>
           </div>
           <button

@@ -52,9 +52,6 @@ export default function MeetingRoomManager({ rooms }: { rooms: RoomItem[] }) {
           </span>
           <div>
             <h2 className="font-semibold">Phòng họp</h2>
-            <p className="text-xs text-zinc-400">
-              Mọi nhân sự đều chọn được các phòng đang dùng khi đặt lịch họp.
-            </p>
           </div>
         </div>
       </div>

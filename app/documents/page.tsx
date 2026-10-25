@@ -85,11 +85,6 @@ export default async function DocumentsPage() {
                 Tài liệu
               </h1>
             </div>
-            <p className="tf-page-subtitle">
-              {canManage
-                ? "Các bộ hồ sơ dùng chung. Mọi người đều tải về được; chỉ Admin thêm, đổi tên và xoá."
-                : "Các bộ hồ sơ dùng chung của công ty. Bấm biểu tượng bên phải để tải file hoặc mở link."}
-            </p>
           </div>
 
           <DocumentSets

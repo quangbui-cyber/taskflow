@@ -234,11 +234,6 @@ function ProjectDetailsForm({
         >
           {category === "INTERNAL" ? "Dự án nội bộ" : "Dự án khách hàng"}
         </h2>
-        <p className="mt-1 text-xs text-zinc-500">
-          {category === "INTERNAL"
-            ? "Công việc nội bộ, không tính vào báo cáo doanh số."
-            : "Dự án phục vụ khách hàng; Client và Account chọn từ Cài đặt."}
-        </p>
       </div>
 
       {category === "CLIENT" && canEditRevenue && (
@@ -252,9 +247,6 @@ function ProjectDetailsForm({
                 <h2 className="text-sm font-semibold text-zinc-900">
                   PO dự án
                 </h2>
-                <p className="mt-0.5 text-xs leading-5 text-zinc-500">
-                  Tải PO Jabil để tự điền Client, nội dung và giá trị dự án.
-                </p>
               </div>
             </div>
             <input

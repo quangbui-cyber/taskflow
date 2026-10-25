@@ -17,9 +17,6 @@ export default function RevenueWinRate({ rows }: { rows: RevenueRow[] }) {
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-100 px-5 py-3">
         <div>
           <h2 className="font-semibold">Tỷ lệ thắng theo Account</h2>
-          <p className="mt-1 text-xs text-zinc-400">
-            On Process và Done được tính là thắng; Fail và Cancel được tính là thua.
-          </p>
         </div>
         <div className="flex items-center gap-3 text-[11px] text-zinc-400">
           <span className="inline-flex items-center gap-1.5">

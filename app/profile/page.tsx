@@ -59,9 +59,7 @@ export default async function ProfilePage({
                 Tài khoản của tôi
               </h1>
             </div>
-            <p className="tf-page-subtitle">
-              Email đăng nhập: {user.email}. Email và vai trò do Admin quản lý.
-            </p>
+            <p className="tf-page-subtitle">{user.email}</p>
           </div>
 
           {/* key theo dữ liệu đã lưu: sau khi lưu, form nhận lại giá trị mới từ server */}

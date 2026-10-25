@@ -79,9 +79,6 @@ export default function LoginForm({
           </form>
         </div>
 
-        <p className="mt-4 text-center text-sm text-zinc-500">
-          Chưa có tài khoản? Liên hệ quản trị viên của công ty để được cấp.
-        </p>
       </div>
     </main>
   );

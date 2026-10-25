@@ -49,9 +49,6 @@ export default function RevenuePipeline({ stages }: { stages: PipelineStage[] })
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h2 className="font-semibold">Pipeline dự án</h2>
-          <p className="mt-1 text-xs text-zinc-400">
-            Giá trị hiện tại của dự án theo từng trạng thái.
-          </p>
         </div>
       </div>
 

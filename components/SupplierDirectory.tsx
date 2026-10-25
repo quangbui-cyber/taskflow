@@ -253,9 +253,6 @@ function SupplierForm({
               placeholder="VD: TÂN HOÀNG VIỆT"
               className="tf-field"
             />
-            <span className="mt-1 block text-xs text-zinc-500">
-              Tên ghi ở cột SUP trong file IC/AC.
-            </span>
           </label>
           <label className="block">
             <span className="tf-label">

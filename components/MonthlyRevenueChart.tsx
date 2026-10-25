@@ -44,9 +44,6 @@ export default function MonthlyRevenueChart({
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-zinc-100 px-5 py-4">
         <div>
           <h2 className="font-semibold">Doanh thu theo tháng</h2>
-          <p className="mt-1 text-xs text-zinc-400">
-            Ghi nhận vào tháng dự án chuyển sang On Process.
-          </p>
         </div>
         <div className="text-right">
           <p className="text-xs text-zinc-400">{periodLabel}</p>

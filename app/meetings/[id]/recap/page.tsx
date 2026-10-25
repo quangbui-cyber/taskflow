@@ -170,8 +170,7 @@ export default async function MeetingRecapPage({
           </header>
 
           {canManage && !meeting.projectId && (
-            <MeetingProjectLink meetingId={meeting.id} projects={linkableProjects}
-              hasPublishedRecap={Boolean(recap?.sentAt && publication)} />
+            <MeetingProjectLink meetingId={meeting.id} projects={linkableProjects} />
           )}
 
           <MeetingRecapPanel
