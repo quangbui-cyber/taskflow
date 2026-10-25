@@ -25,7 +25,9 @@ export async function notify(
       | "MEETING_RECAP_READY"
       | "MEETING_RECAP_FAILED"
       | "MEETING_RECAP_SHARED"
-      | "MEETING_RECAP_PROMPT";
+      | "MEETING_RECAP_PROMPT"
+      | "FINANCE_APPROVAL_REQUEST"
+      | "FINANCE_APPROVAL_DECISION";
     message: string;
     taskId?: string;
     projectId?: string;

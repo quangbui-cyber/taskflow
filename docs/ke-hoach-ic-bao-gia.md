@@ -27,6 +27,7 @@
 | Q14 | **Xem chứng từ ngay trong app, không cần tải về**: ảnh và PDF mở trực tiếp; Excel hiện dạng bảng chỉ đọc; loại khác thì tải về. |
 | Q15 | **Sao lưu chứng từ**: thùng rác 30 ngày trong app + sao lưu hằng đêm sang Google Shared Drive. **Không** gửi bộ hồ sơ qua email. |
 | Q16 | Một người **được** vừa duyệt vừa bấm "Đã chi" cùng một phiếu, nhưng app **ghi lại trong lịch sử và hiện cảnh báo** (mục Phân quyền). Admin kiêm kế toán giữ vai trò Admin + bật ô "Nhận việc kế toán". |
+| Q17 | **Thông báo duyệt gửi qua email thay cho Google Chat.** Khi gửi duyệt, người gửi chọn người nhận: **To** = người duyệt, **CC** = người liên quan tự chọn. Kết quả duyệt/từ chối trả lời trong cùng luồng email. |
 
 ### Chứng từ và cách xem (Q13, Q14)
 
@@ -392,6 +393,15 @@ Mỗi luật có ví dụ thật từ file mẫu nếu có.
 | HU04 | Còn tạm ứng chưa hoàn → không đóng được dự án | — |
 
 ## 10. Thông báo
+
+**Email duyệt (Q17)** — áp dụng cho IC, sau này cả AC và các phiếu đề nghị:
+- Bấm "Gửi duyệt" mở hộp gửi: **Gửi tới** = người duyệt của dự án (cố định); **CC** = chọn thêm người trong app (gợi ý sẵn Account phụ trách, chủ dự án; nhớ danh sách CC lần trước của dự án); kèm **lời nhắn** tuỳ chọn.
+- Email gửi từ hộp thư chung của app (SMTP đang dùng cho nghỉ phép), **Reply-To là người gửi** để trả lời thẳng cho họ.
+- Nội dung: dự án, khách hàng, phiên bản IC, tổng giá vốn, số cảnh báo chưa xử lý, lời nhắn, nút **"Mở IC để duyệt"** (vào app mới duyệt được, giống email nghỉ phép — không duyệt bằng một cú bấm trong email).
+- Giá bán, lợi nhuận, margin chỉ có trong email khi **mọi người nhận** đều có quyền xem số liệu tài chính; có người không có quyền thì email bỏ các số đó.
+- Duyệt / từ chối → email trả lời **trong cùng luồng** tới người gửi + danh sách CC (từ chối kèm lý do).
+- Chuông thông báo trong app vẫn giữ; **không gửi Google Chat** cho luồng duyệt.
+
 - Gửi duyệt IC/AC/phiếu → người duyệt của dự án (chuông + Google Chat).
 - Duyệt xong → Kế toán (chờ chi) + người lập. Từ chối → người lập kèm lý do.
 - Tạm ứng sắp đến hạn hoàn (trước 3 ngày) / quá hạn → người lập; quá hạn → cả người duyệt. Dùng cron có sẵn (`app/api/cron/daily-digest`).
@@ -401,7 +411,7 @@ Mỗi luật có ví dụ thật từ file mẫu nếu có.
 | Giai đoạn | Nội dung |
 |---|---|
 | 1 ✅ | Vai trò Kế toán, người duyệt theo dự án, danh bạ NCC (có tên gọi tắt), logo `public/brand/` — *đã làm 25/10/2026, đã commit trên branch finance-phase-1* |
-| 2 | Bảng tài chính: khối Báo giá + IC, sửa tay, tính tổng, ẩn theo vai trò, gửi/duyệt IC, xuất Excel/PDF có logo — *2a (nhập tay, tính tổng, ẩn giá bán với USER) đã làm trên branch finance-phase-2a; còn 2b gửi/duyệt, 2c xuất file* |
+| 2 | Bảng tài chính: khối Báo giá + IC, sửa tay, tính tổng, ẩn theo vai trò, gửi/duyệt IC, xuất Excel/PDF có logo — *2a (nhập tay, tính tổng, ẩn giá bán với USER) đã làm trên branch finance-phase-2a; 2b (gửi/duyệt/từ chối/rút lại/phiên bản mới, email To–CC–Reply-To cùng luồng, thông báo trong app) đã làm trên branch finance-phase-2b; còn 2c xuất file* |
 | 3 | Nhập từ Excel (đọc 4 khối theo tiêu đề cột) + kiểm lỗi bằng code — *đã làm trên branch finance-phase-3 (nhập Báo giá + IC; khối Nghiệm thu/AC mới được nhận diện, sẽ nhập khi làm AC)* |
 | 4 | Báo giá xuất cho khách |
 | 5 | ĐNTU: lập theo NCC/dòng IC (số tiền do người lập nhập), duyệt, Kế toán chi, in mẫu ĐNTU-CS.2024, nhắc hạn |
