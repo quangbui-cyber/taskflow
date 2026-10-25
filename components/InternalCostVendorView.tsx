@@ -4,7 +4,13 @@ import { useMemo, useState } from "react";
 import { Input, Select } from "@/components/ui/Field";
 import { Badge, EmptyState, Panel, Table } from "@/components/ui/Presentation";
 import { displayMoney, totals } from "@/lib/costflow/money";
-import { groupIcLinesByVendor } from "@/lib/costflow/icVendorView";
+import {
+  filterAndSortIcVendorLines,
+  groupIcLinesByVendor,
+  icVendorShare,
+  type IcVendorLineFilter,
+  type IcVendorLineSort,
+} from "@/lib/costflow/icVendorView";
 import type { IcLine } from "@/lib/costflow/types";
 
 type Props = {
@@ -22,6 +28,9 @@ export default function InternalCostVendorView({ revisionNumber, lines, vendors 
   const [query, setQuery] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("GROSS_DESC");
   const [selectedKey, setSelectedKey] = useState("");
+  const [itemQuery, setItemQuery] = useState("");
+  const [itemFilter, setItemFilter] = useState<IcVendorLineFilter>("ALL");
+  const [itemSort, setItemSort] = useState<IcVendorLineSort>("GROSS_DESC");
 
   const filteredGroups = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("vi");
@@ -40,6 +49,11 @@ export default function InternalCostVendorView({ revisionNumber, lines, vendors 
   const selectedGroup = filteredGroups.find(group => groupKey(group.vendorId) === selectedKey) ?? filteredGroups[0];
   const summary = useMemo(() => totals(lines.flatMap(line => line.cost ? [line.cost] : [])), [lines]);
   const unassignedCount = groups.find(group => !group.vendorId)?.lines.length ?? 0;
+  const visibleLines = useMemo(() => selectedGroup
+    ? filterAndSortIcVendorLines(selectedGroup.lines, itemQuery, itemFilter, itemSort)
+    : [], [selectedGroup, itemQuery, itemFilter, itemSort]);
+  const selectedShare = selectedGroup ? icVendorShare(selectedGroup.amount.gross, summary.gross) : 0;
+  const formatShare = (share: number) => share.toLocaleString("vi-VN", { maximumFractionDigits: 1 });
 
   if (!groups.length) return <EmptyState title="IC chưa có hạng mục" description="Chưa có chi phí để tổng hợp theo NCC." />;
 
@@ -110,6 +124,7 @@ export default function InternalCostVendorView({ revisionNumber, lines, vendors 
                 <span>{group.lines.length} hạng mục</span>
                 <strong className="tabular-nums text-[var(--foreground)]">{displayMoney(group.amount.gross)}</strong>
               </span>
+              <span className="mt-1 block text-xs text-[var(--text-secondary)]">{formatShare(icVendorShare(group.amount.gross, summary.gross))}% tổng IC</span>
               {group.missingCostCount > 0 && <span className="mt-1 block text-xs text-[var(--warning)]">{group.missingCostCount} dòng chưa đủ giá</span>}
             </button>;
           })}
@@ -128,6 +143,7 @@ export default function InternalCostVendorView({ revisionNumber, lines, vendors 
             <div className="text-right tabular-nums">
               <span className="block text-xs text-[var(--text-secondary)]">{selectedGroup.missingCostCount ? "Tạm tính Gross" : "Tổng dự toán Gross"}</span>
               <strong className="text-lg">{displayMoney(selectedGroup.amount.gross)}</strong>
+              <span className="block text-xs text-[var(--text-secondary)]">{formatShare(selectedShare)}% tổng IC</span>
             </div>
           </div>
 
@@ -138,22 +154,49 @@ export default function InternalCostVendorView({ revisionNumber, lines, vendors 
           </div>
           {selectedGroup.missingCostCount > 0 && <p className="text-xs text-[var(--text-secondary)]">Tổng chỉ cộng các dòng đã đủ dữ liệu giá.</p>}
 
-          <Table caption={`Hạng mục mua từ ${selectedGroup.name} trong IC-R${revisionNumber}`} hideCaption>
-            <thead><tr>
-              <th scope="col">Hạng mục mua</th>
-              <th scope="col">Khối lượng</th>
-              <th scope="col" className="text-right">Đơn giá mua</th>
-              <th scope="col" className="text-right">Net</th>
-              <th scope="col" className="text-right">Gross</th>
-            </tr></thead>
-            <tbody>{selectedGroup.lines.map(line => <tr key={line.id}>
-              <th scope="row">{line.description}</th>
-              <td>{line.quantity || "—"} {line.unit}</td>
-              <td className="text-right tabular-nums">{line.unitPrice ? displayMoney(line.unitPrice) : "—"}</td>
-              <td className="text-right tabular-nums">{line.cost ? displayMoney(line.cost.net) : "—"}</td>
-              <td className="text-right tabular-nums">{line.cost ? displayMoney(line.cost.gross) : "Chưa đủ giá"}</td>
-            </tr>)}</tbody>
-          </Table>
+          <div className="grid gap-3 border-t border-[var(--border)] pt-4 md:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_180px_190px]">
+            <Input
+              label="Tìm hạng mục trong NCC"
+              type="search"
+              value={itemQuery}
+              onChange={event => setItemQuery(event.target.value)}
+              placeholder="Tên hạng mục, đơn vị…"
+            />
+            <Select label="Lọc hạng mục" value={itemFilter} onChange={event => setItemFilter(event.target.value as IcVendorLineFilter)}>
+              <option value="ALL">Tất cả hạng mục</option>
+              <option value="MISSING_COST">Chưa đủ giá</option>
+            </Select>
+            <Select label="Sắp xếp hạng mục" value={itemSort} onChange={event => setItemSort(event.target.value as IcVendorLineSort)}>
+              <option value="GROSS_DESC">Gross cao nhất</option>
+              <option value="IC_ORDER">Thứ tự trong IC</option>
+              <option value="NAME_ASC">Tên A–Z</option>
+              <option value="QUANTITY_DESC">Số lượng lớn nhất</option>
+            </Select>
+          </div>
+
+          <p className="text-xs text-[var(--text-secondary)]">Đang xem {visibleLines.length}/{selectedGroup.lines.length} hạng mục của NCC.</p>
+
+          {visibleLines.length === 0 ? <EmptyState
+            title="Không có hạng mục phù hợp"
+            description="Đổi từ khóa hoặc bộ lọc để xem các hạng mục khác của NCC này."
+          /> : <div className="[&_.tf-ui-table-scroll]:max-h-[52vh] [&_.tf-ui-table-scroll]:min-h-[280px] [&_.tf-ui-table-scroll]:overflow-auto [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10">
+            <Table caption={`Hạng mục mua từ ${selectedGroup.name} trong IC-R${revisionNumber}`} hideCaption>
+              <thead><tr>
+                <th scope="col">Hạng mục mua</th>
+                <th scope="col">Khối lượng</th>
+                <th scope="col" className="text-right">Đơn giá mua</th>
+                <th scope="col" className="text-right">Net</th>
+                <th scope="col" className="text-right">Gross</th>
+              </tr></thead>
+              <tbody>{visibleLines.map(line => <tr key={line.id}>
+                <th scope="row">{line.description}</th>
+                <td>{line.quantity || "—"} {line.unit}</td>
+                <td className="text-right tabular-nums">{line.unitPrice ? displayMoney(line.unitPrice) : "—"}</td>
+                <td className="text-right tabular-nums">{line.cost ? displayMoney(line.cost.net) : "—"}</td>
+                <td className="text-right tabular-nums">{line.cost ? displayMoney(line.cost.gross) : "Chưa đủ giá"}</td>
+              </tr>)}</tbody>
+            </Table>
+          </div>}
         </Panel>
       </div>
     )}

@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { groupIcLinesByVendor } from "../lib/costflow/icVendorView";
+import { filterAndSortIcVendorLines, groupIcLinesByVendor, icVendorShare } from "../lib/costflow/icVendorView";
 import { calculateLineCost } from "../lib/costflow/money";
 import type { IcLine } from "../lib/costflow/types";
 
-function line(id: string, vendorId: string | undefined, unitPrice: string, costReady = true): IcLine {
-  const input = { quantity: "2", days: "1", unitPrice, vatPercent: "10", basis: "NET" as const };
+function line(id: string, vendorId: string | undefined, unitPrice: string, costReady = true, quantity = "2"): IcLine {
+  const input = { quantity, days: "1", unitPrice, vatPercent: "10", basis: "NET" as const };
   return { ...input, id, vendorId, description: `Hạng mục ${id}`, unit: "cái", cost: costReady ? calculateLineCost(input) : null };
 }
 
@@ -29,4 +29,24 @@ test("IC vendor view groups line items and exact totals by supplier, keeping una
   assert.equal(groups[0].missingCostCount, 1);
   assert.equal(groups[1].amount.gross, "110");
   assert.equal(groups[2].amount.gross, "22");
+});
+
+test("IC vendor item controls search, filter and sort a long supplier list", () => {
+  const lines = Array.from({ length: 200 }, (_, index) => line(
+    String(index + 1),
+    "vendor-a",
+    String(index + 1),
+    index !== 150,
+    String(index + 1),
+  ));
+
+  assert.equal(filterAndSortIcVendorLines(lines, "Hạng mục 15", "ALL", "IC_ORDER").length, 11);
+  assert.deepEqual(filterAndSortIcVendorLines(lines, "", "MISSING_COST", "GROSS_DESC").map(item => item.id), ["151"]);
+  assert.equal(filterAndSortIcVendorLines(lines, "", "ALL", "GROSS_DESC")[0].id, "200");
+  assert.equal(filterAndSortIcVendorLines(lines, "", "ALL", "QUANTITY_DESC")[0].id, "200");
+});
+
+test("IC vendor share is safe for zero totals and reports the supplier proportion", () => {
+  assert.equal(icVendorShare("25", "100"), 25);
+  assert.equal(icVendorShare("25", "0"), 0);
 });
