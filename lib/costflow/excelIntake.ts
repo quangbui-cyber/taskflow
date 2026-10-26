@@ -13,6 +13,7 @@ export type ExcelIntakePrimitiveCell = {
   value: unknown;
   source: ExcelIntakeSourceCoordinate;
   observation?: ExcelIntakeObservation;
+  canonical?: { value: string; source: ExcelIntakeSourceCoordinate };
 };
 export type ExcelIntakeSource = { kind: "PASTE" | "XLSX" | "TEMPLATE"; sheet: string; range: string };
 export type ExcelIntakeMetadata = { projectName: string; customer: string; preparedAt: string; location: string };
@@ -67,8 +68,19 @@ export type NormalizedExcelIntakeRow = {
   buy: NormalizedExcelIntakeSide & { supplier: string };
   coordinates: Record<string, ExcelIntakeSourceCoordinate>;
 };
-export type ExcelIntakeIssueCode = "INVALID_NUMBER" | "INVALID_QUANTITY" | "INVALID_DAYS" | "INVALID_VAT" | "INVALID_BASIS" | "FOC_NOTE_REQUIRED" | "INVALID_HIERARCHY" | "INVALID_ROW_TYPE";
+export type ExcelIntakeIssueCode = "INVALID_NUMBER" | "AMBIGUOUS_DECIMAL" | "INVALID_QUANTITY" | "INVALID_DAYS" | "INVALID_VAT" | "INVALID_BASIS" | "FOC_NOTE_REQUIRED" | "INVALID_HIERARCHY" | "INVALID_ROW_TYPE";
 export type ExcelIntakeBlockingError = { code: ExcelIntakeIssueCode; message: string; field: string; source: ExcelIntakeSourceCoordinate; blocking: true };
+export type ExcelDecimalConflict = {
+  conflictId: string;
+  candidateKey: string;
+  side: "sell" | "buy";
+  field: "sell.quantity" | "sell.days" | "sell.unitPrice" | "sell.vatPercent" | "buy.quantity" | "buy.days" | "buy.unitPrice" | "buy.vatPercent";
+  visible: string;
+  canonical: string;
+  source: ExcelIntakeSourceCoordinate;
+  canonicalSource: ExcelIntakeSourceCoordinate;
+  reason: "VISIBLE_CANONICAL_MISMATCH" | "AMBIGUOUS_DECIMAL";
+};
 export type ExcelIntakeWarning = { code: "FORMULA_IGNORED"; message: string; field: string; source: ExcelIntakeSourceCoordinate; blocking: false };
 export type NormalizedExcelIntake = {
   schemaVersion: typeof EXCEL_INTAKE_SCHEMA_VERSION;
@@ -78,6 +90,7 @@ export type NormalizedExcelIntake = {
   observations: Array<ExcelIntakeObservation & { field: string; source: ExcelIntakeSourceCoordinate }>;
   errors: ExcelIntakeBlockingError[];
   warnings: ExcelIntakeWarning[];
+  decimalConflicts: ExcelDecimalConflict[];
 };
 
 const ZERO = decimal("0");
@@ -91,11 +104,37 @@ function issue(errors: ExcelIntakeBlockingError[], code: ExcelIntakeIssueCode, f
   errors.push({ code, field, source, message, blocking: true });
 }
 
-function numberValue(cell: ExcelIntakePrimitiveCell, field: string, errors: ExcelIntakeBlockingError[], rule: "NON_NEGATIVE" | "POSITIVE" | "VAT") {
+function parseExcelDecimal(raw: string): { kind: "VALUE"; value: string } | { kind: "AMBIGUOUS" } {
+  const value = raw.trim().replace(/\s/g, "");
+  if (!value) throw new Error("blank");
+  if (/^-?\d{1,3}(?:\.\d{3})+,\d+$/.test(value)) return { kind: "VALUE", value: normalizeDecimalInput(value.replace(/\./g, "").replace(",", ".")) };
+  if (/^-?\d{1,3}(?:,\d{3})+\.\d+$/.test(value)) return { kind: "VALUE", value: normalizeDecimalInput(value.replace(/,/g, "")) };
+  if (/^-?\d+[.,]\d{3}$/.test(value)) return { kind: "AMBIGUOUS" };
+  if (/^-?\d+(?:,\d+)?$/.test(value)) return { kind: "VALUE", value: normalizeDecimalInput(value.replace(",", ".")) };
+  if (/^-?\d+(?:\.\d+)?$/.test(value)) return { kind: "VALUE", value: normalizeDecimalInput(value) };
+  throw new Error("invalid");
+}
+
+function numberValue(cell: ExcelIntakePrimitiveCell, candidateKey: string, field: ExcelDecimalConflict["field"], errors: ExcelIntakeBlockingError[], conflicts: ExcelDecimalConflict[], rule: "NON_NEGATIVE" | "POSITIVE" | "VAT") {
   const raw = text(cell);
-  if (!raw) return null;
+  const canonicalRaw = cell.canonical?.value.trim() ?? "";
+  if (!raw && !canonicalRaw) return null;
   try {
-    const normalized = normalizeDecimalInput(raw);
+    const canonical = canonicalRaw ? normalizeDecimalInput(canonicalRaw) : null;
+    const visibleResult = raw ? parseExcelDecimal(raw) : null;
+    if (visibleResult?.kind === "AMBIGUOUS") {
+      if (!canonical || !cell.canonical) {
+        issue(errors, "AMBIGUOUS_DECIMAL", field, cell.source, "Cách viết số có thể là hàng nghìn hoặc thập phân; hãy chọn giá trị rõ ràng.");
+        return null;
+      }
+      conflicts.push({ conflictId: `${candidateKey}:${field}:${cell.source.cell}`, candidateKey, side: field.startsWith("sell.") ? "sell" : "buy", field, visible: raw, canonical, source: cell.source, canonicalSource: cell.canonical.source, reason: "AMBIGUOUS_DECIMAL" });
+    }
+    const visible = visibleResult?.kind === "VALUE" ? visibleResult.value : null;
+    if (canonical && visible && compare(decimal(canonical), decimal(visible)) !== 0 && cell.canonical) {
+      conflicts.push({ conflictId: `${candidateKey}:${field}:${cell.source.cell}`, candidateKey, side: field.startsWith("sell.") ? "sell" : "buy", field, visible, canonical, source: cell.source, canonicalSource: cell.canonical.source, reason: "VISIBLE_CANONICAL_MISMATCH" });
+    }
+    const normalized = canonical ?? visible;
+    if (!normalized) return null;
     const value = decimal(normalized);
     if (rule === "POSITIVE" && compare(value, ZERO) <= 0) issue(errors, field.endsWith("days") ? "INVALID_DAYS" : "INVALID_QUANTITY", field, cell.source, "Giá trị phải lớn hơn 0.");
     if (rule === "NON_NEGATIVE" && compare(value, ZERO) < 0) issue(errors, "INVALID_NUMBER", field, cell.source, "Giá trị không được âm.");
@@ -107,12 +146,12 @@ function numberValue(cell: ExcelIntakePrimitiveCell, field: string, errors: Exce
   }
 }
 
-function sideValue(side: ExcelIntakeSideInput, prefix: "sell" | "buy", rowType: "GROUP" | "ITEM", errors: ExcelIntakeBlockingError[]): NormalizedExcelIntakeSide {
+function sideValue(side: ExcelIntakeSideInput, prefix: "sell" | "buy", candidateKey: string, rowType: "GROUP" | "ITEM", errors: ExcelIntakeBlockingError[], conflicts: ExcelDecimalConflict[]): NormalizedExcelIntakeSide {
   if (rowType === "GROUP") return { unit: "", quantity: null, days: null, unitPrice: null, vatPercent: null, basis: null, note: "" };
-  const quantity = numberValue(side.quantity, `${prefix}.quantity`, errors, "POSITIVE");
-  const days = numberValue(side.days, `${prefix}.days`, errors, "POSITIVE");
-  const unitPrice = numberValue(side.unitPrice, `${prefix}.unitPrice`, errors, "NON_NEGATIVE");
-  const vatPercent = numberValue(side.vatPercent, `${prefix}.vatPercent`, errors, "VAT");
+  const quantity = numberValue(side.quantity, candidateKey, `${prefix}.quantity`, errors, conflicts, "POSITIVE");
+  const days = numberValue(side.days, candidateKey, `${prefix}.days`, errors, conflicts, "POSITIVE");
+  const unitPrice = numberValue(side.unitPrice, candidateKey, `${prefix}.unitPrice`, errors, conflicts, "NON_NEGATIVE");
+  const vatPercent = numberValue(side.vatPercent, candidateKey, `${prefix}.vatPercent`, errors, conflicts, "VAT");
   const basisText = text(side.basis).toUpperCase();
   const basis = basisText === "NET" || basisText === "GROSS" ? basisText : null;
   if (basisText && !basis) issue(errors, "INVALID_BASIS", `${prefix}.basis`, side.basis.source, "Căn cứ phải là NET hoặc GROSS.");
@@ -126,6 +165,7 @@ export function normalizeExcelIntake(input: ExcelIntakeInput): NormalizedExcelIn
   if (!Array.isArray(input.rows) || input.rows.length > 500) throw new Error("Excel Intake tối đa 500 dòng.");
   const errors: ExcelIntakeBlockingError[] = [];
   const warnings: ExcelIntakeWarning[] = [];
+  const decimalConflicts: ExcelDecimalConflict[] = [];
   const observations: NormalizedExcelIntake["observations"] = [];
   const sourceRowToCandidate = new Map<number, string>();
   input.rows.forEach((row, index) => sourceRowToCandidate.set(row.level.source.row, `candidate-${index + 1}`));
@@ -140,8 +180,8 @@ export function normalizeExcelIntake(input: ExcelIntakeInput): NormalizedExcelIn
     const parentCandidateKey = Number.isInteger(parentSourceRow) ? sourceRowToCandidate.get(parentSourceRow) ?? null : null;
     const validStructure = rowType === "GROUP" ? level === 1 && !parentCandidateKey : level === 1 ? !parentCandidateKey : Boolean(parentCandidateKey);
     if (!validStructure) issue(errors, "INVALID_HIERARCHY", "parentRow", row.parentRow.source, "Cấp và dòng cha không tạo thành cấu trúc ba cấp hợp lệ.");
-    const sell = sideValue(row.sell, "sell", rowType, errors);
-    const buyBase = sideValue(row.buy, "buy", rowType, errors);
+    const sell = sideValue(row.sell, "sell", candidateKey, rowType, errors, decimalConflicts);
+    const buyBase = sideValue(row.buy, "buy", candidateKey, rowType, errors, decimalConflicts);
     for (const [field, primitive] of [
       ["previewNet", row.previewNet],
       ["previewVat", row.previewVat],
@@ -173,7 +213,7 @@ export function normalizeExcelIntake(input: ExcelIntakeInput): NormalizedExcelIn
       },
     };
   });
-  return { schemaVersion: EXCEL_INTAKE_SCHEMA_VERSION, source: { ...input.source }, metadata: { ...input.metadata }, rows, observations, errors, warnings };
+  return { schemaVersion: EXCEL_INTAKE_SCHEMA_VERSION, source: { ...input.source }, metadata: { ...input.metadata }, rows, observations, errors, warnings, decimalConflicts };
 }
 
 export function projectCustomerExcelIntake(input: NormalizedExcelIntake) {

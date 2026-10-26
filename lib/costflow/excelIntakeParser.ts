@@ -45,7 +45,9 @@ function primitive(value: unknown, sheet: string, row: number, column: number): 
   if (isFormulaMatrixCell(value)) return { value: value.cachedValue ?? "", source, observation: { formula: value.formula, cachedValue: value.cachedValue } };
   return { value, source };
 }
-function buildInput(matrix: unknown[][], sheet: string, startRow: number, kind: "PASTE" | "XLSX", range: string): ExcelIntakeInput {
+type CanonicalBinding = { value: string; source: { sheet: string; row: number; column: number; cell: string } };
+
+function buildInput(matrix: unknown[][], sheet: string, startRow: number, kind: "PASTE" | "XLSX", range: string, canonicalBindings: Map<string, CanonicalBinding> = new Map()): ExcelIntakeInput {
   if (matrix.length === 0) throw new Error("Vùng dữ liệu cần hàng tiêu đề và ít nhất một dòng.");
   if (matrix.length - 1 > EXCEL_INTAKE_LIMITS.rows || Math.max(...matrix.map(row => row.length)) > EXCEL_INTAKE_LIMITS.columns) throw new Error("Vùng dữ liệu vượt giới hạn 500 dòng x 40 cột.");
   const rawHeaders = matrix[0].map(normalizedHeader);
@@ -70,7 +72,10 @@ function buildInput(matrix: unknown[][], sheet: string, startRow: number, kind: 
   const orderColumn = headers.indexOf("ORDER");
   const cell = (values: unknown[], key: string, row: number) => {
     const column = index[canonicalHeaders.indexOf(key)];
-    return primitive(column < 0 ? "" : values[column], sheet, row, (column < 0 ? levelColumn : column) + 1);
+    const result = primitive(column < 0 ? "" : values[column], sheet, row, (column < 0 ? levelColumn : column) + 1);
+    const field = ({ SELL_QUANTITY: "sell.quantity", SELL_DAYS: "sell.days", SELL_UNIT_PRICE: "sell.unitPrice", SELL_VAT: "sell.vatPercent", BUY_QUANTITY: "buy.quantity", BUY_DAYS: "buy.days", BUY_UNIT_PRICE: "buy.unitPrice", BUY_VAT: "buy.vatPercent" } as Record<string, string>)[key];
+    const canonical = field ? canonicalBindings.get(`${row}:${field}`) : undefined;
+    return canonical ? { ...result, canonical } : result;
   };
   const identityColumns = ["LEVEL", "ROW_TYPE", "PARENT_ROW", "NAME", "DESCRIPTION"]
     .map(header => index[canonicalHeaders.indexOf(header)])
@@ -163,6 +168,25 @@ export async function previewWorkbookIntake(bytes: Uint8Array, mapping: ExcelInt
     }
     matrix.push(values);
   }
+  const canonicalBindings = new Map<string, CanonicalBinding>();
+  const canonicalSheet = workbook.getWorksheet("_IMPORT");
+  if (canonicalSheet?.state === "veryHidden") {
+    const headerByColumn = new Map<number, string>();
+    canonicalSheet.getRow(1).eachCell((cell, column) => headerByColumn.set(column, String(cell.value ?? "").trim()));
+    const sourceRowColumn = [...headerByColumn].find(([, header]) => header === "sourceRow")?.[0];
+    if (sourceRowColumn) {
+      for (let hiddenRow = 2; hiddenRow <= canonicalSheet.rowCount; hiddenRow++) {
+        const sourceRow = Number(String(canonicalSheet.getRow(hiddenRow).getCell(sourceRowColumn).value ?? ""));
+        if (!Number.isSafeInteger(sourceRow)) continue;
+        for (const [column, field] of headerByColumn) {
+          if (!/^(sell|buy)\.(quantity|days|unitPrice|vatPercent)$/.test(field)) continue;
+          const hiddenCell = canonicalSheet.getRow(hiddenRow).getCell(column);
+          const value = hiddenCell.value === null || hiddenCell.value === undefined ? "" : String(hiddenCell.value).trim();
+          canonicalBindings.set(`${sourceRow}:${field}`, { value, source: { sheet: canonicalSheet.name, row: hiddenRow, column, cell: `${columnName(column)}${hiddenRow}` } });
+        }
+      }
+    }
+  }
   const marker = `${String(selected.getCell("A1").value ?? "")} ${String(selected.getCell("B1").value ?? "")}`;
-  return finish(buildInput(matrix, selected.name, startRow, "XLSX", range), marker.includes("v4") ? "STANDARD_V4" : "FAMILIAR_THREE_LEVEL", marker.includes("v4") ? 1 : 0.75);
+  return finish(buildInput(matrix, selected.name, startRow, "XLSX", range, canonicalBindings), marker.includes("v4") ? "STANDARD_V4" : "FAMILIAR_THREE_LEVEL", marker.includes("v4") ? 1 : 0.75);
 }

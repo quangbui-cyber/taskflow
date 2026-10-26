@@ -45,9 +45,11 @@ function formula(row: number, scope: "sell" | "buy", kind: "net" | "vat" | "gros
 }
 
 function addValidations(sheet: ExcelJS.Worksheet, row: number) {
-  for (const column of [6, 7, 8, 10, 16, 17, 18, 20]) {
+  for (const column of [6, 7, 16, 17]) {
     sheet.getCell(row, column).dataValidation = { type: "decimal", operator: "greaterThan", allowBlank: true, formulae: [0], showErrorMessage: true, errorTitle: "Giá trị không hợp lệ", error: "Nhập số lớn hơn 0; dùng số 0 cho đơn giá FOC và thêm ghi chú." };
   }
+  for (const column of [8, 18]) sheet.getCell(row, column).dataValidation = { type: "decimal", operator: "greaterThanOrEqual", allowBlank: true, formulae: [0], showErrorMessage: true, errorTitle: "Đơn giá không hợp lệ", error: "Đơn giá phải từ 0 trở lên." };
+  for (const column of [10, 20]) sheet.getCell(row, column).dataValidation = { type: "decimal", operator: "between", allowBlank: true, formulae: [0, 100], showErrorMessage: true, errorTitle: "VAT không hợp lệ", error: "VAT phải từ 0 đến 100." };
   for (const column of [9, 19]) sheet.getCell(row, column).dataValidation = { type: "list", allowBlank: true, formulae: ['"NET,GROSS"'], showErrorMessage: true, errorTitle: "Cơ sở không hợp lệ", error: "Chọn NET hoặc GROSS." };
 }
 
@@ -109,11 +111,12 @@ export async function createExcelIntakeTemplate(options: ExcelIntakeTemplateOpti
   sheet.headerFooter.oddFooter = "Excel Intake v4 · Preview only · TaskFlow tính lại trên máy chủ";
 
   const projection = workbook.addWorksheet("_IMPORT", { state: "veryHidden" });
-  projection.addRow(["candidateKey", "parentCandidateKey", "order", "level", "rowType", "sourceRow", "sell.quantity", "sell.days", "sell.unitPrice", "sell.basis", "sell.vatPercent", "buy.quantity", "buy.days", "buy.unitPrice", "buy.basis", "buy.vatPercent"]);
+  projection.addRow(["candidateKey", "parentCandidateKey", "order", "level", "rowType", "sourceRow", "sell.quantity", "sell.days", "sell.unitPrice", "sell.vatPercent", "buy.quantity", "buy.days", "buy.unitPrice", "buy.vatPercent"]);
   projection.addRow(["candidate-1", "", 0, 1, "GROUP", 7]);
-  projection.addRow(["candidate-2", "candidate-1", 1, 2, "ITEM", 8]);
-  projection.addRow(["candidate-3", "candidate-2", 2, 3, "ITEM", 9]);
-  projection.addRow(["candidate-4", "candidate-1", 3, 2, "ITEM", 10]);
+  projection.addRow(["candidate-2", "candidate-1", 1, 2, "ITEM", 8, "2", "1.5", "1500000", "8", "", "", "", "8"]);
+  projection.addRow(["candidate-3", "candidate-2", 2, 3, "ITEM", 9, "1", "0.5", "500000", "8", "", "", "", "8"]);
+  projection.addRow(["candidate-4", "candidate-1", 3, 2, "ITEM", 10, "1", "1", "0", "0", "", "", "", "0"]);
+  for (let row = 2; row <= projection.rowCount; row++) for (let column = 7; column <= 14; column++) projection.getRow(row).getCell(column).numFmt = "@";
   projection.getRow(1).font = { bold: true };
 
   const metadata = workbook.addWorksheet("_META", { state: "veryHidden" });
@@ -130,7 +133,7 @@ export async function createExcelIntakeTemplate(options: ExcelIntakeTemplateOpti
   return workbook.xlsx.writeBuffer();
 }
 
-function excelPrimitive(value: string) {
+function visibleExcelNumber(value: string) {
   if (!value) return "";
   const number = Number(value);
   return Number.isFinite(number) ? number : value;
@@ -151,9 +154,9 @@ export async function createExcelRoundTripWorkbook(projection: RoundTripProjecti
     const row = entry.row;
     const values: unknown[] = [
       entry.level, index + 1, row.name, row.description,
-      row.sell.unit, excelPrimitive(row.sell.quantity), excelPrimitive(row.sell.days), excelPrimitive(row.sell.unitPrice), row.sell.basis, excelPrimitive(row.sell.vatPercent),
+      row.sell.unit, visibleExcelNumber(row.sell.quantity), visibleExcelNumber(row.sell.days), visibleExcelNumber(row.sell.unitPrice), row.sell.basis, visibleExcelNumber(row.sell.vatPercent),
       undefined, undefined, undefined, row.sell.notes,
-      row.buy.unit, excelPrimitive(row.buy.quantity), excelPrimitive(row.buy.days), excelPrimitive(row.buy.unitPrice), row.buy.basis, excelPrimitive(row.buy.vatPercent),
+      row.buy.unit, visibleExcelNumber(row.buy.quantity), visibleExcelNumber(row.buy.days), visibleExcelNumber(row.buy.unitPrice), row.buy.basis, visibleExcelNumber(row.buy.vatPercent),
       undefined, undefined, undefined, row.buy.vendorId, row.buy.notes,
     ];
     values.forEach((value, column) => {
@@ -170,8 +173,12 @@ export async function createExcelRoundTripWorkbook(projection: RoundTripProjecti
 
   const stable = workbook.getWorksheet("_IMPORT")!;
   for (let row = 1; row <= Math.max(stable.rowCount, projection.rows.length + 1); row++) stable.getRow(row).values = [];
-  stable.getRow(1).values = ["itemId", "parentItemId", "order", "level", "rowType", "sourceRow"];
-  projection.rows.forEach((entry, index) => { stable.getRow(index + 2).values = [entry.itemId, entry.parentItemId ?? "", entry.order, entry.level, entry.row.rowType, FIRST_DATA_ROW + index]; });
+  stable.getRow(1).values = ["itemId", "parentItemId", "order", "level", "rowType", "sourceRow", "sell.quantity", "sell.days", "sell.unitPrice", "sell.vatPercent", "buy.quantity", "buy.days", "buy.unitPrice", "buy.vatPercent"];
+  projection.rows.forEach((entry, index) => {
+    const row = entry.row;
+    stable.getRow(index + 2).values = [entry.itemId, entry.parentItemId ?? "", entry.order, entry.level, row.rowType, FIRST_DATA_ROW + index, row.sell.quantity, row.sell.days, row.sell.unitPrice, row.sell.vatPercent, row.buy.quantity, row.buy.days, row.buy.unitPrice, row.buy.vatPercent];
+    for (let column = 7; column <= 14; column++) stable.getRow(index + 2).getCell(column).numFmt = "@";
+  });
   stable.getRow(1).font = { bold: true };
 
   const metadata = workbook.getWorksheet("_META")!;

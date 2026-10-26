@@ -101,7 +101,7 @@ test("hybrid workbook keeps visible numerics and hidden exact canonical text for
   for (const address of ["F7", "G7", "H7", "J7", "P7", "Q7", "R7", "T7"]) {
     assert.equal(typeof visible.getCell(address).value, "number", `${address} must remain a familiar Excel number`);
   }
-  assert.deepEqual(canonical.getRow(2).values?.slice(7, 15), [
+  assert.deepEqual((canonical.getRow(2).values as ExcelJS.CellValue[]).slice(7, 15), [
     "9007199254740993", "0.333333333333333333333333", "0", "0",
     "1.2345", "2.5", "9999999999999999.99", "100",
   ]);
