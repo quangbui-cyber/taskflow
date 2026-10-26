@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { confirmRoundTripMergeAction } from "@/app/actions/costflowExcelIntake";
+import { confirmRoundTripMergeAction, rebuildRoundTripPreviewAction } from "@/app/actions/costflowExcelIntake";
 import type { RoundTripDiff } from "@/lib/costflow/excelRoundTrip";
 import type { PairedRow } from "@/lib/costflow/types";
 import { Button } from "./ui/Button";
@@ -32,6 +32,7 @@ export default function ExcelRoundTripDialog({ projectId, draftId, dirty, onAppl
   const [decimalResolutions, setDecimalResolutions] = useState<Record<string, "VISIBLE" | "CANONICAL">>({});
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [stale, setStale] = useState(false);
   const [pending, startTransition] = useTransition();
   const operationId = useRef(crypto.randomUUID());
   const sourceRevision = useRef(1);
@@ -45,6 +46,7 @@ export default function ExcelRoundTripDialog({ projectId, draftId, dirty, onAppl
     setDecimalResolutions({});
     setError("");
     setSuccess("");
+    setStale(false);
     operationId.current = crypto.randomUUID();
   };
   const review = () => {
@@ -84,6 +86,7 @@ export default function ExcelRoundTripDialog({ projectId, draftId, dirty, onAppl
         idempotencyKey: `excel-round-trip:${operationId.current}`,
       });
       if ("error" in result) {
+        setStale(result.code === "STALE_DRAFT");
         setError(/thay đổi|đồng thời/i.test(result.error) ? `Nháp trên máy chủ đã thay đổi (server draft changed). ${result.error}` : result.error);
         return;
       }
@@ -91,6 +94,15 @@ export default function ExcelRoundTripDialog({ projectId, draftId, dirty, onAppl
       setSuccess(`Đã áp dụng workbook vào nháp v${result.draftVersion}. Phiên chuyển sang chỉ đọc.`);
       setPreview(current => current ? { ...current, state: "READ_ONLY_CONSUMED", result } : current);
       onApplied({ rows: result.rows, version: result.version, draftVersion: result.draftVersion });
+    });
+  };
+  const rebuild = () => {
+    if (!preview) return;
+    startTransition(async () => {
+      const result = await rebuildRoundTripPreviewAction({ projectId, draftId, previewSessionId: preview.previewSessionId });
+      if ("error" in result) { setError(result.error); return; }
+      acceptSession(result);
+      setSuccess("Đã tạo diff mới từ workbook đã giữ lại; các lựa chọn cũ đã được xóa.");
     });
   };
   const diff = preview?.display?.diff;
@@ -112,6 +124,7 @@ export default function ExcelRoundTripDialog({ projectId, draftId, dirty, onAppl
         <Button variant="secondary" onClick={resume} disabled={!resumeSessionId.trim()} loading={pending}>Mở phiên</Button>
         {preview && <p className="tf-ui-help">Phiên {preview.previewSessionId} · hết hạn {new Date(preview.expiresAt).toLocaleString("vi-VN")}</p>}
         {error && <Alert tone="danger" title="Chưa thể áp dụng">{error}</Alert>}
+        {stale && <Button variant="secondary" onClick={rebuild} loading={pending}>Tạo lại diff với bản mới nhất</Button>}
         {success && <Alert tone="success" title="Đã cập nhật">{success}</Alert>}
         {preview?.state === "READ_ONLY_CONSUMED" && <Alert tone="success" title="Bản xem lại chỉ đọc">Phiên đã được áp dụng và không thể chạy lại. {preview.source && <a href={preview.source.downloadUrl}>Tải nguồn {preview.source.filename}</a>}</Alert>}
         {preview?.state.startsWith("NON_ACTIONABLE_") && <Alert tone="warning" title="Phiên không còn hiệu lực">Phiên đã hết hạn, bị thay thế hoặc bị hủy; payload xem trước đã được xóa.</Alert>}

@@ -5,7 +5,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { EXCEL_INTAKE_SCHEMA_VERSION, resolveExcelIntakeDecimalConflicts, type ExcelDecimalResolution } from "./excelIntake";
 import type { ExcelIntakePreview } from "./excelIntakeParser";
-import { previewRoundTripMerge, applyRoundTripDiff, createRoundTripProjection, type RoundTripDiff, type RoundTripImport } from "./excelRoundTrip";
+import { previewRoundTripMerge, applyRoundTripDiff, createRoundTripProjection, resolveRoundTripDecimalConflicts, type RoundTripDiff, type RoundTripImport } from "./excelRoundTrip";
 import { emptyFinance, type FinanceData, type PairedRow } from "./types";
 import { hydrateLinePricingData, normalizePairedRows } from "./pairedDraft";
 import { calculateLineCost, compare, decimal } from "./money";
@@ -33,6 +33,10 @@ export type ConfirmRoundTripMergeCommand = {
   decimalResolutions?: DecimalResolutionMap;
 };
 export type ConfirmRoundTripMergeResult = { draftId: string; draftVersion: number; version: number; idempotent: boolean; rows: PairedRow[] };
+export class ExcelIntakeStaleDraftError extends Error {
+  readonly code = "STALE_DRAFT";
+  constructor() { super("Nháp trên máy chủ đã thay đổi. Tạo lại diff với bản mới nhất trước khi áp dụng."); }
+}
 
 export const EXCEL_INTAKE_PREVIEW_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export type ExcelIntakeOperationKind = "NEW_DRAFT" | "ROUND_TRIP";
@@ -114,6 +118,7 @@ export type CreateRoundTripPreviewInput = {
   sourceFilename: string;
   sourceMimeType?: string | null;
   sourceRevision: number;
+  rebaseToCurrent?: boolean;
 };
 
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -209,7 +214,7 @@ export async function createNewDraftExcelIntakePreview(actor: Actor, input: Crea
 
 export async function createRoundTripExcelIntakePreview(actor: Actor, input: CreateRoundTripPreviewInput): Promise<ActionablePreviewSessionView<RoundTripPreviewDisplay>> {
   if (!Number.isSafeInteger(input.sourceRevision) || input.sourceRevision < 1) throw new Error("Phiên bản nguồn không hợp lệ.");
-  const preview = await previewRoundTripMerge(actor, input.projectId, input.sourceBytes);
+  const preview = await previewRoundTripMerge(actor, input.projectId, input.sourceBytes, { rebaseToCurrent: input.rebaseToCurrent });
   const payload: RoundTripCanonicalPayload = {
     expectedWorkspaceVersion: preview.workspaceVersion,
     expectedDraftVersion: preview.draft.version,
@@ -238,6 +243,18 @@ export async function createRoundTripExcelIntakePreview(actor: Actor, input: Cre
     });
     return { state: "ACTIONABLE", previewSessionId: session.id, operationKind: "ROUND_TRIP", expiresAt: session.expiresAt.toISOString(), display };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15000 });
+}
+
+export async function rebuildRoundTripExcelIntakePreview(actor: Actor, input: { projectId: string; draftId: string; previewSessionId: string }) {
+  const source = await prisma.$transaction(async tx => {
+    await requireExcelIntakeActor(tx, actor.id, input.projectId);
+    const session = await tx.excelIntakePreviewSession.findFirst({ where: { id: input.previewSessionId, projectId: input.projectId, actorId: actor.id, operationKind: "ROUND_TRIP", draftId: input.draftId, status: "ACTIVE" } });
+    if (!session?.sourceBytes || !session.sourceFilename) throw new Error("Workbook nguồn không còn sẵn để tạo lại diff.");
+    return { bytes: Buffer.from(session.sourceBytes), filename: session.sourceFilename, mimeType: session.sourceMimeType, sourceRevision: session.sourceRevision + 1 };
+  });
+  const rebuilt = await createRoundTripExcelIntakePreview(actor, { projectId: input.projectId, sourceBytes: source.bytes, sourceFilename: source.filename, sourceMimeType: source.mimeType, sourceRevision: source.sourceRevision, rebaseToCurrent: true });
+  await prisma.$transaction(tx => redactExcelIntakePreviewSession(tx, input.previewSessionId, "SUPERSEDED"));
+  return rebuilt;
 }
 
 export async function redactExcelIntakePreviewSession(tx: AuthorityTx, sessionId: string, status: Exclude<ExcelIntakePreviewStatus, "ACTIVE" | "CONSUMED">, at = new Date()) {
@@ -531,19 +548,19 @@ export async function confirmRoundTripMerge(actor: Actor, command: ConfirmRoundT
     const session = await loadActionableExcelIntakePreviewSession(tx, { sessionId: command.previewSessionId, projectId: command.projectId, actorId: actor.id, operationKind: "ROUND_TRIP", draftId: command.draftId });
     const payload = session.canonicalPayload as unknown as RoundTripCanonicalPayload;
     if (canonicalHash(payload) !== session.canonicalFingerprint || !payload.diff.previewFingerprint) throw new Error("Xem trước round-trip không còn khớp.");
-    validatedDecimalResolutions(command.decimalResolutions, payload.allowedDecimalResolutionKeys);
+    const decimalResolutions = validatedDecimalResolutions(command.decimalResolutions, payload.allowedDecimalResolutionKeys);
     const workspace = await tx.costFlowWorkspace.findUnique({ where: { projectId: command.projectId } });
-    if (!workspace || workspace.version !== payload.expectedWorkspaceVersion) throw new Error("Nháp trên máy chủ đã thay đổi. Tải lại và xuất workbook mới trước khi thử lại.");
+    if (!workspace || workspace.version !== payload.expectedWorkspaceVersion) throw new ExcelIntakeStaleDraftError();
     const data = hydrateLinePricingData(workspace.data as unknown as FinanceData);
     const draft = data.quotationDrafts?.find(value => value.id === command.draftId);
     if (!draft || draft.createdBy !== actor.id || draft.workspaceMode !== "paired" || data.closed) throw new Error("Nháp không còn ở trạng thái được phép chỉnh sửa.");
-    if (draft.version !== payload.expectedDraftVersion || createRoundTripProjection(command.projectId, draft).fingerprint !== payload.expectedDraftFingerprint) throw new Error("Nháp trên máy chủ đã thay đổi. Tải lại và xuất workbook mới trước khi thử lại.");
+    if (draft.version !== payload.expectedDraftVersion || createRoundTripProjection(command.projectId, draft).fingerprint !== payload.expectedDraftFingerprint) throw new ExcelIntakeStaleDraftError();
     if (draft.icRevisionId) {
       const revision = data.revisions.find(value => value.id === draft.icRevisionId);
       const request = revision ? await tx.workflowRequest.findUnique({ where: { id: revision.requestId }, select: { state: true, creatorId: true } }) : null;
       if (!revision || revision.effective || request?.state !== "DRAFT" || request.creatorId !== actor.id) throw new Error("IC đã gửi hoặc có hiệu lực phải đi qua lifecycle revision hiện có.");
     }
-    draft.rows = applyRoundTripDiff(draft, payload.diff, selectedDeletionIds);
+    draft.rows = applyRoundTripDiff(draft, resolveRoundTripDecimalConflicts(payload.diff, decimalResolutions), selectedDeletionIds);
     draft.version += 1;
     const updated = await tx.costFlowWorkspace.updateMany({ where: { projectId: command.projectId, version: payload.expectedWorkspaceVersion }, data: { data: json(data), version: { increment: 1 } } });
     if (updated.count !== 1) throw new Error("Có thao tác đồng thời. Tải lại và xuất workbook mới trước khi thử lại.");
