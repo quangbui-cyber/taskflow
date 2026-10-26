@@ -23,7 +23,7 @@ test("deadlines read as time, weekday and date in Vietnam time", () => {
 
 test("a new task card leads with what happened, then the task title, icons and a filled button", () => {
   const message = taskGoogleChatMessage(task);
-  assert.equal(message.text, undefined, "don't duplicate the card as a text bubble");
+  assert.ok(message.text && !message.text.includes(task.title), "a short friendly line sits above the card but never repeats the card");
   const card = message.cardsV2![0].card;
   assert.deepEqual(card.header, { title: "🆕 Công việc mới", subtitle: "Jabil Pur" });
   const widgets = card.sections[0].widgets;
@@ -132,4 +132,20 @@ test("webhook transport sends cards intact and still supports existing plain tex
   assert.deepEqual(await sendGoogleChat("https://chat.googleapis.com/example", message), { ok: true });
   assert.deepEqual(await sendGoogleChat("https://chat.googleapis.com/example", "Connected"), { ok: true });
   assert.deepEqual(sent, [message, { text: "Connected" }]);
+});
+
+test("every card carries a friendly line above it while the card itself stays formal", () => {
+  const created = taskGoogleChatMessage(task);
+  assert.ok(created.text && created.text.length > 0);
+  assert.equal(created.cardsV2![0].card.header.title, "🆕 Công việc mới");
+  assert.match(taskGoogleChatMessage({ ...task, event: "status_changed", status: "DONE" }).text!, /Xong|về đích/);
+  assert.match(taskGoogleChatMessage({ ...task, event: "status_changed", status: "IN_PROGRESS" }).text!, /xắn tay áo|Bắt tay/);
+  assert.equal(taskGoogleChatMessage(task).text, created.text);
+  const comment = taskCommentChatMessage({ taskId: "t", projectName: "P", title: "T", authorName: "Hạnh", comment: "ok", assigneeName: null, url: null });
+  assert.ok(comment.text);
+  const digest = deadlineDigestChatMessage({
+    projectId: "p", projectName: "x", baseUrl: "", overdue: [], now: new Date("2026-10-28T02:00:00Z"),
+    dueToday: [{ id: "b", title: "In", assigneeName: null, dueDate: new Date("2026-10-28T10:00:00Z") }],
+  })!;
+  assert.match(digest.text!, /buổi sáng|Điểm danh/);
 });
