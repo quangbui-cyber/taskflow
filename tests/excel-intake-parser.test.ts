@@ -6,6 +6,8 @@ import JSZip from "jszip";
 import { previewPastedIntake, previewWorkbookIntake } from "../lib/costflow/excelIntakeParser";
 import { preflightExcelWorkbook } from "../lib/costflow/excelIntakeSecurity";
 import { createExcelIntakeTemplate } from "../lib/costflow/quotationExcel";
+import { createExcelRoundTripWorkbook } from "../lib/costflow/quotationExcel";
+import { parseRoundTripWorkbook } from "../lib/costflow/excelRoundTrip";
 
 const canonicalUrl = "postgresql://postgres@127.0.0.1:55439/costflow_test";
 
@@ -83,6 +85,44 @@ test("preflight rejects active content, formulas, traversal and resource-limit v
   sheet.getCell("A1").value = { formula: "1+1", result: 2 };
   const formulaBytes = Buffer.from(await workbook.xlsx.writeBuffer());
   await assert.rejects(() => previewWorkbookIntake(formulaBytes, { sheet: "BAO_GIA_IC", range: "A1:A1" }), /công thức/i);
+});
+
+test("new-draft and round-trip parsing accept only safe XLSX filename and browser MIME variants", async () => {
+  const intakeBytes = Buffer.from(await createExcelIntakeTemplate());
+  const roundTripBytes = Buffer.from(await createExcelRoundTripWorkbook({ schemaVersion: 1, projectId: "project-1", draftId: "draft-1", draftVersion: 1, fingerprint: "fingerprint", title: "", clientId: "", customer: "", notes: "", rows: [] }));
+  for (const mimeType of ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "", "application/octet-stream"]) {
+    const parsed = await previewWorkbookIntake(intakeBytes, {}, { filename: "bao-gia.XLSX", mimeType });
+    assert.equal(parsed.adapter, "STANDARD_V4");
+    const roundTrip = await parseRoundTripWorkbook(roundTripBytes, { filename: "round-trip.xlsx", mimeType });
+    assert.equal(roundTrip.draftId, "draft-1");
+  }
+  await assert.rejects(() => previewWorkbookIntake(intakeBytes, {}, { filename: "bao-gia.xls", mimeType: "application/octet-stream" }), /XLSX/i);
+  await assert.rejects(() => parseRoundTripWorkbook(roundTripBytes, { filename: "round-trip.zip", mimeType: "application/octet-stream" }), /XLSX/i);
+});
+
+test("strict package preflight rejects missing parts, active content and excessive entries", async () => {
+  await assert.rejects(() => preflightExcelWorkbook(Buffer.from("not-a-zip"), { filename: "bad.xlsx", mimeType: "application/octet-stream" }), /ZIP/i);
+
+  const missing = new JSZip();
+  missing.file("[Content_Types].xml", "<Types/>");
+  const missingBytes = Buffer.from(await missing.generateAsync({ type: "nodebuffer" }));
+  await assert.rejects(() => preflightExcelWorkbook(missingBytes, { filename: "missing.xlsx", mimeType: "" }), /thành phần|workbook|worksheet/i);
+
+  const active = new JSZip();
+  active.file("[Content_Types].xml", "<Types><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.ms-excel.sheet.macroEnabled.main+xml\"/></Types>");
+  active.file("xl/workbook.xml", "<workbook/>");
+  active.file("xl/worksheets/sheet1.xml", "<worksheet/>");
+  active.file("xl/vbaProject.bin", "macro");
+  const activeBytes = Buffer.from(await active.generateAsync({ type: "nodebuffer" }));
+  await assert.rejects(() => preflightExcelWorkbook(activeBytes, { filename: "active.xlsx", mimeType: "application/octet-stream" }), /macro|chủ động/i);
+
+  const crowded = new JSZip();
+  crowded.file("[Content_Types].xml", "<Types/>");
+  crowded.file("xl/workbook.xml", "<workbook/>");
+  crowded.file("xl/worksheets/sheet1.xml", "<worksheet/>");
+  for (let index = 0; index < 260; index++) crowded.file(`xl/misc/${index}.xml`, "<x/>");
+  const crowdedBytes = Buffer.from(await crowded.generateAsync({ type: "nodebuffer" }));
+  await assert.rejects(() => preflightExcelWorkbook(crowdedBytes, { filename: "crowded.xlsx", mimeType: "application/octet-stream" }), /quá nhiều/i);
 });
 
 test("integration URL probe accepts only the exact canonical URL", () => {
