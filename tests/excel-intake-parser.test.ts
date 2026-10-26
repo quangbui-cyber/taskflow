@@ -146,3 +146,21 @@ test("integration URL probe accepts only the exact canonical URL", () => {
     assert.doesNotMatch(`${result.stdout}${result.stderr}`, /tests\/.*\.test|DATABASE_URL=/);
   }
 });
+
+test("standard unit runner lists every Excel gap suite before execution", () => {
+  const result = spawnSync(process.execPath, ["scripts/test-costflow.mjs", "--unit", "--list"], {
+    env: process.env,
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr);
+  for (const suite of [
+    "excel-intake-contract.test.ts",
+    "excel-intake-template.test.ts",
+    "excel-intake-parser.test.ts",
+    "excel-intake-ui-contract.test.ts",
+    "excel-round-trip.test.ts",
+    "excel-round-trip-ui-contract.test.ts",
+  ]) {
+    assert.match(result.stdout, new RegExp(`^UNIT\\s+tests/${suite.replaceAll(".", "\\.")}$`, "m"));
+  }
+});
