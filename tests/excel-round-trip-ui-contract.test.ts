@@ -17,6 +17,12 @@ test("round-trip dialog groups exact diff facts and requires explicit unchecked 
   assert.match(dialog, /selectedDeletionIds/);
   assert.match(dialog, /useState<string\[\]>\(\[\]\)/);
   assert.match(dialog, /Xác nhận xóa/);
+  assert.match(dialog, /Chọn tất cả/);
+  assert.match(dialog, /aggregateDeletionConfirmed/);
+  assert.match(dialog, /Tiếp tục và bỏ lựa chọn/);
+  assert.match(dialog, /Ở lại/);
+  assert.match(dialog, /method:\s*"DELETE"/);
+  assert.match(dialog, /Không còn áp dụng/);
   assert.match(dialog, /server draft changed|nháp trên máy chủ đã thay đổi/i);
 });
 
