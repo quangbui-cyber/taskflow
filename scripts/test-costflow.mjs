@@ -51,7 +51,9 @@ const integrationSuites = integration ? [
   "tests/costflow.integration.test.ts", "tests/quotation.integration.test.ts", "tests/quotation-reuse.integration.test.ts",
   "tests/quotation-parameters.integration.test.ts", "tests/workflow.integration.test.ts", "tests/budget.integration.test.ts",
   "tests/paired.integration.test.ts", "tests/payment.integration.test.ts", "tests/workflow-documents.integration.test.ts",
-  "tests/workflow-approval.integration.test.ts", "tests/excel-intake.integration.test.ts", "tests/excel-round-trip.integration.test.ts",
+  "tests/workflow-approval.integration.test.ts", "tests/excel-intake.integration.test.ts",
+  "tests/excel-intake-authority-schema.integration.test.ts", "tests/excel-intake-authority.integration.test.ts",
+  "tests/excel-round-trip.integration.test.ts",
   // The sheet integration runs above through the Phase 12 disposable-schema negative matrix.
   ...(phase8 ? ["tests/actual-cost-control-center.integration.test.ts", "tests/customer-liquidation.integration.test.ts"] : []),
 ] : [];

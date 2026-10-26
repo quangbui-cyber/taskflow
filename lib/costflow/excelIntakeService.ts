@@ -536,10 +536,26 @@ function roundTripCommandFingerprint(actorId: string, command: ConfirmRoundTripM
   return canonicalHash({ actorId, projectId: command.projectId, operationKind: "ROUND_TRIP", draftId: command.draftId, previewSessionId: command.previewSessionId, selectedDeletionIds: [...command.selectedDeletionIds].sort(), decimalResolutions: sortedMap(command.decimalResolutions) });
 }
 
+async function redactExpiredExcelIntakeAuthority(actor: Actor, projectId: string, sessionId: string) {
+  return prisma.$transaction(async tx => {
+    await requireExcelIntakeActor(tx, actor.id, projectId);
+    const session = await tx.excelIntakePreviewSession.findFirst({
+      where: { id: sessionId, projectId, actorId: actor.id, status: "ACTIVE" },
+      select: { id: true, expiresAt: true },
+    });
+    if (session && session.expiresAt.getTime() <= Date.now()) {
+      await redactExcelIntakePreviewSession(tx, session.id, "EXPIRED");
+      return true;
+    }
+    return false;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15000 });
+}
+
 export async function confirmExcelIntake(actor: Actor, command: ConfirmExcelIntakeCommand): Promise<ConfirmExcelIntakeResult> {
   if (!command.projectId || !command.previewSessionId || !Number.isSafeInteger(command.expectedVersion) || command.expectedVersion < 0) throw new Error("Phiên bản hồ sơ không hợp lệ.");
   validateIdempotencyKey(command.idempotencyKey);
   const operationFingerprint = newDraftCommandFingerprint(actor.id, command);
+  if (await redactExpiredExcelIntakeAuthority(actor, command.projectId, command.previewSessionId)) throw new Error("Phiên xem trước đã hết hạn sau 7 ngày.");
   return prisma.$transaction(async tx => {
     await requireExcelIntakeActor(tx, actor.id, command.projectId);
     const prior = await readExcelIntakeOperationReceipt(tx, command.projectId, command.idempotencyKey);
@@ -591,6 +607,7 @@ export async function confirmRoundTripMerge(actor: Actor, command: ConfirmRoundT
   if (!Array.isArray(command.selectedDeletionIds) || command.selectedDeletionIds.some(id => typeof id !== "string")) throw new Error("Danh sách xác nhận xóa không hợp lệ.");
   const selectedDeletionIds = [...command.selectedDeletionIds].sort();
   const operationFingerprint = roundTripCommandFingerprint(actor.id, { ...command, selectedDeletionIds });
+  if (await redactExpiredExcelIntakeAuthority(actor, command.projectId, command.previewSessionId)) throw new Error("Phiên xem trước đã hết hạn sau 7 ngày.");
   return prisma.$transaction(async tx => {
     await requireExcelIntakeActor(tx, actor.id, command.projectId);
     const prior = await readExcelIntakeOperationReceipt(tx, command.projectId, command.idempotencyKey);

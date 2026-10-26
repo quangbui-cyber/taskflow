@@ -12,7 +12,7 @@ test("live round-trip preview is authorized, zero-write and preserves immutable 
   assert.equal(process.env.COSTFLOW_TEST_DATABASE_URL, canonicalUrl);
   process.env.DATABASE_URL = canonicalUrl;
   const { prisma } = await import("../lib/prisma");
-  const prefix = `excel-round-trip-${randomUUID()}`;
+  const prefix = `phase31-gap-round-trip-preview-${randomUUID()}`;
   const projectIds: string[] = [];
   const userIds: string[] = [];
   try {
@@ -49,6 +49,13 @@ test("live round-trip preview is authorized, zero-write and preserves immutable 
       await prisma.project.deleteMany({ where: { id: { in: projectIds } } });
     }
     if (userIds.length) await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    assert.deepEqual(await Promise.all([
+      prisma.excelIntakePreviewSession.count({ where: { projectId: { in: projectIds } } }),
+      prisma.excelIntakeOperationReceipt.count({ where: { projectId: { in: projectIds } } }),
+      prisma.excelIntakeSourceEvidence.count({ where: { projectId: { in: projectIds } } }),
+      prisma.project.count({ where: { id: { in: projectIds } } }),
+      prisma.user.count({ where: { id: { in: userIds } } }),
+    ]), [0, 0, 0, 0, 0]);
     await prisma.$disconnect();
   }
 });
@@ -59,7 +66,7 @@ test("live apply keeps unconfirmed deletions, confirms selected deletion and enf
   process.env.DATABASE_URL = canonicalUrl;
   const { prisma } = await import("../lib/prisma");
   const { confirmRoundTripMerge, createRoundTripExcelIntakePreview, rebuildRoundTripExcelIntakePreview } = await import("../lib/costflow/excelIntakeService");
-  const prefix = `excel-round-trip-apply-${randomUUID()}`;
+  const prefix = `phase31-gap-round-trip-apply-${randomUUID()}`;
   const projectIds: string[] = [];
   const userIds: string[] = [];
   try {
@@ -146,6 +153,13 @@ test("live apply keeps unconfirmed deletions, confirms selected deletion and enf
       await prisma.project.deleteMany({ where: { id: { in: projectIds } } });
     }
     if (userIds.length) await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    assert.deepEqual(await Promise.all([
+      prisma.excelIntakePreviewSession.count({ where: { projectId: { in: projectIds } } }),
+      prisma.excelIntakeOperationReceipt.count({ where: { projectId: { in: projectIds } } }),
+      prisma.excelIntakeSourceEvidence.count({ where: { projectId: { in: projectIds } } }),
+      prisma.project.count({ where: { id: { in: projectIds } } }),
+      prisma.user.count({ where: { id: { in: userIds } } }),
+    ]), [0, 0, 0, 0, 0]);
     await prisma.$disconnect();
   }
 });

@@ -44,7 +44,7 @@ test("opaque new-draft session is atomic, durable and reviewable", { skip: !proc
     createNewDraftExcelIntakePreview,
     getExcelIntakePreviewSessionView,
   } = await import("../lib/costflow/excelIntakeService");
-  const prefix = `excel-authority-${randomUUID()}`;
+  const prefix = `phase31-gap-authority-${randomUUID()}`;
   const projectIds: string[] = [];
   const userIds: string[] = [];
   try {
@@ -118,7 +118,12 @@ test("opaque new-draft session is atomic, durable and reviewable", { skip: !proc
     assert.equal(replayAfter101.idempotent, true);
 
     const expiring = await createNewDraftExcelIntakePreview({ id: actor.id, role: "ACCOUNT" }, { projectId: project.id, preview, sourceKind: "PASTE", sourceRevision: 200, sourceText: "expires" });
+    assert.equal((await getExcelIntakePreviewSessionView({ id: actor.id, role: "ACCOUNT" }, project.id, expiring.previewSessionId)).state, "ACTIONABLE", "day-7 boundary remains actionable before expiresAt");
     await prisma.excelIntakePreviewSession.update({ where: { id: expiring.previewSessionId }, data: { expiresAt: new Date(Date.now() - 1) } });
+    await assert.rejects(() => confirmExcelIntake({ id: actor.id, role: "ACCOUNT" }, {
+      projectId: project.id, previewSessionId: expiring.previewSessionId, expectedVersion: 1,
+      idempotencyKey: `${prefix}:expired`, corrections: {}, decimalResolutions: {},
+    }), /hết hạn sau 7 ngày/i);
     const expired = await getExcelIntakePreviewSessionView({ id: actor.id, role: "ACCOUNT" }, project.id, expiring.previewSessionId);
     assert.equal(expired.state, "NON_ACTIONABLE_EXPIRED");
     const redacted = await prisma.excelIntakePreviewSession.findUniqueOrThrow({ where: { id: expiring.previewSessionId } });
@@ -152,6 +157,13 @@ test("opaque new-draft session is atomic, durable and reviewable", { skip: !proc
       await prisma.project.deleteMany({ where: { id: { in: projectIds } } });
     }
     if (userIds.length) await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    assert.deepEqual(await Promise.all([
+      prisma.excelIntakePreviewSession.count({ where: { projectId: { in: projectIds } } }),
+      prisma.excelIntakeOperationReceipt.count({ where: { projectId: { in: projectIds } } }),
+      prisma.excelIntakeSourceEvidence.count({ where: { projectId: { in: projectIds } } }),
+      prisma.project.count({ where: { id: { in: projectIds } } }),
+      prisma.user.count({ where: { id: { in: userIds } } }),
+    ]), [0, 0, 0, 0, 0]);
     await prisma.$disconnect();
   }
 });
@@ -167,7 +179,7 @@ test("exact cancellation and newest-successful scope revoke stale authority", { 
     createNewDraftExcelIntakePreview,
     getExcelIntakePreviewSessionView,
   } = await import("../lib/costflow/excelIntakeService");
-  const prefix = `excel-revision-${randomUUID()}`;
+  const prefix = `phase31-gap-revision-${randomUUID()}`;
   const projectIds: string[] = [];
   const userIds: string[] = [];
   try {
@@ -248,6 +260,13 @@ test("exact cancellation and newest-successful scope revoke stale authority", { 
       await prisma.project.deleteMany({ where: { id: { in: projectIds } } });
     }
     if (userIds.length) await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    assert.deepEqual(await Promise.all([
+      prisma.excelIntakePreviewSession.count({ where: { projectId: { in: projectIds } } }),
+      prisma.excelIntakeOperationReceipt.count({ where: { projectId: { in: projectIds } } }),
+      prisma.excelIntakeSourceEvidence.count({ where: { projectId: { in: projectIds } } }),
+      prisma.project.count({ where: { id: { in: projectIds } } }),
+      prisma.user.count({ where: { id: { in: userIds } } }),
+    ]), [0, 0, 0, 0, 0]);
     await prisma.$disconnect();
   }
 });
