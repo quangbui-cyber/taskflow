@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 // An explicit dedicated URL is required for legacy integration suites; Phase 10 gap suites create and remove unique schemas on the pinned local taskflow database.
 const integration = process.argv.includes("--integration");
 const checkIntegrationDatabaseUrl = process.argv.includes("--check-integration-database-url");
+const listOnly = process.argv.includes("--list");
 const phase8 = !process.argv.includes("--without-phase8");
 if (integration) {
   let url;
@@ -55,6 +56,9 @@ const integrationSuites = integration ? [
   ...(phase8 ? ["tests/actual-cost-control-center.integration.test.ts", "tests/customer-liquidation.integration.test.ts"] : []),
 ] : [];
 const files = [...phase10GapSuites, ...unitSuites, ...integrationSuites];
+for (const suite of unitSuites) console.log(`UNIT ${suite}`);
+for (const suite of integrationSuites) console.log(`INTEGRATION ${suite}`);
+if (listOnly) process.exit(0);
 const env = { ...process.env };
 if (integration) env.DATABASE_URL = env.COSTFLOW_TEST_DATABASE_URL;
 else delete env.COSTFLOW_TEST_DATABASE_URL;
