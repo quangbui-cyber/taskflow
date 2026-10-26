@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { createRoundTripProjection, previewRoundTripMerge } from "../lib/costflow/excelRoundTrip";
+import ExcelJS from "exceljs";
+import { createRoundTripProjection } from "../lib/costflow/excelRoundTrip";
 import { createExcelRoundTripWorkbook } from "../lib/costflow/quotationExcel";
 import { blankPairedRow } from "../lib/costflow/pairedDraft";
 import { emptyFinance, type FinanceData, type PairedDraft } from "../lib/costflow/types";
@@ -25,9 +26,11 @@ test("live round-trip preview is authorized, zero-write and preserves immutable 
     const bytes = await createExcelRoundTripWorkbook(createRoundTripProjection(project.id, draft), { projectName: project.name });
     const beforeWorkspace = await prisma.costFlowWorkspace.findUniqueOrThrow({ where: { projectId: project.id } });
     const beforeHistory = await prisma.costFlowHistory.count({ where: { projectId: project.id } });
-    await assert.rejects(() => previewRoundTripMerge({ id: outsider.id, role: "ACCOUNT" }, project.id, Buffer.from(bytes)), /không tìm thấy|quyền/i);
-    const preview = await previewRoundTripMerge({ id: actor.id, role: "USER" }, project.id, Buffer.from(bytes));
-    assert.deepEqual([preview.diff.adds.length, preview.diff.changes.length, preview.diff.deletionCandidates.length, preview.diff.moves.length], [0, 0, 0, 0]);
+    const { createRoundTripExcelIntakePreview } = await import("../lib/costflow/excelIntakeService");
+    await assert.rejects(() => createRoundTripExcelIntakePreview({ id: outsider.id, role: "ACCOUNT" }, { projectId: project.id, sourceBytes: Buffer.from(bytes), sourceFilename: "round-trip.xlsx", sourceMimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", sourceRevision: 1 }), /không tìm thấy|quyền/i);
+    const preview = await createRoundTripExcelIntakePreview({ id: actor.id, role: "USER" }, { projectId: project.id, sourceBytes: Buffer.from(bytes), sourceFilename: "round-trip.xlsx", sourceMimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", sourceRevision: 1 });
+    assert.equal(preview.state, "ACTIONABLE");
+    assert.deepEqual([preview.display.diff.adds.length, preview.display.diff.changes.length, preview.display.diff.deletionCandidates.length, preview.display.diff.moves.length], [0, 0, 0, 0]);
     const afterWorkspace = await prisma.costFlowWorkspace.findUniqueOrThrow({ where: { projectId: project.id } });
     assert.equal(afterWorkspace.version, beforeWorkspace.version);
     assert.deepEqual(afterWorkspace.data, beforeWorkspace.data);
@@ -36,6 +39,10 @@ test("live round-trip preview is authorized, zero-write and preserves immutable 
     assert.equal(await prisma.costFlowCash.count({ where: { projectId: project.id } }), 0);
   } finally {
     if (projectIds.length) {
+      await prisma.excelIntakePreviewSession.updateMany({ where: { projectId: { in: projectIds } }, data: { receiptId: null } });
+      await prisma.excelIntakeSourceEvidence.deleteMany({ where: { projectId: { in: projectIds } } });
+      await prisma.excelIntakeOperationReceipt.deleteMany({ where: { projectId: { in: projectIds } } });
+      await prisma.excelIntakePreviewSession.deleteMany({ where: { projectId: { in: projectIds } } });
       await prisma.costFlowHistory.deleteMany({ where: { projectId: { in: projectIds } } });
       await prisma.costFlowWorkspace.deleteMany({ where: { projectId: { in: projectIds } } });
       await prisma.projectMember.deleteMany({ where: { projectId: { in: projectIds } } });
@@ -51,8 +58,7 @@ test("live apply keeps unconfirmed deletions, confirms selected deletion and enf
   assert.equal(process.env.COSTFLOW_TEST_DATABASE_URL, canonicalUrl);
   process.env.DATABASE_URL = canonicalUrl;
   const { prisma } = await import("../lib/prisma");
-  const { confirmRoundTripMerge } = await import("../lib/costflow/excelIntakeService");
-  const { diffRoundTripDraft } = await import("../lib/costflow/excelRoundTrip");
+  const { confirmRoundTripMerge, createRoundTripExcelIntakePreview } = await import("../lib/costflow/excelIntakeService");
   const prefix = `excel-round-trip-apply-${randomUUID()}`;
   const projectIds: string[] = [];
   const userIds: string[] = [];
@@ -66,10 +72,15 @@ test("live apply keeps unconfirmed deletions, confirms selected deletion and enf
     const data: FinanceData = { ...emptyFinance(), quotationDrafts: [draft], quotations: [{ id: `${prefix}-quote`, number: 1, parentId: null, title: "Frozen quote", customer: "Customer", notes: "", lines: [], poIds: [], evidenceIds: [], createdBy: actor.id, createdAt: "2026-10-10T00:00:00.000Z" }], revisions: [protectedRevision] };
     await prisma.costFlowWorkspace.create({ data: { projectId: project.id, version: 1, data: data as never } });
     const projection = createRoundTripProjection(project.id, draft);
-    const imported = { schemaVersion: projection.schemaVersion, projectId: project.id, draftId: draft.id, draftVersion: draft.version, fingerprint: projection.fingerprint, rows: projection.rows.filter(entry => !entry.itemId.endsWith("delete-a") && !entry.itemId.endsWith("delete-b")).map(entry => ({ ...structuredClone(entry), row: structuredClone(entry.row), source: { sheet: "BAO_GIA_IC", row: 7 + entry.order, cell: `C${7 + entry.order}` } })) };
-    imported.rows.find(entry => entry.itemId.endsWith("keep"))!.row.sell.unitPrice = "1200";
-    const diff = diffRoundTripDraft(draft, imported, project.id);
-    const base = { projectId: project.id, draftId: draft.id, expectedWorkspaceVersion: 1, expectedDraftVersion: 1, expectedDraftFingerprint: projection.fingerprint, previewFingerprint: diff.previewFingerprint, imported, selectedDeletionIds: [`${prefix}-delete-a`], idempotencyKey: `${prefix}:apply` };
+    const originalBytes = await createExcelRoundTripWorkbook(projection, { projectName: project.name });
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(Buffer.from(originalBytes));
+    const sheet = workbook.getWorksheet("BAO_GIA_IC")!;
+    sheet.getCell("H8").value = 1200;
+    for (const rowNumber of [9, 10]) for (const column of [3, 4, 5, 6, 7, 8, 14, 15, 16, 17, 18, 24, 25]) sheet.getRow(rowNumber).getCell(column).value = null;
+    const modifiedBytes = Buffer.from(await workbook.xlsx.writeBuffer());
+    const session = await createRoundTripExcelIntakePreview({ id: actor.id, role: "USER" }, { projectId: project.id, sourceBytes: modifiedBytes, sourceFilename: "round-trip.xlsx", sourceMimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", sourceRevision: 1 });
+    const base = { projectId: project.id, draftId: draft.id, previewSessionId: session.previewSessionId, selectedDeletionIds: [`${prefix}-delete-a`], idempotencyKey: `${prefix}:apply` };
     const applied = await confirmRoundTripMerge({ id: actor.id, role: "USER" }, base);
     assert.equal(applied.idempotent, false);
     let workspace = await prisma.costFlowWorkspace.findUniqueOrThrow({ where: { projectId: project.id } });
@@ -87,10 +98,12 @@ test("live apply keeps unconfirmed deletions, confirms selected deletion and enf
     workspace = await prisma.costFlowWorkspace.findUniqueOrThrow({ where: { projectId: project.id } });
     saved = (workspace.data as unknown as FinanceData).quotationDrafts![0];
     const nextProjection = createRoundTripProjection(project.id, saved);
-    const nextImported = { schemaVersion: nextProjection.schemaVersion, projectId: project.id, draftId: saved.id, draftVersion: saved.version, fingerprint: nextProjection.fingerprint, rows: nextProjection.rows.map(entry => ({ ...structuredClone(entry), row: structuredClone(entry.row), source: { sheet: "BAO_GIA_IC", row: 7 + entry.order, cell: `C${7 + entry.order}` } })) };
-    nextImported.rows.find(entry => entry.itemId.endsWith("keep"))!.row.sell.unitPrice = "1300";
-    const nextDiff = diffRoundTripDraft(saved, nextImported, project.id);
-    const raceBase = { projectId: project.id, draftId: saved.id, expectedWorkspaceVersion: workspace.version, expectedDraftVersion: saved.version, expectedDraftFingerprint: nextProjection.fingerprint, previewFingerprint: nextDiff.previewFingerprint, imported: nextImported, selectedDeletionIds: [], idempotencyKey: "" };
+    const nextOriginalBytes = await createExcelRoundTripWorkbook(nextProjection, { projectName: project.name });
+    const nextWorkbook = new ExcelJS.Workbook();
+    await nextWorkbook.xlsx.load(Buffer.from(nextOriginalBytes));
+    nextWorkbook.getWorksheet("BAO_GIA_IC")!.getCell("H8").value = 1300;
+    const raceSession = await createRoundTripExcelIntakePreview({ id: actor.id, role: "USER" }, { projectId: project.id, sourceBytes: Buffer.from(await nextWorkbook.xlsx.writeBuffer()), sourceFilename: "round-trip-race.xlsx", sourceMimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", sourceRevision: 2 });
+    const raceBase = { projectId: project.id, draftId: saved.id, previewSessionId: raceSession.previewSessionId, selectedDeletionIds: [], idempotencyKey: "" };
     const race = await Promise.allSettled([confirmRoundTripMerge({ id: actor.id, role: "ACCOUNT" }, { ...raceBase, idempotencyKey: `${prefix}:race-a` }), confirmRoundTripMerge({ id: actor.id, role: "ACCOUNT" }, { ...raceBase, idempotencyKey: `${prefix}:race-b` })]);
     assert.equal(race.filter(result => result.status === "fulfilled").length, 1);
     assert.equal(await prisma.costFlowHistory.count({ where: { projectId: project.id, action: "CONFIRM_EXCEL_ROUND_TRIP" } }), 2);
@@ -98,6 +111,10 @@ test("live apply keeps unconfirmed deletions, confirms selected deletion and enf
     assert.equal((await prisma.project.findUniqueOrThrow({ where: { id: project.id } })).revenue, 777);
   } finally {
     if (projectIds.length) {
+      await prisma.excelIntakePreviewSession.updateMany({ where: { projectId: { in: projectIds } }, data: { receiptId: null } });
+      await prisma.excelIntakeSourceEvidence.deleteMany({ where: { projectId: { in: projectIds } } });
+      await prisma.excelIntakeOperationReceipt.deleteMany({ where: { projectId: { in: projectIds } } });
+      await prisma.excelIntakePreviewSession.deleteMany({ where: { projectId: { in: projectIds } } });
       await prisma.costFlowHistory.deleteMany({ where: { projectId: { in: projectIds } } });
       await prisma.costFlowWorkspace.deleteMany({ where: { projectId: { in: projectIds } } });
       await prisma.projectMember.deleteMany({ where: { projectId: { in: projectIds } } });
