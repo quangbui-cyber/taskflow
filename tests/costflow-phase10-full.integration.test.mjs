@@ -147,5 +147,6 @@ test("routes expose exactly six authorized XLSX and six version-bound print fami
     assert.match(print, new RegExp(`(?:"${family}"|${family}):`));
   }
   assert.match(xlsx, /versionId/);
-  assert.match(print, /requestedVersionId/);
+  assert.match(print, /sourceId/);
+  assert.match(print, /sourceVersion/);
 });

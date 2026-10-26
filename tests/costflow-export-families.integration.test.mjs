@@ -12,7 +12,7 @@ const families = [
 
 test("six export families preserve exact source identity, privacy and aggregate-first rounding", async () => {
   const { buildExportSourceSeal } = await import("../lib/costflow/exportSourceProjection.ts");
-  const seals = families.map((family, index) => buildExportSourceSeal({
+  const seals = await Promise.all(families.map((family, index) => buildExportSourceSeal({
     projectId: "project-a",
     family,
     sourceKind: family === "DNTU" ? "ADVANCE" : family === "DNTT" ? "VENDOR_PAYMENT" : family === "DNHTU" ? "REIMBURSEMENT" : family,
@@ -28,7 +28,7 @@ test("six export families preserve exact source identity, privacy and aggregate-
       { id: "line-a", rawNet: "10049/10", rawVat: "401/10", rawGross: "1045/1", vatPercent: "4" },
       { id: "line-b", rawNet: "20049/10", rawVat: "801/10", rawGross: "2085/1", vatPercent: "4" },
     ],
-  }));
+  })));
 
   assert.equal(new Set(seals.map(seal => seal.projectionHash)).size, six());
   for (const seal of seals) {
@@ -57,7 +57,7 @@ test("rounding allows only -1, 0 or +1 before a seal exists", async () => {
     payload: { title: "Quote" },
     lines: [{ id: "line", rawNet: "100", rawVat: "8", rawGross: "108", vatPercent: "8" }],
   };
-  assert.throws(() => buildExportSourceSeal({ ...base, authoritativeTotals: { net: "100", vat: "8", gross: "110" } }), /-1, 0 hoặc \+1/);
+  await assert.rejects(() => buildExportSourceSeal({ ...base, authoritativeTotals: { net: "100", vat: "8", gross: "110" } }), /-1, 0 hoặc \+1/);
 });
 
 function six() {

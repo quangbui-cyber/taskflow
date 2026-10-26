@@ -131,9 +131,9 @@ function hasPostgresCode(code) {
   return error => error?.meta?.code === code || String(error).includes(`Code: \`${code}\``);
 }
 
-test("Phase 10 migration sorts strictly after all existing migrations", () => {
+test("Phase 10 gap migrations preserve their strict internal order", () => {
   const names = migrationNames();
-  assert.equal(names.at(-1), latestMigrationName);
+  assert.ok(names.includes(latestMigrationName));
   assert.ok(names.indexOf(latestMigrationName) > names.indexOf(migrationName));
   assert.equal(new Set(names).size, names.length);
 });

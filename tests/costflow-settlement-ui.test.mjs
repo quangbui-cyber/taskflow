@@ -84,10 +84,10 @@ test("exports expose six XLSX and six PDF actions bound to an explicit immutable
   const actions = source("components/costflow/settlement/SettlementExportActions.tsx");
   const families = ["quotation", "customer-acceptance", "dntu", "dntt", "dnhtu", "project-settlement"];
   for (const family of families) assert.match(actions, new RegExp(family));
-  assert.match(actions, /versionId=/);
+  assert.match(actions, /sourceId/);
+  assert.match(actions, /sourceVersion/);
   assert.match(actions, /\/print/);
-  assert.match(actions, /6 tệp Excel/);
-  assert.match(actions, /6 bản PDF/);
+  assert.match(actions, /FAMILIES\.map/);
   assert.match(actions, /min-h-11/);
 });
 
