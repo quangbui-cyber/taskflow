@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import ExcelJS from "exceljs";
-import { createRoundTripProjection, diffRoundTripDraft, parseRoundTripWorkbook, type RoundTripImport } from "../lib/costflow/excelRoundTrip";
+import { applyRoundTripDiff, createRoundTripProjection, diffRoundTripDraft, parseRoundTripWorkbook, type RoundTripImport } from "../lib/costflow/excelRoundTrip";
 import { createExcelRoundTripWorkbook } from "../lib/costflow/quotationExcel";
 import type { PairedDraft } from "../lib/costflow/types";
 
@@ -43,7 +43,49 @@ test("round-trip projection fingerprints editable primitives and ignores formula
   assert.match(projection.fingerprint, /^[a-f0-9]{64}$/);
   const evidenceChanged = structuredClone(draft);
   evidenceChanged.rows[1].buy.evidenceIds = ["other-evidence"];
-  assert.equal(createRoundTripProjection("project-1", evidenceChanged).fingerprint, projection.fingerprint);
+  assert.notEqual(createRoundTripProjection("project-1", evidenceChanged).fingerprint, projection.fingerprint);
+});
+
+test("allowlisted no-op preserves rich protected row state byte-for-byte", () => {
+  const rich = structuredClone(draft);
+  rich.rows[1].pricingMode = "PACKAGE";
+  rich.rows[1].showChildren = false;
+  rich.rows[1].showGroupSubtotal = false;
+  rich.rows[1].packageChildDisplay = "QUANTITY";
+  rich.rows[1].saleRemoved = true;
+  rich.rows[1].quotationLineId = "quotation-line-private";
+  rich.rows[1].icLineId = "ic-line-private";
+  rich.rows[1].sell.parameterBinding = { mode: "FORMULA", quantityFormula: { op: "PARAM", key: "participants" }, lastCalculated: { quantity: "2" } };
+  rich.rows[1].buy.parameterBinding = { mode: "FORMULA", unitPriceFormula: { op: "CONST", value: "900000" }, lastCalculated: { unitPrice: "900000" } };
+  const diff = diffRoundTripDraft(rich, importFromDraftFor(rich), "project-1");
+  assert.deepEqual(applyRoundTripDiff(rich, diff, []), rich.rows);
+});
+
+test("one formula primitive edit overrides only its side and parent-only deletion is rejected", () => {
+  const bound = structuredClone(draft);
+  bound.rows[1].sell.parameterBinding = { mode: "FORMULA", unitPriceFormula: { op: "CONST", value: "1500000" }, lastCalculated: { unitPrice: "1500000" } };
+  bound.rows[1].buy.parameterBinding = { mode: "FORMULA", unitPriceFormula: { op: "CONST", value: "900000" }, lastCalculated: { unitPrice: "900000" } };
+  const imported = importFromDraftFor(bound);
+  imported.rows[1].row.sell.unitPrice = "1600000";
+  const applied = applyRoundTripDiff(bound, diffRoundTripDraft(bound, imported, "project-1"), []);
+  assert.equal(applied[1].sell.parameterBinding?.mode, "OVERRIDDEN");
+  assert.deepEqual(applied[1].buy.parameterBinding, bound.rows[1].buy.parameterBinding);
+
+  const tree = structuredClone(draft);
+  const missingParent = importFromDraftFor(tree).rows.filter(row => row.itemId !== "group-1");
+  missingParent[0].parentItemId = null;
+  const deletionDiff = diffRoundTripDraft(tree, { ...importFromDraftFor(tree), rows: missingParent }, "project-1");
+  assert.throws(() => applyRoundTripDiff(tree, deletionDiff, ["group-1"]), /dòng con|hậu duệ|cấu trúc/i);
+});
+
+test("tampered hidden canonical binding blocks the affected stable row", async () => {
+  const projection = createRoundTripProjection("project-1", draft);
+  const bytes = await createExcelRoundTripWorkbook(projection);
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(bytes);
+  workbook.getWorksheet("_IMPORT")!.getCell("I3").value = "999999";
+  const imported = await parseRoundTripWorkbook(Buffer.from(await workbook.xlsx.writeBuffer()));
+  assert.throws(() => diffRoundTripDraft(draft, imported, "project-1"), /metadata|canonical|bảo vệ|đã bị sửa/i);
 });
 
 test("round-trip workbook reopens with visible parity and veryHidden stable metadata", async () => {
@@ -87,6 +129,18 @@ test("round-trip route is exact-draft authorized and private while customer expo
 
 function importFromDraft(): RoundTripImport {
   const projection = createRoundTripProjection("project-1", draft);
+  return {
+    schemaVersion: projection.schemaVersion,
+    projectId: projection.projectId,
+    draftId: projection.draftId,
+    draftVersion: projection.draftVersion,
+    fingerprint: projection.fingerprint,
+    rows: projection.rows.map(entry => ({ ...structuredClone(entry), source: { sheet: "BAO_GIA_IC", row: 7 + entry.order, cell: `C${7 + entry.order}` } })),
+  };
+}
+
+function importFromDraftFor(value: PairedDraft): RoundTripImport {
+  const projection = createRoundTripProjection("project-1", value);
   return {
     schemaVersion: projection.schemaVersion,
     projectId: projection.projectId,
