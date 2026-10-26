@@ -78,7 +78,7 @@ test("preflight rejects active content, formulas, traversal and resource-limit v
   zip.file("xl/workbook.xml", "<workbook/>");
   zip.file("../evil.xml", "bad");
   const traversalBytes = Buffer.from(await zip.generateAsync({ type: "nodebuffer" }));
-  await assert.rejects(() => preflightExcelWorkbook(traversalBytes), /đường dẫn|ZIP/i);
+  await assert.rejects(() => preflightExcelWorkbook(traversalBytes, { filename: "traversal.xlsx", mimeType: "application/octet-stream" }), /đường dẫn|ZIP|thành phần/i);
 
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("BAO_GIA_IC");

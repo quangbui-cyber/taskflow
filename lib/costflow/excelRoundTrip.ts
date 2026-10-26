@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import ExcelJS from "exceljs";
 import { prisma } from "@/lib/prisma";
-import { preflightExcelWorkbook } from "./excelIntakeSecurity";
+import { preflightExcelWorkbook, type ExcelWorkbookUpload } from "./excelIntakeSecurity";
 import { blankPairedRow, hydrateLinePricingData, normalizePairedRows } from "./pairedDraft";
 import { pricedTotal } from "./pairedPricing";
 import type { FinanceData, PairedDraft, PairedRow } from "./types";
@@ -9,6 +9,9 @@ import type { ExcelDecimalConflict } from "./excelIntake";
 import { compare, decimal, normalizeDecimalInput } from "./money";
 
 export const EXCEL_ROUND_TRIP_SCHEMA_VERSION = 1;
+export class ExcelRoundTripDiagnosticError extends Error {
+  constructor(message: string, readonly diagnostic: { itemId: string; field: string; sourceCell: string }) { super(message); }
+}
 
 export type RoundTripRow = {
   itemId: string;
@@ -111,8 +114,8 @@ function metaMap(sheet: ExcelJS.Worksheet) {
   return out;
 }
 
-export async function parseRoundTripWorkbook(bytes: Uint8Array): Promise<RoundTripImport> {
-  await preflightExcelWorkbook(bytes);
+export async function parseRoundTripWorkbook(bytes: Uint8Array, upload: ExcelWorkbookUpload = { filename: "round-trip.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }): Promise<RoundTripImport> {
+  await preflightExcelWorkbook(bytes, upload);
   const workbook = new ExcelJS.Workbook();
   const buffer = Buffer.from(bytes);
   await workbook.xlsx.load(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer);
@@ -199,7 +202,7 @@ export function diffRoundTripDraft(draft: PairedDraft, imported: RoundTripImport
     const currentRow = currentById.get(entry.itemId)!;
     for (const [field, hiddenValue] of Object.entries(entry.canonicalBindings) as Array<[RoundTripDecimalField, string]>) {
       const [side, key] = field.split(".") as ["sell" | "buy", "quantity" | "days" | "unitPrice" | "vatPercent"];
-      if ((hiddenValue ?? "") !== (currentRow[side][key] ?? "")) throw new Error(`Metadata canonical bảo vệ của dòng ${entry.itemId} đã bị sửa.`);
+      if ((hiddenValue ?? "") !== (currentRow[side][key] ?? "")) throw new ExcelRoundTripDiagnosticError(`Metadata canonical bảo vệ của dòng ${entry.itemId} đã bị sửa.`, { itemId: entry.itemId, field, sourceCell: entry.source.cell });
     }
   }
   const retained = new Set(stableIds);
@@ -259,8 +262,8 @@ function rebaseRoundTripImport(imported: RoundTripImport, draft: PairedDraft, pr
   }
 }
 
-export async function previewRoundTripMerge(actor: Actor, projectId: string, bytes: Uint8Array, options: { rebaseToCurrent?: boolean } = {}) {
-  const imported = await parseRoundTripWorkbook(bytes);
+export async function previewRoundTripMerge(actor: Actor, projectId: string, bytes: Uint8Array, options: { rebaseToCurrent?: boolean; upload?: ExcelWorkbookUpload } = {}) {
+  const imported = await parseRoundTripWorkbook(bytes, options.upload);
   const [project, currentActor, workspace] = await Promise.all([
     prisma.project.findUnique({ where: { id: projectId }, select: { members: { where: { userId: actor.id }, select: { userId: true } } } }),
     prisma.user.findFirst({ where: { id: actor.id, isActive: true }, select: { role: true } }),

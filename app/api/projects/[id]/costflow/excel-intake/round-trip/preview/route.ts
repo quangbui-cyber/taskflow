@@ -22,6 +22,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 240) : "Không đọc được workbook round-trip.";
     const status = /không tìm thấy|không có quyền/i.test(message) ? 404 : 422;
-    return Response.json({ error: message }, { status, headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
+    const diagnostic = error && typeof error === "object" && "diagnostic" in error ? (error as { diagnostic: unknown }).diagnostic : undefined;
+    return Response.json({ error: message, ...(diagnostic ? { diagnostic } : {}) }, { status, headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
   }
 }

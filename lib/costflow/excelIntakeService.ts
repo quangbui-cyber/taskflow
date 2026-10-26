@@ -231,7 +231,7 @@ export async function createNewDraftExcelIntakePreview(actor: Actor, input: Crea
 
 export async function createRoundTripExcelIntakePreview(actor: Actor, input: CreateRoundTripPreviewInput): Promise<ActionablePreviewSessionView<RoundTripPreviewDisplay>> {
   if (!Number.isSafeInteger(input.sourceRevision) || input.sourceRevision < 1) throw new Error("Phiên bản nguồn không hợp lệ.");
-  const preview = await previewRoundTripMerge(actor, input.projectId, input.sourceBytes, { rebaseToCurrent: input.rebaseToCurrent });
+  const preview = await previewRoundTripMerge(actor, input.projectId, input.sourceBytes, { rebaseToCurrent: input.rebaseToCurrent, upload: { filename: input.sourceFilename, mimeType: input.sourceMimeType } });
   const payload: RoundTripCanonicalPayload = {
     expectedWorkspaceVersion: preview.workspaceVersion,
     expectedDraftVersion: preview.draft.version,

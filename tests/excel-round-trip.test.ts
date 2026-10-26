@@ -84,8 +84,12 @@ test("tampered hidden canonical binding blocks the affected stable row", async (
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(bytes);
   workbook.getWorksheet("_IMPORT")!.getCell("I3").value = "999999";
-  const imported = await parseRoundTripWorkbook(Buffer.from(await workbook.xlsx.writeBuffer()));
-  assert.throws(() => diffRoundTripDraft(draft, imported, "project-1"), /metadata|canonical|bảo vệ|đã bị sửa/i);
+  const imported = await parseRoundTripWorkbook(Buffer.from(await workbook.xlsx.writeBuffer()), { filename: "round-trip.xlsx", mimeType: "application/octet-stream" });
+  assert.throws(() => diffRoundTripDraft(draft, imported, "project-1"), error => {
+    assert.match((error as Error).message, /metadata|canonical|bảo vệ|đã bị sửa/i);
+    assert.deepEqual((error as Error & { diagnostic?: unknown }).diagnostic, { itemId: "item-1", field: "sell.unitPrice", sourceCell: "C8" });
+    return true;
+  });
 });
 
 test("round-trip workbook reopens with visible parity and veryHidden stable metadata", async () => {
@@ -193,5 +197,5 @@ test("round-trip parser rejects formulas in primitive cells before diffing", asy
   await workbook.xlsx.load(bytes);
   workbook.getWorksheet("BAO_GIA_IC")!.getCell("F8").value = { formula: "1+1", result: 2 };
   const forged = Buffer.from(await workbook.xlsx.writeBuffer());
-  await assert.rejects(() => parseRoundTripWorkbook(forged), /công thức/i);
+  await assert.rejects(() => parseRoundTripWorkbook(forged, { filename: "round-trip.xlsx", mimeType: "application/octet-stream" }), /công thức/i);
 });

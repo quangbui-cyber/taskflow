@@ -17,7 +17,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const sourceRevision = Number(form.get("sourceRevision") ?? "1");
     const sourceBytes = upload instanceof File && upload.size > 0 ? Buffer.from(await upload.arrayBuffer()) : null;
     const preview = sourceBytes
-      ? await previewWorkbookIntake(sourceBytes, { sheet, range }, upload instanceof File ? upload.type : undefined)
+      ? await previewWorkbookIntake(sourceBytes, { sheet, range }, { filename: upload instanceof File ? upload.name : "", mimeType: upload instanceof File ? upload.type : "" })
       : previewPastedIntake({ text: paste, sheet });
     const session = await createNewDraftExcelIntakePreview(actor, {
       projectId: id,

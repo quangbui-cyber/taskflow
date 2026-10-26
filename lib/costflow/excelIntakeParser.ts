@@ -1,7 +1,7 @@
 import ExcelJS from "exceljs";
 import { createHash } from "node:crypto";
 import { EXCEL_INTAKE_SCHEMA_VERSION, normalizeExcelIntake, type ExcelIntakeInput, type ExcelIntakePrimitiveCell, type ExcelIntakeRowInput, type NormalizedExcelIntake } from "./excelIntake";
-import { EXCEL_INTAKE_LIMITS, preflightExcelWorkbook } from "./excelIntakeSecurity";
+import { EXCEL_INTAKE_LIMITS, preflightExcelWorkbook, type ExcelWorkbookUpload } from "./excelIntakeSecurity";
 
 export type ExcelIntakeMapping = { sheet?: string; range?: string; headerRow?: number };
 export type ExcelIntakePreview = NormalizedExcelIntake & { fingerprint: string; adapter: "PASTE" | "STANDARD_V4" | "FAMILIAR_THREE_LEVEL"; confidence: number };
@@ -127,8 +127,8 @@ export function previewPastedIntake(input: { text: string; sheet?: string }): Ex
   const sheet = input.sheet || "DAN_BANG";
   return finish(buildInput(matrix, sheet, 1, "PASTE", `A1:${columnName(Math.max(...matrix.map(row => row.length)))}${matrix.length}`), "PASTE", 1);
 }
-export async function previewWorkbookIntake(bytes: Uint8Array, mapping: ExcelIntakeMapping = {}, mimeType?: string): Promise<ExcelIntakePreview> {
-  await preflightExcelWorkbook(bytes, mimeType);
+export async function previewWorkbookIntake(bytes: Uint8Array, mapping: ExcelIntakeMapping = {}, upload: ExcelWorkbookUpload = { filename: "workbook.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }): Promise<ExcelIntakePreview> {
+  await preflightExcelWorkbook(bytes, upload);
   const workbook = new ExcelJS.Workbook();
   const workbookBytes = Buffer.from(bytes);
   await workbook.xlsx.load(workbookBytes.buffer.slice(workbookBytes.byteOffset, workbookBytes.byteOffset + workbookBytes.byteLength) as ArrayBuffer);
