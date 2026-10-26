@@ -123,6 +123,14 @@ export function excelIntakeDiagnosticTargetId(issue: ExcelIntakeDiagnosticIdenti
   return parts.map(targetPart).join("-");
 }
 
+export function roundTripRowTargetId(itemId: string, field?: string, sourceCell?: string) {
+  return ["excel-round-trip-row", itemId, field, sourceCell].filter((value): value is string => Boolean(value)).map(targetPart).join("-");
+}
+
+export function roundTripAggregateTargetId(section: "subtree-delete" | "stale-draft") {
+  return `excel-round-trip-section-${section}`;
+}
+
 function issue(errors: ExcelIntakeBlockingError[], candidateKey: string, code: ExcelIntakeIssueCode, field: string, source: ExcelIntakeSourceCoordinate, message: string) {
   errors.push({ code, candidateKey, side: diagnosticSide(field), field, source, message, blocking: true });
 }

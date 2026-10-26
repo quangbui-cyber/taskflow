@@ -5,6 +5,7 @@ import { confirmRoundTripMergeAction, rebuildRoundTripPreviewAction } from "@/ap
 import type { RoundTripDiff } from "@/lib/costflow/excelRoundTrip";
 import type { PairedRow } from "@/lib/costflow/types";
 import { createExcelPreviewState, reduceExcelPreviewState } from "@/lib/costflow/excelPreviewState";
+import { excelIntakeDiagnosticTargetId, roundTripAggregateTargetId, roundTripRowTargetId } from "@/lib/costflow/excelIntake";
 import { Button } from "./ui/Button";
 import { Dialog } from "./ui/Dialog";
 import { Alert } from "./ui/Presentation";
@@ -41,8 +42,14 @@ export default function ExcelRoundTripDialog({ projectId, draftId, dirty, onAppl
   const [aggregateOpen, setAggregateOpen] = useState(false);
   const [stagedFile, setStagedFile] = useState<File | null>(null);
   const operationId = useRef(crypto.randomUUID());
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [focusTarget, setFocusTarget] = useState("");
 
   const close = () => setOpen(false);
+  const focusDiagnostic = (targetId: string) => {
+    setFocusTarget(targetId);
+    requestAnimationFrame(() => document.getElementById(targetId)?.focus());
+  };
   const acceptSession = (result: PreviewSession, revision = authority.sourceRevision) => {
     if (result.operationKind !== "ROUND_TRIP" || (result.display?.draft.id && result.display.draft.id !== draftId)) throw new Error("Phiên xem trước không thuộc nháp hiện tại.");
     setPreview(result);
@@ -96,8 +103,13 @@ export default function ExcelRoundTripDialog({ projectId, draftId, dirty, onAppl
         body.set("file", file);
         body.set("sourceRevision", String(revision));
         const response = await fetch(`/api/projects/${projectId}/costflow/excel-intake/round-trip/preview`, { method: "POST", body });
-        const result = await response.json() as PreviewSession & { error?: string };
-        if (!response.ok || result.error) throw new Error(result.error || "Không xem trước được workbook.");
+        const result = await response.json() as PreviewSession & { error?: string; diagnostic?: { itemId?: string; field?: string; sourceCell?: string; section?: "subtree-delete" | "stale-draft" } };
+        if (!response.ok || result.error) {
+          setError(result.error || "Không xem trước được workbook.");
+          if (result.diagnostic?.itemId) focusDiagnostic(roundTripRowTargetId(result.diagnostic.itemId, result.diagnostic.field, result.diagnostic.sourceCell));
+          else if (result.diagnostic?.section) focusDiagnostic(roundTripAggregateTargetId(result.diagnostic.section));
+          return;
+        }
         acceptSession(result, revision);
       } catch (reason) { const message = reason instanceof Error ? reason.message : "Không xem trước được workbook."; setError(message); authorityDispatch({ type: "RESPONSE_FAILED", sourceRevision: authority.sourceRevision, message }); }
     });
@@ -127,6 +139,7 @@ export default function ExcelRoundTripDialog({ projectId, draftId, dirty, onAppl
       if ("error" in result) {
         setStale(result.code === "STALE_DRAFT");
         setError(/thay đổi|đồng thời/i.test(result.error) ? `Nháp trên máy chủ đã thay đổi (server draft changed). ${result.error}` : result.error);
+        focusDiagnostic(result.code === "STALE_DRAFT" ? roundTripAggregateTargetId("stale-draft") : /dòng cha|dòng con|hậu duệ/i.test(result.error) ? roundTripAggregateTargetId("subtree-delete") : "excel-round-trip-summary");
         return;
       }
       setError("");
@@ -163,12 +176,13 @@ export default function ExcelRoundTripDialog({ projectId, draftId, dirty, onAppl
     window.addEventListener("focus", refreshStatus);
     return () => window.removeEventListener("focus", refreshStatus);
   }, [open, preview?.previewSessionId, projectId]);
+  useEffect(() => { if (!open) triggerRef.current?.focus(); }, [open]);
 
   return <div className="tf-round-trip-actions">
     <a className="tf-button-secondary tf-button-size-sm" aria-disabled={dirty || undefined} href={dirty ? undefined : `/api/projects/${projectId}/costflow/excel-intake/drafts/${draftId}`}>
       Xuất Excel
     </a>
-    <Button size="sm" variant="secondary" disabled={dirty} onClick={() => setOpen(true)}>Re-import Excel</Button>
+    <Button ref={triggerRef} size="sm" variant="secondary" disabled={dirty} onClick={() => setOpen(true)}>Re-import Excel</Button>
     {dirty && <span className="tf-ui-help">Lưu Worksheet trước khi xuất hoặc re-import.</span>}
     <Dialog open={open} onClose={close} title="Đối chiếu Excel round-trip" description="Máy chủ giữ authority; trình duyệt chỉ gửi lựa chọn xóa và mã phiên." className="tf-dialog-wide">
       <div className="tf-round-trip">
@@ -178,20 +192,21 @@ export default function ExcelRoundTripDialog({ projectId, draftId, dirty, onAppl
         <Button variant="secondary" onClick={resume} disabled={!resumeSessionId.trim()} loading={pending}>Mở phiên</Button>
         {preview && <p className="tf-ui-help">Phiên {preview.previewSessionId} · hết hạn {new Date(preview.expiresAt).toLocaleString("vi-VN")}</p>}
         <p className="tf-ui-help" aria-live="polite">{authority.notice}</p>
-        {error && <Alert tone="danger" title="Chưa thể áp dụng">{error}</Alert>}
-        {stale && <Button variant="secondary" onClick={rebuild} loading={pending}>Tạo lại diff với bản mới nhất</Button>}
+        {error && <Alert tone="danger" title="Chưa thể áp dụng">{focusTarget ? <button type="button" className="tf-link" onClick={() => focusDiagnostic(focusTarget)}>{error}</button> : error}</Alert>}
+        {stale && <section id={roundTripAggregateTargetId("stale-draft")} tabIndex={-1}><Button variant="secondary" onClick={rebuild} loading={pending}>Tạo lại diff với bản mới nhất</Button></section>}
         {success && <Alert tone="success" title="Đã cập nhật">{success}</Alert>}
         {preview?.state === "READ_ONLY_CONSUMED" && <Alert tone="success" title="Bản xem lại chỉ đọc">Phiên đã được áp dụng và không thể chạy lại. {preview.source && <a href={preview.source.downloadUrl}>Tải nguồn {preview.source.filename}</a>}</Alert>}
         {preview?.state.startsWith("NON_ACTIONABLE_") && <Alert tone="warning" title="Phiên không còn hiệu lực">Phiên đã hết hạn, bị thay thế hoặc bị hủy; payload xem trước đã được xóa.</Alert>}
         {authority.staleProjection && !authority.currentProjection && <Alert tone="warning" title="Không còn áp dụng">Bản diff cũ chỉ còn để đối chiếu và không thể áp dụng.</Alert>}
         {diff && <div className={`tf-round-trip-groups ${authority.staleProjection && !authority.currentProjection ? "opacity-60" : ""}`} aria-readonly={!actionable}>
-          {!!diff.decimalConflicts?.length && <section><h3>Xung đột số thập phân ({diff.decimalConflicts.length})</h3>{diff.decimalConflicts.map(conflict => <fieldset key={conflict.conflictId} disabled={!actionable}><legend>{conflict.field} · ô {conflict.source.cell}</legend><p>Hiển thị: {conflict.visible} · chính xác: {conflict.canonical}</p><label><input type="radio" name={conflict.conflictId} checked={decimalResolutions[conflict.conflictId] === "VISIBLE"} onChange={() => authorityDispatch({ type: "SET_DECIMAL_RESOLUTION", key: conflict.conflictId, value: "VISIBLE" })} /> Dùng giá trị hiển thị</label><label><input type="radio" name={conflict.conflictId} checked={decimalResolutions[conflict.conflictId] === "CANONICAL"} onChange={() => authorityDispatch({ type: "SET_DECIMAL_RESOLUTION", key: conflict.conflictId, value: "CANONICAL" })} /> Giữ giá trị chính xác</label></fieldset>)}</section>}
+          {!!diff.decimalConflicts?.length && <section><h3>Xung đột số thập phân ({diff.decimalConflicts.length})</h3>{diff.decimalConflicts.map(conflict => <fieldset id={excelIntakeDiagnosticTargetId({ ...conflict, conflictId: conflict.conflictId })} tabIndex={-1} key={conflict.conflictId} disabled={!actionable}><legend>{conflict.field} · ô {conflict.source.cell}</legend><p>Hiển thị: {conflict.visible} · chính xác: {conflict.canonical}</p><label><input type="radio" name={conflict.conflictId} checked={decimalResolutions[conflict.conflictId] === "VISIBLE"} onChange={() => authorityDispatch({ type: "SET_DECIMAL_RESOLUTION", key: conflict.conflictId, value: "VISIBLE" })} /> Dùng giá trị hiển thị</label><label><input type="radio" name={conflict.conflictId} checked={decimalResolutions[conflict.conflictId] === "CANONICAL"} onChange={() => authorityDispatch({ type: "SET_DECIMAL_RESOLUTION", key: conflict.conflictId, value: "CANONICAL" })} /> Giữ giá trị chính xác</label></fieldset>)}</section>}
+          <section><h3>Dòng ổn định</h3>{diff.mergedRows.map(row => <article id={roundTripRowTargetId(row.itemId)} tabIndex={-1} key={row.itemId} className="excel-intake-row-card"><strong>{row.name || row.description || row.itemId}</strong></article>)}</section>
           <section><h3>Thêm mới ({diff.adds.length})</h3>{diff.adds.map(row => <p key={row.previewKey}>{row.row.name || "Dòng mới"} · ô {row.source.cell}</p>)}</section>
-          <section><h3>Thay đổi ({diff.changes.length})</h3>{diff.changes.map((change, index) => <p key={`${change.itemId}-${change.field}-${index}`}><strong>{change.field}</strong>: {String(change.oldValue) || "—"} → {String(change.newValue) || "—"} · ô {change.source.cell}</p>)}</section>
+          <section><h3>Thay đổi ({diff.changes.length})</h3>{diff.changes.map((change, index) => <p id={roundTripRowTargetId(change.itemId, change.field, change.source.cell)} tabIndex={-1} key={`${change.itemId}-${change.field}-${index}`}><strong>{change.field}</strong>: {String(change.oldValue) || "—"} → {String(change.newValue) || "—"} · ô {change.source.cell}</p>)}</section>
           <section><h3>Di chuyển ({diff.moves.length})</h3>{diff.moves.map(move => <p key={move.itemId}>{move.itemId}: {move.oldParentItemId || "Gốc"} → {move.newParentItemId || "Gốc"} · ô {move.source.cell}</p>)}</section>
-          <section><h3>Dòng có thể xóa ({diff.deletionCandidates.length})</h3><p className="tf-ui-help">Mặc định không xóa. Chỉ dòng được chọn dưới đây mới bị xóa.</p><Button size="sm" variant="secondary" disabled={!actionable || diff.deletionCandidates.length === 0} onClick={() => authorityDispatch({ type: "SET_DELETIONS", ids: diff.deletionCandidates.map(row => row.itemId) })}>Chọn tất cả</Button>{diff.deletionCandidates.map(row => <label key={row.itemId}><input type="checkbox" disabled={!actionable} checked={selectedDeletionIds.includes(row.itemId)} onChange={event => authorityDispatch({ type: "SET_DELETIONS", ids: event.target.checked ? [...selectedDeletionIds, row.itemId] : selectedDeletionIds.filter(id => id !== row.itemId) })} /> {row.name}</label>)}</section>
+          <section id={roundTripAggregateTargetId("subtree-delete")} tabIndex={-1}><h3>Dòng có thể xóa ({diff.deletionCandidates.length})</h3><p className="tf-ui-help">Mặc định không xóa. Chỉ dòng được chọn dưới đây mới bị xóa.</p><Button size="sm" variant="secondary" disabled={!actionable || diff.deletionCandidates.length === 0} onClick={() => authorityDispatch({ type: "SET_DELETIONS", ids: diff.deletionCandidates.map(row => row.itemId) })}>Chọn tất cả</Button>{diff.deletionCandidates.map(row => <label key={row.itemId}><input type="checkbox" disabled={!actionable} checked={selectedDeletionIds.includes(row.itemId)} onChange={event => authorityDispatch({ type: "SET_DELETIONS", ids: event.target.checked ? [...selectedDeletionIds, row.itemId] : selectedDeletionIds.filter(id => id !== row.itemId) })} /> {row.name}</label>)}</section>
           {deletionNames.length > 0 && <Alert tone="warning" title="Xác nhận xóa">Sẽ xóa: {deletionNames.join(", ")}. Các dòng chưa chọn vẫn được giữ nguyên.</Alert>}
-          <div className="tf-round-trip-summary">Tổng mới được máy chủ tính lại. Thêm {diff.adds.length}, sửa {diff.changes.length}, di chuyển {diff.moves.length}, xác nhận xóa {selectedDeletionIds.length}.</div>
+          <div id="excel-round-trip-summary" tabIndex={-1} className="tf-round-trip-summary">Tổng mới được máy chủ tính lại. Thêm {diff.adds.length}, sửa {diff.changes.length}, di chuyển {diff.moves.length}, xác nhận xóa {selectedDeletionIds.length}.</div>
           <Button onClick={() => selectedDeletionIds.length > 0 && !aggregateDeletionConfirmed ? setAggregateOpen(true) : apply()} loading={pending} disabled={!actionable || unresolvedDecimals > 0}>Áp dụng thay đổi đã chọn</Button>
         </div>}
       </div>
