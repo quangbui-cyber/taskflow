@@ -155,3 +155,99 @@ test("opaque new-draft session is atomic, durable and reviewable", { skip: !proc
     await prisma.$disconnect();
   }
 });
+
+test("exact cancellation and newest-successful scope revoke stale authority", { skip: !process.env.COSTFLOW_TEST_DATABASE_URL }, async () => {
+  assert.equal(process.env.COSTFLOW_TEST_DATABASE_URL, CANONICAL_URL);
+  process.env.DATABASE_URL = CANONICAL_URL;
+  const { prisma } = await import("../lib/prisma");
+  const {
+    cancelExcelIntakePreviewSession,
+    confirmExcelIntake,
+    createExcelIntakePreviewSession,
+    createNewDraftExcelIntakePreview,
+    getExcelIntakePreviewSessionView,
+  } = await import("../lib/costflow/excelIntakeService");
+  const prefix = `excel-revision-${randomUUID()}`;
+  const projectIds: string[] = [];
+  const userIds: string[] = [];
+  try {
+    const actor = await prisma.user.create({ data: { name: prefix, email: `${prefix}@example.test`, passwordHash: "unused", role: "ACCOUNT" } });
+    const outsider = await prisma.user.create({ data: { name: `${prefix}-out`, email: `${prefix}-out@example.test`, passwordHash: "unused", role: "ACCOUNT" } });
+    userIds.push(actor.id, outsider.id);
+    const project = await prisma.project.create({ data: { name: prefix, ownerId: actor.id, members: { create: { userId: actor.id } } } });
+    const otherProject = await prisma.project.create({ data: { name: `${prefix}-other`, ownerId: outsider.id, members: { create: { userId: outsider.id } } } });
+    projectIds.push(project.id, otherProject.id);
+    const preview = previewPastedIntake({
+      sheet: "DATA",
+      text: "LEVEL\tROW_TYPE\tPARENT_ROW\tNAME\tDESCRIPTION\tSELL_QUANTITY\tSELL_DAYS\tSELL_UNIT_PRICE\tSELL_VAT\tBUY_QUANTITY\tBUY_DAYS\tBUY_UNIT_PRICE\tBUY_VAT\n+1\tITEM\t\tA\t\t1\t1\t100\t0\t1\t1\t50\t0",
+    });
+
+    const cancelledA = await createNewDraftExcelIntakePreview({ id: actor.id, role: "ACCOUNT" }, {
+      projectId: project.id, preview, sourceKind: "PASTE", sourceRevision: 1, sourceText: "A",
+    });
+    await assert.rejects(() => cancelExcelIntakePreviewSession({ id: outsider.id, role: "ACCOUNT" }, project.id, cancelledA.previewSessionId), /không tìm thấy|quyền/i);
+    await assert.rejects(() => cancelExcelIntakePreviewSession({ id: actor.id, role: "ACCOUNT" }, otherProject.id, cancelledA.previewSessionId), /không tìm thấy|quyền/i);
+    const cancelled = await cancelExcelIntakePreviewSession({ id: actor.id, role: "ACCOUNT" }, project.id, cancelledA.previewSessionId);
+    assert.equal(cancelled.state, "NON_ACTIONABLE_CANCELLED");
+    assert.equal((await cancelExcelIntakePreviewSession({ id: actor.id, role: "ACCOUNT" }, project.id, cancelledA.previewSessionId)).state, "NON_ACTIONABLE_CANCELLED");
+    const cancelledRow = await prisma.excelIntakePreviewSession.findUniqueOrThrow({ where: { id: cancelledA.previewSessionId } });
+    assert.equal(cancelledRow.canonicalPayload, null);
+    assert.equal(cancelledRow.displayPayload, null);
+    assert.equal(cancelledRow.sourceBytes, null);
+
+    const before = await Promise.all([
+      prisma.costFlowWorkspace.count({ where: { projectId: project.id } }),
+      prisma.costFlowHistory.count({ where: { projectId: project.id } }),
+      prisma.excelIntakeOperationReceipt.count({ where: { projectId: project.id } }),
+      prisma.excelIntakeSourceEvidence.count({ where: { projectId: project.id } }),
+    ]);
+    await assert.rejects(() => confirmExcelIntake({ id: actor.id, role: "ACCOUNT" }, {
+      projectId: project.id, previewSessionId: cancelledA.previewSessionId, expectedVersion: 0,
+      idempotencyKey: `${prefix}:cancelled`, corrections: {}, decimalResolutions: {},
+    }), /không còn hiệu lực/i);
+    assert.deepEqual(await Promise.all([
+      prisma.costFlowWorkspace.count({ where: { projectId: project.id } }),
+      prisma.costFlowHistory.count({ where: { projectId: project.id } }),
+      prisma.excelIntakeOperationReceipt.count({ where: { projectId: project.id } }),
+      prisma.excelIntakeSourceEvidence.count({ where: { projectId: project.id } }),
+    ]), before);
+    // A replacement parse can fail before session creation; explicit cancellation is final.
+    await assert.rejects(async () => { throw new Error("B parse failed"); }, /B parse failed/);
+    assert.equal((await getExcelIntakePreviewSessionView({ id: actor.id, role: "ACCOUNT" }, project.id, cancelledA.previewSessionId)).state, "NON_ACTIONABLE_CANCELLED");
+
+    const activeA = await createNewDraftExcelIntakePreview({ id: actor.id, role: "ACCOUNT" }, {
+      projectId: project.id, preview, sourceKind: "PASTE", sourceRevision: 2, sourceText: "active-A",
+    });
+    // A failed preview without explicit cancellation creates no session and leaves A actionable.
+    await assert.rejects(async () => { throw new Error("B parse failed"); }, /B parse failed/);
+    assert.equal((await getExcelIntakePreviewSessionView({ id: actor.id, role: "ACCOUNT" }, project.id, activeA.previewSessionId)).state, "ACTIONABLE");
+    const activeB = await createNewDraftExcelIntakePreview({ id: actor.id, role: "ACCOUNT" }, {
+      projectId: project.id, preview, sourceKind: "PASTE", sourceRevision: 3, sourceText: "active-B",
+    });
+    assert.equal((await getExcelIntakePreviewSessionView({ id: actor.id, role: "ACCOUNT" }, project.id, activeA.previewSessionId)).state, "NON_ACTIONABLE_SUPERSEDED");
+    assert.equal((await getExcelIntakePreviewSessionView({ id: actor.id, role: "ACCOUNT" }, project.id, activeB.previewSessionId)).state, "ACTIONABLE");
+
+    const sessionSeed = { projectId: project.id, actorId: actor.id, operationKind: "ROUND_TRIP" as const, sourceKind: "XLSX" as const, sourceRevision: 1, sourceSha256: "a".repeat(64), sourceFilename: "round-trip.xlsx", sourceBytes: Buffer.from("PK"), canonicalFingerprint: "b".repeat(64), canonicalPayload: { ok: true }, displayPayload: { ok: true } };
+    const [draftOneA, draftTwoA] = await prisma.$transaction(async tx => [
+      await createExcelIntakePreviewSession(tx, { ...sessionSeed, draftId: `${prefix}-draft-1` }),
+      await createExcelIntakePreviewSession(tx, { ...sessionSeed, draftId: `${prefix}-draft-2` }),
+    ]);
+    const draftOneB = await prisma.$transaction(tx => createExcelIntakePreviewSession(tx, { ...sessionSeed, sourceRevision: 2, draftId: `${prefix}-draft-1` }));
+    assert.equal((await prisma.excelIntakePreviewSession.findUniqueOrThrow({ where: { id: draftOneA.id } })).status, "SUPERSEDED");
+    assert.equal((await prisma.excelIntakePreviewSession.findUniqueOrThrow({ where: { id: draftOneB.id } })).status, "ACTIVE");
+    assert.equal((await prisma.excelIntakePreviewSession.findUniqueOrThrow({ where: { id: draftTwoA.id } })).status, "ACTIVE");
+  } finally {
+    if (projectIds.length) {
+      await prisma.excelIntakePreviewSession.updateMany({ where: { projectId: { in: projectIds } }, data: { receiptId: null } });
+      await prisma.excelIntakeSourceEvidence.deleteMany({ where: { projectId: { in: projectIds } } });
+      await prisma.excelIntakeOperationReceipt.deleteMany({ where: { projectId: { in: projectIds } } });
+      await prisma.excelIntakePreviewSession.deleteMany({ where: { projectId: { in: projectIds } } });
+      await prisma.costFlowHistory.deleteMany({ where: { projectId: { in: projectIds } } });
+      await prisma.costFlowWorkspace.deleteMany({ where: { projectId: { in: projectIds } } });
+      await prisma.projectMember.deleteMany({ where: { projectId: { in: projectIds } } });
+      await prisma.project.deleteMany({ where: { id: { in: projectIds } } });
+    }
+    if (userIds.length) await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    await prisma.$disconnect();
+  }
+});
