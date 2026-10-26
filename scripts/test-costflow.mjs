@@ -16,6 +16,7 @@ if (integration) {
 }
 
 const phase10GapSuites = [
+  "tests/costflow-settlement-schema.test.mjs",
   "tests/costflow-export-sealing.integration.test.mjs",
   "tests/costflow-phase10-runtime.integration.test.mjs",
   "tests/costflow-phase10-http.integration.test.mjs",

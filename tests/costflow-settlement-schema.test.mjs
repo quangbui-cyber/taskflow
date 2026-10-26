@@ -12,6 +12,8 @@ const migrationName = "20261012090000_phase10_gap_contracts";
 const migrationPath = path.join(root, "prisma/migrations", migrationName, "migration.sql");
 const latestMigrationName = "20261012100000_phase10_draft_manifest_hash";
 const latestMigrationPath = path.join(root, "prisma/migrations", latestMigrationName, "migration.sql");
+const integrityMigrationName = "20261026230000_export_projection_project_integrity";
+const integrityMigrationPath = path.join(root, "prisma/migrations", integrityMigrationName, "migration.sql");
 const baselineMigrationPath = path.join(root, "prisma/migrations/20261011090000_phase10_settlement_dossier/migration.sql");
 const baselineTables = [
   "ProjectSettlementDossier",
@@ -135,6 +137,7 @@ test("Phase 10 gap migrations preserve their strict internal order", () => {
   const names = migrationNames();
   assert.ok(names.includes(latestMigrationName));
   assert.ok(names.indexOf(latestMigrationName) > names.indexOf(migrationName));
+  assert.ok(names.indexOf(integrityMigrationName) > names.indexOf(latestMigrationName));
   assert.equal(new Set(names).size, names.length);
 });
 
@@ -150,6 +153,7 @@ test("schema keeps settlement lock separate from producer lifecycle state", () =
 test("migration enforces provenance, idempotency, replacement, and append-only audit constraints", () => {
   const sql = readFileSync(migrationPath, "utf8");
   const latestSql = readFileSync(latestMigrationPath, "utf8");
+  const integritySql = readFileSync(integrityMigrationPath, "utf8");
   const baselineSql = readFileSync(baselineMigrationPath, "utf8");
   for (const table of gapTables) assert.match(sql, new RegExp(`CREATE TABLE "${table}"`));
   assert.match(baselineSql, /SettlementLock_source_xor_check/);
@@ -162,6 +166,8 @@ test("migration enforces provenance, idempotency, replacement, and append-only a
   assert.match(sql, /SettlementExportAudit_file_sha256_check/);
   assert.match(latestSql, /ProjectSettlementVersion_source_manifest_hash_check/);
   assert.match(latestSql, /approvedAttemptId[\s\S]*?approvedSnapshotId[\s\S]*?approvedProjectionHash/);
+  assert.match(integritySql, /cross-project dossier links exist/);
+  assert.match(integritySql, /FOREIGN KEY \("dossierVersionId", "projectId"\)[\s\S]*?REFERENCES "ProjectSettlementVersion"\("id", "projectId"\)/);
   assert.doesNotMatch(sql, /ON DELETE CASCADE/);
   assert.doesNotMatch(sql, /UPDATE "(?:ActualCostApplication|AdvanceApplication)"[\s\S]*?SET[\s\S]*?SETTLED/i);
 });
@@ -199,8 +205,10 @@ test("complete migration chain applies to a disposable schema and reads back Pha
       "SettlementLock_advance_cash_check",
       "ProjectSettlementVersion_supersedesId_fkey",
       "SettlementExportAudit_approvedSnapshotId_fkey",
+      "SettlementExportProjection_dossier_project_fkey",
     ]) assert.ok(byName.has(name), `missing ${name}`);
     assert.match(byName.get("ProjectSettlementVersion_supersedesId_fkey").definition, /ON DELETE RESTRICT/);
+    assert.match(byName.get("SettlementExportProjection_dossier_project_fkey").definition, /FOREIGN KEY \("dossierVersionId", "projectId"\)/);
   } finally {
     await admin.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
     await admin.$disconnect();

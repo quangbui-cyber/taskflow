@@ -2040,7 +2040,7 @@ model SettlementExportSourceProjection {
   projectId          String
   project            Project                   @relation(fields: [projectId], references: [id], onDelete: Restrict)
   dossierVersionId   String?
-  dossierVersion     ProjectSettlementVersion? @relation(fields: [dossierVersionId], references: [id], onDelete: Restrict)
+  dossierVersion     ProjectSettlementVersion? @relation(fields: [dossierVersionId, projectId], references: [id, projectId], onDelete: Restrict, map: "SettlementExportProjection_dossier_project_fkey")
   family             String
   sourceKind         String
   sourceId           String

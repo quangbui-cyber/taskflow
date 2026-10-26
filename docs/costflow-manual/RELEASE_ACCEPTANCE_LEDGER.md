@@ -15,7 +15,7 @@
 | Phase 3.1 — PAIR-01..23 | `PASS` at app commit `7cd812d` | `PENDING` for exact role flow | `PENDING` | `PENDING` for 390px, IME and real workbook | `PENDING` | `human_needed` |
 | Phase 5 — APR-01..08 | `PASS` on 2026-10-26, 17/17 focused checks | `PENDING` | `PENDING` | n/a | `PENDING` | `human_needed` |
 | Phase 8 — CST-01..05 / Bảng AC | `PASS` for the registered contract and integration scope; direct sheet suite remains disposable-schema-only | `PENDING` | `PENDING` in the combined batch below | `PENDING` for native XLSX/PDF reconciliation | `PENDING` | `human_needed` |
-| Phase 10 — SET-01..06 | `GAPS_FOUND` on 2026-10-26: runtime/DB/HTTP paths passed, but a non-null dossier version can still be linked to a different project at the DB layer after the export-identity migration | `PENDING` | `PENDING` | `PENDING` for all six native XLSX/PDF families | `PENDING` | `gaps_found` |
+| Phase 10 — SET-01..06 | `PASS` on 2026-10-26 after Plan 10-17 restored the composite dossier-version/Project FK and registered its verifier | `PENDING` | `PENDING` | `PENDING` for all six native XLSX/PDF families | `PENDING` | `human_needed` |
 | Phase 12 — CFP-01..03 / Plan 08 | release packet and fail-closed gate exist; final rerun recorded in `12-08-SUMMARY.md` | prior read-only local smoke only | `PENDING` | `PENDING` | four named sign-offs `PENDING` | `NOT_READY` |
 | Phase 14 — SUP/VAT | automated technical closure recorded by Phase 14 | `PENDING` | `PENDING` in the combined batch below | n/a unless an exported file is inspected | `PENDING` | `human_needed` |
 
@@ -48,4 +48,4 @@ The canonical named-role form remains `RELEASE_SIGN_OFF.md`. `EV-SIGN-HUY`, `EV-
 
 ## Promotion rule
 
-`RELEASE_VERDICT` may become `READY` only when the unresolved technical blocker is closed, all applicable production/native/company slots contain exact evidence, and each named human fills their own sign-off row. Until then it remains `NOT_READY`.
+`RELEASE_VERDICT` may become `READY` only when all applicable production/native/company slots contain exact evidence and each named human fills their own sign-off row. Until then it remains `NOT_READY`.
