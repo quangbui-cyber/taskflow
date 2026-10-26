@@ -72,6 +72,7 @@ model User {
   excelIntakePreviewSessions         ExcelIntakePreviewSession[]     @relation("ExcelIntakePreviewActor")
   excelIntakeOperationReceipts       ExcelIntakeOperationReceipt[]   @relation("ExcelIntakeReceiptActor")
   excelIntakeSourceEvidence          ExcelIntakeSourceEvidence[]     @relation("ExcelIntakeEvidenceActor")
+  excelIntakePreviewAuthorities      ExcelIntakePreviewAuthority[]   @relation("ExcelIntakeAuthorityActor")
   organizedMeetings                  Meeting[]                      @relation("MeetingOrganizer")
   meetingInvites                     MeetingAttendee[]
   kpiPlanChanges                     KpiPlanChange[]
@@ -174,6 +175,7 @@ model Project {
   excelIntakePreviewSessions    ExcelIntakePreviewSession[]
   excelIntakeOperationReceipts  ExcelIntakeOperationReceipt[]
   excelIntakeSourceEvidence     ExcelIntakeSourceEvidence[]
+  excelIntakePreviewAuthorities ExcelIntakePreviewAuthority[]
 
   @@index([status, onProcessAt])
   @@index([status, completedAt])
@@ -909,6 +911,24 @@ model ExcelIntakePreviewSession {
   @@index([expiresAt, status])
   @@index([draftId])
   @@index([sourceSha256])
+}
+
+// Monotonic scope epoch reserved before expensive parsing. Only the request
+// holding the current generation may publish an actionable preview session.
+model ExcelIntakePreviewAuthority {
+  id            String   @id @default(cuid())
+  projectId     String
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  actorId       String
+  actor         User     @relation("ExcelIntakeAuthorityActor", fields: [actorId], references: [id], onDelete: Restrict)
+  operationKind String
+  scopeKey      String
+  generation    Int      @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([projectId, actorId, operationKind, scopeKey])
+  @@index([actorId, updatedAt])
 }
 
 // Durable replay record. No TTL/count eviction exists; lifecycle follows the

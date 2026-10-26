@@ -151,6 +151,7 @@ test("opaque new-draft session is atomic, durable and reviewable", { skip: !proc
       await prisma.excelIntakeSourceEvidence.deleteMany({ where: { projectId: { in: projectIds } } });
       await prisma.excelIntakeOperationReceipt.deleteMany({ where: { projectId: { in: projectIds } } });
       await prisma.excelIntakePreviewSession.deleteMany({ where: { projectId: { in: projectIds } } });
+      await prisma.excelIntakePreviewAuthority.deleteMany({ where: { projectId: { in: projectIds } } });
       await prisma.costFlowHistory.deleteMany({ where: { projectId: { in: projectIds } } });
       await prisma.costFlowWorkspace.deleteMany({ where: { projectId: { in: projectIds } } });
       await prisma.projectMember.deleteMany({ where: { projectId: { in: projectIds } } });
@@ -165,6 +166,38 @@ test("opaque new-draft session is atomic, durable and reviewable", { skip: !proc
       prisma.user.count({ where: { id: { in: userIds } } }),
     ]), [0, 0, 0, 0, 0]);
     await prisma.$disconnect();
+  }
+});
+
+test("server generation rejects late completion and cancellation prevents resurrection", { skip: !process.env.COSTFLOW_TEST_DATABASE_URL }, async () => {
+  assert.equal(process.env.COSTFLOW_TEST_DATABASE_URL, CANONICAL_URL);
+  process.env.DATABASE_URL = CANONICAL_URL;
+  const { prisma } = await import("../lib/prisma");
+  const { cancelExcelIntakePreviewSession, createNewDraftExcelIntakePreview, reserveExcelIntakePreviewGeneration } = await import("../lib/costflow/excelIntakeService");
+  const prefix = `phase31-gap-generation-${randomUUID()}`;
+  const actor = await prisma.user.create({ data: { name: prefix, email: `${prefix}@example.test`, passwordHash: "unused", role: "ACCOUNT" } });
+  const project = await prisma.project.create({ data: { name: prefix, ownerId: actor.id, members: { create: { userId: actor.id } } } });
+  const preview = previewPastedIntake({ sheet: "DAN_BANG", text: "LEVEL\tROW_TYPE\tPARENT_ROW\tNAME\tDESCRIPTION\tSELL_UNIT\tSELL_QUANTITY\tSELL_DAYS\tSELL_UNIT_PRICE\tSELL_VAT\tSELL_BASIS\tSELL_NOTE\tBUY_UNIT\tBUY_QUANTITY\tBUY_DAYS\tBUY_UNIT_PRICE\tBUY_VAT\tBUY_BASIS\tSUPPLIER\tBUY_NOTE\n1\tITEM\t\tHạng mục\t\tgói\t1\t1\t1000\t8\tNET\t\tgói\t1\t1\t500\t8\tNET\tNCC\tNội bộ" });
+  const input = { projectId: project.id, preview, sourceKind: "PASTE" as const, sourceRevision: 1, sourceText: "source" };
+  try {
+    const generationA = await reserveExcelIntakePreviewGeneration({ id: actor.id, role: "ACCOUNT" }, project.id, "NEW_DRAFT");
+    const generationB = await reserveExcelIntakePreviewGeneration({ id: actor.id, role: "ACCOUNT" }, project.id, "NEW_DRAFT");
+    await assert.rejects(() => createNewDraftExcelIntakePreview({ id: actor.id, role: "ACCOUNT" }, input, generationA), /nguồn mới hơn|thay thế/i);
+    const current = await createNewDraftExcelIntakePreview({ id: actor.id, role: "ACCOUNT" }, input, generationB);
+    assert.equal(current.state, "ACTIONABLE");
+    await cancelExcelIntakePreviewSession({ id: actor.id, role: "ACCOUNT" }, project.id, current.previewSessionId);
+    await assert.rejects(() => createNewDraftExcelIntakePreview({ id: actor.id, role: "ACCOUNT" }, input, generationB), /nguồn mới hơn|thay thế/i);
+    assert.equal(await prisma.excelIntakePreviewSession.count({ where: { projectId: project.id, status: "ACTIVE" } }), 0);
+    const draftOne = await reserveExcelIntakePreviewGeneration({ id: actor.id, role: "ACCOUNT" }, project.id, "ROUND_TRIP", `${prefix}-draft-1`);
+    const draftTwo = await reserveExcelIntakePreviewGeneration({ id: actor.id, role: "ACCOUNT" }, project.id, "ROUND_TRIP", `${prefix}-draft-2`);
+    const draftOneNext = await reserveExcelIntakePreviewGeneration({ id: actor.id, role: "ACCOUNT" }, project.id, "ROUND_TRIP", `${prefix}-draft-1`);
+    assert.deepEqual([draftOne.generation, draftTwo.generation, draftOneNext.generation], [1, 1, 2]);
+  } finally {
+    await prisma.excelIntakePreviewSession.deleteMany({ where: { projectId: project.id } });
+    await prisma.excelIntakePreviewAuthority.deleteMany({ where: { projectId: project.id } });
+    await prisma.projectMember.deleteMany({ where: { projectId: project.id } });
+    await prisma.project.delete({ where: { id: project.id } });
+    await prisma.user.delete({ where: { id: actor.id } });
   }
 });
 
@@ -254,6 +287,7 @@ test("exact cancellation and newest-successful scope revoke stale authority", { 
       await prisma.excelIntakeSourceEvidence.deleteMany({ where: { projectId: { in: projectIds } } });
       await prisma.excelIntakeOperationReceipt.deleteMany({ where: { projectId: { in: projectIds } } });
       await prisma.excelIntakePreviewSession.deleteMany({ where: { projectId: { in: projectIds } } });
+      await prisma.excelIntakePreviewAuthority.deleteMany({ where: { projectId: { in: projectIds } } });
       await prisma.costFlowHistory.deleteMany({ where: { projectId: { in: projectIds } } });
       await prisma.costFlowWorkspace.deleteMany({ where: { projectId: { in: projectIds } } });
       await prisma.projectMember.deleteMany({ where: { projectId: { in: projectIds } } });

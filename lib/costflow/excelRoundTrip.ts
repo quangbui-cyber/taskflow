@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import ExcelJS from "exceljs";
 import { prisma } from "@/lib/prisma";
 import { preflightExcelWorkbook, type ExcelWorkbookUpload } from "./excelIntakeSecurity";
-import { blankPairedRow, hydrateLinePricingData, normalizePairedRows } from "./pairedDraft";
+import { blankPairedRow, hydrateLinePricingData, normalizePairedRows, validatePairedRowPrimitives } from "./pairedDraft";
 import { pricedTotal } from "./pairedPricing";
 import type { FinanceData, PairedDraft, PairedRow } from "./types";
 import type { ExcelDecimalConflict } from "./excelIntake";
@@ -297,7 +297,18 @@ export function applyRoundTripDiff(draft: PairedDraft, diff: RoundTripDiff, sele
     }
   }
   const retainedMissing = draft.rows.filter(row => candidates.has(row.itemId) && !selected.has(row.itemId)).map(row => structuredClone(row));
-  const provisional = [...diff.mergedRows.map(row => structuredClone(row)), ...retainedMissing];
+  const provisional = diff.mergedRows.map(row => structuredClone(row));
+  const explicitlyMoved = new Set(diff.moves.map(move => move.itemId));
+  for (const missing of retainedMissing) {
+    const originalIndex = draft.rows.findIndex(row => row.itemId === missing.itemId);
+    const nextAnchor = draft.rows.slice(originalIndex + 1).find(row => row.parentItemId === missing.parentItemId && !candidates.has(row.itemId) && !explicitlyMoved.has(row.itemId));
+    const previousAnchor = [...draft.rows.slice(0, originalIndex)].reverse().find(row => row.parentItemId === missing.parentItemId && !candidates.has(row.itemId) && !explicitlyMoved.has(row.itemId));
+    const nextIndex = nextAnchor ? provisional.findIndex(row => row.itemId === nextAnchor.itemId) : -1;
+    const previousIndex = previousAnchor ? provisional.findIndex(row => row.itemId === previousAnchor.itemId) : -1;
+    if (nextIndex >= 0) provisional.splice(nextIndex, 0, missing);
+    else if (previousIndex >= 0) provisional.splice(previousIndex + 1, 0, missing);
+    else provisional.push(missing);
+  }
   const newIds = new Map(provisional.filter(row => row.itemId.startsWith("preview-new-")).map(row => [row.itemId, randomUUID()]));
   const applied = provisional.map(row => ({ ...row, itemId: newIds.get(row.itemId) ?? row.itemId, parentItemId: row.parentItemId ? newIds.get(row.parentItemId) ?? row.parentItemId : null }));
   for (const row of applied) {
@@ -312,7 +323,7 @@ export function applyRoundTripDiff(draft: PairedDraft, diff: RoundTripDiff, sele
       })) row[side].parameterBinding = { ...binding, mode: "OVERRIDDEN" };
     }
   }
-  normalizePairedRows(structuredClone(applied));
+  validatePairedRowPrimitives(normalizePairedRows(applied));
   return applied;
 }
 

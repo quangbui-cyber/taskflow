@@ -1,4 +1,4 @@
-import { compare, decimal, normalizeDecimalInput } from "./money";
+import { calculateLineCost, compare, decimal, normalizeDecimalInput } from "./money";
 import { normalizeParameterBinding } from "./quotationParameters";
 import type { FinanceData, IcRevision, PairedDraft, PairedRow, PairedSide, Quotation } from "./types";
 
@@ -58,6 +58,21 @@ export function normalizePairedRows(input: unknown): PairedRow[] {
       visited.add(parent); parent = rows.find(r => r.itemId === parent)!.parentItemId;
     }
     if (row.rowType !== "GROUP" && rows.some(child => child.parentItemId === row.itemId) && (row.buy.unitPrice || row.buy.evidenceIds.length || row.buy.evidenceReason)) throw new Error(`Hạng mục ${row.name || row.itemId} đang có chi phí riêng. Giữ nó là dòng chi phí; chọn một nhóm cha riêng để tránh cộng trùng.`);
+  }
+  return rows;
+}
+
+export function validatePairedRowPrimitives(rows: PairedRow[]): PairedRow[] {
+  for (const row of rows) {
+    if (row.rowType === "GROUP") continue;
+    for (const side of [row.sell, row.buy]) {
+      if (side.quantity && compare(decimal(side.quantity), decimal("0")) <= 0) throw new Error("Số lượng phải lớn hơn 0.");
+      if (side.days && compare(decimal(side.days), decimal("0")) <= 0) throw new Error("Số ngày phải lớn hơn 0.");
+      if (side.unitPrice && compare(decimal(side.unitPrice), decimal("0")) < 0) throw new Error("Đơn giá không được âm.");
+      if (side.vatPercent && (compare(decimal(side.vatPercent), decimal("0")) < 0 || compare(decimal(side.vatPercent), decimal("100")) > 0)) throw new Error("VAT phải từ 0 đến 100.");
+      if (side.unitPrice === "0" && !side.notes.trim()) throw new Error("Dòng FOC có đơn giá 0 phải kèm ghi chú.");
+      if (side.quantity && side.days && side.unitPrice && side.vatPercent) calculateLineCost(side);
+    }
   }
   return rows;
 }

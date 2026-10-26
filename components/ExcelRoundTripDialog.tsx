@@ -101,6 +101,7 @@ export default function ExcelRoundTripDialog({ projectId, draftId, dirty, onAppl
         authorityDispatch({ type: "REQUEST_STARTED", sourceRevision: revision });
         const body = new FormData();
         body.set("file", file);
+        body.set("draftId", draftId);
         body.set("sourceRevision", String(revision));
         const response = await fetch(`/api/projects/${projectId}/costflow/excel-intake/round-trip/preview`, { method: "POST", body });
         const result = await response.json() as PreviewSession & { error?: string; diagnostic?: { itemId?: string; field?: string; sourceCell?: string; section?: "subtree-delete" | "stale-draft" } };

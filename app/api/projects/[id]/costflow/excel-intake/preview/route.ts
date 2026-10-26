@@ -1,6 +1,6 @@
 import { getCurrentUser } from "@/lib/auth";
 import { previewPastedIntake, previewWorkbookIntake } from "@/lib/costflow/excelIntakeParser";
-import { createNewDraftExcelIntakePreview } from "@/lib/costflow/excelIntakeService";
+import { createNewDraftExcelIntakePreview, reserveExcelIntakePreviewGeneration } from "@/lib/costflow/excelIntakeService";
 
 export const runtime = "nodejs";
 
@@ -16,6 +16,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const upload = form.get("file");
     const sourceRevision = Number(form.get("sourceRevision") ?? "1");
     const sourceBytes = upload instanceof File && upload.size > 0 ? Buffer.from(await upload.arrayBuffer()) : null;
+    const generation = await reserveExcelIntakePreviewGeneration(actor, id, "NEW_DRAFT");
     const preview = sourceBytes
       ? await previewWorkbookIntake(sourceBytes, { sheet, range }, { filename: upload instanceof File ? upload.name : "", mimeType: upload instanceof File ? upload.type : "" })
       : previewPastedIntake({ text: paste, sheet });
@@ -28,7 +29,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       sourceMimeType: upload instanceof File ? upload.type : null,
       sourceBytes,
       sourceText: paste,
-    });
+    }, generation);
     return Response.json({ previewSessionId: session.previewSessionId, expiresAt: session.expiresAt, state: session.state, operationKind: session.operationKind, display: session.display }, { headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 240) : "Không đọc được dữ liệu Excel.";

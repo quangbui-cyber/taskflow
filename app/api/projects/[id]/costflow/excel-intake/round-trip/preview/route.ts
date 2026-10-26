@@ -10,9 +10,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const form = await request.formData();
     const upload = form.get("file");
+    const draftId = String(form.get("draftId") ?? "").trim();
     if (!(upload instanceof File) || upload.size === 0) throw new Error("Chọn workbook round-trip cần xem trước.");
+    if (!draftId) throw new Error("Thiếu nháp round-trip cần xem trước.");
     const preview = await createRoundTripExcelIntakePreview(actor, {
       projectId: id,
+      draftId,
       sourceBytes: Buffer.from(await upload.arrayBuffer()),
       sourceFilename: upload.name,
       sourceMimeType: upload.type,

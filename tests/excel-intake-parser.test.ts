@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import ExcelJS from "exceljs";
 import JSZip from "jszip";
 import { previewPastedIntake, previewWorkbookIntake } from "../lib/costflow/excelIntakeParser";
-import { preflightExcelWorkbook } from "../lib/costflow/excelIntakeSecurity";
+import { EXCEL_INTAKE_LIMITS, preflightExcelWorkbook } from "../lib/costflow/excelIntakeSecurity";
 import { createExcelIntakeTemplate } from "../lib/costflow/quotationExcel";
 import { createExcelRoundTripWorkbook } from "../lib/costflow/quotationExcel";
 import { parseRoundTripWorkbook } from "../lib/costflow/excelRoundTrip";
@@ -123,6 +123,17 @@ test("strict package preflight rejects missing parts, active content and excessi
   for (let index = 0; index < 260; index++) crowded.file(`xl/misc/${index}.xml`, "<x/>");
   const crowdedBytes = Buffer.from(await crowded.generateAsync({ type: "nodebuffer" }));
   await assert.rejects(() => preflightExcelWorkbook(crowdedBytes, { filename: "crowded.xlsx", mimeType: "application/octet-stream" }), /quá nhiều/i);
+});
+
+test("preflight rejects a forged oversized central-directory declaration before JSZip materialization", async () => {
+  const bytes = Buffer.from(await createExcelIntakeTemplate());
+  const forged = Buffer.from(bytes);
+  for (let offset = 0; offset + 46 <= forged.length; offset += 1) {
+    if (forged.readUInt32LE(offset) !== 0x02014b50) continue;
+    forged.writeUInt32LE(EXCEL_INTAKE_LIMITS.entryBytes + 1, offset + 24);
+    break;
+  }
+  await assert.rejects(() => preflightExcelWorkbook(forged, { filename: "forged.xlsx", mimeType: "application/octet-stream" }), /vượt giới hạn/i);
 });
 
 test("integration URL probe accepts only the exact canonical URL", () => {

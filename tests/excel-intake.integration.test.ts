@@ -106,6 +106,7 @@ test("live confirm reauthorizes session scope, rolls back and admits one race wi
       await prisma.excelIntakeSourceEvidence.deleteMany({ where: { projectId: { in: projectIds } } });
       await prisma.excelIntakeOperationReceipt.deleteMany({ where: { projectId: { in: projectIds } } });
       await prisma.excelIntakePreviewSession.deleteMany({ where: { projectId: { in: projectIds } } });
+      await prisma.excelIntakePreviewAuthority.deleteMany({ where: { projectId: { in: projectIds } } });
       await prisma.costFlowHistory.deleteMany({ where: { projectId: { in: projectIds } } });
       await prisma.costFlowWorkspace.deleteMany({ where: { projectId: { in: projectIds } } });
       await prisma.projectMember.deleteMany({ where: { projectId: { in: projectIds } } });

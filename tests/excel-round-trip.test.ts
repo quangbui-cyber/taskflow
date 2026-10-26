@@ -78,6 +78,28 @@ test("one formula primitive edit overrides only its side and parent-only deletio
   assert.throws(() => applyRoundTripDiff(tree, deletionDiff, ["group-1"]), /dòng con|hậu duệ|cấu trúc/i);
 });
 
+test("round-trip validates resolved primitives and preserves an unselected omission in its exact sibling position", () => {
+  const three = structuredClone(draft);
+  three.rows.push({ ...structuredClone(three.rows[1]), itemId: "item-2", name: "Âm thanh" });
+  three.rows.push({ ...structuredClone(three.rows[1]), itemId: "item-3", name: "Ánh sáng" });
+  const omitted = importFromDraftFor(three);
+  omitted.rows = omitted.rows.filter(row => row.itemId !== "item-2");
+  omitted.rows.forEach((row, order) => { row.order = order; });
+  const diff = diffRoundTripDraft(three, omitted, "project-1");
+  const applied = applyRoundTripDiff(three, diff, []);
+  assert.deepEqual(applied.map(row => row.itemId), ["group-1", "item-1", "item-2", "item-3"]);
+  assert.equal(applied[2].parentItemId, "group-1");
+
+  const invalid = importFromDraftFor(draft);
+  invalid.rows[1].row.sell.quantity = "0";
+  assert.throws(() => applyRoundTripDiff(draft, diffRoundTripDraft(draft, invalid, "project-1"), []), /Số lượng phải lớn hơn 0/i);
+
+  const foc = importFromDraftFor(draft);
+  foc.rows[1].row.buy.unitPrice = "0";
+  foc.rows[1].row.buy.notes = "";
+  assert.throws(() => applyRoundTripDiff(draft, diffRoundTripDraft(draft, foc, "project-1"), []), /FOC.*ghi chú/i);
+});
+
 test("tampered hidden canonical binding blocks the affected stable row", async () => {
   const projection = createRoundTripProjection("project-1", draft);
   const bytes = await createExcelRoundTripWorkbook(projection);

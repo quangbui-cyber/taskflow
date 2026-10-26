@@ -7,6 +7,7 @@ import { Prisma } from "@prisma/client";
 
 const CANONICAL_URL = "postgresql://postgres@127.0.0.1:55439/costflow_test";
 const EXPECTED_TABLES = [
+  "ExcelIntakePreviewAuthority",
   "ExcelIntakePreviewSession",
   "ExcelIntakeOperationReceipt",
   "ExcelIntakeSourceEvidence",
@@ -33,6 +34,7 @@ async function inspectSchema(prisma: {
   if (tables.length !== EXPECTED_TABLES.length) return "PARTIAL_INCOMPATIBLE";
 
   const requiredColumns: Record<(typeof EXPECTED_TABLES)[number], string[]> = {
+    ExcelIntakePreviewAuthority: ["id", "projectId", "actorId", "operationKind", "scopeKey", "generation", "createdAt", "updatedAt"],
     ExcelIntakePreviewSession: ["id", "projectId", "actorId", "operationKind", "scopeKey", "draftId", "sourceSha256", "sourceBytes", "canonicalPayload", "displayPayload", "status", "expiresAt", "receiptId", "resultKind", "resultId"],
     ExcelIntakeOperationReceipt: ["id", "projectId", "previewSessionId", "idempotencyKey", "actorId", "operationKind", "canonicalFingerprint", "result", "linkedRecordKind", "linkedRecordId", "createdAt"],
     ExcelIntakeSourceEvidence: ["id", "projectId", "previewSessionId", "receiptId", "actorId", "operationKind", "filename", "size", "sha256", "data", "linkedRecordKind", "linkedRecordId", "createdAt"],
@@ -51,7 +53,7 @@ async function inspectSchema(prisma: {
   }
 
   const constraints = await prisma.$queryRawUnsafe<Array<{ definition: string }>>(
-    `SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid IN ('"ExcelIntakePreviewSession"'::regclass, '"ExcelIntakeOperationReceipt"'::regclass, '"ExcelIntakeSourceEvidence"'::regclass)`,
+    `SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid IN ('"ExcelIntakePreviewAuthority"'::regclass, '"ExcelIntakePreviewSession"'::regclass, '"ExcelIntakeOperationReceipt"'::regclass, '"ExcelIntakeSourceEvidence"'::regclass)`,
   );
   const indexes = await prisma.$queryRawUnsafe<Array<{ indexdef: string }>>(
     `SELECT indexdef::text AS indexdef FROM pg_indexes WHERE schemaname = 'public' AND tablename = ANY($1::text[])`,
@@ -59,14 +61,16 @@ async function inspectSchema(prisma: {
   );
   const definitions = [...constraints.map(value => value.definition), ...indexes.map(value => value.indexdef)].join("\n");
   if (!/UNIQUE INDEX[^\n]+\("projectId", "idempotencyKey"\)/.test(definitions)) return "PARTIAL_INCOMPATIBLE";
+  if (!/UNIQUE INDEX[^\n]+\("projectId", "actorId", "operationKind", "scopeKey"\)/.test(definitions)) return "PARTIAL_INCOMPATIBLE";
   if (!/FOREIGN KEY \("receiptId"\)/.test(definitions)) return "PARTIAL_INCOMPATIBLE";
   return "COMPLETE_COMPATIBLE";
 }
 
 test("authority schema contract is additive and keeps redaction payloads nullable", async () => {
-  const [schema, migration] = await Promise.all([
+  const [schema, migration, generationMigration] = await Promise.all([
     readFile(new URL("../prisma/schema.prisma", import.meta.url), "utf8"),
     readFile(new URL("../prisma/migrations/20261025170000_excel_intake_authority/migration.sql", import.meta.url), "utf8"),
+    readFile(new URL("../prisma/migrations/20261026120000_excel_intake_generation_authority/migration.sql", import.meta.url), "utf8"),
   ]);
   for (const model of EXPECTED_TABLES) assert.match(schema, new RegExp(`model ${model} \\{`));
   assert.match(schema, /sourceBytes\s+Bytes\?/);
@@ -74,6 +78,7 @@ test("authority schema contract is additive and keeps redaction payloads nullabl
   assert.match(schema, /displayPayload\s+Json\?/);
   assert.match(schema, /@@unique\(\[projectId, idempotencyKey\]\)/);
   assert.doesNotMatch(migration, /\bDROP\b|\bTRUNCATE\b|\bDELETE\s+FROM\b|ALTER\s+TABLE[^;]*\bDROP\b/i);
+  assert.doesNotMatch(generationMigration, /\bDROP\b|\bTRUNCATE\b|\bDELETE\s+FROM\b|ALTER\s+TABLE[^;]*\bDROP\b/i);
 });
 
 test("standard integration runner lists every persistent Excel authority suite", () => {
@@ -108,6 +113,7 @@ test("authority live schema is exactly absent, complete-compatible or partial-in
       await prisma.excelIntakeSourceEvidence.deleteMany({ where: { projectId: { in: projectIds } } });
       await prisma.excelIntakeOperationReceipt.deleteMany({ where: { projectId: { in: projectIds } } });
       await prisma.excelIntakePreviewSession.deleteMany({ where: { projectId: { in: projectIds } } });
+      await prisma.excelIntakePreviewAuthority.deleteMany({ where: { projectId: { in: projectIds } } });
       await prisma.projectMember.deleteMany({ where: { projectId: { in: projectIds } } });
       await prisma.project.deleteMany({ where: { id: { in: projectIds } } });
       await prisma.user.deleteMany({ where: { email: { startsWith: "phase31-gap-authority-", endsWith: "@example.test" } } });
@@ -148,6 +154,7 @@ test("authority live schema is exactly absent, complete-compatible or partial-in
       await prisma.excelIntakeSourceEvidence.deleteMany({ where: { projectId: project.id } });
       await prisma.excelIntakeOperationReceipt.deleteMany({ where: { projectId: project.id } });
       await prisma.excelIntakePreviewSession.deleteMany({ where: { projectId: project.id } });
+      await prisma.excelIntakePreviewAuthority.deleteMany({ where: { projectId: project.id } });
       await prisma.projectMember.deleteMany({ where: { projectId: project.id } });
       await prisma.project.delete({ where: { id: project.id } });
       await prisma.user.delete({ where: { id: actor.id } });
