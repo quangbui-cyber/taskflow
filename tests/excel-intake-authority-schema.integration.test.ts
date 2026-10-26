@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { Prisma } from "@prisma/client";
 
 const CANONICAL_URL = "postgresql://postgres@127.0.0.1:55439/costflow_test";
@@ -73,6 +74,21 @@ test("authority schema contract is additive and keeps redaction payloads nullabl
   assert.match(schema, /displayPayload\s+Json\?/);
   assert.match(schema, /@@unique\(\[projectId, idempotencyKey\]\)/);
   assert.doesNotMatch(migration, /\bDROP\b|\bTRUNCATE\b|\bDELETE\s+FROM\b|ALTER\s+TABLE[^;]*\bDROP\b/i);
+});
+
+test("standard integration runner lists every persistent Excel authority suite", () => {
+  const result = spawnSync(process.execPath, ["scripts/test-costflow.mjs", "--integration", "--list"], {
+    env: { ...process.env, DATABASE_URL: CANONICAL_URL, COSTFLOW_TEST_DATABASE_URL: CANONICAL_URL },
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr);
+  for (const suite of [
+    "excel-intake-authority-schema.integration.test.ts",
+    "excel-intake-authority.integration.test.ts",
+    "excel-round-trip.integration.test.ts",
+  ]) {
+    assert.match(result.stdout, new RegExp(`^INTEGRATION\\s+tests/${suite.replaceAll(".", "\\.")}$`, "m"));
+  }
 });
 
 test("authority live schema is exactly absent, complete-compatible or partial-incompatible", { skip: !process.env.EXCEL_AUTHORITY_SCHEMA_MODE }, async () => {
