@@ -13,6 +13,7 @@ import { PRIORITIES, STATUSES } from "@/lib/types";
 import { readTaskCreationFiles } from "@/lib/taskCreationFiles";
 import { driveFolderKeys, queueDrivePush, renameDriveFolderSafe, trashTaskFolderSafe } from "@/lib/driveStorage";
 import { after } from "next/server";
+import { validTaskTimeRange } from "@/lib/taskTimeRange";
 
 async function projectChat(projectId: string) {
   const project = await prisma.project.findUnique({
@@ -117,7 +118,9 @@ export async function createTask(
   const status = String(formData.get("status") ?? "TODO");
   const priority = String(formData.get("priority") ?? "MEDIUM");
   const assigneeId = String(formData.get("assigneeId") ?? "") || null;
+  const startDateRaw = String(formData.get("startDate") ?? "").trim();
   const dueDateRaw = String(formData.get("dueDate") ?? "").trim();
+  const startDate = startDateRaw ? parseDueDate(startDateRaw) : null;
   const dueDate = dueDateRaw ? parseDueDate(dueDateRaw) : null;
 
   if (!title) return { error: "Tiêu đề task không được để trống." };
@@ -125,7 +128,12 @@ export async function createTask(
   if (!PRIORITY_KEYS.has(priority)) {
     return { error: "Độ ưu tiên không hợp lệ." };
   }
-  if (dueDate === undefined) return { error: "Hạn chót không hợp lệ." };
+  if (startDate === undefined || dueDate === undefined) {
+    return { error: "Thời gian công việc không hợp lệ." };
+  }
+  if (!validTaskTimeRange(startDate, dueDate)) {
+    return { error: "Giờ kết thúc phải sau giờ bắt đầu trong cùng ngày." };
+  }
 
   const user = await assertMember(projectId);
   if (assigneeId && !(await isProjectMember(projectId, assigneeId))) {
@@ -154,6 +162,7 @@ export async function createTask(
       projectId,
       status,
       priority,
+      startDate,
       dueDate,
       assigneeId,
       creatorId: user.id,
@@ -198,6 +207,7 @@ export async function updateTask(
     description?: string | null;
     result?: string | null;
     priority?: string;
+    startDate?: string | null;
     dueDate?: string | null;
     assigneeId?: string | null;
     status?: string;
@@ -215,9 +225,16 @@ export async function updateTask(
   ) {
     return;
   }
+  const startDate =
+    data.startDate !== undefined ? parseDueDate(data.startDate) : undefined;
   const dueDate =
     data.dueDate !== undefined ? parseDueDate(data.dueDate) : undefined;
+  if (data.startDate !== undefined && startDate === undefined) return;
   if (data.dueDate !== undefined && dueDate === undefined) return;
+  const nextStartDate =
+    data.startDate !== undefined ? startDate ?? null : task.startDate;
+  const nextDueDate = data.dueDate !== undefined ? dueDate ?? null : task.dueDate;
+  if (!validTaskTimeRange(nextStartDate, nextDueDate)) return;
 
   const updatedTask = await prisma.task.update({
     where: { id: taskId },
@@ -228,6 +245,7 @@ export async function updateTask(
         : {}),
       ...(data.result !== undefined ? { result: data.result } : {}),
       ...(data.priority !== undefined ? { priority: data.priority } : {}),
+      ...(data.startDate !== undefined ? { startDate } : {}),
       ...(data.dueDate !== undefined
         ? { dueDate }
         : {}),

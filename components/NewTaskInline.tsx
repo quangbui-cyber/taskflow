@@ -63,12 +63,15 @@ export default function NewTaskInline({
   const [title, setTitle] = useState("");
   const [assigneeId, setAssigneeId] = useState("");
   const [priority, setPriority] = useState("MEDIUM");
+  const [startDate, setStartDate] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [description, setDescription] = useState("");
   const [result, setResult] = useState("");
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     async (prev, formData) => {
+      const startDate = String(formData.get("startDate") ?? "");
       const dueDate = String(formData.get("dueDate") ?? "");
+      if (startDate) formData.set("startDate", new Date(startDate).toISOString());
       if (dueDate) formData.set("dueDate", new Date(dueDate).toISOString());
       for (const file of briefFiles) formData.append("briefFiles", file);
       for (const file of resultFiles) formData.append("resultFiles", file);
@@ -95,6 +98,7 @@ export default function NewTaskInline({
     setTitle("");
     setAssigneeId("");
     setPriority("MEDIUM");
+    setStartDate("");
     setDueDate("");
     setDescription("");
     setResult("");
@@ -114,6 +118,7 @@ export default function NewTaskInline({
     [title, description, result].some((value) => value.trim()) ||
     Boolean(assigneeId) ||
     priority !== "MEDIUM" ||
+    Boolean(startDate) ||
     Boolean(dueDate) ||
     briefFiles.length > 0 ||
     resultFiles.length > 0;
@@ -264,7 +269,15 @@ export default function NewTaskInline({
   );
 
   const deadlineField = (
-    <DeadlineField name="dueDate" defaultValue={dueDate} onChange={setDueDate} compact />
+    <DeadlineField
+      name="dueDate"
+      startName="startDate"
+      defaultValue={dueDate}
+      defaultStartValue={startDate}
+      onChange={setDueDate}
+      onStartChange={setStartDate}
+      compact
+    />
   );
 
   const descriptionField = (

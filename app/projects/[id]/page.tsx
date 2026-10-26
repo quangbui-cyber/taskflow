@@ -236,6 +236,7 @@ export default async function ProjectPage({
     result: t.result,
     status: t.status,
     priority: t.priority,
+    startDate: t.startDate?.toISOString() ?? null,
     dueDate: t.dueDate?.toISOString() ?? null,
     order: t.order,
     assigneeId: t.assigneeId,

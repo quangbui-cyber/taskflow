@@ -451,6 +451,7 @@ model Task {
   result          String? // kết quả/bàn giao sau khi hoàn thành công việc
   status          String                  @default("TODO") // "TODO" | "IN_PROGRESS" | "DONE"
   priority        String                  @default("MEDIUM") // "LOW" | "MEDIUM" | "HIGH"
+  startDate       DateTime? // thời gian bắt đầu dự kiến; cùng ngày và trước dueDate
   dueDate         DateTime?
   completedAt     DateTime? // thời điểm chuyển sang DONE — dùng tính đúng hạn/trễ hạn
   order           Float                   @default(0)

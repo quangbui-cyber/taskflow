@@ -15,6 +15,7 @@ export type TaskDTO = {
   result: string | null;
   status: string;
   priority: string;
+  startDate: string | null;
   dueDate: string | null;
   order: number;
   assigneeId: string | null;
