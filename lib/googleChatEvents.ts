@@ -45,7 +45,7 @@ export async function verifyChatEventRequest(authorization: string | null, endpo
 }
 
 const HELP_TEXT =
-  "Chào bạn, mình là myCreative. Mình gửi thông báo task của dự án vào nhóm này (task mới, đổi trạng thái, bình luận, nhắc việc 9h sáng). Để làm việc, hãy mở dự án trong app myCreative.";
+  "Chào bạn, mình là MyCreative, mình sẽ đồng hành cùng team để triển khai dự án thành công nhé!";
 
 /** Loại sự kiện, đọc được cả kiểu Chat app thường lẫn kiểu Workspace add-on. */
 export function chatEventKind(body: unknown): "added" | "message" | "other" {

@@ -14,7 +14,7 @@ test("Chat events are recognised in both the Chat app and add-on formats", () =>
   assert.equal(chatEventKind({ chat: { messagePayload: {} } }), "message");
   assert.equal(chatEventKind({ type: "REMOVED_FROM_SPACE" }), "other");
   assert.deepEqual(chatEventReply({ type: "REMOVED_FROM_SPACE" }), {});
-  assert.match(JSON.stringify(chatEventReply({ type: "ADDED_TO_SPACE" })), /myCreative/);
+  assert.match(JSON.stringify(chatEventReply({ type: "ADDED_TO_SPACE" })), /MyCreative/);
   assert.ok("hostAppDataAction" in chatEventReply({ chat: { messagePayload: {} } }));
 });
 
