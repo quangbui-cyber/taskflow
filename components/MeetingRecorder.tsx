@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronDown, ExternalLink, Mic, Pause, Play, Square, Trash2, Upload, Video } from "lucide-react";
+import { ChevronDown, Download, ExternalLink, Mic, Pause, Play, Square, Trash2, Upload, Video } from "lucide-react";
 import { useInteraction } from "@/components/InteractionProvider";
 import { formatClock } from "@/lib/meetingRecap";
 import {
@@ -956,6 +956,16 @@ export default function MeetingRecorder({
                 <Upload size={16} aria-hidden="true" />
                 Tạo biên bản từ bản ghi này
               </button>
+              {playUrl && (
+                <a
+                  href={playUrl}
+                  download={recordingFileName(saved.mimeType, new Date(saved.startedAt))}
+                  className="tf-button-secondary"
+                >
+                  <Download size={16} aria-hidden="true" />
+                  Tải file ghi âm
+                </a>
+              )}
               <button type="button" onClick={discard} className="tf-button-secondary">
                 <Trash2 size={16} aria-hidden="true" />
                 Xoá bản ghi
