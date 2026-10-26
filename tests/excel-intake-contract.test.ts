@@ -5,8 +5,11 @@ import {
   EXCEL_INTAKE_SCHEMA_VERSION,
   normalizeExcelIntake,
   projectCustomerExcelIntake,
+  resolveExcelIntakeDecimalConflicts,
   type ExcelIntakeRowInput,
 } from "../lib/costflow/excelIntake";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 
 const cell = (value: unknown, row: number, column: number, formula?: string) => ({
   value,
@@ -130,4 +133,24 @@ test("Excel decimal parser accepts unambiguous Vietnamese/canonical notation and
   assert.equal(normalized.rows[1].sell.quantity, "1234.56");
   assert.equal(normalized.rows[1].sell.days, "1234.56");
   assert.ok(normalized.errors.some(error => error.code === "AMBIGUOUS_DECIMAL" && error.field === "sell.unitPrice"));
+});
+
+test("server resolution requires exactly one choice per conflict and overlays the selected exact value", () => {
+  const normalized = normalizeExcelIntake(document([group, item({ sell: { ...item().sell, quantity: pairedCell(2, "2.0000000000001", 8, 7) } })]));
+  const [conflict] = normalized.decimalConflicts;
+  assert.throws(() => resolveExcelIntakeDecimalConflicts(normalized, {}), /đầy đủ|thiếu/i);
+  assert.throws(() => resolveExcelIntakeDecimalConflicts(normalized, { [conflict.conflictId]: "OTHER" as "VISIBLE" }), /không hợp lệ/i);
+  assert.throws(() => resolveExcelIntakeDecimalConflicts(normalized, { [conflict.conflictId]: "VISIBLE", forged: "CANONICAL" }), /không hợp lệ/i);
+  assert.equal(resolveExcelIntakeDecimalConflicts(normalized, { [conflict.conflictId]: "VISIBLE" }).rows[1].sell.quantity, "2");
+  assert.equal(resolveExcelIntakeDecimalConflicts(normalized, { [conflict.conflictId]: "CANONICAL" }).rows[1].sell.quantity, "2.0000000000001");
+});
+
+test("both dialogs expose per-cell visible/canonical choices and send decimal resolutions", async () => {
+  for (const file of ["ExcelIntakeDialog.tsx", "ExcelRoundTripDialog.tsx"]) {
+    const source = await readFile(path.join(process.cwd(), "components", file), "utf8");
+    assert.match(source, /decimalResolutions/);
+    assert.match(source, /Dùng giá trị hiển thị/);
+    assert.match(source, /Giữ giá trị chính xác/);
+    assert.match(source, /conflict\.source\.cell/);
+  }
 });
