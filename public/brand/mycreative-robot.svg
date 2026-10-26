@@ -14,7 +14,5 @@
     <path d="M186 282 Q210 240 234 282"/>
     <path d="M278 282 Q302 240 326 282"/>
   </g>
-  <ellipse cx="150" cy="356" rx="24" ry="14" fill="#ff9db1" opacity=".85"/>
-  <ellipse cx="362" cy="356" rx="24" ry="14" fill="#ff9db1" opacity=".85"/>
   <path d="M232 362 Q256 388 280 362" fill="none" stroke="#050708" stroke-width="13" stroke-linecap="round"/>
 </svg>
