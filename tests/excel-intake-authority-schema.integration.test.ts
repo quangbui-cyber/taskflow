@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import { Prisma } from "@prisma/client";
 
 const CANONICAL_URL = "postgresql://postgres@127.0.0.1:55439/costflow_test";
 const EXPECTED_TABLES = [
@@ -67,7 +68,7 @@ test("authority schema contract is additive and keeps redaction payloads nullabl
   assert.match(schema, /canonicalPayload\s+Json\?/);
   assert.match(schema, /displayPayload\s+Json\?/);
   assert.match(schema, /@@unique\(\[projectId, idempotencyKey\]\)/);
-  assert.doesNotMatch(migration, /\b(?:DROP|TRUNCATE|DELETE)\b|ALTER\s+TABLE[^;]*\bDROP\b/i);
+  assert.doesNotMatch(migration, /\bDROP\b|\bTRUNCATE\b|\bDELETE\s+FROM\b|ALTER\s+TABLE[^;]*\bDROP\b/i);
 });
 
 test("authority live schema is exactly absent, complete-compatible or partial-incompatible", { skip: !process.env.EXCEL_AUTHORITY_SCHEMA_MODE }, async () => {
@@ -101,7 +102,7 @@ test("authority live schema is exactly absent, complete-compatible or partial-in
         size: 4, sha256: "a".repeat(64), data: Buffer.from("xlsx"), linkedRecordKind: "PAIRED_DRAFT", linkedRecordId: `${prefix}:draft`,
       } });
       await prisma.excelIntakePreviewSession.update({ where: { id: session.id }, data: {
-        status: "CONSUMED", sourceBytes: null, canonicalPayload: null, displayPayload: null, receiptId: receipt.id, resultKind: "PAIRED_DRAFT", resultId: `${prefix}:draft`, consumedAt: new Date(),
+        status: "CONSUMED", sourceBytes: null, canonicalPayload: Prisma.DbNull, displayPayload: Prisma.DbNull, receiptId: receipt.id, resultKind: "PAIRED_DRAFT", resultId: `${prefix}:draft`, consumedAt: new Date(),
       } });
       const redacted = await prisma.excelIntakePreviewSession.findUniqueOrThrow({ where: { id: session.id } });
       assert.equal(redacted.sourceBytes, null);

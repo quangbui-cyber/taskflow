@@ -15,6 +15,196 @@ export type ConfirmExcelIntakeResult = { draftId: string; version: number; idemp
 export type ConfirmRoundTripMergeCommand = { projectId: string; draftId: string; expectedWorkspaceVersion: number; expectedDraftVersion: number; expectedDraftFingerprint: string; previewFingerprint: string; imported: RoundTripImport; selectedDeletionIds: string[]; idempotencyKey: string };
 export type ConfirmRoundTripMergeResult = { draftId: string; draftVersion: number; version: number; idempotent: boolean; rows: PairedRow[] };
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+export const EXCEL_INTAKE_PREVIEW_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+export type ExcelIntakeOperationKind = "NEW_DRAFT" | "ROUND_TRIP";
+export type ExcelIntakePreviewStatus = "ACTIVE" | "SUPERSEDED" | "CANCELLED" | "EXPIRED" | "CONSUMED";
+type AuthorityTx = Prisma.TransactionClient;
+
+export type CreateExcelIntakePreviewSessionInput = {
+  projectId: string;
+  actorId: string;
+  operationKind: ExcelIntakeOperationKind;
+  draftId?: string | null;
+  sourceKind: "XLSX" | "PASTE";
+  sourceRevision: number;
+  sourceSha256: string;
+  sourceFilename?: string | null;
+  sourceMimeType?: string | null;
+  sourceBytes?: Buffer | null;
+  canonicalFingerprint: string;
+  canonicalPayload: unknown;
+  displayPayload: unknown;
+  now?: Date;
+};
+
+function authorityScopeKey(operationKind: ExcelIntakeOperationKind, draftId?: string | null) {
+  if (operationKind === "ROUND_TRIP") {
+    if (!draftId) throw new Error("Round-trip preview phải gắn với một nháp.");
+    return `ROUND_TRIP:${draftId}`;
+  }
+  if (draftId) throw new Error("Preview tạo nháp mới không được gắn draftId.");
+  return "NEW_DRAFT";
+}
+
+export async function createExcelIntakePreviewSession(tx: AuthorityTx, input: CreateExcelIntakePreviewSessionInput) {
+  const now = input.now ?? new Date();
+  return tx.excelIntakePreviewSession.create({
+    data: {
+      projectId: input.projectId,
+      actorId: input.actorId,
+      operationKind: input.operationKind,
+      scopeKey: authorityScopeKey(input.operationKind, input.draftId),
+      draftId: input.draftId ?? null,
+      sourceKind: input.sourceKind,
+      sourceRevision: input.sourceRevision,
+      sourceSha256: input.sourceSha256,
+      sourceFilename: input.sourceFilename ?? null,
+      sourceMimeType: input.sourceMimeType ?? null,
+      sourceSize: input.sourceBytes?.byteLength ?? 0,
+      sourceBytes: input.sourceBytes ? new Uint8Array(input.sourceBytes) : null,
+      canonicalFingerprint: input.canonicalFingerprint,
+      canonicalPayload: json(input.canonicalPayload),
+      displayPayload: json(input.displayPayload),
+      status: "ACTIVE",
+      expiresAt: new Date(now.getTime() + EXCEL_INTAKE_PREVIEW_TTL_MS),
+      createdAt: now,
+    },
+  });
+}
+
+export async function redactExcelIntakePreviewSession(
+  tx: AuthorityTx,
+  sessionId: string,
+  status: Exclude<ExcelIntakePreviewStatus, "ACTIVE" | "CONSUMED">,
+  at = new Date(),
+) {
+  const lifecycle = status === "SUPERSEDED"
+    ? { supersededAt: at }
+    : status === "CANCELLED"
+      ? { cancelledAt: at }
+      : {};
+  return tx.excelIntakePreviewSession.updateMany({
+    where: { id: sessionId, status: "ACTIVE" },
+    data: {
+      status,
+      sourceBytes: null,
+      canonicalPayload: Prisma.DbNull,
+      displayPayload: Prisma.DbNull,
+      ...lifecycle,
+    },
+  });
+}
+
+export async function loadActionableExcelIntakePreviewSession(tx: AuthorityTx, input: {
+  sessionId: string;
+  projectId: string;
+  actorId: string;
+  operationKind: ExcelIntakeOperationKind;
+  draftId?: string | null;
+  now?: Date;
+}) {
+  const now = input.now ?? new Date();
+  const session = await tx.excelIntakePreviewSession.findFirst({ where: {
+    id: input.sessionId,
+    projectId: input.projectId,
+    actorId: input.actorId,
+    operationKind: input.operationKind,
+    scopeKey: authorityScopeKey(input.operationKind, input.draftId),
+  } });
+  if (!session) throw new Error("Không tìm thấy phiên xem trước hoặc bạn không có quyền.");
+  if (session.status !== "ACTIVE") throw new Error("Phiên xem trước không còn hiệu lực.");
+  if (session.expiresAt.getTime() <= now.getTime()) {
+    await redactExcelIntakePreviewSession(tx, session.id, "EXPIRED", now);
+    throw new Error("Phiên xem trước đã hết hạn sau 7 ngày.");
+  }
+  return session;
+}
+
+export async function readExcelIntakeOperationReceipt(tx: AuthorityTx, projectId: string, idempotencyKey: string) {
+  return tx.excelIntakeOperationReceipt.findUnique({ where: { projectId_idempotencyKey: { projectId, idempotencyKey } } });
+}
+
+export async function claimExcelIntakeOperationReceipt(tx: AuthorityTx, input: {
+  projectId: string;
+  previewSessionId: string;
+  idempotencyKey: string;
+  actorId: string;
+  operationKind: ExcelIntakeOperationKind;
+  canonicalFingerprint: string;
+  result: unknown;
+  linkedRecordKind: string;
+  linkedRecordId: string;
+}) {
+  return tx.excelIntakeOperationReceipt.create({ data: {
+    projectId: input.projectId,
+    previewSessionId: input.previewSessionId,
+    idempotencyKey: input.idempotencyKey,
+    actorId: input.actorId,
+    operationKind: input.operationKind,
+    canonicalFingerprint: input.canonicalFingerprint,
+    result: json(input.result),
+    linkedRecordKind: input.linkedRecordKind,
+    linkedRecordId: input.linkedRecordId,
+  } });
+}
+
+export async function copySuccessfulExcelSourceEvidence(tx: AuthorityTx, input: {
+  sessionId: string;
+  receiptId: string;
+  linkedRecordKind: string;
+  linkedRecordId: string;
+}) {
+  const session = await tx.excelIntakePreviewSession.findUniqueOrThrow({ where: { id: input.sessionId } });
+  if (session.sourceKind !== "XLSX" || !session.sourceBytes || !session.sourceFilename) {
+    throw new Error("Phiên xem trước không có nguồn XLSX để lưu bằng chứng.");
+  }
+  return tx.excelIntakeSourceEvidence.create({ data: {
+    projectId: session.projectId,
+    previewSessionId: session.id,
+    receiptId: input.receiptId,
+    actorId: session.actorId,
+    operationKind: session.operationKind,
+    filename: session.sourceFilename,
+    mimeType: session.sourceMimeType,
+    size: session.sourceSize,
+    sha256: session.sourceSha256,
+    data: session.sourceBytes,
+    linkedRecordKind: input.linkedRecordKind,
+    linkedRecordId: input.linkedRecordId,
+  } });
+}
+
+export async function consumeExcelIntakePreviewSession(tx: AuthorityTx, input: {
+  sessionId: string;
+  receiptId: string;
+  resultKind: string;
+  resultId: string;
+  consumedAt?: Date;
+}) {
+  const consumedAt = input.consumedAt ?? new Date();
+  const updated = await tx.excelIntakePreviewSession.updateMany({
+    where: { id: input.sessionId, status: "ACTIVE", expiresAt: { gt: consumedAt } },
+    data: {
+      status: "CONSUMED",
+      receiptId: input.receiptId,
+      resultKind: input.resultKind,
+      resultId: input.resultId,
+      consumedAt,
+      sourceBytes: null,
+      canonicalPayload: Prisma.DbNull,
+      displayPayload: Prisma.DbNull,
+    },
+  });
+  if (updated.count !== 1) throw new Error("Phiên xem trước đã được dùng hoặc không còn hiệu lực.");
+}
+
+export async function loadExcelIntakeReadOnlyReview(input: { sessionId: string; projectId: string; actorId: string }) {
+  return prisma.excelIntakePreviewSession.findFirst({
+    where: { id: input.sessionId, projectId: input.projectId, actorId: input.actorId, status: "CONSUMED" },
+    include: { operationReceipt: true, sourceEvidence: true },
+  });
+}
 
 function previewFingerprint(preview: ExcelIntakePreview) {
   const normalized = { ...preview } as Partial<ExcelIntakePreview>;
