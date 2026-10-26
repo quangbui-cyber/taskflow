@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { createExcelPreviewState, reduceExcelPreviewState } from "../lib/costflow/excelPreviewState";
-import { excelIntakeDiagnosticTargetId } from "../lib/costflow/excelIntake";
+import { excelIntakeDiagnosticTargetId, normalizeExcelIntake, type ExcelIntakePrimitiveCell, type ExcelIntakeRowInput } from "../lib/costflow/excelIntake";
 
 test("shared preview state stages source changes and isolates every revision", () => {
   const projectionA = { rows: [{ candidateKey: "A" }] };
@@ -60,6 +60,22 @@ test("duplicate fields and decimal conflicts target their exact owning controls"
   const ambiguous = { ...mismatch, conflictId: "candidate-2:sell.unitPrice:I5", source: source("candidate-2", 5, "I5"), reason: "AMBIGUOUS_DECIMAL" as const };
   assert.equal(excelIntakeDiagnosticTargetId(mismatch), "excel-intake-conflict-candidate-2-sell-unitPrice-candidate-2-sell-unitPrice-I4");
   assert.equal(excelIntakeDiagnosticTargetId(ambiguous), "excel-intake-conflict-candidate-2-sell-unitPrice-candidate-2-sell-unitPrice-I5");
+});
+
+test("normalization stamps every error and warning with row, field and source identity", () => {
+  const cell = (value: unknown, row: number, column: number): ExcelIntakePrimitiveCell => ({ value, source: { sheet: "BAO_GIA_IC", row, column, cell: `${String.fromCharCode(64 + column)}${row}` } });
+  const side = (row: number) => ({ unit: cell("cái", row, 6), quantity: cell("bad", row, 7), days: cell("1", row, 8), unitPrice: cell("0", row, 9), vatPercent: cell("8", row, 10), basis: cell("NET", row, 11), note: cell("", row, 12) });
+  const rows: ExcelIntakeRowInput[] = [3, 4].map(row => ({ level: cell(2, row, 1), rowType: cell("ITEM", row, 2), parentRow: cell("", row, 3), name: cell(`Dòng ${row}`, row, 4), description: cell("", row, 5), sell: side(row), buy: { ...side(row), supplier: cell("NCC", row, 19) }, previewNet: { ...cell(0, row, 21), observation: { formula: "G*I", cachedValue: 0 } } }));
+  const normalized = normalizeExcelIntake({ schemaVersion: 4, source: { kind: "XLSX", sheet: "BAO_GIA_IC", range: "A2:U4" }, metadata: { projectName: "", customer: "", preparedAt: "", location: "" }, rows });
+  assert.ok(normalized.errors.length > 2);
+  assert.ok(normalized.warnings.length === 2);
+  for (const issue of [...normalized.errors, ...normalized.warnings]) {
+    assert.ok(issue.candidateKey);
+    assert.ok(issue.field);
+    assert.ok(issue.source.cell);
+  }
+  const duplicate = normalized.errors.filter(issue => issue.field === "sell.quantity");
+  assert.deepEqual(duplicate.map(issue => issue.candidateKey), ["candidate-1", "candidate-2"]);
 });
 
 test("reducer preserves raw cells and corrections across stale or failed responses", async () => {

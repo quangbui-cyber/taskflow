@@ -69,7 +69,14 @@ export type NormalizedExcelIntakeRow = {
   coordinates: Record<string, ExcelIntakeSourceCoordinate>;
 };
 export type ExcelIntakeIssueCode = "INVALID_NUMBER" | "AMBIGUOUS_DECIMAL" | "INVALID_QUANTITY" | "INVALID_DAYS" | "INVALID_VAT" | "INVALID_BASIS" | "FOC_NOTE_REQUIRED" | "INVALID_HIERARCHY" | "INVALID_ROW_TYPE";
-export type ExcelIntakeBlockingError = { code: ExcelIntakeIssueCode; message: string; field: string; source: ExcelIntakeSourceCoordinate; blocking: true };
+export type ExcelIntakeDiagnosticIdentity = {
+  candidateKey: string;
+  side?: "sell" | "buy";
+  field: string;
+  source: ExcelIntakeSourceCoordinate;
+  conflictId?: string;
+};
+export type ExcelIntakeBlockingError = ExcelIntakeDiagnosticIdentity & { code: ExcelIntakeIssueCode; message: string; blocking: true };
 export type ExcelDecimalConflict = {
   conflictId: string;
   candidateKey: string;
@@ -82,7 +89,7 @@ export type ExcelDecimalConflict = {
   reason: "VISIBLE_CANONICAL_MISMATCH" | "AMBIGUOUS_DECIMAL";
 };
 export type ExcelDecimalResolution = "VISIBLE" | "CANONICAL";
-export type ExcelIntakeWarning = { code: "FORMULA_IGNORED"; message: string; field: string; source: ExcelIntakeSourceCoordinate; blocking: false };
+export type ExcelIntakeWarning = ExcelIntakeDiagnosticIdentity & { code: "FORMULA_IGNORED"; message: string; blocking: false };
 export type NormalizedExcelIntake = {
   schemaVersion: typeof EXCEL_INTAKE_SCHEMA_VERSION;
   source: ExcelIntakeSource;
@@ -101,8 +108,23 @@ function text(cell: ExcelIntakePrimitiveCell) {
   return cell.value === null || cell.value === undefined ? "" : String(cell.value).trim();
 }
 
-function issue(errors: ExcelIntakeBlockingError[], code: ExcelIntakeIssueCode, field: string, source: ExcelIntakeSourceCoordinate, message: string) {
-  errors.push({ code, field, source, message, blocking: true });
+function diagnosticSide(field: string) {
+  return field.startsWith("sell.") ? "sell" as const : field.startsWith("buy.") ? "buy" as const : undefined;
+}
+
+function targetPart(value: string) {
+  return value.replace(/[^A-Za-z0-9_-]/g, "-");
+}
+
+export function excelIntakeDiagnosticTargetId(issue: ExcelIntakeDiagnosticIdentity) {
+  const prefix = issue.conflictId ? "excel-intake-conflict" : "excel-intake-row";
+  const parts = [prefix, issue.candidateKey, issue.field];
+  if (issue.conflictId) parts.push(issue.conflictId);
+  return parts.map(targetPart).join("-");
+}
+
+function issue(errors: ExcelIntakeBlockingError[], candidateKey: string, code: ExcelIntakeIssueCode, field: string, source: ExcelIntakeSourceCoordinate, message: string) {
+  errors.push({ code, candidateKey, side: diagnosticSide(field), field, source, message, blocking: true });
 }
 
 function parseExcelDecimal(raw: string): { kind: "VALUE"; value: string } | { kind: "AMBIGUOUS" } {
@@ -125,7 +147,7 @@ function numberValue(cell: ExcelIntakePrimitiveCell, candidateKey: string, field
     const visibleResult = raw ? parseExcelDecimal(raw) : null;
     if (visibleResult?.kind === "AMBIGUOUS") {
       if (!canonical || !cell.canonical) {
-        issue(errors, "AMBIGUOUS_DECIMAL", field, cell.source, "Cách viết số có thể là hàng nghìn hoặc thập phân; hãy chọn giá trị rõ ràng.");
+        issue(errors, candidateKey, "AMBIGUOUS_DECIMAL", field, cell.source, "Cách viết số có thể là hàng nghìn hoặc thập phân; hãy chọn giá trị rõ ràng.");
         return null;
       }
       conflicts.push({ conflictId: `${candidateKey}:${field}:${cell.source.cell}`, candidateKey, side: field.startsWith("sell.") ? "sell" : "buy", field, visible: raw, canonical, source: cell.source, canonicalSource: cell.canonical.source, reason: "AMBIGUOUS_DECIMAL" });
@@ -137,12 +159,12 @@ function numberValue(cell: ExcelIntakePrimitiveCell, candidateKey: string, field
     const normalized = canonical ?? visible;
     if (!normalized) return null;
     const value = decimal(normalized);
-    if (rule === "POSITIVE" && compare(value, ZERO) <= 0) issue(errors, field.endsWith("days") ? "INVALID_DAYS" : "INVALID_QUANTITY", field, cell.source, "Giá trị phải lớn hơn 0.");
-    if (rule === "NON_NEGATIVE" && compare(value, ZERO) < 0) issue(errors, "INVALID_NUMBER", field, cell.source, "Giá trị không được âm.");
-    if (rule === "VAT" && (compare(value, ZERO) < 0 || compare(value, HUNDRED) > 0)) issue(errors, "INVALID_VAT", field, cell.source, "VAT phải từ 0 đến 100.");
+    if (rule === "POSITIVE" && compare(value, ZERO) <= 0) issue(errors, candidateKey, field.endsWith("days") ? "INVALID_DAYS" : "INVALID_QUANTITY", field, cell.source, "Giá trị phải lớn hơn 0.");
+    if (rule === "NON_NEGATIVE" && compare(value, ZERO) < 0) issue(errors, candidateKey, "INVALID_NUMBER", field, cell.source, "Giá trị không được âm.");
+    if (rule === "VAT" && (compare(value, ZERO) < 0 || compare(value, HUNDRED) > 0)) issue(errors, candidateKey, "INVALID_VAT", field, cell.source, "VAT phải từ 0 đến 100.");
     return normalized;
   } catch {
-    issue(errors, rule === "VAT" ? "INVALID_VAT" : field.endsWith("days") ? "INVALID_DAYS" : "INVALID_NUMBER", field, cell.source, "Nhập số hợp lệ, không dùng dấu phân cách hàng nghìn.");
+    issue(errors, candidateKey, rule === "VAT" ? "INVALID_VAT" : field.endsWith("days") ? "INVALID_DAYS" : "INVALID_NUMBER", field, cell.source, "Nhập số hợp lệ, không dùng dấu phân cách hàng nghìn.");
     return null;
   }
 }
@@ -155,9 +177,9 @@ function sideValue(side: ExcelIntakeSideInput, prefix: "sell" | "buy", candidate
   const vatPercent = numberValue(side.vatPercent, candidateKey, `${prefix}.vatPercent`, errors, conflicts, "VAT");
   const basisText = text(side.basis).toUpperCase();
   const basis = basisText === "NET" || basisText === "GROSS" ? basisText : null;
-  if (basisText && !basis) issue(errors, "INVALID_BASIS", `${prefix}.basis`, side.basis.source, "Căn cứ phải là NET hoặc GROSS.");
+  if (basisText && !basis) issue(errors, candidateKey, "INVALID_BASIS", `${prefix}.basis`, side.basis.source, "Căn cứ phải là NET hoặc GROSS.");
   const note = text(side.note).slice(0, 5000);
-  if (unitPrice === "0" && !note) issue(errors, "FOC_NOTE_REQUIRED", `${prefix}.note`, side.note.source, "Dòng FOC có đơn giá 0 phải kèm ghi chú.");
+  if (unitPrice === "0" && !note) issue(errors, candidateKey, "FOC_NOTE_REQUIRED", `${prefix}.note`, side.note.source, "Dòng FOC có đơn giá 0 phải kèm ghi chú.");
   return { unit: text(side.unit).slice(0, 100), quantity, days, unitPrice, vatPercent, basis, note };
 }
 
@@ -176,11 +198,11 @@ export function normalizeExcelIntake(input: ExcelIntakeInput): NormalizedExcelIn
     const level = ([1, 2, 3].includes(levelNumber) ? levelNumber : 1) as 1 | 2 | 3;
     const rowTypeText = text(row.rowType).toUpperCase();
     const rowType = rowTypeText === "GROUP" ? "GROUP" : "ITEM";
-    if (rowTypeText !== "GROUP" && rowTypeText !== "ITEM") issue(errors, "INVALID_ROW_TYPE", "rowType", row.rowType.source, "Loại dòng phải là GROUP hoặc ITEM.");
+    if (rowTypeText !== "GROUP" && rowTypeText !== "ITEM") issue(errors, candidateKey, "INVALID_ROW_TYPE", "rowType", row.rowType.source, "Loại dòng phải là GROUP hoặc ITEM.");
     const parentSourceRow = Number(text(row.parentRow));
     const parentCandidateKey = Number.isInteger(parentSourceRow) ? sourceRowToCandidate.get(parentSourceRow) ?? null : null;
     const validStructure = rowType === "GROUP" ? level === 1 && !parentCandidateKey : level === 1 ? !parentCandidateKey : Boolean(parentCandidateKey);
-    if (!validStructure) issue(errors, "INVALID_HIERARCHY", "parentRow", row.parentRow.source, "Cấp và dòng cha không tạo thành cấu trúc ba cấp hợp lệ.");
+    if (!validStructure) issue(errors, candidateKey, "INVALID_HIERARCHY", "parentRow", row.parentRow.source, "Cấp và dòng cha không tạo thành cấu trúc ba cấp hợp lệ.");
     const sell = sideValue(row.sell, "sell", candidateKey, rowType, errors, decimalConflicts);
     const buyBase = sideValue(row.buy, "buy", candidateKey, rowType, errors, decimalConflicts);
     for (const [field, primitive] of [
@@ -193,7 +215,7 @@ export function normalizeExcelIntake(input: ExcelIntakeInput): NormalizedExcelIn
     ] as const) {
       if (!primitive?.observation) continue;
       observations.push({ ...primitive.observation, field, source: primitive.source });
-      warnings.push({ code: "FORMULA_IGNORED", field, source: primitive.source, message: "Công thức và giá trị cache chỉ dùng xem trước; máy chủ tính lại từ dữ liệu nguyên thủy.", blocking: false });
+      warnings.push({ code: "FORMULA_IGNORED", candidateKey, field, source: primitive.source, message: "Công thức và giá trị cache chỉ dùng xem trước; máy chủ tính lại từ dữ liệu nguyên thủy.", blocking: false });
     }
     return {
       candidateKey,

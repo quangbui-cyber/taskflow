@@ -8,7 +8,20 @@ import { Button } from "@/components/ui/Button";
 import { Input as Field, Textarea } from "@/components/ui/Field";
 import { Alert, Table } from "@/components/ui/Presentation";
 import type { ExcelIntakePreview } from "@/lib/costflow/excelIntakeParser";
+import { excelIntakeDiagnosticTargetId, type ExcelIntakeDiagnosticIdentity } from "@/lib/costflow/excelIntake";
 import { createExcelPreviewState, reduceExcelPreviewState } from "@/lib/costflow/excelPreviewState";
+
+const editableFields = [
+  "sell.quantity", "sell.days", "sell.unitPrice", "sell.vatPercent", "sell.basis", "sell.note",
+  "buy.quantity", "buy.days", "buy.unitPrice", "buy.vatPercent", "buy.basis", "buy.note", "buy.supplier",
+] as const;
+type EditableField = typeof editableFields[number];
+
+function editableValue(row: ExcelIntakePreview["rows"][number], field: EditableField) {
+  if (field === "buy.supplier") return row.buy.supplier;
+  const [side, key] = field.split(".") as ["sell" | "buy", "quantity" | "days" | "unitPrice" | "vatPercent" | "basis" | "note"];
+  return row[side][key];
+}
 
 type SessionView = {
   state: "ACTIONABLE" | "READ_ONLY_CONSUMED" | "NON_ACTIONABLE_EXPIRED" | "NON_ACTIONABLE_SUPERSEDED" | "NON_ACTIONABLE_CANCELLED";
@@ -181,7 +194,7 @@ export default function ExcelIntakeDialog({ projectId, version, disabled = false
   }
 
   const corrected = (rowKey: string, field: string, fallback: string | null) => state.corrections[`${rowKey}.${field}`] ?? fallback ?? "";
-  const focusIssue = (field: string, candidateKey?: string) => document.getElementById(`excel-intake-row-${candidateKey ?? visiblePreview?.rows[0]?.candidateKey}-${field.replace(".", "-")}`)?.focus();
+  const focusIssue = (issue: ExcelIntakeDiagnosticIdentity) => document.getElementById(excelIntakeDiagnosticTargetId(issue))?.focus();
   const confirm = () => {
     if (!visiblePreview || !state.session || !actionable || blocking || unresolvedDecimals) return;
     setConfirmError("");
@@ -219,12 +232,12 @@ export default function ExcelIntakeDialog({ projectId, version, disabled = false
       {state.session?.state === "READ_ONLY_CONSUMED" && <Alert tone="success" title="Phiên đã được xác nhận">Bản xem lại chỉ đọc{state.session.result?.draftId ? ` · nháp ${state.session.result.draftId}` : ""}. {state.session.source && <a href={state.session.source.downloadUrl}>Tải nguồn {state.session.source.filename}</a>}</Alert>}
       {state.session?.state.startsWith("NON_ACTIONABLE_") && <Alert tone="warning" title="Phiên không còn hiệu lực">Phiên đã hết hạn, bị thay thế hoặc bị hủy. Dữ liệu xem trước đã được xóa.</Alert>}
       {authority.staleProjection && !authority.currentProjection && <Alert tone="warning" title="Không còn áp dụng">Bản xem trước cũ chỉ còn để đối chiếu và không thể tạo nháp.</Alert>}
-      {!!visiblePreview?.errors.length && <Alert tone="danger" title="Lỗi cần sửa"><ul>{visiblePreview.errors.map((issue, index) => <li key={`${issue.source.cell}-${index}`}><button type="button" className="tf-link" onClick={() => focusIssue(issue.field)}>{issue.message}</button> — {issue.source.sheet} · dòng {issue.source.row} · ô {issue.source.cell}</li>)}</ul></Alert>}
-      {!!visiblePreview?.warnings.length && <Alert tone="warning" title="Cảnh báo"><ul>{visiblePreview.warnings.map((issue, index) => <li key={`${issue.source.cell}-${index}`}>{issue.message} — {issue.source.sheet} · dòng {issue.source.row} · ô {issue.source.cell}</li>)}</ul></Alert>}
-      {!!visiblePreview?.decimalConflicts.length && <Alert tone="warning" title="Chọn giá trị cho từng ô xung đột"><div>{visiblePreview.decimalConflicts.map(conflict => <fieldset key={conflict.conflictId} disabled={readOnly}><legend>{conflict.field} · ô {conflict.source.cell}</legend><p>Hiển thị: {conflict.visible} · chính xác: {conflict.canonical}</p><label><input type="radio" name={conflict.conflictId} checked={state.decimalResolutions[conflict.conflictId] === "VISIBLE"} onChange={() => { dispatch({ type: "RESOLVE_DECIMAL", conflictId: conflict.conflictId, value: "VISIBLE" }); authorityDispatch({ type: "SET_DECIMAL_RESOLUTION", key: conflict.conflictId, value: "VISIBLE" }); }} /> Dùng giá trị hiển thị</label><label><input type="radio" name={conflict.conflictId} checked={state.decimalResolutions[conflict.conflictId] === "CANONICAL"} onChange={() => { dispatch({ type: "RESOLVE_DECIMAL", conflictId: conflict.conflictId, value: "CANONICAL" }); authorityDispatch({ type: "SET_DECIMAL_RESOLUTION", key: conflict.conflictId, value: "CANONICAL" }); }} /> Giữ giá trị chính xác</label></fieldset>)}</div></Alert>}
+      {!!visiblePreview?.errors.length && <Alert tone="danger" title="Lỗi cần sửa"><ul>{visiblePreview.errors.map(issue => <li key={`${issue.candidateKey}-${issue.field}-${issue.source.cell}`}><button type="button" className="tf-link" onClick={() => focusIssue(issue)}>{issue.message}</button> — {issue.source.sheet} · dòng {issue.source.row} · ô {issue.source.cell}</li>)}</ul></Alert>}
+      {!!visiblePreview?.warnings.length && <Alert tone="warning" title="Cảnh báo"><ul>{visiblePreview.warnings.map(issue => <li key={`${issue.candidateKey}-${issue.field}-${issue.source.cell}`}><button type="button" className="tf-link" onClick={() => focusIssue(issue)}>{issue.message}</button> — {issue.source.sheet} · dòng {issue.source.row} · ô {issue.source.cell}</li>)}</ul></Alert>}
+      {!!visiblePreview?.decimalConflicts.length && <Alert tone="warning" title="Chọn giá trị cho từng ô xung đột"><div>{visiblePreview.decimalConflicts.map(conflict => <fieldset id={excelIntakeDiagnosticTargetId({ ...conflict, conflictId: conflict.conflictId })} tabIndex={-1} key={conflict.conflictId} disabled={readOnly}><legend><button type="button" className="tf-link" onClick={() => focusIssue({ ...conflict, conflictId: conflict.conflictId })}>{conflict.field} · ô {conflict.source.cell}</button></legend><p>Hiển thị: {conflict.visible} · chính xác: {conflict.canonical}</p><label><input type="radio" name={conflict.conflictId} checked={state.decimalResolutions[conflict.conflictId] === "VISIBLE"} onChange={() => { dispatch({ type: "RESOLVE_DECIMAL", conflictId: conflict.conflictId, value: "VISIBLE" }); authorityDispatch({ type: "SET_DECIMAL_RESOLUTION", key: conflict.conflictId, value: "VISIBLE" }); }} /> Dùng giá trị hiển thị</label><label><input type="radio" name={conflict.conflictId} checked={state.decimalResolutions[conflict.conflictId] === "CANONICAL"} onChange={() => { dispatch({ type: "RESOLVE_DECIMAL", conflictId: conflict.conflictId, value: "CANONICAL" }); authorityDispatch({ type: "SET_DECIMAL_RESOLUTION", key: conflict.conflictId, value: "CANONICAL" }); }} /> Giữ giá trị chính xác</label></fieldset>)}</div></Alert>}
       {visiblePreview && <div className={`excel-intake-table-scroll ${authority.staleProjection && !authority.currentProjection ? "opacity-60" : ""}`}><p className="tf-ui-help">Sheet · dòng · ô được giữ cho từng trường nguồn.</p><Table caption="Xem trước Báo giá xanh và IC vàng" hideCaption>
-        <thead><tr><th>Hạng mục</th><th>SL bán</th><th>Ngày bán</th><th>Đơn giá bán</th><th>SL mua</th><th>Ngày mua</th><th>Giá vốn</th><th>NCC</th></tr></thead>
-        <tbody>{visiblePreview.rows.map(row => <tr key={row.candidateKey} className="excel-intake-row-card"><td>{row.name || row.description}</td>{(["sell.quantity", "sell.days", "sell.unitPrice", "buy.quantity", "buy.days", "buy.unitPrice", "buy.supplier"] as const).map(field => <td key={field}><input id={`excel-intake-row-${row.candidateKey}-${field.replace(".", "-")}`} className="tf-field" disabled={readOnly || !actionable} value={corrected(row.candidateKey, field, field.startsWith("sell.") ? row.sell[field.slice(5) as "quantity" | "days" | "unitPrice"] : field === "buy.supplier" ? row.buy.supplier : row.buy[field.slice(4) as "quantity" | "days" | "unitPrice"])} onChange={event => { dispatch({ type: "CORRECT", key: `${row.candidateKey}.${field}`, value: event.target.value }); authorityDispatch({ type: "SET_CORRECTION", key: `${row.candidateKey}.${field}`, value: event.target.value }); }} /></td>)}</tr>)}</tbody>
+        <thead><tr><th>Hạng mục</th>{editableFields.map(field => <th key={field}>{field}</th>)}</tr></thead>
+        <tbody>{visiblePreview.rows.map(row => <tr key={row.candidateKey} className="excel-intake-row-card"><td>{row.name || row.description}{[...visiblePreview.errors, ...visiblePreview.warnings].filter(issue => issue.candidateKey === row.candidateKey && !editableFields.includes(issue.field as EditableField)).map(issue => <span id={excelIntakeDiagnosticTargetId(issue)} tabIndex={-1} className="tf-ui-help" key={`${issue.field}-${issue.source.cell}`}>{issue.field} · ô {issue.source.cell}</span>)}</td>{editableFields.map(field => <td key={field}><input id={excelIntakeDiagnosticTargetId({ candidateKey: row.candidateKey, field, source: row.coordinates.name })} aria-label={`${field} · ${row.name || row.description}`} className="tf-field" disabled={readOnly || !actionable} value={corrected(row.candidateKey, field, editableValue(row, field))} onChange={event => { dispatch({ type: "CORRECT", key: `${row.candidateKey}.${field}`, value: event.target.value }); authorityDispatch({ type: "SET_CORRECTION", key: `${row.candidateKey}.${field}`, value: event.target.value }); }} /></td>)}</tr>)}</tbody>
       </Table></div>}
     </Dialog>
     <Dialog open={discardOpen} onClose={() => void stayOnSource()} title="Bỏ các lựa chọn đang sửa?" description="Đổi nguồn sẽ hủy phiên hiện tại và xóa các ô sửa, lựa chọn số thập phân.">
