@@ -1,5 +1,5 @@
 import { getCurrentUser } from "@/lib/auth";
-import { previewRoundTripMerge } from "@/lib/costflow/excelRoundTrip";
+import { createRoundTripExcelIntakePreview } from "@/lib/costflow/excelIntakeService";
 
 export const runtime = "nodejs";
 
@@ -11,8 +11,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const form = await request.formData();
     const upload = form.get("file");
     if (!(upload instanceof File) || upload.size === 0) throw new Error("Chọn workbook round-trip cần xem trước.");
-    const preview = await previewRoundTripMerge(actor, id, Buffer.from(await upload.arrayBuffer()));
-    return Response.json(preview, { headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
+    const preview = await createRoundTripExcelIntakePreview(actor, {
+      projectId: id,
+      sourceBytes: Buffer.from(await upload.arrayBuffer()),
+      sourceFilename: upload.name,
+      sourceMimeType: upload.type,
+      sourceRevision: Number(form.get("sourceRevision") ?? "1"),
+    });
+    return Response.json({ previewSessionId: preview.previewSessionId, expiresAt: preview.expiresAt, state: preview.state, operationKind: preview.operationKind, display: preview.display }, { headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 240) : "Không đọc được workbook round-trip.";
     const status = /không tìm thấy|không có quyền/i.test(message) ? 404 : 422;

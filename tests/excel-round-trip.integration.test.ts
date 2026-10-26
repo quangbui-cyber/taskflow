@@ -74,7 +74,8 @@ test("live apply keeps unconfirmed deletions, confirms selected deletion and enf
     const projection = createRoundTripProjection(project.id, draft);
     const originalBytes = await createExcelRoundTripWorkbook(projection, { projectName: project.name });
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(Buffer.from(originalBytes));
+    const originalBuffer = Buffer.from(originalBytes);
+    await workbook.xlsx.load(originalBuffer.buffer.slice(originalBuffer.byteOffset, originalBuffer.byteOffset + originalBuffer.byteLength) as ArrayBuffer);
     const sheet = workbook.getWorksheet("BAO_GIA_IC")!;
     sheet.getCell("H8").value = 1200;
     for (const rowNumber of [9, 10]) for (const column of [3, 4, 5, 6, 7, 8, 14, 15, 16, 17, 18, 24, 25]) sheet.getRow(rowNumber).getCell(column).value = null;
@@ -94,13 +95,14 @@ test("live apply keeps unconfirmed deletions, confirms selected deletion and enf
     const replay = await confirmRoundTripMerge({ id: actor.id, role: "ACCOUNT" }, base);
     assert.equal(replay.idempotent, true);
     await assert.rejects(() => confirmRoundTripMerge({ id: actor.id, role: "ACCOUNT" }, { ...base, selectedDeletionIds: [`${prefix}-delete-b`] }), /dữ liệu khác/i);
-    await assert.rejects(() => confirmRoundTripMerge({ id: actor.id, role: "ACCOUNT" }, { ...base, idempotencyKey: `${prefix}:stale` }), /thay đổi|tải lại/i);
+    await assert.rejects(() => confirmRoundTripMerge({ id: actor.id, role: "ACCOUNT" }, { ...base, idempotencyKey: `${prefix}:stale` }), /không còn hiệu lực|thay đổi|tải lại/i);
     workspace = await prisma.costFlowWorkspace.findUniqueOrThrow({ where: { projectId: project.id } });
     saved = (workspace.data as unknown as FinanceData).quotationDrafts![0];
     const nextProjection = createRoundTripProjection(project.id, saved);
     const nextOriginalBytes = await createExcelRoundTripWorkbook(nextProjection, { projectName: project.name });
     const nextWorkbook = new ExcelJS.Workbook();
-    await nextWorkbook.xlsx.load(Buffer.from(nextOriginalBytes));
+    const nextOriginalBuffer = Buffer.from(nextOriginalBytes);
+    await nextWorkbook.xlsx.load(nextOriginalBuffer.buffer.slice(nextOriginalBuffer.byteOffset, nextOriginalBuffer.byteOffset + nextOriginalBuffer.byteLength) as ArrayBuffer);
     nextWorkbook.getWorksheet("BAO_GIA_IC")!.getCell("H8").value = 1300;
     const raceSession = await createRoundTripExcelIntakePreview({ id: actor.id, role: "USER" }, { projectId: project.id, sourceBytes: Buffer.from(await nextWorkbook.xlsx.writeBuffer()), sourceFilename: "round-trip-race.xlsx", sourceMimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", sourceRevision: 2 });
     const raceBase = { projectId: project.id, draftId: saved.id, previewSessionId: raceSession.previewSessionId, selectedDeletionIds: [], idempotencyKey: "" };

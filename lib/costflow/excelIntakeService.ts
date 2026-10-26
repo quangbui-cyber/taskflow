@@ -1,25 +1,83 @@
 import "server-only";
+
 import { createHash, randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { EXCEL_INTAKE_SCHEMA_VERSION } from "./excelIntake";
 import type { ExcelIntakePreview } from "./excelIntakeParser";
+import { previewRoundTripMerge, applyRoundTripDiff, createRoundTripProjection, type RoundTripDiff, type RoundTripImport } from "./excelRoundTrip";
 import { emptyFinance, type FinanceData, type PairedRow } from "./types";
 import { hydrateLinePricingData, normalizePairedRows } from "./pairedDraft";
 import { calculateLineCost, compare, decimal } from "./money";
-import { applyRoundTripDiff, createRoundTripProjection, diffRoundTripDraft, type RoundTripImport } from "./excelRoundTrip";
 
 type Actor = { id: string; role: string };
-export type ConfirmExcelIntakeCommand = { projectId: string; expectedVersion: number; idempotencyKey: string; fingerprint: string; preview: ExcelIntakePreview; corrections?: Record<string, string> };
-export type ConfirmExcelIntakeResult = { draftId: string; version: number; idempotent: boolean };
-export type ConfirmRoundTripMergeCommand = { projectId: string; draftId: string; expectedWorkspaceVersion: number; expectedDraftVersion: number; expectedDraftFingerprint: string; previewFingerprint: string; imported: RoundTripImport; selectedDeletionIds: string[]; idempotencyKey: string };
-export type ConfirmRoundTripMergeResult = { draftId: string; draftVersion: number; version: number; idempotent: boolean; rows: PairedRow[] };
-const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
-export const EXCEL_INTAKE_PREVIEW_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+type AuthorityTx = Prisma.TransactionClient;
+type StringMap = Record<string, string>;
 
+export type ConfirmExcelIntakeCommand = {
+  projectId: string;
+  previewSessionId: string;
+  expectedVersion: number;
+  idempotencyKey: string;
+  corrections?: StringMap;
+  decimalResolutions?: StringMap;
+};
+export type ConfirmExcelIntakeResult = { draftId: string; version: number; idempotent: boolean };
+export type ConfirmRoundTripMergeCommand = {
+  projectId: string;
+  draftId: string;
+  previewSessionId: string;
+  idempotencyKey: string;
+  selectedDeletionIds: string[];
+  decimalResolutions?: StringMap;
+};
+export type ConfirmRoundTripMergeResult = { draftId: string; draftVersion: number; version: number; idempotent: boolean; rows: PairedRow[] };
+
+export const EXCEL_INTAKE_PREVIEW_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export type ExcelIntakeOperationKind = "NEW_DRAFT" | "ROUND_TRIP";
 export type ExcelIntakePreviewStatus = "ACTIVE" | "SUPERSEDED" | "CANCELLED" | "EXPIRED" | "CONSUMED";
-type AuthorityTx = Prisma.TransactionClient;
+
+type NewDraftCanonicalPayload = {
+  expectedVersion: number;
+  preview: ExcelIntakePreview;
+  allowedCorrectionKeys: string[];
+  allowedDecimalResolutionKeys: string[];
+};
+type RoundTripCanonicalPayload = {
+  expectedWorkspaceVersion: number;
+  expectedDraftVersion: number;
+  expectedDraftFingerprint: string;
+  imported: RoundTripImport;
+  diff: RoundTripDiff;
+  allowedDecimalResolutionKeys: string[];
+};
+export type RoundTripPreviewDisplay = {
+  draft: { id: string; version: number };
+  diff: RoundTripDiff;
+};
+type ReceiptEnvelope<T> = { output: T; review: unknown };
+
+export type ActionablePreviewSessionView<T> = {
+  state: "ACTIONABLE";
+  previewSessionId: string;
+  operationKind: ExcelIntakeOperationKind;
+  expiresAt: string;
+  display: T;
+};
+export type PreviewSessionView = ActionablePreviewSessionView<unknown> | {
+  state: "READ_ONLY_CONSUMED";
+  previewSessionId: string;
+  operationKind: ExcelIntakeOperationKind;
+  expiresAt: string;
+  display: unknown;
+  result: Record<string, unknown> | null;
+  source: { filename: string; mimeType: string | null; size: number; sha256: string; downloadUrl: string } | null;
+} | {
+  state: "NON_ACTIONABLE_EXPIRED" | "NON_ACTIONABLE_SUPERSEDED" | "NON_ACTIONABLE_CANCELLED";
+  previewSessionId: string;
+  operationKind: ExcelIntakeOperationKind;
+  expiresAt: string;
+};
 
 export type CreateExcelIntakePreviewSessionInput = {
   projectId: string;
@@ -38,6 +96,35 @@ export type CreateExcelIntakePreviewSessionInput = {
   now?: Date;
 };
 
+export type CreateNewDraftPreviewInput = {
+  projectId: string;
+  preview: ExcelIntakePreview;
+  sourceKind: "XLSX" | "PASTE";
+  sourceRevision: number;
+  sourceFilename?: string | null;
+  sourceMimeType?: string | null;
+  sourceBytes?: Buffer | null;
+  sourceText?: string;
+};
+
+export type CreateRoundTripPreviewInput = {
+  projectId: string;
+  sourceBytes: Buffer;
+  sourceFilename: string;
+  sourceMimeType?: string | null;
+  sourceRevision: number;
+};
+
+const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
+function canonicalValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalValue);
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value as Record<string, unknown>).sort(([left], [right]) => left.localeCompare(right)).map(([key, nested]) => [key, canonicalValue(nested)]));
+  return value;
+}
+const canonicalHash = (value: unknown) => sha256(JSON.stringify(canonicalValue(value)));
+const sortedMap = (value?: StringMap) => Object.fromEntries(Object.entries(value ?? {}).sort(([left], [right]) => left.localeCompare(right)));
+
 function authorityScopeKey(operationKind: ExcelIntakeOperationKind, draftId?: string | null) {
   if (operationKind === "ROUND_TRIP") {
     if (!draftId) throw new Error("Round-trip preview phải gắn với một nháp.");
@@ -45,6 +132,17 @@ function authorityScopeKey(operationKind: ExcelIntakeOperationKind, draftId?: st
   }
   if (draftId) throw new Error("Preview tạo nháp mới không được gắn draftId.");
   return "NEW_DRAFT";
+}
+
+async function requireExcelIntakeActor(tx: AuthorityTx, actorId: string, projectId: string) {
+  const [project, currentActor] = await Promise.all([
+    tx.project.findUnique({ where: { id: projectId }, select: { members: { where: { userId: actorId }, select: { userId: true } } } }),
+    tx.user.findFirst({ where: { id: actorId, isActive: true }, select: { role: true } }),
+  ]);
+  if (!project || !currentActor || !["ADMIN", "ACCOUNT"].includes(currentActor.role) || (currentActor.role !== "ADMIN" && !project.members.length)) {
+    throw new Error("Không tìm thấy phiên xem trước hoặc bạn không có quyền.");
+  }
+  return currentActor;
 }
 
 export async function createExcelIntakePreviewSession(tx: AuthorityTx, input: CreateExcelIntakePreviewSessionInput) {
@@ -73,26 +171,79 @@ export async function createExcelIntakePreviewSession(tx: AuthorityTx, input: Cr
   });
 }
 
-export async function redactExcelIntakePreviewSession(
-  tx: AuthorityTx,
-  sessionId: string,
-  status: Exclude<ExcelIntakePreviewStatus, "ACTIVE" | "CONSUMED">,
-  at = new Date(),
-) {
-  const lifecycle = status === "SUPERSEDED"
-    ? { supersededAt: at }
-    : status === "CANCELLED"
-      ? { cancelledAt: at }
-      : {};
+export async function createNewDraftExcelIntakePreview(actor: Actor, input: CreateNewDraftPreviewInput): Promise<ActionablePreviewSessionView<ExcelIntakePreview>> {
+  if (!Number.isSafeInteger(input.sourceRevision) || input.sourceRevision < 1) throw new Error("Phiên bản nguồn không hợp lệ.");
+  const sourceBytes = input.sourceKind === "XLSX" ? input.sourceBytes : null;
+  if (input.sourceKind === "XLSX" && (!sourceBytes?.length || !input.sourceFilename)) throw new Error("Nguồn XLSX không hợp lệ.");
+  const sourceSha256 = sourceBytes ? sha256(sourceBytes) : sha256(input.sourceText ?? "");
+  return prisma.$transaction(async tx => {
+    await requireExcelIntakeActor(tx, actor.id, input.projectId);
+    const workspace = await tx.costFlowWorkspace.findUnique({ where: { projectId: input.projectId }, select: { version: true } });
+    const payload: NewDraftCanonicalPayload = {
+      expectedVersion: workspace?.version ?? 0,
+      preview: input.preview,
+      allowedCorrectionKeys: input.preview.rows.flatMap(row => [
+        "sell.unit", "sell.quantity", "sell.days", "sell.unitPrice", "sell.vatPercent", "sell.basis", "sell.note",
+        "buy.unit", "buy.quantity", "buy.days", "buy.unitPrice", "buy.vatPercent", "buy.basis", "buy.note", "buy.supplier",
+      ].map(field => `${row.candidateKey}.${field}`)),
+      allowedDecimalResolutionKeys: [],
+    };
+    const session = await createExcelIntakePreviewSession(tx, {
+      projectId: input.projectId,
+      actorId: actor.id,
+      operationKind: "NEW_DRAFT",
+      sourceKind: input.sourceKind,
+      sourceRevision: input.sourceRevision,
+      sourceSha256,
+      sourceFilename: input.sourceFilename,
+      sourceMimeType: input.sourceMimeType,
+      sourceBytes,
+      canonicalFingerprint: canonicalHash(payload),
+      canonicalPayload: payload,
+      displayPayload: input.preview,
+    });
+    return { state: "ACTIONABLE", previewSessionId: session.id, operationKind: "NEW_DRAFT", expiresAt: session.expiresAt.toISOString(), display: input.preview };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15000 });
+}
+
+export async function createRoundTripExcelIntakePreview(actor: Actor, input: CreateRoundTripPreviewInput): Promise<ActionablePreviewSessionView<RoundTripPreviewDisplay>> {
+  if (!Number.isSafeInteger(input.sourceRevision) || input.sourceRevision < 1) throw new Error("Phiên bản nguồn không hợp lệ.");
+  const preview = await previewRoundTripMerge(actor, input.projectId, input.sourceBytes);
+  const payload: RoundTripCanonicalPayload = {
+    expectedWorkspaceVersion: preview.workspaceVersion,
+    expectedDraftVersion: preview.draft.version,
+    expectedDraftFingerprint: preview.imported.fingerprint,
+    imported: preview.imported,
+    diff: preview.diff,
+    allowedDecimalResolutionKeys: [],
+  };
+  const display: RoundTripPreviewDisplay = { draft: preview.draft, diff: preview.diff };
+  return prisma.$transaction(async tx => {
+    await requireExcelIntakeActor(tx, actor.id, input.projectId);
+    const session = await createExcelIntakePreviewSession(tx, {
+      projectId: input.projectId,
+      actorId: actor.id,
+      operationKind: "ROUND_TRIP",
+      draftId: preview.draft.id,
+      sourceKind: "XLSX",
+      sourceRevision: input.sourceRevision,
+      sourceSha256: sha256(input.sourceBytes),
+      sourceFilename: input.sourceFilename,
+      sourceMimeType: input.sourceMimeType,
+      sourceBytes: input.sourceBytes,
+      canonicalFingerprint: canonicalHash(payload),
+      canonicalPayload: payload,
+      displayPayload: display,
+    });
+    return { state: "ACTIONABLE", previewSessionId: session.id, operationKind: "ROUND_TRIP", expiresAt: session.expiresAt.toISOString(), display };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15000 });
+}
+
+export async function redactExcelIntakePreviewSession(tx: AuthorityTx, sessionId: string, status: Exclude<ExcelIntakePreviewStatus, "ACTIVE" | "CONSUMED">, at = new Date()) {
+  const lifecycle = status === "SUPERSEDED" ? { supersededAt: at } : status === "CANCELLED" ? { cancelledAt: at } : {};
   return tx.excelIntakePreviewSession.updateMany({
     where: { id: sessionId, status: "ACTIVE" },
-    data: {
-      status,
-      sourceBytes: null,
-      canonicalPayload: Prisma.DbNull,
-      displayPayload: Prisma.DbNull,
-      ...lifecycle,
-    },
+    data: { status, sourceBytes: null, canonicalPayload: Prisma.DbNull, displayPayload: Prisma.DbNull, ...lifecycle },
   });
 }
 
@@ -118,6 +269,7 @@ export async function loadActionableExcelIntakePreviewSession(tx: AuthorityTx, i
     await redactExcelIntakePreviewSession(tx, session.id, "EXPIRED", now);
     throw new Error("Phiên xem trước đã hết hạn sau 7 ngày.");
   }
+  if (!session.canonicalPayload || !session.displayPayload) throw new Error("Phiên xem trước không còn dữ liệu để áp dụng.");
   return session;
 }
 
@@ -149,16 +301,9 @@ export async function claimExcelIntakeOperationReceipt(tx: AuthorityTx, input: {
   } });
 }
 
-export async function copySuccessfulExcelSourceEvidence(tx: AuthorityTx, input: {
-  sessionId: string;
-  receiptId: string;
-  linkedRecordKind: string;
-  linkedRecordId: string;
-}) {
+export async function copySuccessfulExcelSourceEvidence(tx: AuthorityTx, input: { sessionId: string; receiptId: string; linkedRecordKind: string; linkedRecordId: string }) {
   const session = await tx.excelIntakePreviewSession.findUniqueOrThrow({ where: { id: input.sessionId } });
-  if (session.sourceKind !== "XLSX" || !session.sourceBytes || !session.sourceFilename) {
-    throw new Error("Phiên xem trước không có nguồn XLSX để lưu bằng chứng.");
-  }
+  if (session.sourceKind !== "XLSX" || !session.sourceBytes || !session.sourceFilename) throw new Error("Phiên xem trước không có nguồn XLSX để lưu bằng chứng.");
   return tx.excelIntakeSourceEvidence.create({ data: {
     projectId: session.projectId,
     previewSessionId: session.id,
@@ -175,13 +320,7 @@ export async function copySuccessfulExcelSourceEvidence(tx: AuthorityTx, input: 
   } });
 }
 
-export async function consumeExcelIntakePreviewSession(tx: AuthorityTx, input: {
-  sessionId: string;
-  receiptId: string;
-  resultKind: string;
-  resultId: string;
-  consumedAt?: Date;
-}) {
+export async function consumeExcelIntakePreviewSession(tx: AuthorityTx, input: { sessionId: string; receiptId: string; resultKind: string; resultId: string; consumedAt?: Date }) {
   const consumedAt = input.consumedAt ?? new Date();
   const updated = await tx.excelIntakePreviewSession.updateMany({
     where: { id: input.sessionId, status: "ACTIVE", expiresAt: { gt: consumedAt } },
@@ -199,28 +338,73 @@ export async function consumeExcelIntakePreviewSession(tx: AuthorityTx, input: {
   if (updated.count !== 1) throw new Error("Phiên xem trước đã được dùng hoặc không còn hiệu lực.");
 }
 
-export async function loadExcelIntakeReadOnlyReview(input: { sessionId: string; projectId: string; actorId: string }) {
-  return prisma.excelIntakePreviewSession.findFirst({
-    where: { id: input.sessionId, projectId: input.projectId, actorId: input.actorId, status: "CONSUMED" },
-    include: { operationReceipt: true, sourceEvidence: true },
+function receiptEnvelope<T>(value: Prisma.JsonValue): ReceiptEnvelope<T> {
+  if (!value || typeof value !== "object" || Array.isArray(value) || !("output" in value)) throw new Error("Biên nhận thao tác không hợp lệ.");
+  return value as unknown as ReceiptEnvelope<T>;
+}
+
+function nonActionableState(status: string): PreviewSessionView["state"] {
+  if (status === "SUPERSEDED") return "NON_ACTIONABLE_SUPERSEDED";
+  if (status === "CANCELLED") return "NON_ACTIONABLE_CANCELLED";
+  return "NON_ACTIONABLE_EXPIRED";
+}
+
+export async function getExcelIntakePreviewSessionView(actor: Actor, projectId: string, sessionId: string): Promise<PreviewSessionView> {
+  return prisma.$transaction(async tx => {
+    await requireExcelIntakeActor(tx, actor.id, projectId);
+    let session = await tx.excelIntakePreviewSession.findFirst({ where: { id: sessionId, projectId, actorId: actor.id }, include: { operationReceipt: true, sourceEvidence: true } });
+    if (!session) throw new Error("Không tìm thấy phiên xem trước hoặc bạn không có quyền.");
+    if (session.status === "ACTIVE" && session.expiresAt.getTime() <= Date.now()) {
+      await redactExcelIntakePreviewSession(tx, session.id, "EXPIRED");
+      session = await tx.excelIntakePreviewSession.findFirstOrThrow({ where: { id: session.id }, include: { operationReceipt: true, sourceEvidence: true } });
+    }
+    if (session.status === "ACTIVE") {
+      if (!session.displayPayload) throw new Error("Phiên xem trước không còn dữ liệu để tiếp tục.");
+      return { state: "ACTIONABLE", previewSessionId: session.id, operationKind: session.operationKind as ExcelIntakeOperationKind, expiresAt: session.expiresAt.toISOString(), display: session.displayPayload };
+    }
+    if (session.status === "CONSUMED") {
+      const envelope = session.operationReceipt ? receiptEnvelope<Record<string, unknown>>(session.operationReceipt.result) : null;
+      const source = session.sourceEvidence ? {
+        filename: session.sourceEvidence.filename,
+        mimeType: session.sourceEvidence.mimeType,
+        size: session.sourceEvidence.size,
+        sha256: session.sourceEvidence.sha256,
+        downloadUrl: `/api/projects/${projectId}/costflow/excel-intake/sessions/${session.id}/source`,
+      } : null;
+      return { state: "READ_ONLY_CONSUMED", previewSessionId: session.id, operationKind: session.operationKind as ExcelIntakeOperationKind, expiresAt: session.expiresAt.toISOString(), display: envelope?.review ?? null, result: envelope?.output ?? null, source };
+    }
+    return { state: nonActionableState(session.status) as "NON_ACTIONABLE_EXPIRED" | "NON_ACTIONABLE_SUPERSEDED" | "NON_ACTIONABLE_CANCELLED", previewSessionId: session.id, operationKind: session.operationKind as ExcelIntakeOperationKind, expiresAt: session.expiresAt.toISOString() };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15000 });
+}
+
+export async function loadExcelIntakeSourceEvidence(actor: Actor, projectId: string, sessionId: string) {
+  await prisma.$transaction(tx => requireExcelIntakeActor(tx, actor.id, projectId));
+  const evidence = await prisma.excelIntakeSourceEvidence.findFirst({
+    where: { projectId, previewSessionId: sessionId, previewSession: { actorId: actor.id, status: "CONSUMED" } },
   });
+  if (!evidence) throw new Error("Không tìm thấy nguồn xác nhận hoặc bạn không có quyền.");
+  return evidence;
 }
 
-function previewFingerprint(preview: ExcelIntakePreview) {
-  const normalized = { ...preview } as Partial<ExcelIntakePreview>;
-  delete normalized.fingerprint;
-  delete normalized.adapter;
-  delete normalized.confidence;
-  return createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
+function validateIdempotencyKey(value: string) {
+  if (!/^[A-Za-z0-9._:-]{8,200}$/.test(value)) throw new Error("Mã chống ghi trùng không hợp lệ.");
 }
 
-function correctedValue(command: ConfirmExcelIntakeCommand, rowKey: string, field: string, fallback: string | null) {
-  return String(command.corrections?.[`${rowKey}.${field}`] ?? fallback ?? "").trim();
+function validateAllowedMap(input: StringMap | undefined, allowedKeys: string[], label: string) {
+  const sorted = sortedMap(input);
+  const allowed = new Set(allowedKeys);
+  if (Object.keys(sorted).some(key => !allowed.has(key))) throw new Error(`${label} không hợp lệ cho phiên xem trước này.`);
+  return sorted;
 }
 
-function buildRows(command: ConfirmExcelIntakeCommand): PairedRow[] {
-  const ids = new Map(command.preview.rows.map(row => [row.candidateKey, randomUUID()]));
-  const rows = command.preview.rows.map(row => ({
+function correctedValue(preview: ExcelIntakePreview, corrections: StringMap, rowKey: string, field: string, fallback: string | null) {
+  void preview;
+  return String(corrections[`${rowKey}.${field}`] ?? fallback ?? "").trim();
+}
+
+function buildRows(preview: ExcelIntakePreview, corrections: StringMap): PairedRow[] {
+  const ids = new Map(preview.rows.map(row => [row.candidateKey, randomUUID()]));
+  const rows = preview.rows.map(row => ({
     itemId: ids.get(row.candidateKey)!,
     parentItemId: row.parentCandidateKey ? ids.get(row.parentCandidateKey) ?? null : null,
     rowType: row.rowType,
@@ -231,25 +415,25 @@ function buildRows(command: ConfirmExcelIntakeCommand): PairedRow[] {
     showGroupSubtotal: true,
     packageChildDisplay: "CONTENT" as const,
     sell: {
-      unit: correctedValue(command, row.candidateKey, "sell.unit", row.sell.unit),
-      quantity: correctedValue(command, row.candidateKey, "sell.quantity", row.sell.quantity),
-      days: correctedValue(command, row.candidateKey, "sell.days", row.sell.days),
-      unitPrice: correctedValue(command, row.candidateKey, "sell.unitPrice", row.sell.unitPrice),
-      vatPercent: correctedValue(command, row.candidateKey, "sell.vatPercent", row.sell.vatPercent),
-      basis: (correctedValue(command, row.candidateKey, "sell.basis", row.sell.basis) || "NET") as "NET" | "GROSS",
-      notes: correctedValue(command, row.candidateKey, "sell.note", row.sell.note),
+      unit: correctedValue(preview, corrections, row.candidateKey, "sell.unit", row.sell.unit),
+      quantity: correctedValue(preview, corrections, row.candidateKey, "sell.quantity", row.sell.quantity),
+      days: correctedValue(preview, corrections, row.candidateKey, "sell.days", row.sell.days),
+      unitPrice: correctedValue(preview, corrections, row.candidateKey, "sell.unitPrice", row.sell.unitPrice),
+      vatPercent: correctedValue(preview, corrections, row.candidateKey, "sell.vatPercent", row.sell.vatPercent),
+      basis: (correctedValue(preview, corrections, row.candidateKey, "sell.basis", row.sell.basis) || "NET") as "NET" | "GROSS",
+      notes: correctedValue(preview, corrections, row.candidateKey, "sell.note", row.sell.note),
     },
     buy: {
-      unit: correctedValue(command, row.candidateKey, "buy.unit", row.buy.unit),
-      quantity: correctedValue(command, row.candidateKey, "buy.quantity", row.buy.quantity),
-      days: correctedValue(command, row.candidateKey, "buy.days", row.buy.days),
-      unitPrice: correctedValue(command, row.candidateKey, "buy.unitPrice", row.buy.unitPrice),
-      vatPercent: correctedValue(command, row.candidateKey, "buy.vatPercent", row.buy.vatPercent),
-      basis: (correctedValue(command, row.candidateKey, "buy.basis", row.buy.basis) || "NET") as "NET" | "GROSS",
-      notes: correctedValue(command, row.candidateKey, "buy.note", row.buy.note),
+      unit: correctedValue(preview, corrections, row.candidateKey, "buy.unit", row.buy.unit),
+      quantity: correctedValue(preview, corrections, row.candidateKey, "buy.quantity", row.buy.quantity),
+      days: correctedValue(preview, corrections, row.candidateKey, "buy.days", row.buy.days),
+      unitPrice: correctedValue(preview, corrections, row.candidateKey, "buy.unitPrice", row.buy.unitPrice),
+      vatPercent: correctedValue(preview, corrections, row.candidateKey, "buy.vatPercent", row.buy.vatPercent),
+      basis: (correctedValue(preview, corrections, row.candidateKey, "buy.basis", row.buy.basis) || "NET") as "NET" | "GROSS",
+      notes: correctedValue(preview, corrections, row.candidateKey, "buy.note", row.buy.note),
       vendorId: "",
       evidenceIds: [],
-      evidenceReason: correctedValue(command, row.candidateKey, "buy.supplier", row.buy.supplier) ? `Nguồn Excel — NCC: ${correctedValue(command, row.candidateKey, "buy.supplier", row.buy.supplier)}` : "",
+      evidenceReason: correctedValue(preview, corrections, row.candidateKey, "buy.supplier", row.buy.supplier) ? `Nguồn Excel — NCC: ${correctedValue(preview, corrections, row.candidateKey, "buy.supplier", row.buy.supplier)}` : "",
     },
   }));
   const normalized = normalizePairedRows(rows);
@@ -266,80 +450,98 @@ function buildRows(command: ConfirmExcelIntakeCommand): PairedRow[] {
   return normalized;
 }
 
-export async function confirmExcelIntake(actor: Actor, command: ConfirmExcelIntakeCommand): Promise<ConfirmExcelIntakeResult> {
-  if (!command.projectId || !Number.isSafeInteger(command.expectedVersion) || command.expectedVersion < 0) throw new Error("Phiên bản hồ sơ không hợp lệ.");
-  if (!/^[A-Za-z0-9._:-]{8,200}$/.test(command.idempotencyKey)) throw new Error("Mã chống ghi trùng không hợp lệ.");
-  if (command.preview.schemaVersion !== EXCEL_INTAKE_SCHEMA_VERSION || command.preview.errors.length) throw new Error("Xem trước còn lỗi cần sửa.");
-  const calculatedFingerprint = previewFingerprint(command.preview);
-  if (calculatedFingerprint !== command.fingerprint || calculatedFingerprint !== command.preview.fingerprint) throw new Error("Xem trước đã thay đổi. Hãy kiểm tra lại trước khi tạo nháp.");
-  const corrections = Object.fromEntries(Object.entries(command.corrections ?? {}).sort(([left], [right]) => left.localeCompare(right)));
-  const operationFingerprint = createHash("sha256").update(JSON.stringify({ preview: calculatedFingerprint, corrections })).digest("hex");
+function newDraftCommandFingerprint(actorId: string, command: ConfirmExcelIntakeCommand) {
+  return canonicalHash({ actorId, projectId: command.projectId, operationKind: "NEW_DRAFT", previewSessionId: command.previewSessionId, expectedVersion: command.expectedVersion, corrections: sortedMap(command.corrections), decimalResolutions: sortedMap(command.decimalResolutions) });
+}
 
+function roundTripCommandFingerprint(actorId: string, command: ConfirmRoundTripMergeCommand) {
+  return canonicalHash({ actorId, projectId: command.projectId, operationKind: "ROUND_TRIP", draftId: command.draftId, previewSessionId: command.previewSessionId, selectedDeletionIds: [...command.selectedDeletionIds].sort(), decimalResolutions: sortedMap(command.decimalResolutions) });
+}
+
+export async function confirmExcelIntake(actor: Actor, command: ConfirmExcelIntakeCommand): Promise<ConfirmExcelIntakeResult> {
+  if (!command.projectId || !command.previewSessionId || !Number.isSafeInteger(command.expectedVersion) || command.expectedVersion < 0) throw new Error("Phiên bản hồ sơ không hợp lệ.");
+  validateIdempotencyKey(command.idempotencyKey);
+  const operationFingerprint = newDraftCommandFingerprint(actor.id, command);
   return prisma.$transaction(async tx => {
-    const [project, currentActor] = await Promise.all([
-      tx.project.findUnique({ where: { id: command.projectId }, select: { members: { where: { userId: actor.id }, select: { userId: true } } } }),
-      tx.user.findFirst({ where: { id: actor.id, isActive: true }, select: { role: true } }),
-    ]);
-    if (!project || !currentActor || !["ADMIN", "ACCOUNT"].includes(currentActor.role) || (currentActor.role !== "ADMIN" && !project.members.length)) throw new Error("Bạn không có quyền tạo nháp cho Project này.");
+    await requireExcelIntakeActor(tx, actor.id, command.projectId);
+    const prior = await readExcelIntakeOperationReceipt(tx, command.projectId, command.idempotencyKey);
+    if (prior) {
+      if (prior.actorId !== actor.id || prior.operationKind !== "NEW_DRAFT" || prior.previewSessionId !== command.previewSessionId || prior.canonicalFingerprint !== operationFingerprint) throw new Error("Mã chống ghi trùng đã được dùng với dữ liệu khác.");
+      return { ...receiptEnvelope<ConfirmExcelIntakeResult>(prior.result).output, idempotent: true };
+    }
+    const session = await loadActionableExcelIntakePreviewSession(tx, { sessionId: command.previewSessionId, projectId: command.projectId, actorId: actor.id, operationKind: "NEW_DRAFT" });
+    const payload = session.canonicalPayload as unknown as NewDraftCanonicalPayload;
+    if (canonicalHash(payload) !== session.canonicalFingerprint || payload.preview.schemaVersion !== EXCEL_INTAKE_SCHEMA_VERSION || payload.preview.errors.length) throw new Error("Xem trước còn lỗi cần sửa.");
+    if (payload.expectedVersion !== command.expectedVersion) throw new Error("Dữ liệu đã thay đổi. Tải lại trước khi tạo nháp.");
+    const corrections = validateAllowedMap(command.corrections, payload.allowedCorrectionKeys, "Ô sửa");
+    validateAllowedMap(command.decimalResolutions, payload.allowedDecimalResolutionKeys, "Cách xử lý số thập phân");
     let workspace = await tx.costFlowWorkspace.findUnique({ where: { projectId: command.projectId } });
     if (!workspace) workspace = await tx.costFlowWorkspace.create({ data: { projectId: command.projectId, data: json(emptyFinance()) } });
+    if (workspace.version !== payload.expectedVersion) throw new Error("Dữ liệu đã thay đổi. Tải lại trước khi tạo nháp.");
     const data = hydrateLinePricingData(workspace.data as unknown as FinanceData);
-    const prior = data.excelIntakeReceipts?.find(receipt => receipt.idempotencyKey === command.idempotencyKey);
-    if (prior) {
-      if (prior.fingerprint !== operationFingerprint || prior.actorId !== actor.id) throw new Error("Mã chống ghi trùng đã được dùng với dữ liệu khác.");
-      return { draftId: prior.draftId, version: workspace.version, idempotent: true };
-    }
-    if (workspace.version !== command.expectedVersion) throw new Error("Dữ liệu đã thay đổi. Tải lại trước khi tạo nháp.");
-    const rows = buildRows(command);
+    const rows = buildRows(payload.preview, corrections);
     const draftId = randomUUID();
-    data.quotationDrafts = [...(data.quotationDrafts ?? []), { linePricingSchemaVersion: 2, id: draftId, version: 1, createdBy: actor.id, workspaceMode: "paired", title: command.preview.metadata.projectName || "Báo giá nhập Excel", clientId: "", customer: command.preview.metadata.customer, notes: `Nguồn ${command.preview.source.sheet} ${command.preview.source.range}`.trim(), rows, globalEvidenceIds: [] }];
-    data.excelIntakeReceipts = [...(data.excelIntakeReceipts ?? []).slice(-99), { idempotencyKey: command.idempotencyKey, fingerprint: operationFingerprint, draftId, actorId: actor.id, createdAt: new Date().toISOString() }];
-    const updated = await tx.costFlowWorkspace.updateMany({ where: { projectId: command.projectId, version: command.expectedVersion }, data: { data: json(data), version: { increment: 1 } } });
+    data.quotationDrafts = [...(data.quotationDrafts ?? []), {
+      linePricingSchemaVersion: 2,
+      id: draftId,
+      version: 1,
+      createdBy: actor.id,
+      workspaceMode: "paired",
+      title: payload.preview.metadata.projectName || "Báo giá nhập Excel",
+      clientId: "",
+      customer: payload.preview.metadata.customer,
+      notes: `Nguồn ${payload.preview.source.sheet} ${payload.preview.source.range}`.trim(),
+      rows,
+      globalEvidenceIds: [],
+    }];
+    const updated = await tx.costFlowWorkspace.updateMany({ where: { projectId: command.projectId, version: payload.expectedVersion }, data: { data: json(data), version: { increment: 1 } } });
     if (updated.count !== 1) throw new Error("Có thao tác đồng thời. Tải lại rồi thử lại.");
-    await tx.costFlowHistory.create({ data: { projectId: command.projectId, version: command.expectedVersion + 1, actorId: actor.id, action: "CONFIRM_EXCEL_INTAKE", snapshot: json(data) } });
-    return { draftId, version: command.expectedVersion + 1, idempotent: false };
+    const output: ConfirmExcelIntakeResult = { draftId, version: payload.expectedVersion + 1, idempotent: false };
+    const receipt = await claimExcelIntakeOperationReceipt(tx, { projectId: command.projectId, previewSessionId: session.id, idempotencyKey: command.idempotencyKey, actorId: actor.id, operationKind: "NEW_DRAFT", canonicalFingerprint: operationFingerprint, result: { output, review: session.displayPayload }, linkedRecordKind: "PAIRED_DRAFT", linkedRecordId: draftId });
+    if (session.sourceKind === "XLSX") await copySuccessfulExcelSourceEvidence(tx, { sessionId: session.id, receiptId: receipt.id, linkedRecordKind: "PAIRED_DRAFT", linkedRecordId: draftId });
+    await tx.costFlowHistory.create({ data: { projectId: command.projectId, version: output.version, actorId: actor.id, action: "CONFIRM_EXCEL_INTAKE", snapshot: json(data) } });
+    await consumeExcelIntakePreviewSession(tx, { sessionId: session.id, receiptId: receipt.id, resultKind: "PAIRED_DRAFT", resultId: draftId });
+    return output;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15000 });
 }
 
 export async function confirmRoundTripMerge(actor: Actor, command: ConfirmRoundTripMergeCommand): Promise<ConfirmRoundTripMergeResult> {
-  if (!command.projectId || !command.draftId || !Number.isSafeInteger(command.expectedWorkspaceVersion) || !Number.isSafeInteger(command.expectedDraftVersion)) throw new Error("Phiên bản round-trip không hợp lệ.");
-  if (!/^[A-Za-z0-9._:-]{8,200}$/.test(command.idempotencyKey)) throw new Error("Mã chống ghi trùng không hợp lệ.");
+  if (!command.projectId || !command.draftId || !command.previewSessionId) throw new Error("Phiên round-trip không hợp lệ.");
+  validateIdempotencyKey(command.idempotencyKey);
   if (!Array.isArray(command.selectedDeletionIds) || command.selectedDeletionIds.some(id => typeof id !== "string")) throw new Error("Danh sách xác nhận xóa không hợp lệ.");
   const selectedDeletionIds = [...command.selectedDeletionIds].sort();
-  const operationFingerprint = createHash("sha256").update(JSON.stringify({ draftId: command.draftId, expectedDraftVersion: command.expectedDraftVersion, expectedDraftFingerprint: command.expectedDraftFingerprint, previewFingerprint: command.previewFingerprint, imported: command.imported, selectedDeletionIds })).digest("hex");
-
+  const operationFingerprint = roundTripCommandFingerprint(actor.id, { ...command, selectedDeletionIds });
   return prisma.$transaction(async tx => {
-    const [project, currentActor, workspace] = await Promise.all([
-      tx.project.findUnique({ where: { id: command.projectId }, select: { members: { where: { userId: actor.id }, select: { userId: true } } } }),
-      tx.user.findFirst({ where: { id: actor.id, isActive: true }, select: { role: true } }),
-      tx.costFlowWorkspace.findUnique({ where: { projectId: command.projectId } }),
-    ]);
-    if (!project || !currentActor || !workspace || !["ADMIN", "ACCOUNT"].includes(currentActor.role) || (currentActor.role !== "ADMIN" && !project.members.length)) throw new Error("Không tìm thấy nháp hoặc bạn không có quyền.");
-    const data = hydrateLinePricingData(workspace.data as unknown as FinanceData);
-    const prior = data.excelIntakeReceipts?.find(receipt => receipt.idempotencyKey === command.idempotencyKey);
+    await requireExcelIntakeActor(tx, actor.id, command.projectId);
+    const prior = await readExcelIntakeOperationReceipt(tx, command.projectId, command.idempotencyKey);
     if (prior) {
-      if (prior.fingerprint !== operationFingerprint || prior.actorId !== actor.id || prior.draftId !== command.draftId) throw new Error("Mã chống ghi trùng đã được dùng với dữ liệu khác.");
-      const replayDraft = data.quotationDrafts?.find(value => value.id === prior.draftId);
-      if (!replayDraft) throw new Error("Nháp round-trip không còn tồn tại.");
-      return { draftId: replayDraft.id, draftVersion: replayDraft.version, version: workspace.version, idempotent: true, rows: structuredClone(replayDraft.rows) };
+      if (prior.actorId !== actor.id || prior.operationKind !== "ROUND_TRIP" || prior.previewSessionId !== command.previewSessionId || prior.canonicalFingerprint !== operationFingerprint || prior.linkedRecordId !== command.draftId) throw new Error("Mã chống ghi trùng đã được dùng với dữ liệu khác.");
+      return { ...receiptEnvelope<ConfirmRoundTripMergeResult>(prior.result).output, idempotent: true };
     }
-    if (workspace.version !== command.expectedWorkspaceVersion) throw new Error("Nháp trên máy chủ đã thay đổi. Tải lại và xuất workbook mới trước khi thử lại.");
+    const session = await loadActionableExcelIntakePreviewSession(tx, { sessionId: command.previewSessionId, projectId: command.projectId, actorId: actor.id, operationKind: "ROUND_TRIP", draftId: command.draftId });
+    const payload = session.canonicalPayload as unknown as RoundTripCanonicalPayload;
+    if (canonicalHash(payload) !== session.canonicalFingerprint || !payload.diff.previewFingerprint) throw new Error("Xem trước round-trip không còn khớp.");
+    validateAllowedMap(command.decimalResolutions, payload.allowedDecimalResolutionKeys, "Cách xử lý số thập phân");
+    const workspace = await tx.costFlowWorkspace.findUnique({ where: { projectId: command.projectId } });
+    if (!workspace || workspace.version !== payload.expectedWorkspaceVersion) throw new Error("Nháp trên máy chủ đã thay đổi. Tải lại và xuất workbook mới trước khi thử lại.");
+    const data = hydrateLinePricingData(workspace.data as unknown as FinanceData);
     const draft = data.quotationDrafts?.find(value => value.id === command.draftId);
     if (!draft || draft.createdBy !== actor.id || draft.workspaceMode !== "paired" || data.closed) throw new Error("Nháp không còn ở trạng thái được phép chỉnh sửa.");
-    if (draft.version !== command.expectedDraftVersion || createRoundTripProjection(command.projectId, draft).fingerprint !== command.expectedDraftFingerprint) throw new Error("Nháp trên máy chủ đã thay đổi. Tải lại và xuất workbook mới trước khi thử lại.");
+    if (draft.version !== payload.expectedDraftVersion || createRoundTripProjection(command.projectId, draft).fingerprint !== payload.expectedDraftFingerprint) throw new Error("Nháp trên máy chủ đã thay đổi. Tải lại và xuất workbook mới trước khi thử lại.");
     if (draft.icRevisionId) {
       const revision = data.revisions.find(value => value.id === draft.icRevisionId);
       const request = revision ? await tx.workflowRequest.findUnique({ where: { id: revision.requestId }, select: { state: true, creatorId: true } }) : null;
       if (!revision || revision.effective || request?.state !== "DRAFT" || request.creatorId !== actor.id) throw new Error("IC đã gửi hoặc có hiệu lực phải đi qua lifecycle revision hiện có.");
     }
-    const diff = diffRoundTripDraft(draft, command.imported, command.projectId);
-    if (diff.previewFingerprint !== command.previewFingerprint) throw new Error("Xem trước round-trip không còn khớp. Hãy xem lại diff trước khi áp dụng.");
-    draft.rows = applyRoundTripDiff(draft, diff, selectedDeletionIds);
+    draft.rows = applyRoundTripDiff(draft, payload.diff, selectedDeletionIds);
     draft.version += 1;
-    data.excelIntakeReceipts = [...(data.excelIntakeReceipts ?? []).slice(-99), { idempotencyKey: command.idempotencyKey, fingerprint: operationFingerprint, draftId: draft.id, actorId: actor.id, createdAt: new Date().toISOString() }];
-    const updated = await tx.costFlowWorkspace.updateMany({ where: { projectId: command.projectId, version: command.expectedWorkspaceVersion }, data: { data: json(data), version: { increment: 1 } } });
+    const updated = await tx.costFlowWorkspace.updateMany({ where: { projectId: command.projectId, version: payload.expectedWorkspaceVersion }, data: { data: json(data), version: { increment: 1 } } });
     if (updated.count !== 1) throw new Error("Có thao tác đồng thời. Tải lại và xuất workbook mới trước khi thử lại.");
-    await tx.costFlowHistory.create({ data: { projectId: command.projectId, version: command.expectedWorkspaceVersion + 1, actorId: actor.id, action: "CONFIRM_EXCEL_ROUND_TRIP", snapshot: json(data) } });
-    return { draftId: draft.id, draftVersion: draft.version, version: command.expectedWorkspaceVersion + 1, idempotent: false, rows: structuredClone(draft.rows) };
+    const output: ConfirmRoundTripMergeResult = { draftId: draft.id, draftVersion: draft.version, version: payload.expectedWorkspaceVersion + 1, idempotent: false, rows: structuredClone(draft.rows) };
+    const receipt = await claimExcelIntakeOperationReceipt(tx, { projectId: command.projectId, previewSessionId: session.id, idempotencyKey: command.idempotencyKey, actorId: actor.id, operationKind: "ROUND_TRIP", canonicalFingerprint: operationFingerprint, result: { output, review: session.displayPayload }, linkedRecordKind: "PAIRED_DRAFT", linkedRecordId: draft.id });
+    await copySuccessfulExcelSourceEvidence(tx, { sessionId: session.id, receiptId: receipt.id, linkedRecordKind: "PAIRED_DRAFT", linkedRecordId: draft.id });
+    await tx.costFlowHistory.create({ data: { projectId: command.projectId, version: output.version, actorId: actor.id, action: "CONFIRM_EXCEL_ROUND_TRIP", snapshot: json(data) } });
+    await consumeExcelIntakePreviewSession(tx, { sessionId: session.id, receiptId: receipt.id, resultKind: "PAIRED_DRAFT", resultId: draft.id });
+    return output;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15000 });
 }

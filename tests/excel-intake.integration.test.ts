@@ -84,6 +84,12 @@ test("live confirm reauthorizes session scope, rolls back and admits one race wi
     }), /Số lượng phải lớn hơn 0/i);
     assert.equal(await prisma.costFlowWorkspace.count({ where: { projectId: rollbackProject.id } }), 0);
     assert.equal(await prisma.excelIntakeOperationReceipt.count({ where: { projectId: rollbackProject.id } }), 0);
+    assert.equal(await prisma.excelIntakeSourceEvidence.count({ where: { projectId: rollbackProject.id } }), 0);
+    assert.equal(await prisma.costFlowHistory.count({ where: { projectId: rollbackProject.id } }), 0);
+    const stillReviewable = await prisma.excelIntakePreviewSession.findUniqueOrThrow({ where: { id: rollbackSession.previewSessionId } });
+    assert.equal(stillReviewable.status, "ACTIVE");
+    assert.notEqual(stillReviewable.canonicalPayload, null);
+    assert.notEqual(stillReviewable.displayPayload, null);
 
     const raceProject = await createProject("race");
     const raceSession = await createSession(raceProject.id);
