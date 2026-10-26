@@ -32,7 +32,7 @@ The Bảng AC and Phase 14 checks must be performed in one authorized, read-only
 | `PROD-AC14-05` | Verify outsider/incorrect-role denial and private-field redaction | session with permitted test identity only | HTTP/UI denial evidence; no production credential disclosure | `PENDING` |
 | `PROD-AC14-06` | Record company acceptance separately from technical smoke | named company reviewer(s) | explicit decision, evidence IDs and timestamp entered by the human reviewer | `PENDING` |
 
-No production credential or existing authenticated session was available to the automated Plan 12-08 run. Therefore this batch is prepared but not represented as executed.
+A Chrome window titled `myCreative — Quản lý công việc` was visible in the desktop inventory, but browser control is disabled in Work settings and the read-only window-observation approval timed out. Its URL, actor and authentication state could not be verified. No production credential was supplied, so this batch is prepared but not represented as executed.
 
 ## Phase 12 release sign-off
 
