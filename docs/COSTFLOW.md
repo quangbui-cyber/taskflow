@@ -194,3 +194,50 @@ Các trục vẫn độc lập: kết quả DD, completeness chứng từ, payme
 - Dòng vắng khỏi workbook chỉ là deletion candidate. Mỗi dòng xóa mặc định chưa chọn và phải được người dùng xác nhận riêng; dòng không xác nhận được giữ nguyên. Apply re-authorize và kiểm tra workspace/draft CAS, preview fingerprint, selected deletions và lifecycle trong transaction Serializable; retry cùng payload là idempotent, race chỉ có một winner.
 - Finalized quotation và IC đã submit/effective không bị round-trip sửa. Muốn đổi các bản đó phải dùng revision lifecycle hiện có. Customer quotation/PDF/XLSX vẫn dùng allowlist bán, không xuất buy, supplier, stable ID, draft version hay metadata round-trip.
 - Phase 12 vẫn phải đo bằng file công ty thật: thời gian từ file đến nháp, số ô cần sửa và đối chiếu chênh lệch tổng. Test local/synthetic, browser local hay workbook reopen không phải nghiệm thu Kế toán, pilot công ty, deployment hoặc production acceptance.
+
+## Excel Intake v4 — hợp đồng closure PAIR-21–23 (2026-10-26)
+
+### Authority, exact value và lifecycle
+
+- Workbook dùng mô hình hybrid: ô số hiển thị giữ trải nghiệm Excel quen thuộc, sheet `_IMPORT` giữ chuỗi thập phân canonical. Công thức chỉ để preview; server parse lại primitive, buộc chọn từng xung đột visible/canonical và tự tính authoritative totals. VAT `0` và đơn giá FOC `0` là giá trị hợp lệ; FOC vẫn cần ghi chú.
+- Cả tạo nháp mới và round-trip chỉ nhận `previewSessionId` opaque. Canonical payload, actor, Project, operation kind, scope, draft/version, source hash và expiry nằm phía server. Browser projection không phải mutation authority.
+- Preview thành công từ XLSX giữ bytes tạm trong session. Khi confirm/apply thành công, transaction tạo durable receipt và source evidence gồm bytes gốc, SHA-256, filename, MIME, size, actor, operation kind và linked record. Session `CONSUMED` xóa payload/bytes tạm nhưng còn review read-only qua receipt/evidence; receipt không bị eviction theo số lượng.
+- Preview chưa dùng actionable đến trước `expiresAt` bảy ngày. Từ boundary hết hạn, confirm/apply fail closed và một transaction riêng ghi `EXPIRED`, xóa canonical/display payload cùng source bytes để lỗi nghiệp vụ sau đó không rollback việc redaction. `CANCELLED` và `SUPERSEDED` dùng cùng ranh giới non-actionable/redacted.
+- Đổi file, paste, mode, sheet, range hoặc mapping phải cancel exact session trước khi cài source mới. Projection cũ chỉ còn dimmed/read-only. Response revision cũ bị bỏ; preview thành công mới nhất thắng theo actor + Project + operation scope, và round-trip thêm draft ID. Cancel A rồi B parse fail không làm A sống lại.
+
+### Round-trip lossless và review
+
+- Workbook round-trip giữ stable row/parent/order và canonical fingerprint trong sheet rất ẩn, nhưng apply chỉ tạo allowlisted patch trên server clone. Package/display state, formula binding, evidence, lineage, removal/lifecycle state và immutable quotation/revision không được lấy từ browser.
+- Dòng thiếu khỏi workbook là deletion candidate mặc định unchecked. `Chọn tất cả` chỉ đổi selection; apply vẫn cần aggregate confirmation. Parent-only deletion bị chặn, không auto cascade/reparent.
+- Server draft thay đổi sau preview làm toàn bộ apply stale và không ghi một phần. Người dùng giữ workbook, tải draft mới và rebuild diff; không có force overwrite.
+- Technical/canonical metadata tamper chặn đúng stable row. Sửa một primitive có formula chỉ đặt đúng sell hoặc buy binding thành `OVERRIDDEN`; phía còn lại và protected state giữ nguyên.
+- Upload MIME rỗng hoặc `application/octet-stream` chỉ được chấp nhận với tên `.xlsx` và package ZIP/OpenXML hợp lệ. Signature, content types, workbook/worksheet parts, path traversal, entry/ratio/size bounds, macro, external link, DDE, OLE/ActiveX và formula primitive vẫn fail closed.
+
+### Ma trận finding/decision → behavioral evidence
+
+| ID | Behavioral evidence đã chạy | Runner |
+|---|---|---|
+| CR-01, CR-05 | `public commands and browser callers use opaque preview sessions only`; `opaque new-draft session is atomic, durable and reviewable`; `live round-trip preview is authorized, zero-write and preserves immutable records` | integration |
+| CR-02 | `allowlisted no-op preserves rich protected row state byte-for-byte`; `live apply keeps unconfirmed deletions, confirms selected deletion and enforces CAS replay race` | unit + integration |
+| CR-03 | `hybrid decimals keep canonical exact values and emit stable per-cell conflicts`; `hybrid workbook keeps visible numerics and hidden exact canonical text for all eight primitives` | unit |
+| CR-04 | `v4 normalization keeps exact coordinates, blank versus zero and independent sides`; `v4 workbook reopens with paired layout, three levels and preview-only formulas` | unit |
+| CR-06 | `opaque new-draft session is atomic, durable and reviewable` thực thi replay sau 101 receipt | integration |
+| CR-07 | `shared preview state stages source changes and isolates every revision`; `exact cancellation and newest-successful scope revoke stale authority` | unit + integration |
+| WR-01 | `duplicate fields and decimal conflicts target their exact owning controls`; `normalization stamps every error and warning with row, field and source identity`; `round-trip row and aggregate diagnostics have deterministic distinct targets` | unit |
+| WR-02 | `new-draft and round-trip parsing accept only safe XLSX filename and browser MIME variants`; `strict package preflight rejects missing parts, active content and excessive entries` | unit |
+| WR-03 | Các suite trên gọi parser/workbook/reducer/service/DB thật; source-contract assertion chỉ bổ sung wiring, không đứng một mình làm closure | unit + integration |
+| D-16–D-18 | Các test hybrid workbook, per-cell resolution, locale ambiguity và exact diagnostic ownership nêu trên | unit |
+| D-19–D-21 | `authority schema contract is additive and keeps redaction payloads nullable`; `opaque new-draft session is atomic, durable and reviewable` kiểm tra bytes/hash/lineage, day-7/day-8, consumed review và 101 replay | integration |
+| D-22–D-23 | `shared preview state stages source changes and isolates every revision`; `exact cancellation and newest-successful scope revoke stale authority` kiểm tra cancel-before-change, failed-B non-resurrection, late response và scoped supersession | unit + integration |
+| D-24–D-26 | `one formula primitive edit overrides only its side and parent-only deletion is rejected`; `tampered hidden canonical binding blocks the affected stable row`; `live apply keeps unconfirmed deletions, confirms selected deletion and enforces CAS replay race` | unit + integration |
+
+Runner chuẩn đăng ký và in inventory cho `excel-intake-authority-schema.integration.test.ts`, `excel-intake-authority.integration.test.ts` và `excel-round-trip.integration.test.ts`; fixture `phase31-gap-*` tự dọn và kiểm tra residue sessions/receipts/evidence/Projects/Users bằng `0`.
+
+### Bằng chứng kỹ thuật local đã quan sát
+
+- `npm.cmd run test:costflow`: PASS, 215/215 non-integration tests; gồm regression PAIR-01–20, customer privacy và các trục approval/budget/cash/revenue/settlement.
+- Exact `DATABASE_URL` = `COSTFLOW_TEST_DATABASE_URL` = `postgresql://postgres@127.0.0.1:55439/costflow_test`, `EXCEL_AUTHORITY_SCHEMA_MODE=verify`, rồi `npm.cmd run test:costflow -- --integration`: PASS, 243 pass, 0 fail, 1 legacy skip có chủ đích; output có đủ ba suite persistence ở trên. Không select/mutate `/taskflow`, không seed/reset/repoint/db push/migrate deploy.
+- `npx.cmd tsc --noEmit`: PASS. Targeted ESLint trên runner, Excel implementation/routes/dialogs và chín suite gap: PASS.
+- `TASKFLOW_DIST_DIR=.codex-tmp/next-excel-gap-17-escalated` với direct Next 16 webpack build: PASS. Hai build sandbox ban đầu gặp Windows/OneDrive `EPERM` tại route động `[id]`; build cô lập cùng source chạy ngoài sandbox hoàn tất. Cảnh báo `unpdf` `import.meta` đã tồn tại, không làm build fail.
+
+Đây chỉ là **automated local technical evidence**. Vẫn **Pending** và không được suy ra từ kết quả trên: exact-390px human visual interaction, native Vietnamese IME, real company workbook/accounting reconciliation, Phase 12 pilot, deployment và production acceptance. Không có browser acceptance, migration deploy hay production operation trong closure này.
