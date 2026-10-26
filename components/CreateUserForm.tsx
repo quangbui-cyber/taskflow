@@ -63,6 +63,7 @@ export default function CreateUserForm() {
           >
             <option value="USER">User</option>
             <option value="ACCOUNT">Account</option>
+            <option value="ACCOUNTANT">Kế toán</option>
             <option value="ADMIN">Admin</option>
           </select>
           <ChevronDown

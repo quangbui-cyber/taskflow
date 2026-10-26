@@ -1,6 +1,8 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth";
-import { attachmentDisposition } from "@/lib/contentDisposition";
+import { after } from "next/server";
+import { trashDriveFileSafe } from "@/lib/driveStorage";
+import { openStoredFileResponse, storedFileResponse } from "@/lib/storedFileResponse";
 import { prisma } from "@/lib/prisma";
 import { findAccessibleTask } from "@/lib/taskFiles";
 
@@ -35,19 +37,15 @@ async function loadFile(context: Context) {
   return { user, task, file };
 }
 
-export async function GET(_request: Request, context: Context) {
+export async function GET(request: Request, context: Context) {
   const result = await loadFile(context);
   if ("error" in result) return result.error;
-  const { file } = result;
+  const { file, user } = result;
 
-  return new Response(file.data, {
-    headers: {
-      "Content-Type": file.mimeType,
-      "Content-Length": String(file.size),
-      "Content-Disposition": attachmentDisposition(file.name),
-      "Cache-Control": "private, no-store",
-    },
-  });
+  if (new URL(request.url).searchParams.get("open") === "1") {
+    return openStoredFileResponse(file, user.email);
+  }
+  return storedFileResponse(file);
 }
 
 export async function DELETE(_request: Request, context: Context) {
@@ -68,6 +66,7 @@ export async function DELETE(_request: Request, context: Context) {
   }
 
   await prisma.taskFile.delete({ where: { id: file.id } });
+  after(() => trashDriveFileSafe(file.driveFileId));
   revalidatePath(`/projects/${task.projectId}`);
   return Response.json({ success: true });
 }

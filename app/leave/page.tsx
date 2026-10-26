@@ -9,6 +9,7 @@ import {
   LeaveManagerPicker,
   LeaveQuotaInput,
   LeaveRequestForm,
+  LeaveUsedInput,
 } from "@/components/LeaveViews";
 import {
   HALF_DAY_OPTIONS,
@@ -275,11 +276,6 @@ export default async function LeavePage({
                 <h2 className="font-semibold">
                   Báo cáo nghỉ phép năm {reportYear}
                 </h2>
-                <p className="mt-0.5 text-xs text-zinc-400">
-                  Chỉ tính đơn đã duyệt. Đơn vắt qua hai tháng được tách theo
-                  ngày làm việc của từng tháng. Bấm vào một tháng để xem chi
-                  tiết.
-                </p>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[520px] text-sm">
@@ -438,6 +434,10 @@ export default async function LeavePage({
         id: true,
         name: true,
         annualLeaveDays: true,
+        leaveAdjustments: {
+          where: { year },
+          select: { adjustmentDays: true },
+        },
         leaveRequests: {
           where: { startDate: yearRange },
           select: { type: true, status: true, days: true },
@@ -473,7 +473,7 @@ export default async function LeavePage({
                 <h2 className="font-semibold">Quỹ phép năm {year}</h2>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[520px] text-sm">
+                <table className="w-full min-w-[700px] text-sm">
                   <thead>
                     <tr className="text-xs text-zinc-500">
                       <th className="px-5 py-2 text-left font-medium">
@@ -497,7 +497,8 @@ export default async function LeavePage({
                     {people.map((person) => {
                       const balance = summarizeLeave(
                         person.leaveRequests,
-                        person.annualLeaveDays
+                        person.annualLeaveDays,
+                        person.leaveAdjustments[0]?.adjustmentDays ?? 0
                       );
                       return (
                         <tr key={person.id}>
@@ -505,7 +506,13 @@ export default async function LeavePage({
                             {person.name}
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums">
-                            {formatLeaveDays(balance.used)}
+                            <LeaveUsedInput
+                              key={`${person.id}:${year}:${balance.used}`}
+                              userId={person.id}
+                              userName={person.name}
+                              year={year}
+                              days={balance.used}
+                            />
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums text-zinc-500">
                             {formatLeaveDays(balance.pending)}
@@ -546,6 +553,10 @@ export default async function LeavePage({
       select: {
         id: true,
         annualLeaveDays: true,
+        leaveAdjustments: {
+          where: { year },
+          select: { adjustmentDays: true },
+        },
         managerId: true,
         manager: { select: { name: true, isActive: true } },
       },
@@ -609,7 +620,8 @@ export default async function LeavePage({
       (request) =>
         request.startDate >= yearRange.gte && request.startDate < yearRange.lt
     ),
-    me.annualLeaveDays
+    me.annualLeaveDays,
+    me.leaveAdjustments[0]?.adjustmentDays ?? 0
   );
 
   return (

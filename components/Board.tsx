@@ -190,9 +190,6 @@ export default function Board({
               <p className="text-sm font-semibold text-zinc-800">
                 Dự án chưa có công việc
               </p>
-              <p className="mt-0.5 text-xs leading-5 text-zinc-500">
-                Tạo task đầu tiên để bắt đầu phân công và theo dõi tiến độ.
-              </p>
             </div>
           </div>
           <button
@@ -356,7 +353,7 @@ export default function Board({
                 )}
               </Droppable>
 
-              <div className="shrink-0 border-t border-zinc-200 p-3 md:max-h-[calc(100%-8rem)] md:overflow-y-auto">
+              <div className="shrink-0 border-t border-zinc-200 p-3">
                 <NewTaskInline
                   key={`${col.key}-${col.key === "TODO" ? todoComposerSignal : 0}`}
                   projectId={projectId}

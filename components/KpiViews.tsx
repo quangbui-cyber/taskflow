@@ -76,14 +76,12 @@ export function KpiSummary({
         <p className="mt-2 text-xl font-semibold tabular-nums text-zinc-950">
           {yearTarget > 0 ? formatCompactVND(yearTarget) : "—"}
         </p>
-        <p className="mt-1 text-xs text-zinc-400">Doanh số ghi nhận</p>
       </section>
       <section className="tf-metric-item">
         <p className="text-xs font-medium text-zinc-500">Đã đạt</p>
         <p className="mt-2 text-xl font-semibold tabular-nums text-zinc-950">
           {formatCompactVND(earned)}
         </p>
-        <p className="mt-1 text-xs text-zinc-400">On Process + Done</p>
       </section>
       <section className="tf-metric-item">
         <p className="text-xs font-medium text-zinc-500">Hoàn thành</p>

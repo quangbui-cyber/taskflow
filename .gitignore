@@ -63,3 +63,14 @@ admin-accounts-*.png
 # kết quả audit / tài liệu xuất ra từ công cụ (không phải mã nguồn app)
 /outputs/
 /.codex/
+
+# repo/công cụ bên ngoài và dữ liệu cục bộ của agent (không phải mã nguồn app)
+/markitdown/
+/.claude/worktrees/
+/.codegraph/
+
+# ảnh chụp màn hình / ảnh tạm đặt ở thư mục gốc (ảnh của app nằm trong public/)
+/*.png
+/*.jpg
+/*.jpeg
+/*.webp

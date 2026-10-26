@@ -30,6 +30,8 @@ type MeetingInput = {
   roomId: string | null;
   meetingUrl: string | null;
   attendeeIds: string[];
+  /** Người ghi biên bản; null = người tổ chức tự ghi. */
+  recorderId: string | null;
 };
 
 type Recipient = { name: string; email: string };
@@ -78,11 +80,15 @@ function parseMeetingForm(
     return { error: "Không thể đặt lịch họp trong quá khứ." };
   }
 
-  if (attendeeIds.length === 0) {
-    return { error: "Hãy chọn ít nhất một người tham dự." };
-  }
+  // Không mời ai cũng được: họp một mình với khách vẫn cần giữ phòng và ghi biên bản.
   if (attendeeIds.length > MEETING_MAX_ATTENDEES) {
     return { error: `Một cuộc họp tối đa ${MEETING_MAX_ATTENDEES} người tham dự.` };
+  }
+
+  const requestedRecorder = String(formData.get("recorderId") ?? "").trim();
+  const recorderId = requestedRecorder && requestedRecorder !== organizerId ? requestedRecorder : null;
+  if (recorderId && !attendeeIds.includes(recorderId)) {
+    return { error: "Người ghi biên bản phải là người tham dự cuộc họp." };
   }
 
   if (meetingUrl) {
@@ -103,6 +109,7 @@ function parseMeetingForm(
     roomId: roomId || null,
     meetingUrl: meetingUrl || null,
     attendeeIds,
+    recorderId,
   };
 }
 
@@ -213,9 +220,10 @@ function queueMeetingEmail(
 ) {
   after(async () => {
     try {
-      await sendMeetingEmail({ meetingId, kind, recipients });
-    } catch (error) {
-      console.error("Meeting email failed:", error);
+      const result = await sendMeetingEmail({ meetingId, kind, recipients });
+      if (!result.ok) console.warn("Meeting email delivery could not be completed.");
+    } catch {
+      console.warn("Meeting email delivery could not be completed.");
     }
   });
 }
@@ -233,6 +241,25 @@ export async function createMeeting(
   const user = await requireUser();
   const input = parseMeetingForm(formData, user.id);
   if ("error" in input) return input;
+
+  // Họp tạo từ trang dự án: gắn vào dự án (người tạo phải là thành viên hoặc admin).
+  const requestedProjectId = String(formData.get("projectId") ?? "").trim();
+  let projectId: string | null = null;
+  if (requestedProjectId) {
+    const canUseProject =
+      user.role === "ADMIN" ||
+      Boolean(
+        await prisma.projectMember.findFirst({
+          where: { projectId: requestedProjectId, userId: user.id },
+          select: { id: true },
+        })
+      );
+    const project = canUseProject
+      ? await prisma.project.findUnique({ where: { id: requestedProjectId }, select: { id: true } })
+      : null;
+    if (!project) return { error: "Bạn không có quyền tạo cuộc họp cho dự án này." };
+    projectId = project.id;
+  }
 
   const [roomResult, attendees] = await Promise.all([
     loadActiveRoom(input.roomId),
@@ -256,6 +283,8 @@ export async function createMeeting(
           roomId: input.roomId,
           meetingUrl: input.meetingUrl,
           organizerId: user.id,
+          recorderId: input.recorderId,
+          projectId,
           attendees: {
             create: attendees.map((attendee) => ({ userId: attendee.id })),
           },
@@ -279,6 +308,13 @@ export async function createMeeting(
       meetingId,
     }
   );
+  if (input.recorderId) {
+    await notify([input.recorderId], {
+      type: "MEETING_UPDATED",
+      message: `${user.name} giao bạn ghi biên bản cuộc họp “${input.title}”`,
+      meetingId,
+    });
+  }
   queueMeetingEmail(meetingId, "INVITED");
 
   const busy = await busyPeopleNames(
@@ -288,7 +324,11 @@ export async function createMeeting(
     meetingId
   );
   revalidateMeetings();
-  return { success: `Đã đặt lịch họp và gửi lời mời.${busyWarning(busy)}` };
+  return {
+    success: attendees.length
+      ? `Đã đặt lịch họp và gửi lời mời.${busyWarning(busy)}`
+      : `Đã đặt lịch họp.${busyWarning(busy)}`,
+  };
 }
 
 export async function updateMeeting(
@@ -304,6 +344,7 @@ export async function updateMeeting(
       id: true,
       status: true,
       organizerId: true,
+      recorderId: true,
       startAt: true,
       endAt: true,
       roomId: true,
@@ -369,6 +410,7 @@ export async function updateMeeting(
           endAt: input.endAt,
           roomId: input.roomId,
           meetingUrl: input.meetingUrl,
+          recorderId: input.recorderId,
           sequence: { increment: 1 },
           attendees: {
             create: added.map((attendee) => ({ userId: attendee.id })),
@@ -382,7 +424,18 @@ export async function updateMeeting(
   }
 
   const when = formatMeetingWhen(input.startAt, input.endAt);
+  const newRecorderId =
+    input.recorderId && input.recorderId !== existing.recorderId && input.recorderId !== user.id
+      ? input.recorderId
+      : null;
   await Promise.all([
+    newRecorderId
+      ? notify([newRecorderId], {
+          type: "MEETING_UPDATED",
+          message: `${user.name} giao bạn ghi biên bản cuộc họp “${input.title}”`,
+          meetingId,
+        })
+      : Promise.resolve(),
     notify(
       added.map((attendee) => attendee.id),
       {

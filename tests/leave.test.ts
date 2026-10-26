@@ -97,6 +97,23 @@ test("only approved annual leave reduces the balance", () => {
   assert.deepEqual(summary, { quota: 12, used: 2.5, pending: 3, remaining: 9.5 });
 });
 
+test("manual used-day adjustment is kept when later requests are approved", () => {
+  const approved = [{ type: "ANNUAL", status: "APPROVED", days: 2 }];
+  const adjustment = 5 - summarizeLeave(approved, 12).used;
+  assert.deepEqual(summarizeLeave(approved, 12, adjustment), {
+    quota: 12, used: 5, pending: 0, remaining: 7,
+  });
+  assert.deepEqual(
+    summarizeLeave(
+      [...approved, { type: "ANNUAL", status: "APPROVED", days: 1 }],
+      12,
+      adjustment
+    ),
+    { quota: 12, used: 6, pending: 0, remaining: 6 }
+  );
+  assert.equal(summarizeLeave([], 12, -2).used, 0);
+});
+
 test("report splits a request across the months it spans", () => {
   // 29/10/2026 là Thứ Năm → 29, 30/10 và 02/11 là ngày làm việc
   assert.deepEqual(

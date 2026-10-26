@@ -40,9 +40,6 @@ export default function RecognitionWebhookSettings({
         </span>
         <div>
           <h2 className="text-lg font-semibold text-zinc-950">Kết nối Google Chat</h2>
-          <p className="mt-1 text-sm leading-6 text-zinc-500">
-            Tự động chia sẻ lời cảm ơn công khai vào Space của công ty.
-          </p>
         </div>
       </div>
 

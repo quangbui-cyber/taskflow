@@ -5,8 +5,11 @@ self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim(
 function safeDestination(value) {
   try {
     const url = new URL(typeof value === "string" ? value : "/notifications", self.location.origin);
+    // Chỉ mở các trang mà thông báo của app dẫn tới (dự án, góc cảm ơn, nghỉ phép, lịch họp, biên bản họp).
     if (url.origin === self.location.origin &&
-        (/^\/projects\/[^/]+$/.test(url.pathname) || url.pathname === "/recognition" || url.pathname === "/notifications")) {
+        (/^\/projects\/[^/]+$/.test(url.pathname) ||
+          /^\/meetings\/[^/]+\/recap$/.test(url.pathname) ||
+          ["/recognition", "/notifications", "/leave", "/meetings"].includes(url.pathname))) {
       return url.href;
     }
   } catch { /* Fall back to the user's notifications. */ }

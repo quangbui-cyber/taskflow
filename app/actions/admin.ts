@@ -1,15 +1,16 @@
 "use server";
 
+import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 import { parseAvatarDataUrl } from "@/lib/avatarImage";
 import { passwordLengthError } from "@/lib/password";
+import { OPEN_PROJECT_STATUSES } from "@/lib/types";
+import { canHoldAccountProfile, isUserRole } from "@/lib/roles";
 
 export type AdminState = { error?: string; success?: string };
-
-const USER_ROLES = ["ADMIN", "ACCOUNT", "USER"] as const;
 
 export async function createUser(
   _prev: AdminState,
@@ -23,7 +24,7 @@ export async function createUser(
     .toLowerCase();
   const password = String(formData.get("password") ?? "");
   const rawRole = String(formData.get("role") ?? "USER");
-  const role = ["ADMIN", "ACCOUNT"].includes(rawRole) ? rawRole : "USER";
+  const role = isUserRole(rawRole) ? rawRole : "USER";
   const avatar = parseAvatarDataUrl(formData.get("avatarUrl"));
 
   if (!name || !email || !password) {
@@ -47,40 +48,25 @@ export async function createUser(
   return { success: `Đã tạo tài khoản cho ${name}.` };
 }
 
-export async function deleteUser(userId: string): Promise<AdminState> {
+export async function deleteUser(
+  userId: string,
+  recipientId?: string | null
+): Promise<AdminState> {
   const admin = await requireAdmin();
   if (userId === admin.id) return { error: "Không thể tự xoá chính mình." };
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
-      _count: {
-        select: {
-          ownedProjects: true,
-          memberships: true,
-          createdTasks: true,
-          assignedTasks: true,
-        },
-      },
-      accountProfile: { select: { id: true } },
+      name: true,
       isActive: true,
+      deletedAt: true,
+      accountProfile: { select: { id: true } },
     },
   });
-  if (!user) return { error: "Tài khoản không tồn tại." };
+  if (!user || user.deletedAt) return { error: "Tài khoản không tồn tại." };
   if (user.isActive) {
     return { error: "Hãy vô hiệu hóa tài khoản trước khi xoá vĩnh viễn." };
-  }
-  if (user._count.ownedProjects > 0 || user._count.memberships > 0) {
-    return {
-      error:
-        "Không thể xoá tài khoản đang thuộc hoặc sở hữu dự án. Hãy chuyển dữ liệu dự án trước.",
-    };
-  }
-  if (user._count.createdTasks > 0 || user._count.assignedTasks > 0) {
-    return {
-      error:
-        "Không thể xoá tài khoản đang có task được giao hoặc đã tạo. Hãy chuyển dữ liệu công việc trước.",
-    };
   }
   if (user.accountProfile) {
     return {
@@ -89,9 +75,126 @@ export async function deleteUser(userId: string): Promise<AdminState> {
     };
   }
 
-  await prisma.user.delete({ where: { id: userId } });
-  revalidatePath("/admin");
-  return { success: "Đã xoá tài khoản." };
+  // Dự án đang chạy và task chưa xong phải có người nhận. Dự án đã đóng,
+  // task đã xong và bình luận vẫn giữ tên người này để làm lịch sử.
+  const openProject = { status: { in: OPEN_PROJECT_STATUSES } };
+  const [ownedProjects, openTasks] = await Promise.all([
+    prisma.project.findMany({
+      where: { ownerId: userId, ...openProject },
+      select: { id: true },
+    }),
+    prisma.task.findMany({
+      where: { assigneeId: userId, status: { not: "DONE" }, project: openProject },
+      select: { id: true, projectId: true },
+    }),
+  ]);
+  const ownedProjectIds = ownedProjects.map((project) => project.id);
+  const openTaskIds = openTasks.map((task) => task.id);
+  const handoverProjectIds = [
+    ...new Set([...ownedProjectIds, ...openTasks.map((task) => task.projectId)]),
+  ];
+
+  let recipient: { id: string; name: string } | null = null;
+  if (handoverProjectIds.length > 0) {
+    if (!recipientId) {
+      return { error: "Hãy chọn người nhận bàn giao dự án và task đang chạy." };
+    }
+    if (recipientId === userId) {
+      return { error: "Người nhận bàn giao phải là một tài khoản khác." };
+    }
+    recipient = await prisma.user.findFirst({
+      where: { id: recipientId, isActive: true, deletedAt: null },
+      select: { id: true, name: true },
+    });
+    if (!recipient) {
+      return { error: "Người nhận bàn giao không tồn tại hoặc đã bị vô hiệu hóa." };
+    }
+  }
+
+  // Mật khẩu ngẫu nhiên không ai biết, để tài khoản không thể đăng nhập lại.
+  const lockedPasswordHash = await bcrypt.hash(randomBytes(32).toString("hex"), 10);
+
+  await prisma.$transaction(async (tx) => {
+    if (recipient) {
+      for (const projectId of handoverProjectIds) {
+        await tx.projectMember.upsert({
+          where: { projectId_userId: { projectId, userId: recipient.id } },
+          create: { projectId, userId: recipient.id },
+          update: {},
+        });
+      }
+      if (ownedProjectIds.length > 0) {
+        await tx.project.updateMany({
+          where: { id: { in: ownedProjectIds } },
+          data: { ownerId: recipient.id },
+        });
+        await tx.projectMember.updateMany({
+          where: { projectId: { in: ownedProjectIds }, userId: recipient.id },
+          data: { role: "owner" },
+        });
+      }
+      if (openTaskIds.length > 0) {
+        await tx.task.updateMany({
+          where: { id: { in: openTaskIds } },
+          data: { assigneeId: recipient.id },
+        });
+      }
+    }
+
+    // Rời các dự án đang chạy; dự án đã đóng giữ lại để còn ghi nhận. Dự án đang
+    // chạy mà người này vẫn còn task (đã xong) thì giữ họ làm thành viên thường,
+    // vì bảng task tìm người làm trong danh sách thành viên và việc sửa task đòi
+    // người làm phải là thành viên.
+    await tx.projectMember.deleteMany({
+      where: {
+        userId,
+        project: { ...openProject, tasks: { none: { assigneeId: userId } } },
+      },
+    });
+    await tx.projectMember.updateMany({
+      where: { userId, project: openProject },
+      data: { role: "member" },
+    });
+    await tx.taskFollower.deleteMany({ where: { userId } });
+    await tx.notification.deleteMany({ where: { userId } });
+    await tx.pushSubscription.deleteMany({ where: { userId } });
+    await tx.memberGroupMember.deleteMany({ where: { userId } });
+    await tx.user.updateMany({
+      where: { managerId: userId },
+      data: { managerId: null },
+    });
+    await tx.user.update({
+      where: { id: userId },
+      data: {
+        deletedAt: new Date(),
+        isActive: false,
+        // Giải phóng email để có thể tạo lại tài khoản mới với email này.
+        email: `deleted-${userId}@deleted.invalid`,
+        // Giải phóng tài khoản Google để tài khoản mới cùng email liên kết lại được.
+        googleSub: null,
+        googleMeetToken: null,
+        googleToken: null,
+        googleEmail: null,
+        googleScopes: [],
+        passwordHash: lockedPasswordHash,
+        sessionVersion: { increment: 1 },
+        managerId: null,
+        isLeaveManager: false,
+      },
+    });
+  });
+
+  revalidatePath("/", "layout");
+  if (!recipient) return { success: `Đã xoá tài khoản ${user.name}.` };
+  const handedOver = [
+    ownedProjectIds.length > 0 ? `${ownedProjectIds.length} dự án` : null,
+    openTaskIds.length > 0 ? `${openTaskIds.length} task` : null,
+  ]
+    .filter(Boolean)
+    .join(" và ");
+  return {
+    success: `Đã xoá tài khoản ${user.name} và bàn giao ${handedOver} cho ${recipient.name}.`,
+  };
 }
 
 export async function setUserActive(
@@ -105,9 +208,9 @@ export async function setUserActive(
 
   const target = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, name: true, role: true, isActive: true },
+    select: { id: true, name: true, role: true, isActive: true, deletedAt: true },
   });
-  if (!target) return { error: "Tài khoản không tồn tại." };
+  if (!target || target.deletedAt) return { error: "Tài khoản không tồn tại." };
   if (target.isActive === isActive) {
     return {
       success: isActive
@@ -156,10 +259,10 @@ export async function updateUserProfile(
 
   if (!normalizedName) return { error: "Tên tài khoản không được để trống." };
   if (avatar.error) return { error: avatar.error };
-  if (!USER_ROLES.includes(role as (typeof USER_ROLES)[number])) {
+  if (!isUserRole(role)) {
     return { error: "Vai trò tài khoản không hợp lệ." };
   }
-  const normalizedRole = role as (typeof USER_ROLES)[number];
+  const normalizedRole = role;
 
   const target = await prisma.user.findUnique({
     where: { id: userId },
@@ -181,9 +284,9 @@ export async function updateUserProfile(
     }
   }
 
-  if (normalizedRole === "USER" && target.accountProfile) {
+  if (!canHoldAccountProfile(normalizedRole) && target.accountProfile) {
     return {
-      error: "Tài khoản đang được dùng làm Account. Hãy xoá liên kết Account trước khi chuyển thành User.",
+      error: "Tài khoản đang được dùng làm Account. Hãy xoá liên kết Account trước khi chuyển sang vai trò này.",
     };
   }
 

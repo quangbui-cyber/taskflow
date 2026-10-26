@@ -11,6 +11,7 @@ const USERS = [
   { key: "lan", name: "Lan Account", email: "lan@mycreative.vn", role: "ACCOUNT" },
   { key: "minh", name: "Minh Account", email: "minh@mycreative.vn", role: "ACCOUNT" },
   { key: "ha", name: "Hà Account", email: "ha@mycreative.vn", role: "ACCOUNT" },
+  { key: "thao", name: "Thảo Kế toán", email: "thao@mycreative.vn", role: "ACCOUNTANT" },
   { key: "an", name: "An Thiết kế", email: "an@mycreative.vn", role: "USER" },
   { key: "binh", name: "Bình Nội dung", email: "binh@mycreative.vn", role: "USER" },
   { key: "dung", name: "Dũng Kỹ thuật", email: "dung@mycreative.vn", role: "USER" },

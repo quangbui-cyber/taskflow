@@ -21,7 +21,13 @@ export async function notify(
       | "MEETING_UPDATED"
       | "MEETING_CANCELLED"
       | "MEETING_RESPONSE"
-      | "MEETING_REMINDER";
+      | "MEETING_REMINDER"
+      | "MEETING_RECAP_READY"
+      | "MEETING_RECAP_FAILED"
+      | "MEETING_RECAP_SHARED"
+      | "MEETING_RECAP_PROMPT"
+      | "FINANCE_APPROVAL_REQUEST"
+      | "FINANCE_APPROVAL_DECISION";
     message: string;
     taskId?: string;
     projectId?: string;

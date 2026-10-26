@@ -1,11 +1,15 @@
 import { parseCommentMentions } from "@/lib/commentMentions";
 import {
+  ArrowLeft,
   BriefcaseBusiness,
   Building2,
   CalendarDays,
   FileText,
+  MessagesSquare,
+  ShieldCheck,
   UsersRound,
 } from "lucide-react";
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { canViewRevenue as hasRevenueAccess, requireUser } from "@/lib/auth";
@@ -15,10 +19,16 @@ import MembersBar from "@/components/MembersBar";
 import ProjectEditButton from "@/components/ProjectEditButton";
 import ProjectActionsMenu from "@/components/ProjectActionsMenu";
 import ProjectDescriptionDisclosure from "@/components/ProjectDescriptionDisclosure";
-import ProjectWebhookPanel from "@/components/ProjectWebhookPanel";
+import { chatAppConfigured, chatAppProblem } from "@/lib/googleChatApp";
+import ProjectChatSpacePanel from "@/components/ProjectChatSpacePanel";
+import { canAddChatApp, canManageChatSpaces, googleWorkspaceConfigured } from "@/lib/googleWorkspace";
 import ProjectFilesPanel from "@/components/ProjectFilesPanel";
+import ProjectFinancePanel from "@/components/ProjectFinancePanel";
 import ProjectStatusSelect from "@/components/ProjectStatusSelect";
 import ProjectTabs from "@/components/ProjectTabs";
+import MeetingComposer from "@/components/MeetingComposer";
+import { financeEnabled, meetingsEnabled } from "@/lib/features";
+import { loadMeetingComposerData } from "@/lib/meetingComposerData";
 import {
   formatVND,
   projectStatusColor,
@@ -28,6 +38,9 @@ import {
   type TaskDTO,
 } from "@/lib/types";
 import { formatExecutionRange, toDateInputVN } from "@/lib/dates";
+import { FINANCE_APPROVER_ROLES, canSetFinanceApprovers } from "@/lib/financePolicy";
+import { ROLE_LABELS, isUserRole } from "@/lib/roles";
+import { storedFileDriveUrl } from "@/lib/storedFileResponse";
 
 function extractProjectMetadata(description: string | null) {
   if (!description) return { poNumber: null, poDate: null };
@@ -47,15 +60,16 @@ export default async function ProjectPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string; task?: string }>;
+  searchParams: Promise<{ tab?: string; task?: string; google?: string }>;
 }) {
   const { id } = await params;
-  const { tab, task: requestedTaskId } = await searchParams;
+  const { tab, task: requestedTaskId, google: googleResult } = await searchParams;
   const user = await requireUser();
   const project = await prisma.project.findUnique({
     where: { id },
     include: {
       client: { select: { id: true, name: true } },
+      googleChatSpaceBy: { select: { name: true } },
       responsibleTeam: { select: { id: true, name: true } },
       responsibleGroup: { select: { id: true, name: true } },
       account: {
@@ -66,6 +80,8 @@ export default async function ProjectPage({
           team: { select: { id: true, name: true } },
         },
       },
+      icApprover: { select: { name: true } },
+      acApprover: { select: { name: true } },
       members: {
         include: {
           user: {
@@ -96,6 +112,7 @@ export default async function ProjectPage({
               mimeType: true,
               size: true,
               createdAt: true,
+              driveFileId: true,
               uploader: { select: { id: true, name: true } },
             },
             orderBy: { createdAt: "asc" },
@@ -110,6 +127,7 @@ export default async function ProjectPage({
           mimeType: true,
           size: true,
           createdAt: true,
+          driveFileId: true,
           uploader: {
             select: { id: true, name: true, avatarUrl: true },
           },
@@ -123,7 +141,13 @@ export default async function ProjectPage({
   const isMember = project.members.some((m) => m.userId === user.id);
   if (!isMember && user.role !== "ADMIN") redirect("/");
 
-  const [sidebarProjects, clients, accounts, availableUsers, memberGroups, teams] = await Promise.all([
+  const showMeetings = meetingsEnabled();
+  const showFinance = financeEnabled();
+  const canEditApprovers =
+    showFinance &&
+    (project.ownerId === user.id || user.role === "ADMIN") &&
+    canSetFinanceApprovers(user.role);
+  const [sidebarProjects, clients, accounts, availableUsers, memberGroups, teams, meetingData, approverUsers] = await Promise.all([
     prisma.project.findMany({
       where: { members: { some: { userId: user.id } } },
       select: {
@@ -181,7 +205,24 @@ export default async function ProjectPage({
       orderBy: { name: "asc" },
     }),
     prisma.salesTeam.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    // Phần họp đang tắt (ví dụ production) thì không tải dữ liệu và không hiện nút.
+    showMeetings ? loadMeetingComposerData() : null,
+    canEditApprovers
+      ? prisma.user.findMany({
+          where: {
+            isActive: true,
+            deletedAt: null,
+            role: { in: [...FINANCE_APPROVER_ROLES] },
+          },
+          select: { id: true, name: true, email: true, avatarUrl: true, role: true },
+          orderBy: { name: "asc" },
+        })
+      : [],
   ]);
+  // Chọn sẵn thành viên dự án đang hoạt động; người tổ chức (người đang xem) không tự mời mình.
+  const meetingAttendeeIds = project.members
+    .filter((member) => member.user.isActive && member.userId !== user.id)
+    .map((member) => member.userId);
 
   const members: MemberDTO[] = project.members.map((m) => ({
     userId: m.userId,
@@ -214,14 +255,30 @@ export default async function ProjectPage({
       mimeType: f.mimeType,
       size: f.size,
       createdAt: f.createdAt.toISOString(),
+      driveUrl: storedFileDriveUrl(f),
       uploader: f.uploader,
     })),
   }));
 
   const isOwner = project.ownerId === user.id;
+  // Tab Tài chính chỉ có ở dự án Khách hàng (dự án Nội bộ không có báo giá/IC).
+  const hasFinanceTab = showFinance && project.category === "CLIENT";
   const activeTab =
-    tab === "webhook" ? "webhook" : tab === "files" ? "files" : "tasks";
+    tab === "webhook"
+      ? "webhook"
+      : tab === "files"
+        ? "files"
+        : tab === "finance" && hasFinanceTab
+          ? "finance"
+          : "tasks";
   const canManageWebhook = isMember || user.role === "ADMIN";
+  const viewerGoogle =
+    activeTab === "webhook"
+      ? await prisma.user.findUnique({
+          where: { id: user.id },
+          select: { googleToken: true, googleScopes: true },
+        })
+      : null;
   const canViewRevenue = hasRevenueAccess(user.role) && project.category === "CLIENT";
   const categoryInfo = projectCategoryInfo(project.category);
   const projectMetadata = extractProjectMetadata(project.description);
@@ -235,6 +292,51 @@ export default async function ProjectPage({
   const initialTaskId = project.tasks.some((task) => task.id === requestedTaskId)
     ? requestedTaskId ?? null
     : null;
+
+  // Tab Tài chính mở toàn màn hình (không thanh bên, đầu trang gọn) để bảng IC có đủ chỗ.
+  if (activeTab === "finance") {
+    const tabLinks = [
+      { href: `/projects/${project.id}`, label: "Task" },
+      { href: `/projects/${project.id}?tab=files`, label: "Tài liệu" },
+      { href: `/projects/${project.id}?tab=webhook`, label: "Google Chat" },
+    ];
+    return (
+      <div className="flex min-h-screen flex-col bg-[#f7f8fa] md:h-screen md:max-h-screen md:overflow-hidden">
+        <header className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-zinc-200 bg-white px-4 py-2.5 sm:px-5">
+          <Link
+            href={`/projects/${project.id}`}
+            className="inline-flex items-center gap-1.5 rounded-[6px] px-2 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950"
+          >
+            <ArrowLeft size={16} aria-hidden="true" />
+            Về dự án
+          </Link>
+          <span aria-hidden="true" className="hidden h-6 w-px bg-zinc-200 sm:block" />
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+            <span
+              className="h-2.5 w-2.5 shrink-0 rounded-full"
+              style={{ backgroundColor: projectStatusColor(project.status) }}
+            />
+            <h1 className="truncate text-base font-semibold text-zinc-950 sm:text-lg">
+              {project.name}
+              <span className="font-normal text-zinc-500"> · Báo giá &amp; IC</span>
+            </h1>
+          </div>
+          <nav aria-label="Các tab khác của dự án" className="flex gap-1">
+            {tabLinks.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="rounded-[7px] px-3 py-1.5 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+        </header>
+        <ProjectFinancePanel projectId={project.id} viewer={{ id: user.id, role: user.role }} />
+      </div>
+    );
+  }
 
   return (
     <div className="tf-shell">
@@ -293,7 +395,17 @@ export default async function ProjectPage({
                       project.account?.user?.name ??
                       project.account?.name ??
                       null,
+                    icApproverId: project.icApproverId,
+                    acApproverId: project.acApproverId,
                   }}
+                  approverOptions={approverUsers.map((approver) => ({
+                    id: approver.id,
+                    name: approver.name,
+                    email: approver.email,
+                    avatarUrl: approver.avatarUrl,
+                    meta: isUserRole(approver.role) ? ROLE_LABELS[approver.role] : null,
+                  }))}
+                  canEditApprovers={canEditApprovers}
                   clients={clients}
                   responsibilityOptions={{
                     teams,
@@ -312,6 +424,27 @@ export default async function ProjectPage({
                   canEdit={isOwner || user.role === "ADMIN"}
                   canEditRevenue={hasRevenueAccess(user.role)}
                 />
+                {meetingData && (
+                  <MeetingComposer
+                    {...meetingData.composerProps}
+                    organizerId={user.id}
+                    initialAttendeeIds={meetingAttendeeIds}
+                    projectId={project.id}
+                    triggerLabel="Tạo cuộc họp"
+                    triggerClassName="tf-button-secondary !min-h-9 !px-3 !py-1.5 text-sm"
+                  />
+                )}
+                {project.googleChatSpaceUri && (
+                  <a
+                    href={project.googleChatSpaceUri}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="tf-button-secondary !min-h-9 !px-3 !py-1.5 text-sm"
+                  >
+                    <MessagesSquare size={15} strokeWidth={1.8} aria-hidden="true" />
+                    Nhóm Chat
+                  </a>
+                )}
                 {isOwner && <ProjectActionsMenu projectId={project.id} />}
               </div>
             </div>
@@ -366,6 +499,13 @@ export default async function ProjectPage({
                     {accountName ?? "Cần gán Account"}
                   </span>
                 )}
+                {canViewRevenue && showFinance && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <ShieldCheck size={14} aria-hidden="true" />
+                    Duyệt IC: {project.icApprover?.name ?? "chưa chọn"} · Duyệt AC:{" "}
+                    {project.acApprover?.name ?? "chưa chọn"}
+                  </span>
+                )}
               </div>
 
               <div className="flex shrink-0 items-center gap-2">
@@ -405,15 +545,38 @@ export default async function ProjectPage({
             )}
           </div>
 
-          <div className="mt-3"><ProjectTabs projectId={project.id} active={activeTab} fileCount={project.files.length} /></div>
+          <div className="mt-3">
+            <ProjectTabs
+              projectId={project.id}
+              active={activeTab}
+              fileCount={project.files.length}
+              showFinance={hasFinanceTab}
+            />
+          </div>
         </header>
 
         {activeTab === "webhook" ? (
-          <div className="flex-1 overflow-auto bg-[#f7f8fa] p-4 sm:p-6">
-            <ProjectWebhookPanel
+          <div className="flex-1 space-y-4 overflow-auto bg-[#f7f8fa] p-4 sm:p-6">
+            <ProjectChatSpacePanel
               projectId={project.id}
-              configured={Boolean(project.googleChatWebhookUrl)}
+              space={
+                project.googleChatSpaceUri
+                  ? { uri: project.googleChatSpaceUri, creatorName: project.googleChatSpaceBy?.name ?? null }
+                  : null
+              }
+              memberCount={project.members.length}
               canManage={canManageWebhook}
+              canUnlink={isOwner || user.role === "ADMIN" || project.googleChatSpaceById === user.id}
+              viewerConnected={Boolean(
+                viewerGoogle?.googleToken &&
+                  canManageChatSpaces(viewerGoogle.googleScopes) &&
+                  (!chatAppConfigured() || canAddChatApp(viewerGoogle.googleScopes))
+              )}
+              configured={googleWorkspaceConfigured()}
+              googleResult={googleResult ?? null}
+              chatAppReady={chatAppConfigured()}
+              chatAppProblem={chatAppProblem()}
+              legacyWebhook={Boolean(project.googleChatWebhookUrl)}
             />
           </div>
         ) : activeTab === "files" ? (
@@ -422,9 +585,10 @@ export default async function ProjectPage({
               projectId={project.id}
               currentUserId={user.id}
               canManageAll={isOwner || user.role === "ADMIN"}
-              initialFiles={project.files.map((file) => ({
+              initialFiles={project.files.map(({ driveFileId, ...file }) => ({
                 ...file,
                 createdAt: file.createdAt.toISOString(),
+                driveUrl: storedFileDriveUrl({ driveFileId, mimeType: file.mimeType }),
               }))}
             />
           </div>

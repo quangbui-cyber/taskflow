@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   CalendarPlus,
@@ -18,6 +18,7 @@ import {
   type MeetingActionState,
 } from "@/app/actions/meetings";
 import Avatar from "@/components/Avatar";
+import GoogleMeetLinkButton from "@/components/GoogleMeetLinkButton";
 import { useActionFeedback } from "@/components/InteractionProvider";
 import { formatHour, toDateInputVN } from "@/lib/dates";
 import {
@@ -25,6 +26,7 @@ import {
   MEETING_TITLE_MAX,
   MEETING_TIME_SLOTS,
   formatMeetingTime,
+  presetMeetingAttendees,
   rangesOverlap,
   vnDateTimeToUtc,
 } from "@/lib/meetings";
@@ -53,6 +55,8 @@ export type PersonSchedule = {
   endAt: string;
   userIds: string[];
 };
+/** Khung giờ chọn sẵn khi bấm ô trống trên lịch phòng */
+export type MeetingSlot = { date: string; startTime: string; endTime: string; roomId: string };
 export type EditableMeeting = {
   id: string;
   organizerId: string;
@@ -63,6 +67,7 @@ export type EditableMeeting = {
   roomId: string | null;
   meetingUrl: string;
   attendeeIds: string[];
+  recorderId: string | null;
 };
 
 type FormValues = {
@@ -74,6 +79,8 @@ type FormValues = {
   roomId: string;
   meetingUrl: string;
   attendeeIds: string[];
+  /** "" = người tổ chức tự ghi biên bản */
+  recorderId: string;
 };
 
 const INITIAL_STATE: MeetingActionState = {};
@@ -92,7 +99,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * Mặc định: 09:00 – 10:00. Chưa tới 9 giờ sáng thì gợi ý hôm nay; đã qua thì gợi ý
  * ngày làm việc kế tiếp (bỏ qua Thứ Bảy, Chủ nhật) vì không đặt được lịch trong quá khứ.
  */
-function defaultValues(now = new Date()): FormValues {
+function defaultValues(attendeeIds: string[] = [], now = new Date()): FormValues {
   let day = now;
   if (formatHour(now) >= DEFAULT_START_TIME) {
     do {
@@ -107,8 +114,14 @@ function defaultValues(now = new Date()): FormValues {
     endTime: DEFAULT_END_TIME,
     roomId: "",
     meetingUrl: "",
-    attendeeIds: [],
+    attendeeIds,
+    recorderId: "",
   };
+}
+
+function sameIds(a: string[], b: string[]) {
+  const set = new Set(a);
+  return a.length === b.length && b.every((id) => set.has(id));
 }
 
 function valuesFromMeeting(meeting: EditableMeeting): FormValues {
@@ -123,6 +136,7 @@ function valuesFromMeeting(meeting: EditableMeeting): FormValues {
     roomId: meeting.roomId ?? "",
     meetingUrl: meeting.meetingUrl,
     attendeeIds: meeting.attendeeIds,
+    recorderId: meeting.recorderId ?? "",
   };
 }
 
@@ -134,7 +148,14 @@ export default function MeetingComposer({
   schedules,
   organizerId,
   meeting,
-  emailEnabled,
+  initialAttendeeIds,
+  projectId,
+  triggerLabel = "Đặt lịch họp",
+  triggerClassName = "tf-button-primary min-h-11 px-4",
+  initialSlot,
+  defaultOpen = false,
+  hideTrigger = false,
+  onClose,
 }: {
   people: MeetingPerson[];
   rooms: MeetingRoomOption[];
@@ -146,11 +167,43 @@ export default function MeetingComposer({
   /** Có giá trị thì form ở chế độ sửa */
   meeting?: EditableMeeting;
   emailEnabled: boolean;
+  /** Người được chọn sẵn khi mở form tạo mới (ví dụ: thành viên dự án); vẫn bỏ bớt/thêm được */
+  initialAttendeeIds?: string[];
+  /** Tạo từ trang dự án: cuộc họp gắn với dự án, biên bản được lưu vào tài liệu dự án */
+  projectId?: string;
+  /** Chữ trên nút mở form tạo mới */
+  triggerLabel?: string;
+  triggerClassName?: string;
+  /** Mở từ ô trống trên lịch phòng: điền sẵn ngày, giờ và phòng */
+  initialSlot?: MeetingSlot;
+  defaultOpen?: boolean;
+  /** Không hiện nút mở form (form do nơi khác mở, ví dụ lịch phòng) */
+  hideTrigger?: boolean;
+  onClose?: () => void;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
+  // Chỉ chọn sẵn người mời được: đang hoạt động và không phải người tổ chức.
+  const presetAttendeeIds = useMemo(
+    () =>
+      presetMeetingAttendees(
+        initialAttendeeIds ?? [],
+        people.map((person) => person.id),
+        organizerId
+      ),
+    [initialAttendeeIds, organizerId, people]
+  );
+  // Bản mới nhất cho effect đóng form, để danh sách đổi sau router.refresh() không chạy lại effect.
+  const presetRef = useRef(presetAttendeeIds);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    presetRef.current = presetAttendeeIds;
+    onCloseRef.current = onClose;
+  }, [presetAttendeeIds, onClose]);
   const [values, setValues] = useState<FormValues>(() =>
-    meeting ? valuesFromMeeting(meeting) : defaultValues()
+    meeting
+      ? valuesFromMeeting(meeting)
+      : { ...defaultValues(presetAttendeeIds), ...initialSlot }
   );
   const [query, setQuery] = useState("");
   const action = useMemo(
@@ -167,6 +220,10 @@ export default function MeetingComposer({
     [organizerId, people]
   );
   const selected = useMemo(() => new Set(values.attendeeIds), [values.attendeeIds]);
+  // Bỏ người đang được giao ghi biên bản khỏi danh sách mời thì quay về người tổ chức.
+  const recorderId = selected.has(values.recorderId) ? values.recorderId : "";
+  const organizerName = people.find((person) => person.id === organizerId)?.name ?? "Người tổ chức";
+  const selectedPeople = invitable.filter((person) => selected.has(person.id));
   const normalizedQuery = query.trim().toLowerCase();
   const filteredPeople = invitable.filter((person) =>
     `${person.name} ${person.email}`.toLowerCase().includes(normalizedQuery)
@@ -224,6 +281,11 @@ export default function MeetingComposer({
   const busySelectedCount = values.attendeeIds.filter(isBusy).length;
   const selectedRoomClash = values.roomId ? roomClashes.get(values.roomId) : undefined;
 
+  function close() {
+    setOpen(false);
+    onClose?.();
+  }
+
   function set<K extends keyof FormValues>(key: K, value: FormValues[K]) {
     setValues((current) => ({ ...current, [key]: value }));
   }
@@ -270,9 +332,10 @@ export default function MeetingComposer({
   function openDialog() {
     // Form tạo mới luôn mở với mốc giờ tính từ lúc bấm, không phải lúc trang tải.
     if (!meeting) {
-      const fresh = defaultValues();
+      const fresh = defaultValues(presetAttendeeIds);
+      // Đang có bản nháp (đã gõ tiêu đề hoặc đã đổi người mời) thì giữ nguyên.
       setValues((current) =>
-        current.title || current.attendeeIds.length > 0
+        current.title || !sameIds(current.attendeeIds, presetAttendeeIds)
           ? current
           : { ...fresh, roomId: current.roomId, meetingUrl: current.meetingUrl }
       );
@@ -288,7 +351,10 @@ export default function MeetingComposer({
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !pending) setOpen(false);
+      if (event.key === "Escape" && !pending) {
+        setOpen(false);
+        onCloseRef.current?.();
+      }
     };
     document.addEventListener("keydown", closeOnEscape);
     return () => {
@@ -303,8 +369,9 @@ export default function MeetingComposer({
     if (!state.success) return;
     router.refresh();
     const frame = window.requestAnimationFrame(() => {
-      if (!meeting) setValues(defaultValues());
+      if (!meeting) setValues(defaultValues(presetRef.current));
       setOpen(false);
+      onCloseRef.current?.();
     });
     return () => window.cancelAnimationFrame(frame);
   }, [meeting, router, state]);
@@ -312,7 +379,6 @@ export default function MeetingComposer({
   const canSubmit =
     values.title.trim().length >= 2 &&
     timeValid &&
-    values.attendeeIds.length > 0 &&
     !selectedRoomClash;
   const dialogTitleId = meeting ? `meeting-dialog-${meeting.id}` : "meeting-dialog-new";
 
@@ -323,10 +389,10 @@ export default function MeetingComposer({
           <Pencil size={14} aria-hidden="true" />
           Sửa
         </button>
-      ) : (
-        <button type="button" className="tf-button-primary min-h-11 px-4" onClick={openDialog}>
+      ) : hideTrigger ? null : (
+        <button type="button" className={triggerClassName} onClick={openDialog}>
           <CalendarPlus size={18} strokeWidth={1.8} aria-hidden="true" />
-          Đặt lịch họp
+          {triggerLabel}
         </button>
       )}
 
@@ -334,7 +400,7 @@ export default function MeetingComposer({
         <div
           className="tf-overlay-enter fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-4"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !pending) setOpen(false);
+            if (event.target === event.currentTarget && !pending) close();
           }}
         >
           <section
@@ -348,16 +414,11 @@ export default function MeetingComposer({
                 <h2 id={dialogTitleId} className="text-xl font-semibold text-zinc-900">
                   {meeting ? "Sửa lịch họp" : "Đặt lịch họp"}
                 </h2>
-                <p className="mt-1 text-sm text-zinc-500">
-                  {emailEnabled
-                    ? "Người tham dự sẽ nhận thông báo trong app và email kèm lịch."
-                    : "Người tham dự sẽ nhận thông báo trong app."}
-                </p>
               </div>
               <button
                 type="button"
                 className="tf-icon-button shrink-0"
-                onClick={() => setOpen(false)}
+                onClick={close}
                 disabled={pending}
                 aria-label="Đóng"
               >
@@ -449,6 +510,7 @@ export default function MeetingComposer({
                 <fieldset>
                   <legend className="tf-label">Phòng họp</legend>
                   <input type="hidden" name="roomId" value={values.roomId} />
+                  {projectId && !meeting && <input type="hidden" name="projectId" value={projectId} />}
                   <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Phòng họp">
                     {[{ id: "", name: "Không dùng phòng", capacity: null }, ...rooms].map((room) => {
                       const clash = room.id ? roomClashes.get(room.id) : undefined;
@@ -535,6 +597,7 @@ export default function MeetingComposer({
                     className="tf-field"
                   />
                 </label>
+                <GoogleMeetLinkButton disabled={pending} onLink={(url) => set("meetingUrl", url)} />
 
                 <fieldset>
                   <legend className="tf-label">
@@ -657,6 +720,26 @@ export default function MeetingComposer({
                 </fieldset>
 
                 <label className="block">
+                  <span className="tf-label">Người ghi biên bản</span>
+                  <select
+                    name="recorderId"
+                    value={recorderId}
+                    onChange={(event) => set("recorderId", event.target.value)}
+                    className="tf-field"
+                  >
+                    <option value="">{organizerName} (người tổ chức)</option>
+                    {selectedPeople.map((person) => (
+                      <option key={person.id} value={person.id}>
+                        {person.name}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="mt-1.5 block text-xs text-zinc-500">
+                    Người này ghi âm và gửi biên bản. Không chọn ai thì người tổ chức tự ghi.
+                  </span>
+                </label>
+
+                <label className="block">
                   <span className="tf-label">Nội dung (không bắt buộc)</span>
                   <textarea
                     name="description"
@@ -673,7 +756,7 @@ export default function MeetingComposer({
                 <button
                   type="button"
                   className="tf-button-secondary"
-                  onClick={() => setOpen(false)}
+                  onClick={close}
                   disabled={pending}
                 >
                   Đóng
@@ -689,7 +772,13 @@ export default function MeetingComposer({
                   ) : (
                     <CalendarPlus size={17} aria-hidden="true" />
                   )}
-                  {pending ? "Đang lưu…" : meeting ? "Lưu thay đổi" : "Đặt lịch và gửi lời mời"}
+                  {pending
+                    ? "Đang lưu…"
+                    : meeting
+                      ? "Lưu thay đổi"
+                      : values.attendeeIds.length
+                        ? "Đặt lịch và gửi lời mời"
+                        : "Đặt lịch"}
                 </button>
               </div>
             </form>

@@ -6,7 +6,8 @@ const securityHeaders = [
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {
     key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+    // Micro chỉ cho chính trang của app (ghi âm biên bản họp); camera, vị trí… vẫn tắt hẳn.
+    value: "camera=(), microphone=(self), geolocation=(), payment=(), usb=()",
   },
   ...(process.env.NODE_ENV === "production"
     ? [
@@ -28,7 +29,7 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/api/projects/*/costflow/customer-acceptance/pdf": ["./node_modules/next/dist/compiled/@vercel/og/Geist-Regular.ttf"],
   },
-  serverExternalPackages: ["nodemailer"],
+  serverExternalPackages: ["pdf-parse", "nodemailer", "exceljs"],
   experimental: {
     serverActions: {
       bodySizeLimit: "4.2mb",

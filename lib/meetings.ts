@@ -97,3 +97,17 @@ export function vnDayRange(date = new Date()) {
   const start = vnDateTimeToUtc(toDateInputVN(date), "00:00")!;
   return { start, end: new Date(start.getTime() + 24 * 60 * 60 * 1000) };
 }
+
+/**
+ * Người được chọn sẵn khi mở form họp: chỉ giữ người có trong danh sách mời được
+ * (tài khoản đang hoạt động), bỏ người tổ chức và bỏ trùng, giữ nguyên thứ tự.
+ */
+export function presetMeetingAttendees(
+  candidateIds: readonly string[],
+  invitableIds: readonly string[],
+  organizerId: string
+): string[] {
+  const allowed = new Set(invitableIds);
+  allowed.delete(organizerId);
+  return [...new Set(candidateIds)].filter((id) => allowed.has(id));
+}

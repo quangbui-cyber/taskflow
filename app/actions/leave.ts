@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin, requireUser } from "@/lib/auth";
 import {
   MAX_ANNUAL_LEAVE_DAYS,
+  MAX_USED_LEAVE_DAYS,
   canCancelLeave,
   canDecideLeave,
   countLeaveDays,
@@ -18,6 +19,7 @@ import {
   parseLeaveDate,
 } from "@/lib/leave";
 import { loadLeaveManagers } from "@/lib/leaveData";
+import { queueLeaveEmail } from "@/lib/leaveMail";
 import { notify } from "@/lib/notify";
 
 export type LeaveState = { error?: string; success?: string };
@@ -93,7 +95,7 @@ export async function createLeaveRequest(
   }
 
   const days = countLeaveDays(startDate, endDate, halfDay);
-  await prisma.leaveRequest.create({
+  const request = await prisma.leaveRequest.create({
     data: {
       userId: user.id,
       type,
@@ -104,6 +106,11 @@ export async function createLeaveRequest(
       reason: cleanText(formData.get("reason"), 500),
     },
   });
+
+  queueLeaveEmail(
+    { kind: "REQUESTED", request, requesterName: user.name },
+    [user.id, ...approverIds]
+  );
 
   // Báo cho người duyệt: quản lý trực tiếp, hoặc quản lý nghỉ phép nếu chưa có.
   await notify(approverIds, {
@@ -126,6 +133,16 @@ export async function cancelLeaveRequest(requestId: string): Promise<LeaveState>
       endDate: true,
       days: true,
       deciderId: true,
+      type: true,
+      halfDay: true,
+      reason: true,
+      user: {
+        select: {
+          id: true,
+          managerId: true,
+          manager: { select: { isActive: true } },
+        },
+      },
     },
   });
   if (!request) return { error: "Không tìm thấy đơn nghỉ." };
@@ -142,9 +159,21 @@ export async function cancelLeaveRequest(requestId: string): Promise<LeaveState>
     return { error: "Đơn vừa được cập nhật. Hãy tải lại trang." };
   }
 
+  const leaveManagers = await loadLeaveManagers();
+  const managerIds = leaveManagers.map((manager) => manager.id);
+  const cancellationRecipients = request.status === "APPROVED"
+    ? [request.deciderId, ...managerIds]
+    : leaveApproverIds(
+        { ...request.user, managerActive: request.user.manager?.isActive },
+        managerIds
+      );
+  queueLeaveEmail(
+    { kind: "CANCELLED", request, requesterName: user.name },
+    [user.id, ...cancellationRecipients]
+  );
+
   // Đơn đã duyệt bị huỷ: báo người đã duyệt và quản lý nghỉ phép.
   if (request.status === "APPROVED") {
-    const leaveManagers = await loadLeaveManagers();
     await notify(
       [request.deciderId, ...leaveManagers.map((manager) => manager.id)].filter(
         (id) => id !== user.id
@@ -174,6 +203,9 @@ export async function decideLeaveRequest(
       startDate: true,
       endDate: true,
       days: true,
+      type: true,
+      halfDay: true,
+      reason: true,
       user: {
         select: {
           id: true,
@@ -207,18 +239,30 @@ export async function decideLeaveRequest(
     return { error: "Đơn này đã được xử lý." };
   }
 
+  const decisionNote = cleanText(rawNote, 300);
   const updated = await prisma.leaveRequest.updateMany({
     where: { id: request.id, status: "PENDING" },
     data: {
       status: approve ? "APPROVED" : "REJECTED",
       deciderId: viewer.id,
       decidedAt: new Date(),
-      decisionNote: cleanText(rawNote, 300),
+      decisionNote,
     },
   });
   if (updated.count === 0) {
     return { error: "Đơn vừa được xử lý ở nơi khác. Hãy tải lại trang." };
   }
+
+  queueLeaveEmail(
+    {
+      kind: approve ? "APPROVED" : "REJECTED",
+      request,
+      requesterName: request.user.name,
+      actorName: viewer.name,
+      decisionNote,
+    },
+    [request.user.id, ...leaveManagerIds.filter((id) => id !== viewer.id)]
+  );
 
   const range = describeRange(request.startDate, request.endDate, request.days);
   await notify([request.user.id], {
@@ -269,6 +313,63 @@ export async function setAnnualLeaveDays(
   if (updated.count === 0) return { error: "Tài khoản không tồn tại." };
   revalidatePath("/leave");
   return { success: "Đã lưu số ngày phép năm." };
+}
+
+/** Admin đặt tổng số ngày đã dùng của một người trong năm, không sửa đơn nghỉ. */
+export async function setUsedLeaveDays(
+  userId: string,
+  year: number,
+  days: number
+): Promise<LeaveState> {
+  await requireAdmin();
+  if (
+    typeof userId !== "string" ||
+    !userId ||
+    !Number.isInteger(year) ||
+    year < 2000 ||
+    year > 2100 ||
+    typeof days !== "number" ||
+    !Number.isFinite(days) ||
+    days < 0 ||
+    days > MAX_USED_LEAVE_DAYS ||
+    !Number.isInteger(days * 2)
+  ) {
+    return {
+      error: `Số ngày đã dùng phải từ 0 đến ${MAX_USED_LEAVE_DAYS}, bước 0,5.`,
+    };
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const person = await tx.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+    if (!person) return false;
+
+    const approved = await tx.leaveRequest.aggregate({
+      where: {
+        userId,
+        type: "ANNUAL",
+        status: "APPROVED",
+        startDate: {
+          gte: new Date(Date.UTC(year, 0, 1)),
+          lt: new Date(Date.UTC(year + 1, 0, 1)),
+        },
+      },
+      _sum: { days: true },
+    });
+    const adjustmentDays = days - (approved._sum.days ?? 0);
+    await tx.leaveUsageAdjustment.upsert({
+      where: { userId_year: { userId, year } },
+      create: { userId, year, adjustmentDays },
+      update: { adjustmentDays },
+    });
+    return true;
+  });
+  if (!result) return { error: "Tài khoản không tồn tại." };
+
+  revalidatePath("/leave");
+  return { success: "Đã lưu số ngày phép đã dùng." };
 }
 
 /** Admin đặt lại toàn bộ danh sách quản lý nghỉ phép. */

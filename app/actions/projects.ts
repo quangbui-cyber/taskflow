@@ -2,15 +2,21 @@
 
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { queueChatMemberSync } from "@/lib/projectChatSync";
+import {
+  driveFolderKeys,
+  queueDrivePush,
+  queueDriveSharingSync,
+  renameDriveFolderSafe,
+  trashProjectFolderSafe,
+} from "@/lib/driveStorage";
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { canCreateProjects, canViewRevenue, getMembership, requireUser } from "@/lib/auth";
 import { readProjectBusinessFields } from "@/lib/projectPolicy";
+import { FINANCE_APPROVER_ROLES, readFinanceApprovers } from "@/lib/financePolicy";
 import { readProjectResponsibility, type ProjectResponsibility } from "@/lib/projectResponsibility";
-import {
-  sendGoogleChat,
-  validateGoogleChatWebhookUrl,
-} from "@/lib/googleChat";
 import { readProjectUpload } from "@/lib/projectFiles";
 import { parsePurchaseOrderPdf } from "@/lib/purchaseOrderPdf";
 import { projectStatusColor, type ProjectCategory } from "@/lib/types";
@@ -77,6 +83,29 @@ async function findValidAccount(accountId: string | null) {
     },
     select: { id: true, userId: true },
   });
+}
+
+async function findValidClient(clientId: string | null) {
+  if (!clientId) return null;
+  return prisma.client.findUnique({
+    where: { id: clientId },
+    select: { id: true },
+  });
+}
+
+/** Người duyệt IC/AC phải là Admin hoặc Account đang hoạt động. */
+async function invalidFinanceApprover(ids: (string | null)[]) {
+  const wanted = [...new Set(ids.filter((id): id is string => Boolean(id)))];
+  if (wanted.length === 0) return false;
+  const found = await prisma.user.count({
+    where: {
+      id: { in: wanted },
+      isActive: true,
+      deletedAt: null,
+      role: { in: [...FINANCE_APPROVER_ROLES] },
+    },
+  });
+  return found !== wanted.length;
 }
 
 async function validateResponsibility(assignment: ProjectResponsibility) {
@@ -148,9 +177,15 @@ export async function createProject(
       };
     }
   }
-  const account = await findValidAccount(accountId);
+  const [account, client] = await Promise.all([
+    findValidAccount(accountId),
+    findValidClient(clientId),
+  ]);
   if (accountId && !account) {
     return { error: "Hãy chọn Account đang hoạt động, đã liên kết tài khoản và Team kinh doanh." };
+  }
+  if (clientId && !client) {
+    return { error: "Client không còn tồn tại. Vui lòng chọn lại." };
   }
   if (purchaseOrderNumber) {
     const existingProject = await prisma.project.findUnique({
@@ -216,6 +251,7 @@ export async function createProject(
     throw error;
   }
 
+  if (projectFile) queueDrivePush(project.id);
   revalidatePath("/", "layout");
   redirect(`/projects/${project.id}`);
 }
@@ -245,11 +281,28 @@ export async function updateProject(
   if ("error" in assignment) return assignment;
   const assignmentError = await validateResponsibility(assignment);
   if (assignmentError) return assignmentError;
+  const approvers = readFinanceApprovers(formData, user.role, category, project);
+  if ("error" in approvers) return approvers;
+  const approversChanged =
+    approvers.icApproverId !== project.icApproverId ||
+    approvers.acApproverId !== project.acApproverId;
+  if (
+    approversChanged &&
+    (await invalidFinanceApprover([approvers.icApproverId, approvers.acApproverId]))
+  ) {
+    return { error: "Người duyệt IC/AC phải là Admin hoặc Account đang hoạt động." };
+  }
   const execution = parseExecutionFields(formData, category);
   if ("error" in execution) return execution;
-  const account = await findValidAccount(accountId);
+  const [account, client] = await Promise.all([
+    findValidAccount(accountId),
+    findValidClient(clientId),
+  ]);
   if (accountId && !account) {
     return { error: "Hãy chọn Account đang hoạt động, đã liên kết tài khoản và Team kinh doanh." };
+  }
+  if (clientId && !client) {
+    return { error: "Client không còn tồn tại. Vui lòng chọn lại." };
   }
   await prisma.$transaction(async (tx) => {
     await tx.project.update({
@@ -265,17 +318,27 @@ export async function updateProject(
         revenue: canViewRevenue(user.role) ? revenue : undefined,
         clientId,
         accountId,
+        icApproverId: approvers.icApproverId,
+        acApproverId: approvers.acApproverId,
       },
     });
-    if (account?.userId) {
+    // Account và người duyệt cần mở được dự án, nên tự thêm họ làm thành viên.
+    const memberIds = new Set(
+      [account?.userId, approvers.icApproverId, approvers.acApproverId].filter(
+        (id): id is string => Boolean(id),
+      ),
+    );
+    for (const userId of memberIds) {
       await tx.projectMember.upsert({
-        where: { projectId_userId: { projectId, userId: account.userId } },
-        create: { projectId, userId: account.userId },
+        where: { projectId_userId: { projectId, userId } },
+        create: { projectId, userId },
         update: {},
       });
     }
   });
 
+  after(() => renameDriveFolderSafe(driveFolderKeys.project(projectId), name));
+  queueDriveSharingSync(projectId);
   revalidatePath("/", "layout");
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/revenue");
@@ -342,6 +405,7 @@ export async function deleteProject(projectId: string) {
   if (await prisma.costFlowWorkspace.findUnique({ where: { projectId }, select: { projectId: true } })) {
     return { error: "Không thể xoá project có hồ sơ hoặc lịch sử CostFlow." };
   }
+  const taskIds = (await prisma.task.findMany({ where: { projectId }, select: { id: true } })).map((task) => task.id);
   try {
     await prisma.project.delete({ where: { id: projectId } });
   } catch (error) {
@@ -350,81 +414,10 @@ export async function deleteProject(projectId: string) {
     }
     throw error;
   }
+  // Thư mục dự án trên Drive vào thùng rác (khôi phục được 30 ngày).
+  after(() => trashProjectFolderSafe(projectId, taskIds));
   revalidatePath("/");
   redirect("/");
-}
-
-async function manageableProject(projectId: string) {
-  const user = await requireUser();
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: {
-      id: true,
-      name: true,
-      ownerId: true,
-      googleChatWebhookUrl: true,
-    },
-  });
-
-  if (!project) return { error: "Project không tồn tại." } as const;
-  const membership =
-    user.role === "ADMIN" ? true : await getMembership(projectId, user.id);
-  if (!membership) {
-    return {
-      error: "Chỉ thành viên dự án hoặc admin được cấu hình Google Chat.",
-    } as const;
-  }
-  return { project } as const;
-}
-
-export async function saveProjectGoogleChatWebhook(
-  projectId: string,
-  webhookUrl: string
-) {
-  const access = await manageableProject(projectId);
-  if ("error" in access) return access;
-
-  const normalizedUrl = webhookUrl.trim();
-  if (!validateGoogleChatWebhookUrl(normalizedUrl)) {
-    return {
-      error: "URL không đúng định dạng webhook của Google Chat.",
-    };
-  }
-
-  await prisma.project.update({
-    where: { id: projectId },
-    data: { googleChatWebhookUrl: normalizedUrl },
-  });
-
-  revalidatePath(`/projects/${projectId}`);
-  return { success: "Đã kết nối dự án với Google Chat." };
-}
-
-export async function testProjectGoogleChatWebhook(projectId: string) {
-  const access = await manageableProject(projectId);
-  if ("error" in access) return access;
-  if (!access.project.googleChatWebhookUrl) {
-    return { error: "Dự án chưa có webhook Google Chat." };
-  }
-
-  const result = await sendGoogleChat(
-    access.project.googleChatWebhookUrl,
-    `*${access.project.name}*\nKết nối Google Chat thành công.`
-  );
-  if (!result.ok) return { error: result.error };
-  return { success: "Đã gửi tin thử vào Google Chat." };
-}
-
-export async function disconnectProjectGoogleChatWebhook(projectId: string) {
-  const access = await manageableProject(projectId);
-  if ("error" in access) return access;
-
-  await prisma.project.update({
-    where: { id: projectId },
-    data: { googleChatWebhookUrl: null },
-  });
-  revalidatePath(`/projects/${projectId}`);
-  return { success: "Đã ngắt kết nối Google Chat." };
 }
 
 export async function addMember(
@@ -460,6 +453,8 @@ export async function addMember(
   await prisma.projectMember.create({
     data: { projectId, userId: invitee.id, role: "member" },
   });
+  queueChatMemberSync(projectId, [invitee.id]);
+  queueDriveSharingSync(projectId);
 
   revalidatePath(`/projects/${projectId}`);
   return {};
@@ -506,6 +501,8 @@ export async function addMemberGroup(
     })),
     skipDuplicates: true,
   });
+  queueChatMemberSync(projectId, newMemberIds);
+  queueDriveSharingSync(projectId);
 
   revalidatePath(`/projects/${projectId}`);
   return {
@@ -549,6 +546,7 @@ export async function removeMember(projectId: string, memberUserId: string) {
       where: { projectId, userId: memberUserId },
     });
   });
+  queueDriveSharingSync(projectId);
 
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/");

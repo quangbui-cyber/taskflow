@@ -5,13 +5,23 @@ import Sidebar from "@/components/Sidebar";
 import { ProfileInfoForm, ProfilePasswordForm } from "@/components/ProfileForms";
 import { ProfileSignatureForm } from "@/components/ProfileSignatureForm";
 import { readOwnSignatureAsset } from "@/lib/workflow/signatureAssets";
+import GoogleConnectionCard from "@/components/GoogleConnectionCard";
+import { canManageChatSpaces, canSendGmail, googleWorkspaceConfigured } from "@/lib/googleWorkspace";
 
 const PROFILE_BLUE_DARK = "#1d4ed8";
 const PROFILE_BLUE_SOFT = "#eff6ff";
 
-export default async function ProfilePage() {
-  const user = await requireUser();
-  const [sidebarProjects, signatureAsset, signatureSecurity] = await Promise.all([
+export default async function ProfilePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ google?: string }>;
+}) {
+  const [user, params] = await Promise.all([requireUser(), searchParams]);
+  const [google, sidebarProjects, signatureAsset, signatureSecurity] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: user.id },
+      select: { googleToken: true, googleEmail: true, googleScopes: true },
+    }),
     prisma.project.findMany({
     where: { members: { some: { userId: user.id } } },
     select: {
@@ -32,6 +42,7 @@ export default async function ProfilePage() {
       select: { signaturePinHash: true },
     }),
   ]);
+  const scopes = google?.googleToken ? google.googleScopes : [];
 
   return (
     <div className="tf-shell">
@@ -72,6 +83,14 @@ export default async function ProfilePage() {
           <ProfileSignatureForm
             initialSignatureData={signatureAsset?.dataUrl ?? null}
             initialHasPin={Boolean(signatureSecurity.signaturePinHash)}
+          />
+          <GoogleConnectionCard
+            configured={googleWorkspaceConfigured()}
+            loginEmail={user.email}
+            connectedEmail={google?.googleToken ? google.googleEmail : null}
+            canSendGmail={canSendGmail(scopes)}
+            canManageChat={canManageChatSpaces(scopes)}
+            result={params.google ?? null}
           />
           <ProfilePasswordForm />
         </div>

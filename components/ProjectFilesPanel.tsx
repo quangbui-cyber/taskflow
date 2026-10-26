@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import {
   Download,
+  ExternalLink,
   File,
   FileImage,
   FileSpreadsheet,
@@ -13,6 +14,7 @@ import {
   Upload,
 } from "lucide-react";
 import { useInteraction } from "@/components/InteractionProvider";
+import { uploadStoredFile } from "@/lib/fileUploadClient";
 import {
   formatProjectFileSize,
   projectFileTypeLabel,
@@ -24,6 +26,8 @@ export type ProjectFileDTO = {
   mimeType: string;
   size: number;
   createdAt: string;
+  /** Link mở trên Google Drive; null khi file còn lưu trong app. */
+  driveUrl: string | null;
   uploader: {
     id: string;
     name: string;
@@ -47,6 +51,7 @@ function FileTypeIcon({ mimeType }: { mimeType: string }) {
   if (
     mimeType === "application/pdf" ||
     mimeType.includes("word") ||
+    mimeType === "application/vnd.google-apps.document" ||
     mimeType.startsWith("text/")
   ) {
     return <FileText size={19} className={className} aria-hidden="true" />;
@@ -97,22 +102,13 @@ export default function ProjectFilesPanel({
 
   async function uploadFile(file: File) {
     setUploading(true);
-    const body = new FormData();
-    body.append("file", file);
 
     try {
-      const response = await fetch(`/api/projects/${projectId}/files`, {
-        method: "POST",
-        body,
-      });
-      const result = (await response.json()) as {
-        file?: ProjectFileDTO;
-        error?: string;
-      };
-      if (!response.ok || !result.file) {
-        throw new Error(result.error || "Không thể tải tài liệu lên.");
-      }
-      setFiles((current) => [result.file!, ...current]);
+      const saved = await uploadStoredFile<ProjectFileDTO>(
+        { target: "project", projectId },
+        file
+      );
+      setFiles((current) => [saved, ...current]);
       notify({ message: "Đã thêm tài liệu vào dự án.", tone: "success" });
     } catch (error) {
       notify({
@@ -163,9 +159,6 @@ export default function ProjectFilesPanel({
           </span>
           <div className="min-w-0">
             <h2 className="font-semibold text-zinc-950">Tài liệu dự án</h2>
-            <p className="text-sm text-zinc-500">
-              Lưu PO, brief và thông tin khách hàng cùng dự án.
-            </p>
           </div>
         </div>
 
@@ -202,10 +195,6 @@ export default function ProjectFilesPanel({
           </span>
           <p className="mt-3 text-sm font-medium text-zinc-700">
             Chưa có tài liệu
-          </p>
-          <p className="mt-1 text-xs leading-5 text-zinc-500">
-            Hỗ trợ PDF, hình ảnh, Word, Excel, PowerPoint, TXT và CSV, tối đa 4
-            MB.
           </p>
         </div>
       ) : (
@@ -255,6 +244,18 @@ export default function ProjectFilesPanel({
                   </div>
                 )}
 
+                {file.driveUrl && (
+                  <a
+                    href={`/api/projects/${projectId}/files/${file.id}?open=1`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="tf-icon-button shrink-0"
+                    aria-label={`Mở ${file.name} trên Google Drive`}
+                    title="Mở trên Google Drive"
+                  >
+                    <ExternalLink size={16} aria-hidden="true" />
+                  </a>
+                )}
                 <a
                   href={`/api/projects/${projectId}/files/${file.id}`}
                   className="tf-icon-button shrink-0"

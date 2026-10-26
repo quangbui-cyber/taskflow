@@ -202,6 +202,7 @@ async function resolveEvidence(tx: Prisma.TransactionClient, projectId: string, 
   const sourceFileId = required(formText(form, "sourceFileId"), "chứng từ thu/chi");
   const source = await tx.projectFile.findFirst({ where: { id: sourceFileId, projectId } });
   if (!source) throw new Error("Chứng từ không thuộc Project này.");
+  if (!source.data) throw new Error("File trên Google Drive chưa có bản sao nội dung. Hãy tải file xuống rồi tải trực tiếp làm chứng từ.");
   const sha256 = createHash("sha256").update(source.data).digest("hex");
   return tx.costFlowEvidence.create({ data: { projectId, requestId: null, sourceFileId: source.id, kind: "CASH", name: source.name, mimeType: source.mimeType, data: source.data, sha256, createdBy: actorId } });
 }

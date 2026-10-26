@@ -40,3 +40,4 @@ export async function findAccessibleTask(
   const canAccess = user.role === "ADMIN" || task.project.members.length > 0;
   return canAccess ? task : null;
 }
+

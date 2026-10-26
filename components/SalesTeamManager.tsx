@@ -179,10 +179,6 @@ export default function SalesTeamManager({ teams }: { teams: SalesTeamItem[] }) 
     <div className="tf-panel overflow-hidden">
       <div className="border-b border-zinc-100 px-5 py-3">
         <h2 className="font-semibold">Team kinh doanh</h2>
-        <p className="mt-0.5 text-xs text-zinc-400">
-          Tạo Team tại đây, sau đó thêm hoặc chuyển Account ở phần bên dưới.
-          Manager là người chia KPI của team xuống từng Account.
-        </p>
       </div>
 
       <form ref={formRef} action={formAction} className="flex gap-2 p-4">

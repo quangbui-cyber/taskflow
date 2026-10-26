@@ -68,7 +68,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const sourceId = String(form.get("sourceFileId") ?? "");
     const source = sourceId ? await prisma.projectFile.findFirst({ where: { id: sourceId, projectId: id } }) : null;
     if (sourceId && !source) return Response.json({ error: "File phải thuộc project." }, { status: 404 });
-    const upload = source ? { name: source.name, mimeType: source.mimeType, data: source.data, size: source.size } : await readProjectUpload(form.get("proof"));
+    let upload = await readProjectUpload(form.get("proof"));
+    if (source) {
+      const sourceData = source.data;
+      if (!sourceData) {
+        return Response.json({ error: "File trên Google Drive chưa có bản sao nội dung. Hãy tải file xuống rồi tải trực tiếp làm minh chứng." }, { status: 422 });
+      }
+      upload = { name: source.name, mimeType: source.mimeType, data: sourceData, size: source.size };
+    }
     if (!upload || upload.size > 4 * 1024 * 1024) throw new Error("Chọn một file tối đa 4 MiB.");
     const evidence = await prisma.costFlowEvidence.create({ data: { projectId: id, sourceFileId: source?.id ?? "", kind: "IC_ESTIMATE", name: upload.name, mimeType: upload.mimeType, data: upload.data, sha256: createHash("sha256").update(upload.data).digest("hex"), createdBy: actor.id }, select: { id: true, name: true, mimeType: true, sha256: true, kind: true, requestId: true } });
     return Response.json({ evidence }, { status: 201 });

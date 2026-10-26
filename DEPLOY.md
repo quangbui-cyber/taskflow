@@ -171,20 +171,30 @@ npx prisma migrate dev --name ten_thay_doi
 
 ## Báo lên Google Chat (tuỳ chọn)
 
-Khi có job mới, đổi người được giao hoặc đổi trạng thái, app gửi tin nhắn kèm người được giao và link mở đúng job vào group chat.
+Khi có job mới, đổi người được giao hoặc đổi trạng thái, app gửi tin vào **nhóm Google Chat của dự án**
+dưới tên Chat app **myCreative**, kèm người được giao và link mở đúng job. Không cần dán webhook nữa.
 
-1. Mở **Google Chat** → vào **Space** (group) muốn nhận thông báo.
-2. Bấm tên Space ở đầu trang → **Apps & integrations** → **Webhooks** → **Add webhooks**.
-3. Đặt tên (ví dụ "myCreative") → **Save** → **Copy** URL webhook.
-4. Trong myCreative, mở dự án cần kết nối → tab **Webhook** → dán URL → **Lưu webhook**.
-5. Bấm **Gửi thử** để kiểm tra tin nhắn đã vào đúng Space.
+**Cài một lần trên máy chủ**
 
-Mỗi dự án có thể dùng một URL riêng để gửi vào một group riêng. URL được lưu kín
-trong database và chỉ chủ dự án hoặc admin được thay đổi. Lỗi gửi tin nhắn (mạng,
-webhook bị xoá...) không làm hỏng thao tác chính trong app.
+1. Google Cloud (dự án của OAuth client đăng nhập Google) → **Google Chat API → Configuration**: Chat app
+   tên `myCreative` đã có, trạng thái LIVE. Ô **Avatar URL** điền
+   `https://taskflow-vert-psi.vercel.app/brand/creative-station-chat-avatar.png` (logo Creative Station bản vuông)
+   → **Save**. Google Chat có thể mất vài phút đến vài giờ mới hiện avatar mới.
+2. **IAM & Admin → Service accounts → Create service account** (ví dụ `mycreative-chat`, không cần cấp vai trò).
+3. Mở tài khoản vừa tạo → **Keys → Add key → JSON** → tải file khoá về.
+4. Vercel → Settings → Environment Variables → thêm `GOOGLE_CHAT_SERVICE_ACCOUNT` = toàn bộ nội dung file JSON
+   (hoặc nội dung đã mã hoá base64) → deploy lại. Giữ file khoá kín, xoá khỏi máy sau khi dán.
 
-> Lưu ý: webhook Google Chat chỉ gửi **một chiều** (app → group). Nhân viên trả
-> lời trong group sẽ không phản hồi ngược lại app.
+**Trong mỗi dự án**
+
+1. Mở dự án → tab **Google Chat** → **Tạo nhóm Google Chat**. App tạo nhóm trùng tên dự án, thêm mọi thành viên
+   và thêm myCreative vào nhóm.
+2. Bấm **Gửi tin thử** để kiểm tra.
+3. Nhóm tạo trước khi có Chat app: bấm **Thêm người còn thiếu** để thêm myCreative.
+
+Người bấm tạo nhóm cần **Kết nối Google** một lần (cho phép tạo nhóm Chat và thêm myCreative). Ai đã kết nối
+trước đây cần kết nối lại để cho thêm quyền này. Dự án cũ còn webhook vẫn nhận tin qua webhook cho tới khi tạo
+nhóm; tạo nhóm xong app tự bỏ webhook. Lỗi gửi tin không làm hỏng thao tác chính trong app.
 
 ---
 
@@ -199,7 +209,7 @@ Cơ chế: [Vercel Cron](https://vercel.com/docs/cron-jobs) gọi route
 
 **Cần làm để bật:**
 
-1. Đảm bảo dự án đã cấu hình webhook Chat (xem mục trên).
+1. Đảm bảo dự án đã có nhóm Google Chat tạo từ app (xem mục trên).
 2. Tạo chuỗi bí mật bảo vệ endpoint:
    ```bash
    node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"
@@ -231,11 +241,15 @@ curl -H "Authorization: Bearer <CRON_SECRET>" \
 > ⚠️ Endpoint này gửi tin **thật** vào group Chat của mọi dự án có việc trễ hạn.
 > Đừng gọi thử trên production nếu chưa muốn cả công ty nhận tin nhắn.
 
-## Lịch họp: gửi email mời họp qua Gmail (tuỳ chọn)
+## Email lịch họp và nghỉ phép qua Google Workspace (tuỳ chọn)
 
 Trang **Lịch họp** luôn gửi thông báo trong app. Muốn người tham dự nhận thêm
 **email kèm lịch (.ics)** khi được mời, khi đổi giờ/phòng và khi huỷ họp thì khai báo
-một hộp thư Gmail để gửi:
+một hộp thư Gmail hoặc Google Workspace để gửi. Trang **Nghỉ phép** dùng cùng
+hộp thư: gửi xác nhận cho người xin và thông báo cho người duyệt khi có đơn mới;
+gửi kết quả duyệt/từ chối cho người xin và quản lý nghỉ phép; khi hủy, báo người xin
+và người duyệt (đơn đã duyệt thì báo thêm quản lý nghỉ phép). Email nghỉ phép gửi
+riêng từng người nhận và bỏ qua tài khoản đã ngừng hoạt động.
 
 1. Tạo (hoặc chọn) một tài khoản Gmail **dùng riêng cho app** — mail mời họp sẽ gửi
    đi từ địa chỉ này.
@@ -243,11 +257,26 @@ một hộp thư Gmail để gửi:
    <https://myaccount.google.com/apppasswords>.
 3. Vercel → Settings → Environment Variables → thêm:
    - `SMTP_USER` = địa chỉ Gmail ở bước 1
-   - `SMTP_APP_PASSWORD` = mật khẩu ứng dụng 16 ký tự ở bước 2
+   - `SMTP_APP_PASSWORD` = mật khẩu ứng dụng 16 ký tự ở bước 2, lưu dạng Secret/Sensitive
+   - `SMTP_HOST` = `smtp.gmail.com`
+   - `SMTP_PORT` = `465` (TLS trực tiếp) hoặc `587` (STARTTLS bắt buộc)
+   - `MAIL_FROM_NAME` = `Creative Station` (tùy chọn)
    - `APP_URL` = địa chỉ app (không bắt buộc trên Vercel) để email có nút mở app
 4. **Redeploy.**
 
 Chưa khai báo thì app vẫn chạy bình thường, chỉ không gửi email.
+
+Không dùng mật khẩu đăng nhập Google cho `SMTP_APP_PASSWORD`. Nếu không thấy mục
+Mật khẩu ứng dụng, nhờ quản trị viên Workspace kiểm tra chính sách xác minh hai bước
+và quyền dùng mật khẩu ứng dụng. Không đưa mã thật vào Git hoặc nội dung PR.
+
+Email chạy sau khi thao tác lưu thành công; lỗi SMTP không làm mất đơn hoặc lịch đã đặt.
+Lỗi gửi mail được ghi trong runtime logs bằng mã lỗi, không ghi mật khẩu hoặc nội dung thư.
+Đây là gửi trực tiếp theo từng sự kiện, chưa có hàng đợi gửi lại khi máy chủ mail gặp lỗi.
+Lịch họp bật mặc định ở mọi môi trường. Muốn tạm ẩn thì đặt `MEETINGS_ENABLED=false` rồi Redeploy.
+
+Tài chính (tab Tài chính của dự án, duyệt IC) và danh bạ Nhà cung cấp đang **tạm ẩn** mặc định. Muốn bật lại thì đặt
+`FINANCE_ENABLED=true` rồi Redeploy; dữ liệu đã nhập vẫn còn nguyên.
 
 - **Giới hạn của Gmail:** khoảng 500 người nhận/ngày với Gmail thường (2.000 với
   Google Workspace). Vượt mức, Google tạm khoá gửi khoảng 24 giờ.
@@ -255,3 +284,166 @@ Chưa khai báo thì app vẫn chạy bình thường, chỉ không gửi email.
   Gmail chỉ gửi thư trả lời về hộp thư ở bước 1, không cập nhật vào app.
 - **Phòng họp** do Admin thêm trong *Cài đặt → Phòng họp*.
 - Cron 9h sáng (mục trên) nhắc thêm trong app các cuộc họp diễn ra trong ngày.
+
+## Biên bản họp bằng AI (tuỳ chọn)
+
+Người tổ chức **ghi âm ngay trong app** hoặc tải file ghi âm có sẵn lên trang **Biên bản** của cuộc họp
+(ghi âm trong app cần HTTPS — Vercel có sẵn — và quyền micro: `Permissions-Policy` cho phép `microphone=(self)`).
+Chế độ **Họp online** dùng tính năng chia sẻ tab của trình duyệt để thu thêm tiếng của tab Meet/Zoom — chỉ Chrome/Edge máy tính,
+không cần cấu hình gì thêm.
+App gửi file cho **Groq** (`whisper-large-v3`) để chép lời tiếng Việt, rồi nhờ
+**Gemini** (`gemini-3.8-flash`, mức suy nghĩ `medium`) viết biên bản gồm tóm tắt, nội dung thảo luận chia theo
+chủ đề, quyết định, việc cần làm (gắn sẵn người phụ trách trong danh sách mời) và vấn đề còn mở. Người tổ chức đọc lại, sửa nếu cần, rồi
+bấm **Gửi cho người tham dự** (thông báo trong app + email nếu đã cấu hình email ở mục trên).
+
+Chi phí tham khảo: khoảng **$0.17 cho mỗi giờ ghi âm** (Groq $0.111/giờ + Gemini khoảng
+$0.05–0.07 mỗi lượt viết; từ 1/1/2027 Google tăng giá 3.8 Flash gấp đôi nên khoảng $0.10–0.14). File ghi âm chỉ nằm tạm trên Vercel Blob và **bị xoá ngay khi chép lời xong**;
+app lưu lại bản chép lời và biên bản.
+
+1. **Groq:** tạo API key tại <https://console.groq.com/keys>. Vào **Settings → Billing**
+   chuyển sang gói **Developer** (trả theo dùng) để nhận file tới 100 MB.
+2. **Gemini:** tạo API key tại <https://aistudio.google.com/apikey> và **bật thanh toán**
+   cho project của key đó. Gói miễn phí cho phép Google dùng dữ liệu để cải thiện sản phẩm,
+   không phù hợp với nội dung họp nội bộ.
+3. **Vercel Blob:** Vercel → project → **Storage** → **Create** → **Blob** → chọn
+   **Private** → kết nối với project (Production, Preview; thêm Development nếu chạy thử
+   trên máy). Vercel tự thêm `BLOB_READ_WRITE_TOKEN` cùng các biến Blob khác.
+4. Vercel → Settings → Environment Variables → thêm, lưu dạng Sensitive:
+   - `GROQ_API_KEY`
+   - `GEMINI_API_KEY`
+5. **Redeploy.** Nút **Tạo biên bản** hiện trên các cuộc họp đã bắt đầu.
+
+Thiếu một trong ba khoá (`GROQ_API_KEY`, `GEMINI_API_KEY`, `BLOB_READ_WRITE_TOKEN`) thì
+nút tạo biên bản không hiện; biên bản đã có vẫn xem được. Muốn tắt hẳn thì đặt
+`MEETING_RECAPS_ENABLED=false`. Đổi model không cần sửa code:
+`RECAP_TRANSCRIBE_MODEL` (mặc định `whisper-large-v3`, rẻ hơn: `whisper-large-v3-turbo`)
+và `RECAP_SUMMARY_MODEL` (mặc định `gemini-3.8-flash`; rẻ hơn nhưng kém hơn: `gemini-3.1-flash-lite`).
+
+Cách Gemini viết biên bản:
+
+- `RECAP_SUMMARY_THINKING`: mức "suy nghĩ" trước khi viết — `low`, `medium` (mặc định), `high`
+  (`minimal` chỉ dùng với model Flash-Lite). Cao hơn thì gom chủ đề, đoán người phụ trách và ngày hạn
+  kỹ hơn nhưng chậm và tốn hơn.
+- `RECAP_SUMMARY_MAX_OUTPUT_TOKENS`: trần token trả về mỗi lượt, **đã gồm phần suy nghĩ**
+  (mặc định 24576, nhận 4096–65536). Hết trần giữa chừng thì biên bản báo lỗi
+  "AI dùng hết giới hạn token…" — tăng trần hoặc giảm mức suy nghĩ.
+- Log server ghi số token mỗi lượt (`Gemini recap (…): input …, thinking …, output … tokens`)
+  để đối chiếu chi phí và chỉnh hai biến trên.
+
+- **Ai được làm gì:** người tổ chức và Admin tải ghi âm, sửa, viết lại, gửi, xoá biên bản.
+  Người được mời chỉ đọc được **sau khi** biên bản được gửi.
+- **Thời gian xử lý:** thường 1–3 phút cho một cuộc họp 1 giờ, chạy nền nên có thể rời trang.
+  Lần xử lý quá 15 phút được coi là bị gián đoạn: người tổ chức tải file lên lại;
+  cron 9h sáng cũng đánh dấu lỗi và xoá file ghi âm còn sót.
+- **Giới hạn:** file tối đa 100 MB (mp3, m4a, wav, webm, ogg, flac, mp4). Ghi âm iPhone
+  1 giờ khoảng 30–60 MB. Whisper không phân biệt người nói, nên biên bản không ghi
+  "ai nói gì" chính xác.
+- **Đoạn không nghe rõ:** Whisper đôi khi chép lại phần gợi ý tên (thay cho cả khung 30 giây lời nói thật)
+  hoặc bị kẹt làm rơi chữ có dấu. App nhận ra các đoạn này, tự chép lại cả file **một lần nữa không kèm gợi ý**
+  để lấy lại lời nói (chỉ khi có ít nhất 10 giây bị hỏng, còn hạn mức phút trong ngày và đủ thời gian), đoạn nào
+  vẫn hỏng thì ghi `(không nghe rõ)` kèm khoảng thời gian. Trang biên bản báo số đoạn và tổng thời lượng bị mất.
+  Lần chép lại tính vào tổng phút chép lời trong ngày nhưng không tính vào 3 lần chép lời của mỗi cuộc họp.
+- **Quyền riêng tư:** nên báo trước cho người tham dự (nhất là khách hàng) rằng cuộc họp được ghi âm.
+- **Thông báo khi họp bắt đầu:** cron `/api/cron/meeting-starts` chạy **mỗi phút** để báo người tổ chức
+  "cuộc họp đã bắt đầu — bấm để ghi âm". Lịch chạy mỗi phút **cần gói Vercel Pro**; gói Hobby chỉ cho
+  cron mỗi ngày một lần và sẽ **từ chối deploy** — khi đó xoá mục `meeting-starts` trong `vercel.json`.
+  Cron dùng chung `CRON_SECRET` với cron 9h sáng.
+- **Cuộc họp dự án:** họp tạo từ trang dự án được gắn với dự án; khi gửi, biên bản được lưu thành file
+  `.docx` trong tài liệu dự án (gửi lại thì thay file cũ).
+
+### Bản nháp và bản biên bản đã gửi
+
+- Migration `20261023150000_recap_drafts_and_publication` thêm bản lưu nội dung và công việc đã gửi,
+  đồng thời chuyển các biên bản đã gửi trước đây sang cơ chế này. Chạy migration trước khi phục vụ code mới;
+  quy trình build production hiện có đã gọi `prisma migrate deploy`.
+- Sửa nội dung, tải ghi âm mới hoặc viết lại chỉ thay bản nháp. Người tham dự tiếp tục đọc bản đã gửi
+  cho tới khi người tổ chức bấm **Gửi lại**. Email và file Word lấy đúng bản đã công bố.
+- Cuộc họp tạo ngoài dự án: trên trang biên bản bấm **Gắn vào dự án**, chọn dự án và bấm **Gắn và lưu biên bản**.
+  Người tổ chức, người ghi biên bản hoặc Admin được thực hiện, kể cả khi họp đã kết thúc; người thao tác
+  phải là thành viên dự án hoặc Admin. Bản đã gửi được lưu ngay, bản nháp đợi tới khi gửi. Các task đã tạo
+  giữ nguyên dự án. Không hỗ trợ chuyển cuộc họp đã gắn sang dự án khác trong thao tác này.
+- Viết lại giữ nguyên danh sách công việc, người phụ trách, hạn chót, dấu hoàn thành và liên kết task.
+  Việc AI đề xuất thêm nằm trong **AI đề xuất bổ sung**; người tổ chức chọn **Thêm vào danh sách** hoặc **Bỏ qua**.
+  Việc bổ sung chưa tạo task; tạo task vẫn là thao tác riêng.
+- Kiểm thử PostgreSQL: tạo database cục bộ riêng có tên bắt đầu bằng `taskflow_recap_test`, chạy migrations vào
+  database đó, rồi chạy `TASKFLOW_TEST_DATABASE_URL=postgresql://...@127.0.0.1:PORT/taskflow_recap_test npx tsx --test tests/recapWorkflow.integration.test.ts`.
+  Bộ test từ chối URL không phải database thử nghiệm cục bộ. Không truyền database production.
+
+### Chống chạy quá tay (giới hạn chi phí)
+
+App tự chặn **trước khi** gọi AI, không có lần chạy nào tự lặp lại:
+
+| Giới hạn | Mặc định | Đổi bằng biến môi trường |
+|---|---|---|
+| Độ dài tối đa mỗi file ghi âm | 180 phút | `RECAP_MAX_AUDIO_MINUTES` |
+| Tổng phút chép lời mỗi ngày (cả công ty) | 600 phút ≈ tối đa $1.1/ngày | `RECAP_DAILY_AUDIO_MINUTES` |
+| Tổng lượt viết biên bản mỗi ngày (cả công ty) | 60 lượt ≈ tối đa $9/ngày (từ 2027 ≈ $18) | `RECAP_DAILY_SUMMARIES` |
+| Mỗi cuộc họp mỗi ngày | chép lời 3 lần, viết biên bản 6 lần | — |
+
+- Mỗi lượt Gemini bị giới hạn 8.192 token trả về và tối đa khoảng 5 giờ nội dung đầu vào.
+- Groq/Gemini báo bận (429) hoặc lỗi máy chủ (5xx) thì thử lại tối đa 3 lần; **quá thời gian
+  chờ thì không thử lại** (có thể đã bị tính tiền). Không có hàng đợi hay cron nào tự chạy lại.
+- Hết hạn mức thì người dùng thấy lý do bằng tiếng Việt; ngày mới (0h giờ Việt Nam) tự mở lại.
+- `MEETING_RECAPS_ENABLED=false` rồi Redeploy là tắt hẳn ngay.
+
+Nên đặt thêm **trần chi tiêu ở phía nhà cung cấp** — lớp bảo vệ cuối cùng, kể cả khi code có lỗi:
+
+1. **Groq:** Console → **Settings → Billing → Limits** → nhập trần theo tháng (ví dụ $10),
+   bật email cảnh báo ở 50% / 75% / 90%. Chạm trần là Groq chặn mọi lời gọi tới đầu tháng sau.
+2. **Gemini:** Google AI Studio → tab **Spend** của project → đặt trần theo tháng (ví dụ $5).
+   Trần có hiệu lực sau khoảng 10 phút.
+3. **Vercel:** gói Hobby tự dừng khi vượt mức miễn phí, không tính thêm tiền. Gói Pro: bật
+   **Spend Management** (Settings → Billing) để nhận cảnh báo hoặc tạm dừng dự án.
+
+## Đăng nhập bằng Google
+
+- Tạo OAuth client loại **Web application** trong Google Cloud Console. Nếu muốn nhận mọi tài khoản Google,
+  chọn đối tượng **External**; không giới hạn theo Google Workspace.
+- Khai báo **Authorized redirect URI** cho từng tên miền dùng để đăng nhập, ví dụ
+  `https://taskflow-vert-psi.vercel.app/api/auth/google/callback` và
+  `http://localhost:3000/api/auth/google/callback` khi chạy local.
+- Đặt `GOOGLE_CLIENT_ID` và `GOOGLE_CLIENT_SECRET` trong môi trường chạy app rồi redeploy. Chỉ đặt
+  Client Secret ở server, không dùng biến `NEXT_PUBLIC_`.
+- Chạy migration `20261023160000_add_google_login` trước khi mở nút Google. Quy trình build production
+  hiện có chạy `prisma migrate deploy`.
+- Người đăng nhập Google phải có tài khoản đang hoạt động trong app, cùng địa chỉ email. Gmail và
+  Google Workspace được liên kết ở lần đăng nhập đầu; tài khoản Google dùng địa chỉ email từ dịch vụ
+  khác cần nhập mật khẩu app một lần để liên kết an toàn. Các lần sau dùng Google trực tiếp.
+- Cách đăng nhập bằng email và mật khẩu hiện có tiếp tục hoạt động.
+
+## Lưu tài liệu dự án trên Google Drive (tuỳ chọn)
+
+Tài liệu dự án, tệp giao việc / kết quả của task và biên bản họp (thành Google Doc) lưu trên Shared Drive
+"myCreative – Dự án", xếp theo `năm / dự án / Tài liệu, Công việc / task`. Chưa kết nối thì app lưu file trong
+database như cũ (tối đa 4 MB).
+
+1. Google Cloud (dự án của OAuth client đăng nhập Google) đã bật **Google Drive API**.
+2. Tài khoản `noreply@creativestation.vn` là Manager của Shared Drive (mã mặc định `0AL-5HJ8czOkOUk9PVA`;
+   đổi bằng `GOOGLE_DRIVE_SHARED_DRIVE_ID`, đổi tài khoản bằng `GOOGLE_DRIVE_ACCOUNT`).
+3. Admin vào **Cài đặt → Lưu trữ → Kết nối Google Drive**, đăng nhập `noreply@` và cho quyền Google Drive.
+   Google có thể báo "ứng dụng chưa được xác minh": chọn **Nâng cao → Tiếp tục**.
+4. Bấm **Chuyển file cũ lên Drive** để đưa file đang nằm trong database lên Drive.
+
+Thành viên dự án và Admin được share quyền xem thư mục dự án tự động (không gửi email). Cron `/api/cron/drive-sync`
+chạy 2h sáng đẩy file còn sót và đối chiếu quyền.
+
+## Tạo link Google Meet khi đặt lịch họp
+
+Dùng chung OAuth client với mục "Đăng nhập bằng Google" (cùng `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`).
+Chưa đặt hai biến đó thì nút tạo link Meet được ẩn; vẫn dán link thủ công được.
+
+- Trong Google Cloud Console (cùng project với OAuth client): **APIs & Services → Library** → bật
+  **Google Meet REST API**.
+- **OAuth consent screen → Data access**: thêm scope
+  `https://www.googleapis.com/auth/meetings.space.created` (chỉ cho phép tạo phòng Meet, không đọc lịch hay email).
+- Khai báo thêm **Authorized redirect URI** cho từng tên miền, ví dụ
+  `https://taskflow-vert-psi.vercel.app/api/google/meet/callback` và
+  `http://localhost:3000/api/google/meet/callback` khi chạy local.
+- Đối tượng **External**: khi app còn ở chế độ *Testing*, chỉ các tài khoản trong danh sách *Test users*
+  kết nối được, và Google tự gỡ quyền sau 7 ngày. Muốn dùng lâu dài thì gửi app cho Google xác minh
+  (scope này thuộc loại cần xác minh). Đối tượng **Internal** (Google Workspace) không cần xác minh.
+- Chạy migration `20261024100000_add_google_meet_token`. Refresh token được mã hoá bằng khoá suy ra từ
+  `SESSION_SECRET`; đổi `SESSION_SECRET` thì mọi người phải bấm kết nối lại một lần.
+- Cách dùng: trong form đặt lịch, bấm **Kết nối Google để tạo link Meet** (chỉ lần đầu, mở cửa sổ Google),
+  sau đó mỗi lần bấm **Tạo link Google Meet** app điền sẵn link phòng mới vào ô link họp. Phòng thuộc tài khoản
+  Google của người bấm.

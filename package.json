@@ -15,6 +15,7 @@
     "start": "TZ=Asia/Ho_Chi_Minh next start",
     "lint": "eslint",
     "test:costflow": "node scripts/test-costflow.mjs",
+    "test": "TZ=Asia/Ho_Chi_Minh node --import tsx --test tests/*.test.ts",
     "postinstall": "prisma generate",
     "seed": "prisma db seed",
     "seed:quotation-templates": "tsx scripts/seed-quotation-templates.ts"
@@ -31,13 +32,16 @@
     "@prisma/client": "^6.19.3",
     "@types/pngjs": "^6.0.5",
     "@types/qrcode": "^1.5.5",
+    "@vercel/blob": "^2.8.2",
     "bcryptjs": "^3.0.3",
     "exceljs": "4.4.0",
     "jose": "^6.2.3",
+    "jszip": "^3.10.2",
     "jsqr": "^1.4.0",
     "lucide-react": "^1.24.0",
-    "next": "16.2.10",
-    "nodemailer": "^7.0.13",
+    "next": "16.4.2",
+    "nodemailer": "^10.2.1",
+    "pdf-parse": "^2.4.5",
     "pdfjs-dist": "^5.4.296",
     "pg": "^8.23.1",
     "pngjs": "^7.0.0",
@@ -59,10 +63,13 @@
     "@types/web-push": "^3.6.4",
     "cross-env": "^10.1.0",
     "eslint": "^9",
-    "eslint-config-next": "16.2.10",
+    "eslint-config-next": "16.4.2",
     "tailwindcss": "^4",
     "tsx": "^4.23.0",
     "typescript": "^5",
     "wrangler": "^4.149.0"
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.2"
   }
 }

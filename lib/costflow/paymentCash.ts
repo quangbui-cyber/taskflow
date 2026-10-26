@@ -88,6 +88,7 @@ async function executeOnce(projectId: string, expectedVersion: number, actor: Ac
       const sourceFileId = required(text(form, "sourceFileId"), "chứng từ chuyển tiền");
       const file = await tx.projectFile.findFirst({ where: { id: sourceFileId, projectId } });
       if (!file) throw new Error("Chứng từ không thuộc Project này.");
+      if (!file.data) throw new Error("File trên Google Drive chưa có bản sao nội dung. Hãy tải file xuống rồi tải trực tiếp làm chứng từ.");
       evidence = { sourceFileId: file.id, name: file.name, mimeType: file.mimeType, data: new Uint8Array(file.data), sha256: createHash("sha256").update(file.data).digest("hex") };
     }
 

@@ -39,10 +39,8 @@ export type UserItem = {
   isActive: boolean;
   deactivatedAt: string | null;
   createdAt: string;
-  assignedTaskCount: number;
-  createdTaskCount: number;
-  projectMemberCount: number;
-  ownedProjectCount: number;
+  openOwnedProjectCount: number;
+  openAssignedTaskCount: number;
   isAccount: boolean;
   managerId: string | null;
   avatarUrl: string | null;
@@ -61,6 +59,8 @@ export default function UserRow({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [recipientId, setRecipientId] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
   const [accountMessage, setAccountMessage] = useState<string | null>(null);
   const [accountMessageError, setAccountMessageError] = useState(false);
@@ -76,14 +76,18 @@ export default function UserRow({
   const [pendingAction, startTransition] = useTransition();
   const managerChanged = managerId !== savedManagerId;
   const managerOptions = managers.filter((manager) => manager.id !== user.id);
-  const relatedTaskCount = user.assignedTaskCount + user.createdTaskCount;
-  const relatedProjectCount = user.projectMemberCount + user.ownedProjectCount;
-  const deleteBlockReasons = [
-    relatedProjectCount > 0 ? "tài khoản vẫn đang thuộc hoặc sở hữu dự án" : null,
-    relatedTaskCount > 0 ? "tài khoản vẫn đang có task được giao hoặc đã tạo" : null,
-    user.isAccount ? "tài khoản đang được dùng làm Account" : null,
-  ].filter(Boolean);
-  const canDelete = !isSelf && !user.isActive && deleteBlockReasons.length === 0;
+  const needsHandover =
+    user.openOwnedProjectCount > 0 || user.openAssignedTaskCount > 0;
+  const handoverSummary = [
+    user.openOwnedProjectCount > 0
+      ? `${user.openOwnedProjectCount} dự án đang chạy`
+      : null,
+    user.openAssignedTaskCount > 0
+      ? `${user.openAssignedTaskCount} task chưa xong`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" và ");
   const [state, formAction, pending] = useActionState<AdminState, FormData>(
     async (prev, formData) => {
       const result = await resetPassword(prev, formData);
@@ -101,6 +105,7 @@ export default function UserRow({
     function handleEscape(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
       if (menuOpen) setMenuOpen(false);
+      else if (deleteOpen && !pendingAction) setDeleteOpen(false);
       else if (drawerOpen) setDrawerOpen(false);
     }
     document.addEventListener("pointerdown", closeMenu, true);
@@ -109,7 +114,7 @@ export default function UserRow({
       document.removeEventListener("pointerdown", closeMenu, true);
       document.removeEventListener("keydown", handleEscape);
     };
-  }, [drawerOpen, menuOpen]);
+  }, [deleteOpen, drawerOpen, menuOpen, pendingAction]);
 
   useEffect(() => {
     if (!drawerOpen) return;
@@ -171,25 +176,29 @@ export default function UserRow({
 
   function permanentlyDelete() {
     setMenuOpen(false);
-    if (!canDelete) {
+    if (user.isAccount) {
       setAccountMessageError(true);
       setAccountMessage(
-        `Không thể xoá vĩnh viễn vì ${deleteBlockReasons.join(", ")}. Hãy chuyển dữ liệu liên quan trước.`
+        "Không thể xoá vĩnh viễn vì tài khoản đang được dùng làm Account. Hãy xoá Account trong Cài đặt trước."
       );
       notify({
-        message: "Không thể xoá tài khoản khi vẫn còn dữ liệu liên quan.",
+        message: "Không thể xoá tài khoản đang được dùng làm Account.",
         tone: "error",
       });
       return;
     }
-    if (!confirm(`Xoá vĩnh viễn tài khoản ${user.name}? Thao tác này không thể hoàn tác.`)) {
-      return;
-    }
     setAccountMessage(null);
+    setRecipientId("");
+    setDeleteOpen(true);
+  }
+
+  function confirmDelete() {
+    if (needsHandover && !recipientId) return;
     startTransition(async () => {
-      const result = await deleteUser(user.id);
+      const result = await deleteUser(user.id, recipientId || null);
+      if (!result.error) setDeleteOpen(false);
       setAccountMessageError(Boolean(result.error));
-      setAccountMessage(result.error ?? result.success ?? null);
+      setAccountMessage(result.error ?? null);
       notify({
         message: result.error ?? result.success ?? "Đã xoá tài khoản.",
         tone: result.error ? "error" : "success",
@@ -349,6 +358,79 @@ export default function UserRow({
         </div>
       )}
 
+      {deleteOpen && (
+        <div
+          className="tf-overlay-enter fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/35 p-4 backdrop-blur-[2px]"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Xoá vĩnh viễn ${user.name}`}
+          onClick={() => {
+            if (!pendingAction) setDeleteOpen(false);
+          }}
+        >
+          <div
+            className="tf-modal-enter w-full max-w-md rounded-[10px] border border-zinc-200 bg-white shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="space-y-4 p-5">
+              <div className="flex items-start gap-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600">
+                  <Trash2 size={17} aria-hidden="true" />
+                </span>
+                <div className="min-w-0">
+                  <h3 className="text-base font-semibold text-zinc-900">
+                    Xoá vĩnh viễn {user.name}?
+                  </h3>
+                  <p className="mt-1 text-sm leading-6 text-zinc-600">
+                    Tài khoản sẽ không đăng nhập được và bị ẩn khỏi danh sách.
+                    Dự án đã đóng, task đã xong và bình luận vẫn giữ tên{" "}
+                    {user.name}.
+                  </p>
+                </div>
+              </div>
+
+              {needsHandover && (
+                <div className="rounded-[8px] border border-amber-200 bg-amber-50/70 p-3">
+                  <p className="text-sm text-amber-900">
+                    {user.name} đang phụ trách{" "}
+                    <span className="font-semibold">{handoverSummary}</span>.
+                    Chọn người nhận bàn giao:
+                  </p>
+                  <UserPicker
+                    value={recipientId}
+                    onChange={setRecipientId}
+                    options={managerOptions}
+                    placeholder="Chọn người nhận bàn giao"
+                    ariaLabel="Người nhận bàn giao"
+                    className="mt-2"
+                  />
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 border-t border-zinc-100 px-5 py-3">
+              <button
+                type="button"
+                disabled={pendingAction}
+                onClick={() => setDeleteOpen(false)}
+                className="tf-button-secondary"
+              >
+                Huỷ
+              </button>
+              <button
+                type="button"
+                disabled={pendingAction || (needsHandover && !recipientId)}
+                onClick={confirmDelete}
+                className="tf-button-danger"
+                aria-busy={pendingAction}
+              >
+                {pendingAction && <span className="tf-spinner" aria-hidden="true" />}
+                {needsHandover ? "Bàn giao và xoá" : "Xoá tài khoản"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {drawerOpen && (
         <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={`Chỉnh sửa ${user.name}`}>
           <button
@@ -410,6 +492,7 @@ export default function UserRow({
                       >
                         <option value="ADMIN">Admin</option>
                         <option value="ACCOUNT">Account</option>
+                        <option value="ACCOUNTANT">Kế toán</option>
                         <option value="USER">User</option>
                       </select>
                       <ChevronDown
@@ -421,11 +504,6 @@ export default function UserRow({
                       />
                     </div>
                   </label>
-                  {isSelf && (
-                    <p className="text-xs leading-5 text-zinc-400">
-                      Admin có thể tham gia Team trong tab Account mà không cần đổi vai trò.
-                    </p>
-                  )}
                   <button
                     type="button"
                     onClick={saveProfile}
@@ -452,7 +530,6 @@ export default function UserRow({
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <h4 className="text-sm font-semibold">Mật khẩu</h4>
-                    <p className="mt-1 text-xs text-zinc-400">Đặt mật khẩu mới cho tài khoản này.</p>
                   </div>
                   {!resetting && (
                     <button

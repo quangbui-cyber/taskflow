@@ -1,6 +1,8 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth";
-import { attachmentDisposition } from "@/lib/contentDisposition";
+import { after } from "next/server";
+import { trashDriveFileSafe } from "@/lib/driveStorage";
+import { openStoredFileResponse, storedFileResponse } from "@/lib/storedFileResponse";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -36,7 +38,7 @@ async function findAccessibleFile(
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   {
     params,
   }: { params: Promise<{ id: string; fileId: string }> }
@@ -63,14 +65,10 @@ export async function GET(
     );
   }
 
-  return new Response(file.data, {
-    headers: {
-      "Content-Type": file.mimeType,
-      "Content-Length": String(file.size),
-      "Content-Disposition": attachmentDisposition(file.name),
-      "Cache-Control": "private, no-store",
-    },
-  });
+  if (new URL(request.url).searchParams.get("open") === "1") {
+    return openStoredFileResponse(file, user.email);
+  }
+  return storedFileResponse(file);
 }
 
 export async function DELETE(
@@ -113,6 +111,7 @@ export async function DELETE(
   }
 
   await prisma.projectFile.delete({ where: { id: fileId } });
+  after(() => trashDriveFileSafe(file.driveFileId));
   revalidatePath(`/projects/${projectId}`);
   return Response.json({ success: true });
 }

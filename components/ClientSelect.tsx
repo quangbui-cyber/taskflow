@@ -8,17 +8,26 @@ export type ClientOption = {
 export default function ClientSelect({
   clients,
   defaultValue = "",
+  value,
+  onChange,
+  disabled = false,
   className = "",
 }: {
   clients: ClientOption[];
   defaultValue?: string;
+  value?: string;
+  onChange?: (value: string) => void;
+  disabled?: boolean;
   className?: string;
 }) {
   return (
     <div className={`relative ${className}`}>
       <select
         name="clientId"
-        defaultValue={defaultValue}
+        defaultValue={value === undefined ? defaultValue : undefined}
+        value={value}
+        disabled={disabled}
+        onChange={onChange ? (event) => onChange(event.target.value) : undefined}
         className="tf-field min-w-0 appearance-none !pr-11"
       >
         <option value="">— Chưa chọn —</option>

@@ -1,6 +1,8 @@
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { pushPendingFiles } from "@/lib/driveStorage";
 import { readProjectUpload } from "@/lib/projectFiles";
 
 export const runtime = "nodejs";
@@ -67,8 +69,10 @@ export async function POST(
       },
     });
 
+    // Đẩy lên Google Drive sau khi trả kết quả (Drive chưa kết nối thì giữ trong database).
+    after(() => pushPendingFiles({ projectId }));
     revalidatePath(`/projects/${projectId}`);
-    return Response.json({ file });
+    return Response.json({ file: { ...file, driveUrl: null } });
   } catch (error) {
     return Response.json(
       {

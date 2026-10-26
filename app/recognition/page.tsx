@@ -247,9 +247,6 @@ export default async function RecognitionPage({
               <h1 className="text-[34px] font-semibold leading-tight tracking-[-0.03em] text-zinc-950">
                 Góc cảm ơn
               </h1>
-              <p className="mt-1.5 text-sm text-zinc-500">
-                Một lời cảm ơn nhỏ có thể làm ngày làm việc tốt hơn.
-              </p>
             </div>
             {view !== "webhook" && (
               <RecognitionComposer
@@ -323,9 +320,6 @@ export default async function RecognitionPage({
                   <h2 className="mt-4 text-lg font-semibold text-zinc-800">
                     Chưa có ngôi sao nào trong tháng này
                   </h2>
-                  <p className="mt-1 max-w-sm text-sm leading-6 text-zinc-500">
-                    Một lời cảm ơn chân thành là cách tuyệt vời để bắt đầu dải ngân hà của cả nhóm.
-                  </p>
                 </div>
                   ) : (
                 <div className="px-5">

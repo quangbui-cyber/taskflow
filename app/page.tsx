@@ -7,6 +7,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { activeDirectReportsWhere } from "@/lib/directReports";
 import { canCreateProjects, canViewRevenue, requireUser } from "@/lib/auth";
 import { daysUntil, isOverdue } from "@/lib/dates";
 import Sidebar from "@/components/Sidebar";
@@ -52,6 +53,13 @@ const ACTIVE_PROJECT_GROUPS = [
     badgeClassName: "bg-amber-100 text-amber-700",
   },
 ] as const;
+
+function onTimeRateClass(rate: number | null) {
+  if (rate === null) return "text-zinc-400";
+  if (rate >= 80) return "text-brand-700";
+  if (rate >= 60) return "text-amber-600";
+  return "text-red-600";
+}
 
 export default async function DashboardPage({
   searchParams,
@@ -126,7 +134,7 @@ export default async function DashboardPage({
       orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }],
     }),
     prisma.user.findMany({
-      where: { managerId: user.id },
+      where: activeDirectReportsWhere(user.id),
       select: {
         id: true,
         name: true,
@@ -196,6 +204,21 @@ export default async function DashboardPage({
         perf: computePerf(report.assignedTasks),
       };
     });
+  const teamReports = [...visibleReports].sort(
+    (a, b) =>
+      b.perf.overdueOpen - a.perf.overdueOpen ||
+      b.openTasks.length - a.openTasks.length ||
+      a.name.localeCompare(b.name, "vi")
+  );
+  const maxOpenTasks = Math.max(1, ...teamReports.map((report) => report.openTasks.length));
+  const teamOnTime = teamReports.reduce((sum, report) => sum + report.perf.onTime, 0);
+  const teamDone = teamReports.reduce((sum, report) => sum + report.perf.done, 0);
+  const teamTotals = {
+    open: teamReports.reduce((sum, report) => sum + report.openTasks.length, 0),
+    overdue: teamReports.reduce((sum, report) => sum + report.perf.overdueOpen, 0),
+    done: teamDone,
+    rate: teamDone > 0 ? Math.round((teamOnTime / teamDone) * 100) : null,
+  };
   const visibleProjects = projects.filter(
     (project) => !isArchivedProjectStatus(project.status)
   );
@@ -471,9 +494,6 @@ export default async function DashboardPage({
                     <h2 id="following-heading" className="text-base font-semibold text-zinc-900">
                       Đang theo dõi ({visibleFollowing.length})
                     </h2>
-                    <p className="mt-1 text-xs text-zinc-400">
-                      Các công việc bạn theo dõi nhưng không trực tiếp làm hoặc giao.
-                    </p>
                   </div>
                   {visibleFollowing.length > 0 ? (
                     <div>
@@ -511,88 +531,142 @@ export default async function DashboardPage({
                     <UsersRound size={19} className="text-zinc-400" aria-hidden="true" />
                   </div>
 
-                  {visibleReports.length > 0 ? (
-                    <div className="divide-y divide-zinc-200">
-                      {visibleReports.map((report) => (
-                        <details key={report.id} open className="group/report py-1">
-                          <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-1 py-4 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto_auto] sm:px-3">
-                            <span className="flex min-w-0 items-center gap-3">
-                              <Avatar
-                                id={report.id}
-                                name={report.name}
-                                avatarUrl={report.avatarUrl}
-                                className="h-9 w-9 text-xs"
-                              />
-                              <span className="min-w-0">
-                                <span className="block truncate text-sm font-semibold text-zinc-900">
-                                  {report.name}
-                                </span>
-                                <span className="block truncate text-xs text-zinc-400">
-                                  {report.email}
-                                </span>
-                              </span>
-                            </span>
-                            <span className="hidden text-right text-xs text-zinc-500 sm:block">
-                              <strong className="block text-sm text-zinc-800">{report.openTasks.length}</strong>
-                              đang mở
-                            </span>
-                            <span className={`hidden text-right text-xs sm:block ${report.perf.overdueOpen > 0 ? "text-red-600" : "text-zinc-400"}`}>
-                              <strong className="block text-sm">{report.perf.overdueOpen}</strong>
-                              quá hạn
-                            </span>
-                            <span className="hidden text-right text-xs text-zinc-500 sm:block">
-                              <strong className="block text-sm text-zinc-800">{report.perf.onTime}</strong>
-                              đúng hạn
-                            </span>
-                            <ChevronDown
-                              size={16}
-                              className="text-zinc-300 transition-transform group-open/report:rotate-180"
-                              aria-hidden="true"
-                            />
-                          </summary>
-
-                          <div className="space-y-6 bg-zinc-50/60 px-3 py-5 sm:px-5">
-                            <PerformanceBar perf={report.perf} />
-
-                            <div>
-                              <h3 className="mb-1 text-xs font-semibold uppercase text-zinc-400">
-                                Đang thực hiện ({report.openTasks.length})
-                              </h3>
-                              {report.openTasks.length > 0 ? (
-                                <div className="bg-white px-2">
-                                  {report.openTasks.map((task) => (
-                                    <TaskListItem
-                                      key={task.id}
-                                      task={toItem(task, `${report.name} phụ trách`)}
-                                    />
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className="py-3 text-sm text-zinc-400">Không có công việc đang mở.</p>
-                              )}
-                            </div>
-
-                            <div>
-                              <h3 className="mb-1 text-xs font-semibold uppercase text-zinc-400">
-                                Đã hoàn thành ({report.completedTasks.length})
-                              </h3>
-                              {report.completedTasks.length > 0 ? (
-                                <div className="bg-white px-2">
-                                  {report.completedTasks.map((task) => (
-                                    <TaskListItem
-                                      key={task.id}
-                                      task={toItem(task, `${report.name} hoàn thành`)}
-                                    />
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className="py-3 text-sm text-zinc-400">Chưa có công việc hoàn thành.</p>
-                              )}
-                            </div>
+                  {teamReports.length > 0 ? (
+                    <>
+                      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        {[
+                          { label: "Đang mở", value: teamTotals.open, className: "text-zinc-900" },
+                          {
+                            label: "Quá hạn",
+                            value: teamTotals.overdue,
+                            className: teamTotals.overdue > 0 ? "text-red-600" : "text-zinc-400",
+                          },
+                          { label: "Đã xong", value: teamTotals.done, className: "text-zinc-900" },
+                          {
+                            label: "Đúng hạn TB",
+                            value: teamTotals.rate !== null ? `${teamTotals.rate}%` : "—",
+                            className: onTimeRateClass(teamTotals.rate),
+                          },
+                        ].map((stat) => (
+                          <div key={stat.label} className="rounded-[8px] bg-zinc-50 px-3 py-2.5">
+                            <p className="text-xs text-zinc-500">{stat.label}</p>
+                            <p className={`mt-0.5 text-xl font-semibold tabular-nums ${stat.className}`}>
+                              {stat.value}
+                            </p>
                           </div>
-                        </details>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+
+                      <div className="mt-4">
+                        <div className="divide-y divide-zinc-200 border-y border-zinc-200">
+                          {teamReports.map((report) => {
+                            const open = report.openTasks.length;
+                            const rate =
+                              report.perf.done > 0
+                                ? Math.round((report.perf.onTime / report.perf.done) * 100)
+                                : null;
+                            const segments = [
+                              { key: "overdue", label: "Quá hạn", value: report.perf.overdueOpen, className: "bg-red-500" },
+                              { key: "progress", label: "Đang làm", value: report.perf.inProgress, className: "bg-blue-500" },
+                              { key: "todo", label: "Cần làm", value: report.perf.todo, className: "bg-orange-500" },
+                            ];
+                            return (
+                              <details key={report.id} className="group/report">
+                                <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto_auto_16px] items-center gap-x-3 gap-y-2 px-1 py-3 transition-colors hover:bg-zinc-50 sm:grid-cols-[180px_minmax(0,1fr)_32px_80px_16px] [&::-webkit-details-marker]:hidden">
+                                  <span className="flex min-w-0 items-center gap-2.5">
+                                    <Avatar
+                                      id={report.id}
+                                      name={report.name}
+                                      avatarUrl={report.avatarUrl}
+                                      className="h-7 w-7 text-[11px]"
+                                    />
+                                    <span className="truncate text-sm font-medium text-zinc-900" title={report.email}>
+                                      {report.name}
+                                    </span>
+                                  </span>
+                                  <span
+                                    className="order-last col-span-4 flex h-2 overflow-hidden rounded-full bg-zinc-100 sm:order-none sm:col-span-1"
+                                    role="img"
+                                    aria-label={`${report.perf.overdueOpen} quá hạn, ${report.perf.inProgress} đang làm, ${report.perf.todo} cần làm`}
+                                  >
+                                    {segments.map((segment) =>
+                                      segment.value > 0 ? (
+                                        <span
+                                          key={segment.key}
+                                          className={segment.className}
+                                          style={{ width: `${(segment.value / maxOpenTasks) * 100}%` }}
+                                          title={`${segment.label}: ${segment.value}`}
+                                        />
+                                      ) : null
+                                    )}
+                                  </span>
+                                  <span
+                                    className={`text-right text-sm tabular-nums ${open > 0 ? "font-medium text-zinc-800" : "text-zinc-400"}`}
+                                    title="Việc đang mở"
+                                  >
+                                    {open}
+                                  </span>
+                                  <span className={`text-right text-xs font-medium tabular-nums ${onTimeRateClass(rate)}`}>
+                                    {rate !== null ? `${rate}% đúng` : <span className="font-normal">chưa có</span>}
+                                  </span>
+                                  <ChevronDown
+                                    size={15}
+                                    className="text-zinc-300 transition-transform group-open/report:rotate-180"
+                                    aria-hidden="true"
+                                  />
+                                </summary>
+
+                                <div className="space-y-6 bg-zinc-50/60 px-3 py-5 sm:px-5">
+                                  <p className="text-xs text-zinc-400">{report.email}</p>
+                                  <PerformanceBar perf={report.perf} />
+
+                                  <div>
+                                    <h3 className="mb-1 text-xs font-semibold uppercase text-zinc-400">
+                                      Đang thực hiện ({report.openTasks.length})
+                                    </h3>
+                                    {report.openTasks.length > 0 ? (
+                                      <div className="bg-white px-2">
+                                        {report.openTasks.map((task) => (
+                                          <TaskListItem
+                                            key={task.id}
+                                            task={toItem(task, `${report.name} phụ trách`)}
+                                          />
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <p className="py-3 text-sm text-zinc-400">Không có công việc đang mở.</p>
+                                    )}
+                                  </div>
+
+                                  <div>
+                                    <h3 className="mb-1 text-xs font-semibold uppercase text-zinc-400">
+                                      Đã hoàn thành ({report.completedTasks.length})
+                                    </h3>
+                                    {report.completedTasks.length > 0 ? (
+                                      <div className="bg-white px-2">
+                                        {report.completedTasks.map((task) => (
+                                          <TaskListItem
+                                            key={task.id}
+                                            task={toItem(task, `${report.name} hoàn thành`)}
+                                          />
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <p className="py-3 text-sm text-zinc-400">Chưa có công việc hoàn thành.</p>
+                                    )}
+                                  </div>
+                                </div>
+                              </details>
+                            );
+                          })}
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-zinc-500">
+                          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-red-500" aria-hidden="true" />Quá hạn</span>
+                          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-blue-500" aria-hidden="true" />Đang làm</span>
+                          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-orange-500" aria-hidden="true" />Cần làm</span>
+                        </div>
+                      </div>
+                    </>
                   ) : (
                     <p className="py-8 text-sm text-zinc-400">Không có báo cáo phù hợp.</p>
                   )}

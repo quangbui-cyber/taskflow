@@ -2,9 +2,12 @@ import { Prisma } from "@prisma/client";
 import { after } from "next/server";
 import { deliverPush } from "@/lib/webPush";
 import { prisma } from "@/lib/prisma";
-import { sendGoogleChat } from "@/lib/googleChat";
+import { hasProjectChat, sendProjectChat } from "@/lib/projectChatMessage";
+import { deadlineDigestChatMessage } from "@/lib/taskGoogleChat";
+import { emailAppUrl } from "@/lib/email";
 import { daysUntil, formatDue, isOverdue } from "@/lib/dates";
 import { meetingsEnabled } from "@/lib/features";
+import { cleanupMeetingRecaps } from "@/lib/meetingRecapJob";
 import { formatMeetingTime, vnDayRange } from "@/lib/meetings";
 import { ARCHIVED_PROJECT_STATUS_KEYS } from "@/lib/types";
 
@@ -69,40 +72,6 @@ function vietnamDateKey(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
-function taskLine(task: DigestTask) {
-  const who = task.assignee?.name ?? "chưa gán";
-  const due = task.dueDate ? formatDue(task.dueDate) : "chưa đặt hạn";
-  return `• ${task.title} — ${who} (${due})`;
-}
-
-/** Soạn tin nhắn cho một dự án; trả null nếu không có gì đáng báo. */
-function buildMessage(
-  projectName: string,
-  overdue: DigestTask[],
-  dueToday: DigestTask[]
-): string | null {
-  if (overdue.length === 0 && dueToday.length === 0) return null;
-
-  const parts = [`*${projectName}* — nhắc việc hàng ngày`];
-
-  if (overdue.length > 0) {
-    parts.push(
-      "",
-      `🔴 Quá hạn (${overdue.length})`,
-      ...overdue.map(taskLine)
-    );
-  }
-  if (dueToday.length > 0) {
-    parts.push(
-      "",
-      `🟡 Đến hạn hôm nay (${dueToday.length})`,
-      ...dueToday.map(taskLine)
-    );
-  }
-
-  return parts.join("\n");
-}
-
 export async function GET(request: Request) {
   // Vercel tự gửi header này khi cron chạy (lấy từ biến môi trường CRON_SECRET).
   // Nếu chưa cấu hình secret thì từ chối luôn, tránh để endpoint mở cho người lạ.
@@ -122,6 +91,7 @@ export async function GET(request: Request) {
           id: true,
           name: true,
           googleChatWebhookUrl: true,
+          googleChatSpaceName: true,
           tasks: {
             where: { status: { not: "DONE" }, dueDate: { not: null } },
             select: {
@@ -217,14 +187,23 @@ export async function GET(request: Request) {
         });
       }
 
-      const message = buildMessage(project.name, overdue, dueToday);
-      if (!message || !project.googleChatWebhookUrl) {
+      const toChat = (task: DigestTask) => ({
+        id: task.id, title: task.title, assigneeName: task.assignee?.name ?? null, dueDate: task.dueDate!,
+      });
+      const message = deadlineDigestChatMessage({
+        projectId: project.id,
+        projectName: project.name,
+        overdue: overdue.map(toChat),
+        dueToday: dueToday.map(toChat),
+        baseUrl: emailAppUrl(),
+      });
+      if (!message || !hasProjectChat(project)) {
         skipped += 1;
         continue;
       }
 
-      const result = await sendGoogleChat(project.googleChatWebhookUrl, message);
-      if (result.ok) sent += 1;
+      const result = await sendProjectChat(project, message);
+      if (result?.ok) sent += 1;
       else failed += 1;
     }
 
@@ -302,11 +281,20 @@ export async function GET(request: Request) {
       })
     );
 
+    // Biên bản họp: đánh dấu lỗi lần xử lý bị treo, xoá file ghi âm còn sót.
+    let meetingRecaps: { stuck: number; cleaned: number } | null = null;
+    try {
+      meetingRecaps = await cleanupMeetingRecaps();
+    } catch (error) {
+      console.warn("Meeting recap cleanup failed", error);
+    }
+
     return Response.json({
       ok: true,
       projects: projects.length,
       reminders,
       meetingReminders,
+      meetingRecaps,
       chat: { sent, skipped, failed },
     });
   } catch (error) {

@@ -1,15 +1,41 @@
 /**
  * Công tắc bật/tắt tính năng theo môi trường.
  *
- * Lịch họp đang tạm ẩn trên production (Vercel) và vẫn bật ở máy dev / bản preview.
- * Muốn mở lại trên production: đặt biến môi trường MEETINGS_ENABLED=true trên Vercel
- * rồi deploy lại. Đặt MEETINGS_ENABLED=false để tắt ở mọi môi trường.
+ * Lịch họp bật mặc định ở mọi môi trường (production, preview, máy dev).
+ * Muốn tạm ẩn: đặt biến môi trường MEETINGS_ENABLED=false (hoặc 0) rồi deploy lại.
+ * Khi ẩn, không dữ liệu nào bị xoá.
  */
 export function meetingsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   const flag = env.MEETINGS_ENABLED?.trim().toLowerCase();
-  if (flag === "true" || flag === "1") return true;
-  if (flag === "false" || flag === "0") return false;
-  return env.VERCEL_ENV !== "production";
+  return flag !== "false" && flag !== "0";
 }
 
 export const MEETINGS_DISABLED_MESSAGE = "Chức năng đặt lịch họp đang tạm ẩn.";
+
+/**
+ * Biên bản họp bằng AI chỉ bật khi lịch họp đang bật và đã khai báo đủ:
+ * GROQ_API_KEY (chép lời), GEMINI_API_KEY (viết biên bản) và
+ * BLOB_READ_WRITE_TOKEN (kho Vercel Blob riêng tư giữ file ghi âm tạm).
+ * Đặt MEETING_RECAPS_ENABLED=false để tắt dù đã có đủ khoá.
+ */
+export function meetingRecapsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (!meetingsEnabled(env)) return false;
+  const flag = env.MEETING_RECAPS_ENABLED?.trim().toLowerCase();
+  if (flag === "false" || flag === "0") return false;
+  return Boolean(
+    env.GROQ_API_KEY?.trim() && env.GEMINI_API_KEY?.trim() && env.BLOB_READ_WRITE_TOKEN?.trim()
+  );
+}
+
+export const MEETING_RECAPS_DISABLED_MESSAGE =
+  "Chức năng biên bản họp chưa được cấu hình. Nhờ quản trị viên xem mục Biên bản họp trong DEPLOY.md.";
+
+/**
+ * Tài chính (tab Tài chính của dự án: Báo giá, IC/AC, duyệt IC) và danh bạ Nhà cung cấp.
+ * Đang tạm ẩn: tắt mặc định ở mọi môi trường. Muốn bật lại, đặt FINANCE_ENABLED=true (hoặc 1)
+ * rồi deploy lại. Khi ẩn, không dữ liệu nào bị xoá.
+ */
+export function financeEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const flag = env.FINANCE_ENABLED?.trim().toLowerCase();
+  return flag === "true" || flag === "1";
+}

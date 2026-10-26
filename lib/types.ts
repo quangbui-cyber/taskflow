@@ -32,6 +32,8 @@ export type TaskFileDTO = {
   mimeType: string;
   size: number;
   createdAt: string;
+  /** Link mở trên Google Drive; null khi file còn lưu trong app. */
+  driveUrl: string | null;
   uploader: { id: string; name: string } | null;
 };
 
@@ -55,6 +57,10 @@ export const PROJECT_STATUSES = [
   { key: "PENDING", label: "Pending", color: "#8b5cf6", className: "bg-violet-100 text-violet-700" },
   { key: "CANCEL", label: "Cancel", color: "#71717a", className: "bg-zinc-200 text-zinc-700" },
 ] as const;
+
+// Dự án chưa đóng (kể cả đang tạm dừng) vẫn cần một người chịu trách nhiệm,
+// nên khi xoá tài khoản phải bàn giao các dự án này cho người khác.
+export const OPEN_PROJECT_STATUSES = ["BIDDING", "ON_PROCESS", "PENDING"];
 
 // Bảng màu 6 loại hình đã qua validator dataviz (phân biệt được với người
 // mù màu, đủ tương phản trên nền trắng) — đừng đổi tuỳ tiện từng màu lẻ.

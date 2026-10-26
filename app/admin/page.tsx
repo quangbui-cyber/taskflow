@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BarChart3 } from "lucide-react";
 import { meetingsEnabled } from "@/lib/features";
+import { OPEN_PROJECT_STATUSES } from "@/lib/types";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
@@ -12,6 +13,9 @@ import AccountCatalogManager from "@/components/AccountCatalogManager";
 import ClientCatalogManager from "@/components/ClientCatalogManager";
 import QuotationTemplateAdmin from "@/components/QuotationTemplateAdmin";
 import MeetingRoomManager from "@/components/MeetingRoomManager";
+import DriveStorageSettings from "@/components/DriveStorageSettings";
+import { googleAuthConfigured } from "@/lib/googleAuth";
+import { pendingDriveFileCounts } from "@/lib/driveStorage";
 
 const SETTINGS_TABS = [
   { key: "create-user", label: "Tạo tài khoản" },
@@ -21,6 +25,7 @@ const SETTINGS_TABS = [
   { key: "account", label: "Team & Account" },
   { key: "quotation-templates", label: "Mẫu báo giá" },
   { key: "rooms", label: "Phòng họp" },
+  { key: "storage", label: "Lưu trữ" },
 ] as const;
 
 type SettingsTab = (typeof SETTINGS_TABS)[number]["key"];
@@ -32,14 +37,44 @@ function isSettingsTab(value: string | undefined): value is SettingsTab {
 async function SettingsContent({
   activeTab,
   adminId,
+  driveResult,
 }: {
   activeTab: SettingsTab;
   adminId: string;
+  driveResult?: string;
 }) {
   if (activeTab === "create-user") return <CreateUserForm />;
 
+  if (activeTab === "storage") {
+    const [connection, counts] = await Promise.all([
+      prisma.googleDriveConnection.findUnique({
+        where: { id: "default" },
+        select: { email: true, connectedAt: true, lastError: true, lastErrorAt: true },
+      }),
+      pendingDriveFileCounts(),
+    ]);
+    return (
+      <DriveStorageSettings
+        configured={googleAuthConfigured()}
+        connection={
+          connection
+            ? {
+                email: connection.email,
+                connectedAt: connection.connectedAt.toISOString(),
+                lastError: connection.lastError,
+                lastErrorAt: connection.lastErrorAt?.toISOString() ?? null,
+              }
+            : null
+        }
+        counts={counts}
+        result={driveResult}
+      />
+    );
+  }
+
   if (activeTab === "users") {
     const users = await prisma.user.findMany({
+      where: { deletedAt: null },
       select: {
         id: true,
         name: true,
@@ -53,10 +88,13 @@ async function SettingsContent({
         accountProfile: { select: { id: true } },
         _count: {
           select: {
-            ownedProjects: true,
-            createdTasks: true,
-            assignedTasks: true,
-            memberships: true,
+            ownedProjects: { where: { status: { in: OPEN_PROJECT_STATUSES } } },
+            assignedTasks: {
+              where: {
+                status: { not: "DONE" },
+                project: { status: { in: OPEN_PROJECT_STATUSES } },
+              },
+            },
           },
         },
       },
@@ -83,10 +121,8 @@ async function SettingsContent({
           avatarUrl: user.avatarUrl,
           managerId: user.managerId,
           createdAt: user.createdAt.toISOString(),
-          assignedTaskCount: user._count.assignedTasks,
-          createdTaskCount: user._count.createdTasks,
-          projectMemberCount: user._count.memberships,
-          ownedProjectCount: user._count.ownedProjects,
+          openOwnedProjectCount: user._count.ownedProjects,
+          openAssignedTaskCount: user._count.assignedTasks,
           isAccount: Boolean(user.accountProfile),
         }))}
       />
@@ -251,7 +287,7 @@ async function SettingsContent({
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; drive?: string }>;
 }) {
   const [admin, params] = await Promise.all([requireAdmin(), searchParams]);
   const requestedTab = params.tab === "team" ? "account" : params.tab;
@@ -284,9 +320,6 @@ export default async function AdminPage({
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h1 className="tf-page-title">Cài đặt</h1>
-              <p className="tf-page-subtitle">
-                Quản lý tài khoản, nhóm nhân sự, danh mục kinh doanh và phòng họp.
-              </p>
             </div>
             <Link href="/team" prefetch={false} className="tf-button-secondary">
               <BarChart3 size={16} aria-hidden="true" />
@@ -317,7 +350,7 @@ export default async function AdminPage({
             ))}
           </nav>
 
-          <SettingsContent activeTab={activeTab} adminId={admin.id} />
+          <SettingsContent activeTab={activeTab} adminId={admin.id} driveResult={params.drive} />
         </div>
       </main>
     </div>

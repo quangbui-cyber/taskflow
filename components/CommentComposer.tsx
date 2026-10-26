@@ -129,8 +129,7 @@ export default function CommentComposer({ taskId, members }: { taskId: string; m
           </div>
         )}
       </div>
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-zinc-500">Chọn người từ danh sách @ để gửi thông báo cho họ.</p>
+      <div className="flex items-center justify-end gap-3">
         <button type="submit" disabled={pending || !body.trim()} className="tf-button-primary shrink-0" aria-busy={pending}>
           {pending ? <span className="tf-spinner" aria-hidden="true" /> : <Send size={15} aria-hidden="true" />}
           {pending ? "Đang gửi…" : "Gửi"}

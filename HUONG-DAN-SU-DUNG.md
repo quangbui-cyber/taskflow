@@ -389,7 +389,64 @@ Mở **Cài đặt → Team & Account** để quản lý Team kinh doanh và Acc
 
 Sau khi tạo, có thể đổi Team của Account; các dự án Khách hàng gắn với Account đó sẽ tự chuyển về Team mới. Nếu Account đang gắn với dự án, cần đổi Account của các dự án đó trước khi xóa.
 
-## 15. Quy trình sử dụng đề xuất
+## 15. Biên bản họp
+
+Sau khi cuộc họp bắt đầu, thẻ cuộc họp trong **Lịch họp** có nút **Tạo biên bản** (chỉ người tổ chức và Admin thấy).
+
+### Tạo biên bản
+
+Khi cuộc họp bắt đầu, người tổ chức nhận thông báo (trong app và trên điện thoại nếu đã bật thông báo) *"Cuộc họp … đã bắt đầu. Bấm để ghi âm và tạo biên bản."*. Bấm vào là mở trang biên bản và **bắt đầu ghi âm ngay** (họp online thì bấm thêm **Bắt đầu ghi âm** để chọn tab cuộc họp). Cũng có thể tự mở **Lịch họp → Tạo biên bản** ở cuộc họp đã bắt đầu. Có hai cách:
+
+**Ghi âm ngay trong app** (tab *Ghi âm trong app*)
+
+1. Bấm **Bắt đầu ghi âm** (hoặc bấm vào thông báo cuộc họp đã bắt đầu) và cho phép trình duyệt dùng micro.
+2. Đặt máy gần người nói. Thanh đỏ nhấp nháy theo tiếng nói nghĩa là micro đang thu. Có thể **Tạm dừng** / **Ghi tiếp**.
+3. Họp xong bấm **Dừng ghi**, nghe lại nếu cần, rồi bấm **Tạo biên bản từ bản ghi này**.
+4. Lỡ quên bấm Dừng ghi: app tự dừng và **tự tạo biên bản** khi đã **quá giờ kết thúc 10 phút** hoặc **không nghe thấy tiếng nói trong 10 phút**. Trước đó app hiện đếm ngược kèm nút **Vẫn đang họp** (họp kéo dài thì bấm để lùi thêm 30 phút) và **Dừng và tạo biên bản**. Cách tự dừng này cần tab taskflow còn mở trên máy đang ghi.
+
+Bản ghi được lưu dần trên máy (5 giây một lần): lỡ đóng tab hay tải lại trang, mở lại trang biên bản sẽ thấy *"Có bản ghi chưa gửi trên máy này"* (có thể mất vài giây cuối). Trên điện thoại, giữ màn hình mở và ở lại trang trong lúc ghi — khoá máy hoặc chuyển ứng dụng có thể làm trình duyệt dừng ghi.
+
+**Họp online (Google Meet, Zoom trên web…)** — chỉ dùng được với Chrome hoặc Edge trên máy tính:
+
+1. Mở cuộc họp ở một tab (nếu lịch họp có link, bấm *mở link họp* ngay trong trang biên bản).
+2. Ở trang biên bản chọn **Họp online** (lịch có link họp thì app chọn sẵn), bấm **Bắt đầu ghi âm**.
+3. Chrome hỏi chia sẻ gì: chọn **tab cuộc họp**, bật **"Chia sẻ âm thanh của tab"**, bấm **Chia sẻ**. Sau đó cho phép micro để ghi cả giọng của bạn.
+4. Giữ cả tab cuộc họp và tab taskflow mở. Họp xong chỉ cần **đóng tab cuộc họp** (hoặc bấm *Dừng chia sẻ* trên thanh của Chrome): app tự dừng ghi và **tự tạo biên bản**, không cần bấm thêm. Bản ghi dưới 30 giây (thường do bấm nhầm) thì app chỉ dừng ghi, không tự tạo biên bản. Muốn đọc lại trước khi tạo, bấm **Dừng ghi** trên taskflow thay vì đóng tab họp.
+
+App trộn tiếng mọi người trong tab họp với giọng của bạn thành một bản ghi. Nếu không cho phép micro, app vẫn ghi tiếng từ tab họp (nhãn *"chỉ tab họp"*).
+
+**Tải file có sẵn** (tab *Tải file lên*)
+
+1. Chọn file ghi âm (mp3, m4a, wav, webm, ogg, flac hoặc mp4, tối đa 100 MB).
+2. Bấm **Tạo biên bản**.
+
+Sau đó AI chép lời rồi viết biên bản, thường mất 1–3 phút. Có thể rời trang; khi xong app sẽ thông báo.
+
+Giới hạn: mỗi file tối đa 3 giờ; mỗi cuộc họp chép lời tối đa 3 lần và viết lại tối đa 6 lần mỗi ngày; cả công ty có hạn mức phút chép lời mỗi ngày. Khi chạm giới hạn, app báo lý do và mở lại vào ngày hôm sau.
+
+File ghi âm bị xoá ngay sau khi chép lời. App giữ lại bản chép lời (chỉ người tổ chức và Admin xem được) và biên bản.
+
+### Đọc lại và gửi
+
+- Biên bản gồm: Tóm tắt, Nội dung thảo luận (chia theo từng chủ đề, mỗi chủ đề có kết luận nếu có), Quyết định, Vấn đề còn mở và danh sách **Việc cần làm**.
+- AI có thể nghe sai tên riêng hoặc con số. Bấm **Sửa** để chỉnh: dòng bắt đầu bằng `## ` là mục lớn, `### ` là chủ đề, `- ` là gạch đầu dòng.
+- **Viết lại** nhờ AI viết lại từ bản chép lời (những chỗ đã sửa tay và danh sách việc cần làm sẽ được làm lại; task đã tạo vẫn giữ nguyên).
+
+### Việc cần làm
+
+- AI gắn sẵn **người phụ trách** nếu tên nghe được khớp rõ với một người trong cuộc họp, và điền **hạn chót** khi trong họp nói rõ ngày (ví dụ "thứ Sáu tuần này"). Không chắc thì để *Chưa giao* / giữ nguyên câu nói (ví dụ *"cuối tháng"*) để người tổ chức tự chọn.
+- Người tổ chức và Admin bấm biểu tượng bút để sửa việc, đổi người phụ trách, chọn hạn; bấm **Thêm việc** để thêm việc mới.
+- Tick ô vuông khi việc đã xong. Người phụ trách cũng tự tick được việc của mình sau khi biên bản đã gửi.
+- **Tạo task**: biến việc thành task trong dự án (cuộc họp dự án thì tạo thẳng trong dự án đó, cuộc họp khác thì chọn dự án), mang theo người phụ trách và hạn chót. Người phụ trách không thuộc dự án thì task được tạo nhưng chưa giao cho ai. Sau khi tạo, trạng thái việc đi theo task (task Hoàn thành thì việc tự được tick).
+- Email biên bản, file Word và nút **Sao chép** đều kèm danh sách việc cần làm.
+- Bấm **Gửi cho người tham dự**: mọi người nhận thông báo trong app và email (nếu app đã cấu hình email). Trước khi gửi, người tham dự chưa xem được biên bản.
+- **Xoá biên bản** xoá cả biên bản lẫn bản chép lời.
+
+### Biên bản của cuộc họp dự án
+
+Cuộc họp tạo bằng nút **Tạo cuộc họp** trong trang dự án được gắn với dự án đó. Khi người tổ chức bấm **Gửi cho người tham dự**, biên bản được lưu thành file Word *"Biên bản họp - <tên cuộc họp> - <ngày>.docx"* trong tab **Tài liệu** của dự án (mọi thành viên dự án xem được). Gửi lại thì file được thay bằng bản mới, không tạo thêm file trùng.
+
+## 16. Quy trình sử dụng đề xuất
 
 ### Nhận thông báo trên điện thoại
 

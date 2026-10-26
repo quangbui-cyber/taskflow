@@ -682,6 +682,7 @@ export async function executeFinance(projectId: string, expectedVersion: number,
       if (!member && !isAdmin) throw new Error("Người ngoài project cần tải chứng từ mới vào hồ sơ được giao.");
       const file = await tx.projectFile.findFirst({ where: { id: fileId, projectId } });
       if (!file) throw new Error("Chứng từ phải thuộc đúng project.");
+      if (!file.data) throw new Error("File trên Google Drive chưa có bản sao nội dung. Hãy tải file xuống rồi tải trực tiếp làm chứng từ.");
       const saved = await tx.costFlowEvidence.create({ data: { projectId, requestId, sourceFileId: file.id, kind, name: file.name, mimeType: file.mimeType, data: file.data, sha256: createHash("sha256").update(file.data).digest("hex"), createdBy: actor.id } });
       return saved.id;
     };

@@ -106,9 +106,6 @@ export default function RecognitionComposer({
                 <h2 id="recognition-dialog-title" className="text-xl font-semibold text-zinc-900">
                   Gửi lời cảm ơn
                 </h2>
-                <p className="mt-1 text-sm text-zinc-500">
-                  Một lời thật lòng, một ngôi sao dành cho đồng đội.
-                </p>
                 <span className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-800">
                   <Star size={13} fill="currentColor" aria-hidden="true" />
                   Còn {remainingStars}/{weeklyLimit} sao trong tuần này

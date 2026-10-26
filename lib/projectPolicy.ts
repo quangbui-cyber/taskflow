@@ -1,11 +1,17 @@
 import { type ProjectCategory } from "./types";
 
 export function canCreateProjects(role: string) {
-  return role === "ADMIN" || role === "ACCOUNT" || role === "USER";
+  return (
+    role === "ADMIN" ||
+    role === "ACCOUNT" ||
+    role === "ACCOUNTANT" ||
+    role === "USER"
+  );
 }
 
+/** Xem doanh thu, giá bán, lợi nhuận. Kế toán xem được để đối chiếu khi chi. */
 export function canViewRevenue(role: string) {
-  return role === "ADMIN" || role === "ACCOUNT";
+  return role === "ADMIN" || role === "ACCOUNT" || role === "ACCOUNTANT";
 }
 
 type BusinessFields = {

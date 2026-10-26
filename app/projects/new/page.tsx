@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { canViewRevenue, requireUser } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
 import NewProjectForm from "@/components/NewProjectForm";
+import { canCreateClient } from "@/lib/clientCatalog";
 
 export default async function NewProjectPage() {
   const user = await requireUser();
@@ -46,12 +47,10 @@ export default async function NewProjectPage() {
         <div className="tf-page-narrow space-y-6">
           <div>
             <h1 className="tf-page-title">Tạo dự án mới</h1>
-            <p className="tf-page-subtitle">
-              Chọn Nội bộ hoặc Khách hàng để mở form tạo dự án tương ứng.
-            </p>
           </div>
           <NewProjectForm
             canEditRevenue={canViewRevenue(user.role)}
+            canCreateClient={canCreateClient(user.role)}
             clients={clients}
             responsibilityOptions={{ teams, groups }}
             accounts={accounts.map((account) => ({
