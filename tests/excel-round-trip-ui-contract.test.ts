@@ -15,7 +15,7 @@ test("round-trip dialog groups exact diff facts and requires explicit unchecked 
   assert.match(dialog, /newValue/);
   assert.match(dialog, /source\.cell/);
   assert.match(dialog, /selectedDeletionIds/);
-  assert.match(dialog, /useState<string\[\]>\(\[\]\)/);
+  assert.match(dialog, /authority\.selectedDeletionIds/);
   assert.match(dialog, /Xác nhận xóa/);
   assert.match(dialog, /Chọn tất cả/);
   assert.match(dialog, /aggregateDeletionConfirmed/);

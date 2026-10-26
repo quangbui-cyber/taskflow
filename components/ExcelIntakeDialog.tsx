@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Input as Field, Textarea } from "@/components/ui/Field";
 import { Alert, Table } from "@/components/ui/Presentation";
 import type { ExcelIntakePreview } from "@/lib/costflow/excelIntakeParser";
+import { createExcelPreviewState, reduceExcelPreviewState } from "@/lib/costflow/excelPreviewState";
 
 type SessionView = {
   state: "ACTIONABLE" | "READ_ONLY_CONSUMED" | "NON_ACTIONABLE_EXPIRED" | "NON_ACTIONABLE_SUPERSEDED" | "NON_ACTIONABLE_CANCELLED";
@@ -66,39 +67,62 @@ export function excelIntakeReducer(state: IntakeState, action: IntakeAction): In
 
 export default function ExcelIntakeDialog({ projectId, version, disabled = false }: { projectId: string; version: number; disabled?: boolean }) {
   const [state, dispatch] = useReducer(excelIntakeReducer, initialExcelIntakeState);
+  const [authority, authorityDispatch] = useReducer(reduceExcelPreviewState<
+    { mode: IntakeState["mode"]; paste: string; file: File | null; sheet: string; range: string },
+    ExcelIntakePreview
+  >, createExcelPreviewState({ mode: "PASTE", paste: "", file: null, sheet: "", range: "" }));
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const [stagedChange, setStagedChange] = useState<IntakeAction | null>(null);
   const [confirmError, setConfirmError] = useState("");
   const [confirmPending, startConfirm] = useTransition();
   const router = useRouter();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const sequence = useRef(0);
-  const blocking = state.preview?.errors.length ?? 0;
-  const unresolvedDecimals = state.preview?.decimalConflicts.filter(conflict => !state.decimalResolutions[conflict.conflictId]).length ?? 0;
-  const actionable = state.session?.state === "ACTIONABLE" && state.session.operationKind === "NEW_DRAFT";
+  const visiblePreview = authority.currentProjection ?? authority.staleProjection;
+  const blocking = visiblePreview?.errors.length ?? 0;
+  const unresolvedDecimals = visiblePreview?.decimalConflicts.filter(conflict => !state.decimalResolutions[conflict.conflictId]).length ?? 0;
+  const actionable = state.session?.state === "ACTIONABLE" && state.session.operationKind === "NEW_DRAFT" && authority.actionableSessionId === state.session.previewSessionId;
 
   useEffect(() => { if (!state.open) triggerRef.current?.focus(); }, [state.open]);
+  useEffect(() => {
+    const refreshStatus = async () => {
+      if (!state.open || !state.session?.previewSessionId) return;
+      const response = await fetch(`/api/projects/${projectId}/costflow/excel-intake/sessions/${encodeURIComponent(state.session.previewSessionId)}`, { cache: "no-store" });
+      if (!response.ok) return;
+      const body = await response.json() as SessionView;
+      authorityDispatch({ type: "SERVER_STATUS", serverState: body.state });
+    };
+    window.addEventListener("focus", refreshStatus);
+    return () => window.removeEventListener("focus", refreshStatus);
+  }, [projectId, state.open, state.session?.previewSessionId]);
 
-  async function requestSession(request: Promise<Response>, requestId: number) {
+  async function requestSession(request: Promise<Response>, requestId: number, sourceRevision: number) {
     try {
       const response = await request;
       const body = await response.json() as SessionView & { error?: string };
       if (!response.ok || body.error) throw new Error(body.error || "Không đọc được phiên xem trước.");
       if (body.operationKind !== "NEW_DRAFT") throw new Error("Phiên xem trước không thuộc luồng tạo nháp mới.");
       dispatch({ type: "PREVIEW_OK", requestId, session: body });
+      if (body.state === "ACTIONABLE" && body.display) authorityDispatch({ type: "RESPONSE_SUCCEEDED", sourceRevision, sessionId: body.previewSessionId, projection: body.display });
+      else authorityDispatch({ type: "SESSION_LOADED", serverState: body.state, sessionId: body.previewSessionId, projection: body.display ?? null });
     } catch (error) {
-      dispatch({ type: "REQUEST_FAILED", requestId, message: error instanceof Error ? error.message : "Không đọc được phiên xem trước." });
+      const message = error instanceof Error ? error.message : "Không đọc được phiên xem trước.";
+      dispatch({ type: "REQUEST_FAILED", requestId, message });
+      authorityDispatch({ type: "RESPONSE_FAILED", sourceRevision, message });
     }
   }
 
   async function preview() {
     const requestId = ++sequence.current;
     dispatch({ type: "REQUEST_STARTED", requestId });
+    authorityDispatch({ type: "REQUEST_STARTED", sourceRevision: authority.sourceRevision });
     const form = new FormData();
     form.set("paste", state.paste);
     form.set("sheet", state.sheet);
     form.set("range", state.range);
-    form.set("sourceRevision", String(state.sourceRevision));
+    form.set("sourceRevision", String(authority.sourceRevision));
     if (state.mode === "XLSX" && state.file) form.set("file", state.file);
-    await requestSession(fetch(`/api/projects/${projectId}/costflow/excel-intake/preview`, { method: "POST", body: form }), requestId);
+    await requestSession(fetch(`/api/projects/${projectId}/costflow/excel-intake/preview`, { method: "POST", body: form }), requestId, authority.sourceRevision);
   }
 
   async function resume() {
@@ -106,13 +130,60 @@ export default function ExcelIntakeDialog({ projectId, version, disabled = false
     if (!sessionId) return;
     const requestId = ++sequence.current;
     dispatch({ type: "REQUEST_STARTED", requestId });
-    await requestSession(fetch(`/api/projects/${projectId}/costflow/excel-intake/sessions/${encodeURIComponent(sessionId)}`, { cache: "no-store" }), requestId);
+    await requestSession(fetch(`/api/projects/${projectId}/costflow/excel-intake/sessions/${encodeURIComponent(sessionId)}`, { cache: "no-store" }), requestId, authority.sourceRevision);
+  }
+
+  const nextSource = (action: IntakeAction) => ({
+    mode: action.type === "SET_MODE" ? action.mode : state.mode,
+    paste: action.type === "SET_SOURCE" && action.key === "paste" ? action.value : state.paste,
+    file: action.type === "SET_FILE" ? action.file : state.file,
+    sheet: action.type === "SET_SOURCE" && action.key === "sheet" ? action.value : state.sheet,
+    range: action.type === "SET_SOURCE" && action.key === "range" ? action.value : state.range,
+  });
+
+  async function continueSourceChange(action = stagedChange) {
+    if (!action) return;
+    const oldSessionId = authority.pendingSourceChange?.previous.actionableSessionId ?? authority.actionableSessionId;
+    try {
+      if (oldSessionId) {
+        const response = await fetch(`/api/projects/${projectId}/costflow/excel-intake/sessions/${encodeURIComponent(oldSessionId)}`, { method: "DELETE" });
+        if (!response.ok) throw new Error("Không thể hủy phiên cũ trên máy chủ.");
+      }
+      dispatch(action);
+      authorityDispatch({ type: "SOURCE_CANCELLED" });
+      setDiscardOpen(false);
+      setStagedChange(null);
+    } catch (error) {
+      authorityDispatch({ type: "SOURCE_CANCEL_FAILED", message: error instanceof Error ? error.message : "Không thể hủy phiên cũ trên máy chủ." });
+    }
+  }
+
+  function proposeSourceChange(action: IntakeAction) {
+    const source = nextSource(action);
+    const hasChoices = Object.keys(state.corrections).length > 0 || Object.keys(state.decimalResolutions).length > 0;
+    authorityDispatch({ type: "SOURCE_CHANGE_INTENT", source });
+    setStagedChange(action);
+    if (hasChoices) setDiscardOpen(true);
+    else void continueSourceChange(action);
+  }
+
+  async function stayOnSource() {
+    const oldSessionId = authority.pendingSourceChange?.previous.actionableSessionId;
+    if (!oldSessionId) {
+      authorityDispatch({ type: "STAY_CONFIRMED", serverState: "ACTIONABLE" });
+    } else {
+      const response = await fetch(`/api/projects/${projectId}/costflow/excel-intake/sessions/${encodeURIComponent(oldSessionId)}`, { cache: "no-store" });
+      const body = await response.json() as SessionView;
+      authorityDispatch({ type: "STAY_CONFIRMED", serverState: response.ok ? body.state : "NON_ACTIONABLE_CANCELLED" });
+    }
+    setDiscardOpen(false);
+    setStagedChange(null);
   }
 
   const corrected = (rowKey: string, field: string, fallback: string | null) => state.corrections[`${rowKey}.${field}`] ?? fallback ?? "";
-  const focusIssue = (field: string, candidateKey?: string) => document.getElementById(`excel-intake-row-${candidateKey ?? state.preview?.rows[0]?.candidateKey}-${field.replace(".", "-")}`)?.focus();
+  const focusIssue = (field: string, candidateKey?: string) => document.getElementById(`excel-intake-row-${candidateKey ?? visiblePreview?.rows[0]?.candidateKey}-${field.replace(".", "-")}`)?.focus();
   const confirm = () => {
-    if (!state.preview || !state.session || !actionable || blocking || unresolvedDecimals) return;
+    if (!visiblePreview || !state.session || !actionable || blocking || unresolvedDecimals) return;
     setConfirmError("");
     startConfirm(async () => {
       const result = await confirmExcelIntakeAction({ projectId, previewSessionId: state.session!.previewSessionId, expectedVersion: version, idempotencyKey: `excel-intake:${crypto.randomUUID()}`, corrections: state.corrections, decimalResolutions: state.decimalResolutions });
@@ -130,30 +201,34 @@ export default function ExcelIntakeDialog({ projectId, version, disabled = false
         <Button onClick={confirm} loading={confirmPending} disabled={state.pending || confirmPending || blocking > 0 || unresolvedDecimals > 0 || !state.preview || !actionable}>Tạo nháp mới</Button>
       </>}>
       <div className="excel-intake-source-grid">
-        <Button variant={state.mode === "PASTE" ? "primary" : "secondary"} onClick={() => dispatch({ type: "SET_MODE", mode: "PASTE" })}>Dán bảng</Button>
-        <Button variant={state.mode === "XLSX" ? "primary" : "secondary"} onClick={() => dispatch({ type: "SET_MODE", mode: "XLSX" })}>Tải XLSX</Button>
-        <Field label="Sheet" value={state.sheet} onChange={event => dispatch({ type: "SET_SOURCE", key: "sheet", value: event.target.value })} placeholder="Tự nhận diện" />
-        <Field label="Vùng dữ liệu" value={state.range} onChange={event => dispatch({ type: "SET_SOURCE", key: "range", value: event.target.value })} placeholder="Ví dụ A6:Y40" />
+        <Button variant={state.mode === "PASTE" ? "primary" : "secondary"} onClick={() => proposeSourceChange({ type: "SET_MODE", mode: "PASTE" })}>Dán bảng</Button>
+        <Button variant={state.mode === "XLSX" ? "primary" : "secondary"} onClick={() => proposeSourceChange({ type: "SET_MODE", mode: "XLSX" })}>Tải XLSX</Button>
+        <Field label="Sheet" value={state.sheet} onChange={event => proposeSourceChange({ type: "SET_SOURCE", key: "sheet", value: event.target.value })} placeholder="Tự nhận diện" />
+        <Field label="Vùng dữ liệu" value={state.range} onChange={event => proposeSourceChange({ type: "SET_SOURCE", key: "range", value: event.target.value })} placeholder="Ví dụ A6:Y40" />
       </div>
-      {state.mode === "PASTE" ? <Textarea label="Dữ liệu nhiều ô" value={state.paste} onChange={event => dispatch({ type: "SET_SOURCE", key: "paste", value: event.target.value })} /> :
-        <Field label="Tệp XLSX" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event: ChangeEvent<HTMLInputElement>) => dispatch({ type: "SET_FILE", file: event.target.files?.[0] ?? null })} />}
+      {state.mode === "PASTE" ? <Textarea label="Dữ liệu nhiều ô" value={state.paste} onChange={event => proposeSourceChange({ type: "SET_SOURCE", key: "paste", value: event.target.value })} /> :
+        <Field label="Tệp XLSX" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event: ChangeEvent<HTMLInputElement>) => proposeSourceChange({ type: "SET_FILE", file: event.target.files?.[0] ?? null })} />}
       <div className="excel-intake-source-grid">
         <Field label="Mã phiên xem trước" value={state.resumeSessionId} onChange={event => dispatch({ type: "SET_SOURCE", key: "resumeSessionId", value: event.target.value })} placeholder="Dán mã để tiếp tục hoặc xem lại" />
         <Button variant="secondary" onClick={resume} disabled={!state.resumeSessionId.trim()} loading={state.pending}>Mở phiên</Button>
       </div>
-      <p className="tf-ui-help" aria-live="polite">{state.pending ? "Đang kiểm tra dữ liệu…" : state.error || (state.preview ? `Đã nhận diện ${state.preview.adapter} · ${state.preview.rows.length} dòng.` : "Chọn nguồn rồi cập nhật xem trước.")}</p>
+      <p className="tf-ui-help" aria-live="polite">{authority.notice || (state.pending ? "Đang kiểm tra dữ liệu…" : state.error || (visiblePreview ? `Đã nhận diện ${visiblePreview.adapter} · ${visiblePreview.rows.length} dòng.` : "Chọn nguồn rồi cập nhật xem trước."))}</p>
       {state.session && <p className="tf-ui-help">Phiên {state.session.previewSessionId} · hết hạn {new Date(state.session.expiresAt).toLocaleString("vi-VN")}</p>}
       {state.error && <Alert tone="danger" title="Chưa thể xem trước">{state.error} Dữ liệu và các ô đã sửa vẫn được giữ.</Alert>}
       {confirmError && <Alert tone="danger" title="Chưa thể tạo nháp">{confirmError} Dữ liệu và các ô đã sửa vẫn được giữ.</Alert>}
       {state.session?.state === "READ_ONLY_CONSUMED" && <Alert tone="success" title="Phiên đã được xác nhận">Bản xem lại chỉ đọc{state.session.result?.draftId ? ` · nháp ${state.session.result.draftId}` : ""}. {state.session.source && <a href={state.session.source.downloadUrl}>Tải nguồn {state.session.source.filename}</a>}</Alert>}
       {state.session?.state.startsWith("NON_ACTIONABLE_") && <Alert tone="warning" title="Phiên không còn hiệu lực">Phiên đã hết hạn, bị thay thế hoặc bị hủy. Dữ liệu xem trước đã được xóa.</Alert>}
-      {!!state.preview?.errors.length && <Alert tone="danger" title="Lỗi cần sửa"><ul>{state.preview.errors.map((issue, index) => <li key={`${issue.source.cell}-${index}`}><button type="button" className="tf-link" onClick={() => focusIssue(issue.field)}>{issue.message}</button> — {issue.source.sheet} · dòng {issue.source.row} · ô {issue.source.cell}</li>)}</ul></Alert>}
-      {!!state.preview?.warnings.length && <Alert tone="warning" title="Cảnh báo"><ul>{state.preview.warnings.map((issue, index) => <li key={`${issue.source.cell}-${index}`}>{issue.message} — {issue.source.sheet} · dòng {issue.source.row} · ô {issue.source.cell}</li>)}</ul></Alert>}
-      {!!state.preview?.decimalConflicts.length && <Alert tone="warning" title="Chọn giá trị cho từng ô xung đột"><div>{state.preview.decimalConflicts.map(conflict => <fieldset key={conflict.conflictId} disabled={readOnly}><legend>{conflict.field} · ô {conflict.source.cell}</legend><p>Hiển thị: {conflict.visible} · chính xác: {conflict.canonical}</p><label><input type="radio" name={conflict.conflictId} checked={state.decimalResolutions[conflict.conflictId] === "VISIBLE"} onChange={() => dispatch({ type: "RESOLVE_DECIMAL", conflictId: conflict.conflictId, value: "VISIBLE" })} /> Dùng giá trị hiển thị</label><label><input type="radio" name={conflict.conflictId} checked={state.decimalResolutions[conflict.conflictId] === "CANONICAL"} onChange={() => dispatch({ type: "RESOLVE_DECIMAL", conflictId: conflict.conflictId, value: "CANONICAL" })} /> Giữ giá trị chính xác</label></fieldset>)}</div></Alert>}
-      {state.preview && <div className="excel-intake-table-scroll"><p className="tf-ui-help">Sheet · dòng · ô được giữ cho từng trường nguồn.</p><Table caption="Xem trước Báo giá xanh và IC vàng" hideCaption>
+      {authority.staleProjection && !authority.currentProjection && <Alert tone="warning" title="Không còn áp dụng">Bản xem trước cũ chỉ còn để đối chiếu và không thể tạo nháp.</Alert>}
+      {!!visiblePreview?.errors.length && <Alert tone="danger" title="Lỗi cần sửa"><ul>{visiblePreview.errors.map((issue, index) => <li key={`${issue.source.cell}-${index}`}><button type="button" className="tf-link" onClick={() => focusIssue(issue.field)}>{issue.message}</button> — {issue.source.sheet} · dòng {issue.source.row} · ô {issue.source.cell}</li>)}</ul></Alert>}
+      {!!visiblePreview?.warnings.length && <Alert tone="warning" title="Cảnh báo"><ul>{visiblePreview.warnings.map((issue, index) => <li key={`${issue.source.cell}-${index}`}>{issue.message} — {issue.source.sheet} · dòng {issue.source.row} · ô {issue.source.cell}</li>)}</ul></Alert>}
+      {!!visiblePreview?.decimalConflicts.length && <Alert tone="warning" title="Chọn giá trị cho từng ô xung đột"><div>{visiblePreview.decimalConflicts.map(conflict => <fieldset key={conflict.conflictId} disabled={readOnly}><legend>{conflict.field} · ô {conflict.source.cell}</legend><p>Hiển thị: {conflict.visible} · chính xác: {conflict.canonical}</p><label><input type="radio" name={conflict.conflictId} checked={state.decimalResolutions[conflict.conflictId] === "VISIBLE"} onChange={() => { dispatch({ type: "RESOLVE_DECIMAL", conflictId: conflict.conflictId, value: "VISIBLE" }); authorityDispatch({ type: "SET_DECIMAL_RESOLUTION", key: conflict.conflictId, value: "VISIBLE" }); }} /> Dùng giá trị hiển thị</label><label><input type="radio" name={conflict.conflictId} checked={state.decimalResolutions[conflict.conflictId] === "CANONICAL"} onChange={() => { dispatch({ type: "RESOLVE_DECIMAL", conflictId: conflict.conflictId, value: "CANONICAL" }); authorityDispatch({ type: "SET_DECIMAL_RESOLUTION", key: conflict.conflictId, value: "CANONICAL" }); }} /> Giữ giá trị chính xác</label></fieldset>)}</div></Alert>}
+      {visiblePreview && <div className={`excel-intake-table-scroll ${authority.staleProjection && !authority.currentProjection ? "opacity-60" : ""}`}><p className="tf-ui-help">Sheet · dòng · ô được giữ cho từng trường nguồn.</p><Table caption="Xem trước Báo giá xanh và IC vàng" hideCaption>
         <thead><tr><th>Hạng mục</th><th>SL bán</th><th>Ngày bán</th><th>Đơn giá bán</th><th>SL mua</th><th>Ngày mua</th><th>Giá vốn</th><th>NCC</th></tr></thead>
-        <tbody>{state.preview.rows.map(row => <tr key={row.candidateKey} className="excel-intake-row-card"><td>{row.name || row.description}</td>{(["sell.quantity", "sell.days", "sell.unitPrice", "buy.quantity", "buy.days", "buy.unitPrice", "buy.supplier"] as const).map(field => <td key={field}><input id={`excel-intake-row-${row.candidateKey}-${field.replace(".", "-")}`} className="tf-field" disabled={readOnly} value={corrected(row.candidateKey, field, field.startsWith("sell.") ? row.sell[field.slice(5) as "quantity" | "days" | "unitPrice"] : field === "buy.supplier" ? row.buy.supplier : row.buy[field.slice(4) as "quantity" | "days" | "unitPrice"])} onChange={event => dispatch({ type: "CORRECT", key: `${row.candidateKey}.${field}`, value: event.target.value })} /></td>)}</tr>)}</tbody>
+        <tbody>{visiblePreview.rows.map(row => <tr key={row.candidateKey} className="excel-intake-row-card"><td>{row.name || row.description}</td>{(["sell.quantity", "sell.days", "sell.unitPrice", "buy.quantity", "buy.days", "buy.unitPrice", "buy.supplier"] as const).map(field => <td key={field}><input id={`excel-intake-row-${row.candidateKey}-${field.replace(".", "-")}`} className="tf-field" disabled={readOnly || !actionable} value={corrected(row.candidateKey, field, field.startsWith("sell.") ? row.sell[field.slice(5) as "quantity" | "days" | "unitPrice"] : field === "buy.supplier" ? row.buy.supplier : row.buy[field.slice(4) as "quantity" | "days" | "unitPrice"])} onChange={event => { dispatch({ type: "CORRECT", key: `${row.candidateKey}.${field}`, value: event.target.value }); authorityDispatch({ type: "SET_CORRECTION", key: `${row.candidateKey}.${field}`, value: event.target.value }); }} /></td>)}</tr>)}</tbody>
       </Table></div>}
+    </Dialog>
+    <Dialog open={discardOpen} onClose={() => void stayOnSource()} title="Bỏ các lựa chọn đang sửa?" description="Đổi nguồn sẽ hủy phiên hiện tại và xóa các ô sửa, lựa chọn số thập phân.">
+      <div className="tf-ui-actions"><Button variant="secondary" onClick={() => void stayOnSource()}>Ở lại</Button><Button onClick={() => void continueSourceChange()}>Tiếp tục và bỏ lựa chọn</Button></div>
     </Dialog>
   </>;
 }

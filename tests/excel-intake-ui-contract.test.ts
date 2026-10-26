@@ -57,12 +57,13 @@ test("reducer preserves raw cells and corrections across stale or failed respons
 
 test("intake dialog cancels exact authority before installing source and offers Stay", async () => {
   const source = await readFile(path.join(process.cwd(), "components/ExcelIntakeDialog.tsx"), "utf8");
+  const reducer = await readFile(path.join(process.cwd(), "lib/costflow/excelPreviewState.ts"), "utf8");
   assert.match(source, /reduceExcelPreviewState/);
   assert.match(source, /method:\s*"DELETE"/);
   assert.match(source, /Tiếp tục và bỏ lựa chọn/);
   assert.match(source, /Ở lại/);
   assert.match(source, /Không còn áp dụng/);
-  assert.match(source, /Đã bỏ kết quả của nguồn cũ/);
+  assert.match(`${source}\n${reducer}`, /Đã bỏ kết quả của nguồn cũ/);
 });
 
 test("quotation panel opens the creator-only intake dialog and customer view remains private", async () => {
