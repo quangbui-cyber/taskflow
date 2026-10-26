@@ -334,8 +334,11 @@ export default async function MeetingsPage({
             endAt: true,
             meetingUrl: true,
             organizerId: true,
-            organizer: { select: { name: true } },
-            attendees: { select: { userId: true } },
+            organizer: { select: { id: true, name: true, avatarUrl: true } },
+            attendees: {
+              select: { userId: true, response: true, user: { select: { name: true, avatarUrl: true } } },
+              orderBy: { createdAt: "asc" },
+            },
           },
           orderBy: { startAt: "asc" },
           take: 500,
@@ -377,7 +380,13 @@ export default async function MeetingsPage({
       startAt: meeting.startAt.toISOString(),
       endAt: meeting.endAt.toISOString(),
       organizerName: meeting.organizer.name,
-      attendeeCount: meeting.attendees.length,
+      organizer: meeting.organizer,
+      attendees: meeting.attendees.map((attendee) => ({
+        id: attendee.userId,
+        name: attendee.user.name,
+        avatarUrl: attendee.user.avatarUrl,
+        response: attendee.response,
+      })),
       isMine,
       meetingUrl: isMine ? meeting.meetingUrl : null,
     };
