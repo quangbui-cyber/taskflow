@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { roundTripAggregateTargetId, roundTripRowTargetId } from "../lib/costflow/excelIntake";
 
 const source = (file: string) => readFile(path.join(process.cwd(), file), "utf8");
 
@@ -46,4 +47,12 @@ test("round-trip action re-authenticates and delegates to serializable merge ser
   assert.match(service, /selectedDeletionIds/);
   assert.match(service, /previewFingerprint/);
   assert.match(service, /CONFIRM_EXCEL_ROUND_TRIP/);
+});
+
+test("round-trip row and aggregate diagnostics have deterministic distinct targets", () => {
+  assert.equal(roundTripRowTargetId("item-a", "buy.unitPrice", "R10"), "excel-round-trip-row-item-a-buy-unitPrice-R10");
+  assert.equal(roundTripRowTargetId("item-b", "buy.unitPrice", "R11"), "excel-round-trip-row-item-b-buy-unitPrice-R11");
+  assert.notEqual(roundTripRowTargetId("item-a", "buy.unitPrice", "R10"), roundTripRowTargetId("item-b", "buy.unitPrice", "R11"));
+  assert.equal(roundTripAggregateTargetId("subtree-delete"), "excel-round-trip-section-subtree-delete");
+  assert.equal(roundTripAggregateTargetId("stale-draft"), "excel-round-trip-section-stale-draft");
 });
