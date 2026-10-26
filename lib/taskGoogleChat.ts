@@ -49,6 +49,37 @@ const SHORT_DAY = { format: (date: Date) => DAY.format(date).slice(0, 5) };
 
 const capitalize = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 
+/** Chọn một câu theo hạt giống để cùng một việc luôn ra cùng câu, còn các việc khác nhau thì đổi câu. */
+function pickLine(lines: string[], seed: string) {
+  let hash = 0;
+  for (const char of seed) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return lines[hash % lines.length];
+}
+
+/** Dòng tin vui hiện phía trên thẻ; thẻ bên dưới vẫn giữ nguyên, nghiêm chỉnh. */
+export function taskChatGreeting(input: Pick<TaskChatInput, "event" | "status" | "taskId" | "assigneeName">) {
+  const seed = `${input.taskId}-${input.event}-${input.status}`;
+  const name = input.assigneeName;
+  if (input.event === "created") {
+    return pickLine(
+      [
+        "Có việc nước sôi tới rồi nè 🔥",
+        "Ting ting! Việc mới nóng hổi vừa ra lò 🥐",
+        ...(name ? [`${name} ơi, có việc mới đáp xuống bàn bạn nè 🛬`] : ["Có việc mới đáp xuống bàn rồi, ai nhận nào? 🛬"]),
+      ],
+      seed
+    );
+  }
+  if (input.event === "assignee_changed") {
+    return name
+      ? pickLine([`${name} ơi, việc này giao cho bạn nha 🎯`, `Có bạn ${name} nhận việc rồi nè 🙌`], seed)
+      : "Việc này đang chờ người nhận nè 👀";
+  }
+  if (input.status === "DONE") return pickLine(["Xong một việc rồi, vỗ tay nào 👏", "Tuyệt vời, thêm một việc về đích 🏁"], seed);
+  if (input.status === "IN_PROGRESS") return pickLine(["Có người xắn tay áo làm rồi nè 💪", "Bắt tay vào việc thôi nào 🚀"], seed);
+  return pickLine(["Việc vừa nhích thêm một bước nè ✨", "Có chút cập nhật mới cho mình nè 🔔"], seed);
+}
+
 /** "17:00 · Thứ Năm 30/10/2026" (giờ Việt Nam). */
 export function chatDeadline(date: Date) {
   return `${TIME.format(date)} · ${capitalize(WEEKDAY.format(date))} ${DAY.format(date)}`;
@@ -66,8 +97,9 @@ function buttonSection(text: string, url: string | null): GoogleChatSection[] {
   return url ? [{ widgets: [{ buttonList: { buttons: [{ text, type: "FILLED", onClick: { openLink: { url } } }] } }] }] : [];
 }
 
-function card(id: string, title: string, subtitle: string, sections: GoogleChatSection[], fallback: string[]): GoogleChatMessage {
+function card(id: string, title: string, subtitle: string, sections: GoogleChatSection[], fallback: string[], text?: string): GoogleChatMessage {
   return {
+    ...(text ? { text } : {}),
     fallbackText: fallback.join("\n"),
     cardsV2: [{ cardId: id, card: { header: { title, subtitle }, sections } }],
   };
@@ -120,7 +152,8 @@ export function taskGoogleChatMessage(input: TaskChatInput): GoogleChatMessage {
       `${actorLabel}: ${input.actorName}`,
       ...(input.meetingTitle ? [`Từ biên bản họp: ${input.meetingTitle}`] : []),
       ...(input.url ? [input.url] : []),
-    ]
+    ],
+    taskChatGreeting(input)
   );
 }
 
@@ -151,7 +184,11 @@ export function taskCommentChatMessage(input: {
       },
       ...buttonSection("Trả lời trong app", input.url),
     ],
-    [`${headline} · ${input.projectName}`, input.title, `“${comment}”`, `Người phụ trách: ${assignee}`, ...(input.url ? [input.url] : [])]
+    [`${headline} · ${input.projectName}`, input.title, `“${comment}”`, `Người phụ trách: ${assignee}`, ...(input.url ? [input.url] : [])],
+    pickLine(
+      [`${input.authorName} vừa để lại một lời nhắn nè 💌`, `Có tin nhắn mới trong việc này nè 💬`, `${input.authorName} có điều muốn nói nè 👂`],
+      `${input.taskId}-${Date.now()}`
+    )
   );
 }
 
@@ -219,6 +256,12 @@ export function deadlineDigestChatMessage(input: {
       `⏰ Nhắc việc hôm nay · ${input.projectName}`,
       ...(input.overdue.length > 0 ? [`Quá hạn (${input.overdue.length})`, ...input.overdue.map((task) => line(task, overdueLabel(task.dueDate)))] : []),
       ...(input.dueToday.length > 0 ? [`Đến hạn hôm nay (${input.dueToday.length})`, ...input.dueToday.map((task) => line(task, TIME.format(task.dueDate)))] : []),
-    ]
+    ],
+    pickLine(
+      input.overdue.length > 0
+        ? ["Chào buổi sáng! Có vài việc đang chờ mình ghé thăm nè 🐢", "Sáng rồi, mình cùng dọn vài việc còn đang chờ nhé ☀️"]
+        : ["Chào buổi sáng! Hôm nay có việc đến hạn, mình cùng làm nhé 💪", "Ting ting! Điểm danh việc hôm nay nào ☀️"],
+      `${input.projectId}-${SHORT_DAY.format(now)}`
+    )
   );
 }
