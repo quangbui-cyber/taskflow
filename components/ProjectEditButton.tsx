@@ -9,6 +9,7 @@ import { responsibilityValue, type ProjectResponsibility, type ResponsibilityOpt
 import ClientSelect, { type ClientOption } from "@/components/ClientSelect";
 import ProjectAccountSelect, { preventMissingProjectAccount, type ProjectAccountOption } from "@/components/ProjectAccountSelect";
 import UserPicker, { type UserPickerOption } from "@/components/UserPicker";
+import { DateRangeField } from "@/components/TemporalFields";
 import { useInteraction } from "@/components/InteractionProvider";
 import {
   PROJECT_CATEGORIES,
@@ -208,29 +209,16 @@ export default function ProjectEditButton({
                 </label>
               )}
 
-              <label className="block">
-                <span className="text-xs font-medium text-zinc-500">
-                  Ngày thực hiện
-                </span>
-                <input
-                  name="executionStartAt"
-                  type="date"
-                  defaultValue={project.executionStartAt ?? ""}
-                  className="tf-field mt-1"
+              <div className="sm:col-span-2">
+                <DateRangeField
+                  label="Thời gian thực hiện"
+                  startName="executionStartAt"
+                  endName="executionEndAt"
+                  defaultStartValue={project.executionStartAt ?? ""}
+                  defaultEndValue={project.executionEndAt ?? ""}
+                  helperText="Chọn một ngày, hoặc thêm ngày kết thúc nếu dự án chạy nhiều ngày."
                 />
-              </label>
-
-              <label className="block">
-                <span className="text-xs font-medium text-zinc-500">
-                  Đến ngày (nếu chạy nhiều ngày)
-                </span>
-                <input
-                  name="executionEndAt"
-                  type="date"
-                  defaultValue={project.executionEndAt ?? ""}
-                  className="tf-field mt-1"
-                />
-              </label>
+              </div>
 
               {category === "CLIENT" && (
                 <div className="block">

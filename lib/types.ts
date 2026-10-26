@@ -19,6 +19,10 @@ export type TaskDTO = {
   dueDate: string | null;
   order: number;
   assigneeId: string | null;
+  creator: { id: string; name: string; avatarUrl: string | null };
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
   comments: CommentDTO[];
   followers: { id: string; name: string; avatarUrl: string | null }[];
   files: TaskFileDTO[];

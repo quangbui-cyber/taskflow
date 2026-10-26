@@ -14,9 +14,10 @@ import {
 import { createPortal } from "react-dom";
 import { ChevronDown, Plus, X } from "lucide-react";
 import { createTask, type ActionState } from "@/app/actions/tasks";
-import { PRIORITIES, type MemberDTO } from "@/lib/types";
+import { PRIORITIES, STATUSES, type MemberDTO } from "@/lib/types";
 import DeadlineField from "@/components/DeadlineField";
 import UserPicker from "@/components/UserPicker";
+import TaskAttributeSelect from "@/components/TaskAttributeSelect";
 import { useInteraction } from "@/components/InteractionProvider";
 import TaskAttachmentPicker from "@/components/TaskAttachmentPicker";
 import { MAX_TASK_CREATION_FILE_SIZE } from "@/lib/taskCreationFiles";
@@ -24,6 +25,16 @@ import { formatProjectFileSize } from "@/lib/projectFiles";
 
 // Same breakpoint where the board switches to three columns side by side.
 const DESKTOP_QUERY = "(min-width: 768px)";
+const STATUS_DOTS: Record<string, string> = {
+  TODO: "bg-amber-500",
+  IN_PROGRESS: "bg-blue-500",
+  DONE: "bg-emerald-500",
+};
+const PRIORITY_DOTS: Record<string, string> = {
+  LOW: "bg-emerald-500",
+  MEDIUM: "bg-orange-500",
+  HIGH: "bg-red-500",
+};
 
 function subscribeToDesktop(onChange: () => void) {
   const media = window.matchMedia(DESKTOP_QUERY);
@@ -62,11 +73,26 @@ export default function NewTaskInline({
   // desktop breakpoint swaps the dialog and inline form and remounts them.
   const [title, setTitle] = useState("");
   const [assigneeId, setAssigneeId] = useState("");
+  const [taskStatus, setTaskStatus] = useState(status);
   const [priority, setPriority] = useState("MEDIUM");
   const [startDate, setStartDate] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [description, setDescription] = useState("");
   const [result, setResult] = useState("");
+  const [deliverableOpen, setDeliverableOpen] = useState(false);
+  const resetDraft = useCallback(() => {
+    setTitle("");
+    setAssigneeId("");
+    setTaskStatus(status);
+    setPriority("MEDIUM");
+    setStartDate("");
+    setDueDate("");
+    setDescription("");
+    setResult("");
+    setDeliverableOpen(false);
+    setBriefFiles([]);
+    setResultFiles([]);
+  }, [status]);
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     async (prev, formData) => {
       const startDate = String(formData.get("startDate") ?? "");
@@ -94,29 +120,19 @@ export default function NewTaskInline({
     {}
   );
   const totalFileSize = [...briefFiles, ...resultFiles].reduce((size, file) => size + file.size, 0);
-  function resetDraft() {
-    setTitle("");
-    setAssigneeId("");
-    setPriority("MEDIUM");
-    setStartDate("");
-    setDueDate("");
-    setDescription("");
-    setResult("");
-    setBriefFiles([]);
-    setResultFiles([]);
-  }
 
   const closeEditor = useCallback(() => {
     if (pending) return;
     resetDraft();
     setEditing(false);
-  }, [pending]);
+  }, [pending, resetDraft]);
 
   // In the dialog, a stray Escape or backdrop click should not throw away
   // anything already filled in or picked, so those only close an empty draft.
   const hasDraft =
     [title, description, result].some((value) => value.trim()) ||
     Boolean(assigneeId) ||
+    taskStatus !== status ||
     priority !== "MEDIUM" ||
     Boolean(startDate) ||
     Boolean(dueDate) ||
@@ -172,7 +188,12 @@ export default function NewTaskInline({
     }
 
     function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") requestClose();
+      if (
+        event.key === "Escape" &&
+        !document.querySelector('[data-floating-layer][data-open="true"]')
+      ) {
+        requestClose();
+      }
     }
 
     document.addEventListener("pointerdown", closeOnOutsideClick, true);
@@ -206,7 +227,7 @@ export default function NewTaskInline({
   const hiddenFields = (
     <>
       <input type="hidden" name="projectId" value={projectId} />
-      <input type="hidden" name="status" value={status} />
+      <input type="hidden" name="status" value={taskStatus} />
     </>
   );
 
@@ -244,28 +265,24 @@ export default function NewTaskInline({
   );
 
   const priorityField = (
-    <label className="block">
-      <span className="text-xs font-medium text-zinc-500">Ưu tiên</span>
-      <div className="relative mt-1">
-        <select
-          name="priority"
-          value={priority}
-          onChange={(event) => setPriority(event.target.value)}
-          className="tf-field appearance-none !pr-10"
-        >
-          {PRIORITIES.map((priority) => (
-            <option key={priority.key} value={priority.key}>
-              {priority.label}
-            </option>
-          ))}
-        </select>
-        <ChevronDown
-          size={16}
-          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500"
-          aria-hidden="true"
-        />
-      </div>
-    </label>
+    <TaskAttributeSelect
+      name="priority"
+      label="Ưu tiên"
+      value={priority}
+      onChange={setPriority}
+      options={PRIORITIES}
+      dotClasses={PRIORITY_DOTS}
+    />
+  );
+
+  const statusField = (
+    <TaskAttributeSelect
+      label="Trạng thái"
+      value={taskStatus}
+      onChange={setTaskStatus}
+      options={STATUSES}
+      dotClasses={STATUS_DOTS}
+    />
   );
 
   const deadlineField = (
@@ -326,6 +343,30 @@ export default function NewTaskInline({
       onChange={(files) => selectFiles("RESULT", files)}
       disabled={pending}
     />
+  );
+
+  const deliverableFields = (
+    <details
+      className="group rounded-[8px] border border-zinc-200 bg-zinc-50/60"
+      open={deliverableOpen}
+      onToggle={(event) => setDeliverableOpen(event.currentTarget.open)}
+    >
+      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-3 text-sm font-medium text-zinc-700 marker:content-none">
+        <span>Kết quả ban đầu</span>
+        <span className="text-xs font-normal text-zinc-400 group-open:hidden">
+          Không bắt buộc
+        </span>
+        <ChevronDown
+          size={15}
+          className="hidden text-zinc-400 transition-transform group-open:block group-open:rotate-180"
+          aria-hidden="true"
+        />
+      </summary>
+      <div className="border-t border-zinc-200 px-3 pb-3 pt-3">
+        {resultField}
+        {resultPicker}
+      </div>
+    </details>
   );
 
   const fileNote =
@@ -398,14 +439,12 @@ export default function NewTaskInline({
                   {descriptionField}
                   {briefPicker}
                 </div>
-                <div>
-                  {resultField}
-                  {resultPicker}
-                </div>
+                {deliverableFields}
               </div>
 
               <aside className="h-fit space-y-4 rounded-[8px] border border-zinc-200 bg-zinc-50/70 p-4">
                 {assigneeField}
+                {statusField}
                 {priorityField}
                 {deadlineField}
               </aside>
@@ -438,8 +477,9 @@ export default function NewTaskInline({
         {hiddenFields}
         {titleField}
 
+        {assigneeField}
         <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
-          {assigneeField}
+          {statusField}
           {priorityField}
         </div>
 
@@ -447,8 +487,7 @@ export default function NewTaskInline({
 
         {descriptionField}
         {briefPicker}
-        {resultField}
-        {resultPicker}
+        {deliverableFields}
         {fileNote}
 
         {errorMessage}

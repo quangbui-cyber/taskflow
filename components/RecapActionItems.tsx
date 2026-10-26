@@ -13,6 +13,7 @@ import {
   type MeetingRecapActionState,
 } from "@/app/actions/meetingRecaps";
 import Avatar from "@/components/Avatar";
+import { DateField } from "@/components/TemporalFields";
 import { useInteraction } from "@/components/InteractionProvider";
 import { STATUSES } from "@/lib/types";
 import { toDateInputVN } from "@/lib/dates";
@@ -81,18 +82,12 @@ function ItemForm({
             ))}
           </select>
         </label>
-        <label className="block">
-          <span className="tf-label">Hạn chót</span>
-          <input
-            type="date"
-            value={draft.dueDate}
-            onChange={(event) => onChange({ ...draft, dueDate: event.target.value })}
-            className="tf-field w-full"
-          />
-          {dueHint && !draft.dueDate && (
-            <span className="mt-1 block text-xs text-zinc-500">Trong họp nói: “{dueHint}”</span>
-          )}
-        </label>
+        <DateField
+          label="Hạn chót"
+          value={draft.dueDate}
+          onChange={(dueDate) => onChange({ ...draft, dueDate })}
+          helperText={dueHint && !draft.dueDate ? `Trong họp nói: “${dueHint}”` : undefined}
+        />
       </div>
       <div className="flex flex-wrap gap-2">
         <button type="submit" disabled={pending || !draft.title.trim()} className="tf-button-primary !min-h-9 !px-3 text-xs">

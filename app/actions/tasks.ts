@@ -212,29 +212,42 @@ export async function updateTask(
     assigneeId?: string | null;
     status?: string;
   }
-) {
+): Promise<ActionState> {
   const task = await prisma.task.findUnique({ where: { id: taskId } });
-  if (!task) return;
+  if (!task) return { error: "Task không tồn tại." };
   const actor = await assertMember(task.projectId);
-  if (data.status !== undefined && !STATUS_KEYS.has(data.status)) return;
-  if (data.priority !== undefined && !PRIORITY_KEYS.has(data.priority)) return;
+  if (data.title !== undefined && !data.title.trim()) {
+    return { error: "Tiêu đề task không được để trống." };
+  }
+  if (data.status !== undefined && !STATUS_KEYS.has(data.status)) {
+    return { error: "Trạng thái không hợp lệ." };
+  }
+  if (data.priority !== undefined && !PRIORITY_KEYS.has(data.priority)) {
+    return { error: "Độ ưu tiên không hợp lệ." };
+  }
   if (
     data.assigneeId !== undefined &&
     data.assigneeId !== null &&
     !(await isProjectMember(task.projectId, data.assigneeId))
   ) {
-    return;
+    return { error: "Người được giao không thuộc project này." };
   }
   const startDate =
     data.startDate !== undefined ? parseDueDate(data.startDate) : undefined;
   const dueDate =
     data.dueDate !== undefined ? parseDueDate(data.dueDate) : undefined;
-  if (data.startDate !== undefined && startDate === undefined) return;
-  if (data.dueDate !== undefined && dueDate === undefined) return;
+  if (data.startDate !== undefined && startDate === undefined) {
+    return { error: "Thời gian bắt đầu không hợp lệ." };
+  }
+  if (data.dueDate !== undefined && dueDate === undefined) {
+    return { error: "Thời gian kết thúc không hợp lệ." };
+  }
   const nextStartDate =
     data.startDate !== undefined ? startDate ?? null : task.startDate;
   const nextDueDate = data.dueDate !== undefined ? dueDate ?? null : task.dueDate;
-  if (!validTaskTimeRange(nextStartDate, nextDueDate)) return;
+  if (!validTaskTimeRange(nextStartDate, nextDueDate)) {
+    return { error: "Giờ kết thúc phải sau giờ bắt đầu trong cùng ngày." };
+  }
 
   const updatedTask = await prisma.task.update({
     where: { id: taskId },
@@ -360,6 +373,7 @@ export async function updateTask(
   }
   revalidatePath(`/projects/${task.projectId}`);
   revalidatePath("/");
+  return {};
 }
 
 /** Di chuyển task sang cột khác / vị trí khác (kéo thả) */

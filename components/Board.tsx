@@ -20,7 +20,7 @@ import { STATUSES, PRIORITIES, type MemberDTO, type TaskDTO } from "@/lib/types"
 import { formatHour, hasTime, isOverdue } from "@/lib/dates";
 import Avatar from "@/components/Avatar";
 import NewTaskInline from "@/components/NewTaskInline";
-import TaskModal from "@/components/TaskModal";
+import TaskWorkspaceModal from "@/components/TaskWorkspaceModal";
 
 const COLUMN_ACCENT: Record<string, string> = {
   TODO: "bg-orange-500",
@@ -371,7 +371,7 @@ export default function Board({
       </div>
 
       {openTask && (
-        <TaskModal
+        <TaskWorkspaceModal
           task={openTask}
           members={members}
           currentUserId={currentUserId}

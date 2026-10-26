@@ -1,278 +1,173 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
-  CalendarDays,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  ChevronUp,
-} from "lucide-react";
+  type KeyboardEvent as ReactKeyboardEvent,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Minus, Plus, X } from "lucide-react";
 
-const HOURS = Array.from({ length: 24 }, (_, hour) =>
-  String(hour).padStart(2, "0")
-);
-const MINUTES = ["00", "30"] as const;
-const TIME_OPTIONS = HOURS.flatMap((hour) =>
-  MINUTES.map((minute) => `${hour}:${minute}`)
-);
+const HOURS = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, "0"));
+const TIMES = HOURS.flatMap((hour) => ["00", "30"].map((minute) => `${hour}:${minute}`));
 const WEEKDAYS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
 
-function pad(value: number): string {
+function pad(value: number) {
   return String(value).padStart(2, "0");
 }
 
-function normalizeHalfHour(date: Date): Date {
+function normalizeHalfHour(date: Date) {
   const normalized = new Date(date);
   const minutes = normalized.getMinutes();
   normalized.setSeconds(0, 0);
-
   if (minutes < 15) normalized.setMinutes(0);
   else if (minutes < 45) normalized.setMinutes(30);
   else {
     normalized.setHours(normalized.getHours() + 1);
     normalized.setMinutes(0);
   }
-
   return normalized;
 }
 
-export function toDeadlineLocalValue(iso: string): string {
+export function toDeadlineLocalValue(iso: string) {
   const date = normalizeHalfHour(new Date(iso));
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
-    date.getDate()
-  )}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function splitValue(value: string) {
   const [date = "", time = ""] = value.split("T");
   const [hour = "09", minute = "00"] = time.split(":");
-  return {
-    date,
-    hour: HOURS.includes(hour) ? hour : "09",
-    minute: minute === "30" ? "30" : "00",
-  };
+  return { date, time: `${HOURS.includes(hour) ? hour : "09"}:${minute === "30" ? "30" : "00"}` };
 }
 
-function composeValue(date: string, hour: string, minute: string): string {
-  return date ? `${date}T${hour}:${minute}` : "";
+function composeValue(date: string, time: string) {
+  return date && time ? `${date}T${time}` : "";
 }
 
-function parseDateInput(value: string): Date | null {
+function parseDateInput(value: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) return null;
   const parsed = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12);
-  if (
-    parsed.getFullYear() !== Number(match[1]) ||
-    parsed.getMonth() !== Number(match[2]) - 1 ||
-    parsed.getDate() !== Number(match[3])
-  ) {
-    return null;
-  }
-  return parsed;
+  return parsed.getFullYear() === Number(match[1]) &&
+    parsed.getMonth() === Number(match[2]) - 1 &&
+    parsed.getDate() === Number(match[3])
+    ? parsed
+    : null;
 }
 
-function toDateInput(date: Date): string {
+function toDateInput(date: Date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-function formatDate(value: string): string {
+function formatDate(value: string) {
   const parsed = parseDateInput(value);
   return parsed
-    ? new Intl.DateTimeFormat("vi-VN", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      }).format(parsed)
+    ? new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" }).format(parsed)
     : "Chọn ngày";
 }
 
-function startOfCalendarMonth(month: Date): Date {
+function formatMonth(value: Date) {
+  const formatted = new Intl.DateTimeFormat("vi-VN", { month: "long", year: "numeric" }).format(value);
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+}
+
+function startOfCalendarMonth(month: Date) {
   const firstDay = new Date(month.getFullYear(), month.getMonth(), 1, 12);
-  const mondayOffset = (firstDay.getDay() + 6) % 7;
-  firstDay.setDate(firstDay.getDate() - mondayOffset);
+  firstDay.setDate(firstDay.getDate() - ((firstDay.getDay() + 6) % 7));
   return firstDay;
 }
 
-function splitTwelveHourTime(value: string) {
-  const [hourText = "09", minute = "00"] = (value || "09:00").split(":");
-  const hour24 = Number(hourText);
-  return {
-    hour: hour24 % 12 || 12,
-    minute: minute === "30" ? "30" : "00",
-    period: hour24 >= 12 ? "CH" : "SA",
-  } as const;
-}
-
-function composeTwelveHourTime(hour: number, minute: string, period: string) {
-  const hour24 = (hour % 12) + (period === "CH" ? 12 : 0);
-  return `${pad(hour24)}:${minute}`;
-}
-
-function formatTwelveHourTime(value: string) {
+function formatTime(value: string) {
   if (!value) return "Chưa đặt";
-  const time = splitTwelveHourTime(value);
-  return `${pad(time.hour)}:${time.minute} ${time.period}`;
+  const [hourText = "09", minute = "00"] = value.split(":");
+  const hour = Number(hourText);
+  return `${pad(hour % 12 || 12)}:${minute} ${hour >= 12 ? "CH" : "SA"}`;
 }
 
-function TimeSpinner({
+function formatDuration(slots: number) {
+  const minutes = Math.max(1, slots) * 30;
+  if (minutes < 60) return `${minutes} phút`;
+  const hours = Math.floor(minutes / 60);
+  return minutes % 60 ? `${hours} giờ ${minutes % 60} phút` : `${hours} giờ`;
+}
+
+type FloatingPosition = {
+  top: number;
+  left: number;
+  width: number;
+  maxHeight: number;
+  ready: boolean;
+};
+
+function InlineTimeControl({
   label,
   value,
-  disabled,
-  compact,
-  align = "right",
-  optional = false,
-  onChange,
+  optional,
+  onStep,
+  onClear,
 }: {
   label: string;
   value: string;
-  disabled: boolean;
-  compact: boolean;
-  align?: "left" | "right";
   optional?: boolean;
-  onChange: (value: string) => void;
+  onStep: (amount: -1 | 1) => void;
+  onClear?: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const pickerRef = useRef<HTMLDivElement>(null);
-  const time = splitTwelveHourTime(value);
-
-  function change(partial: Partial<typeof time>) {
-    const next = { ...time, ...partial };
-    onChange(composeTwelveHourTime(next.hour, next.minute, next.period));
-  }
-
-  function stepHour(amount: number) {
-    change({ hour: ((time.hour - 1 + amount + 12) % 12) + 1 });
-  }
-
-  function stepMinute() {
-    change({ minute: time.minute === "00" ? "30" : "00" });
-  }
-
-  function togglePeriod() {
-    change({ period: time.period === "SA" ? "CH" : "SA" });
-  }
-
-  useEffect(() => {
-    if (!open) return;
-    function close(event: PointerEvent) {
-      if (!pickerRef.current?.contains(event.target as Node)) setOpen(false);
+  function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (["ArrowUp", "ArrowRight"].includes(event.key)) {
+      event.preventDefault();
+      onStep(1);
+    } else if (["ArrowDown", "ArrowLeft"].includes(event.key)) {
+      event.preventDefault();
+      onStep(-1);
     }
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("pointerdown", close, true);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", close, true);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [open]);
+  }
 
   return (
-    <div ref={pickerRef} className="relative min-w-0" data-floating-layer>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => setOpen((current) => !current)}
-        className={`tf-deadline-control flex w-full items-center text-left disabled:cursor-not-allowed disabled:bg-zinc-50/80 disabled:opacity-70 ${
-          compact ? "min-h-9" : "min-h-10"
-        }`}
-        aria-haspopup="dialog"
-        aria-expanded={open}
+    <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-2.5">
+      <div className="flex min-h-4 items-center gap-2">
+        <span className="text-[11px] font-semibold text-zinc-600">{label}</span>
+      </div>
+      <div
+        role="group"
+        aria-label={`Chọn ${label.toLowerCase()}`}
+        onKeyDown={handleKeyDown}
+        className="grid grid-cols-[2.25rem_1fr_2.25rem] items-center rounded-[7px] border border-zinc-200 bg-white"
       >
-        <span className="min-w-0 flex-1 py-1 pl-2.5 pr-1">
-          <span className="block text-[8px] font-semibold uppercase tracking-[0.05em] text-zinc-400">
-            {label}
-          </span>
-          <span className="block whitespace-nowrap text-xs font-semibold tabular-nums text-zinc-800">
-            {formatTwelveHourTime(value)}
-          </span>
-        </span>
-        <ChevronDown
-          size={12}
-          className={`mr-1.5 shrink-0 text-zinc-400 transition-transform duration-300 ${
-            open ? "rotate-180" : ""
-          }`}
-          aria-hidden="true"
-        />
-      </button>
-
-      {open && (
-        <div
-          role="dialog"
-          aria-label={`Chọn ${label.toLowerCase()}`}
-          className={`tf-time-spinner absolute top-full z-40 mt-1.5 w-[12.5rem] rounded-[10px] border border-white/80 bg-white/95 p-2.5 backdrop-blur-xl ${
-            align === "left" ? "left-0" : "right-0"
-          }`}
+        <button
+          type="button"
+          onClick={() => onStep(-1)}
+          className="inline-flex min-h-9 items-center justify-center rounded-l-[6px] text-zinc-400 transition-[background-color,color,transform] duration-150 hover:bg-zinc-100 hover:text-zinc-700 active:scale-[0.98] focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-brand-500"
+          aria-label={`Giảm ${label.toLowerCase()} 30 phút`}
         >
-          <div className="grid grid-cols-[1fr_auto_1fr_auto_1fr] items-center gap-1 text-center">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
-              Giờ
-            </span>
-            <span aria-hidden="true" />
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
-              Phút
-            </span>
-            <span aria-hidden="true" />
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
-              Buổi
-            </span>
-
-            <button type="button" onClick={() => stepHour(1)} className="tf-time-step" aria-label="Tăng giờ">
-              <ChevronUp size={17} aria-hidden="true" />
-            </button>
-            <span aria-hidden="true" />
-            <button type="button" onClick={stepMinute} className="tf-time-step" aria-label="Tăng phút">
-              <ChevronUp size={17} aria-hidden="true" />
-            </button>
-            <span aria-hidden="true" />
-            <button type="button" onClick={togglePeriod} className="tf-time-step" aria-label="Đổi buổi">
-              <ChevronUp size={17} aria-hidden="true" />
-            </button>
-
-            <span className="tf-time-value">{pad(time.hour)}</span>
-            <span className="font-semibold text-zinc-300" aria-hidden="true">:</span>
-            <span className="tf-time-value">{time.minute}</span>
-            <span className="font-semibold text-zinc-300" aria-hidden="true" />
-            <span className="tf-time-value">{time.period}</span>
-
-            <button type="button" onClick={() => stepHour(-1)} className="tf-time-step" aria-label="Giảm giờ">
-              <ChevronDown size={17} aria-hidden="true" />
-            </button>
-            <span aria-hidden="true" />
-            <button type="button" onClick={stepMinute} className="tf-time-step" aria-label="Giảm phút">
-              <ChevronDown size={17} aria-hidden="true" />
-            </button>
-            <span aria-hidden="true" />
-            <button type="button" onClick={togglePeriod} className="tf-time-step" aria-label="Đổi buổi">
-              <ChevronDown size={17} aria-hidden="true" />
-            </button>
-          </div>
-
-          <div className="mt-2.5 flex gap-2 border-t border-zinc-100 pt-2.5">
-            {optional && (
-              <button
-                type="button"
-                onClick={() => {
-                  onChange("");
-                  setOpen(false);
-                }}
-                className="min-h-8 flex-1 rounded-full bg-zinc-100 px-3 text-xs font-medium text-zinc-600 transition-colors duration-300 hover:bg-zinc-200"
-              >
-                Bỏ giờ
-              </button>
-            )}
+          <Minus size={14} aria-hidden="true" />
+        </button>
+        <span className="flex min-w-0 items-center justify-center gap-1 border-x border-zinc-100 px-1 text-center text-xs font-semibold tabular-nums text-zinc-800">
+          <span className="truncate">{formatTime(value)}</span>
+          {optional && value && (
             <button
               type="button"
-              onClick={() => setOpen(false)}
-              className="min-h-8 flex-1 rounded-full bg-brand-500 px-3 text-xs font-semibold text-zinc-950 transition-colors duration-300 hover:bg-brand-600"
+              onClick={onClear}
+              className="inline-flex size-5 shrink-0 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 focus-visible:outline-2 focus-visible:outline-brand-500"
+              aria-label="Bỏ giờ bắt đầu"
+              title="Bỏ giờ bắt đầu"
             >
-              Xong
+              <X size={11} aria-hidden="true" />
             </button>
-          </div>
-        </div>
-      )}
+          )}
+        </span>
+        <button
+          type="button"
+          onClick={() => onStep(1)}
+          className="inline-flex min-h-9 items-center justify-center rounded-r-[6px] text-zinc-400 transition-[background-color,color,transform] duration-150 hover:bg-zinc-100 hover:text-zinc-700 active:scale-[0.98] focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-brand-500"
+          aria-label={`Tăng ${label.toLowerCase()} 30 phút`}
+        >
+          <Plus size={14} aria-hidden="true" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -280,7 +175,7 @@ function TimeSpinner({
 export default function DeadlineField({
   name,
   startName,
-  label = "Thời gian thực hiện",
+  label = "Hạn chót",
   value,
   startValue,
   defaultValue = "",
@@ -307,59 +202,29 @@ export default function DeadlineField({
   const initialDateValue = initialEnd.date || initialStart.date;
   const initialDate = parseDateInput(initialDateValue) ?? new Date();
   const [date, setDate] = useState(initialDateValue);
-  const [startTime, setStartTime] = useState(
-    initialStart.date
-      ? `${initialStart.hour}:${initialStart.minute}`
-      : initialDateValue
-        ? ""
-        : "09:00"
-  );
-  const [endTime, setEndTime] = useState(
-    initialEnd.date ? `${initialEnd.hour}:${initialEnd.minute}` : "09:30"
-  );
-  const [calendarOpen, setCalendarOpen] = useState(false);
-  const [calendarMonth, setCalendarMonth] = useState(
-    new Date(initialDate.getFullYear(), initialDate.getMonth(), 1, 12)
-  );
+  const [startTime, setStartTime] = useState(initialStart.date ? initialStart.time : "");
+  const [endTime, setEndTime] = useState(initialEnd.date ? initialEnd.time : "17:00");
+  const [draftDate, setDraftDate] = useState(date);
+  const [draftStartTime, setDraftStartTime] = useState(startTime);
+  const [draftEndTime, setDraftEndTime] = useState(endTime);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(new Date(initialDate.getFullYear(), initialDate.getMonth(), 1, 12));
+  const [focusedDate, setFocusedDate] = useState(initialDateValue || toDateInput(new Date()));
+  const [feedback, setFeedback] = useState("");
   const labelId = useId();
-  const calendarRef = useRef<HTMLDivElement>(null);
+  const pickerId = useId();
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const calendarGridRef = useRef<HTMLDivElement>(null);
+  const [floatingPosition, setFloatingPosition] = useState<FloatingPosition>({
+    top: 16,
+    left: 16,
+    width: 336,
+    maxHeight: 0,
+    ready: false,
+  });
 
-  function update(nextDate: string, nextStartTime: string, nextEndTime: string) {
-    if (nextDate) {
-      const [endHour, endMinute] = nextEndTime.split(":");
-      onChange?.(composeValue(nextDate, endHour, endMinute));
-      if (nextStartTime) {
-        const [startHour, startMinute] = nextStartTime.split(":");
-        onStartChange?.(composeValue(nextDate, startHour, startMinute));
-      } else {
-        onStartChange?.("");
-      }
-    } else {
-      onChange?.("");
-      onStartChange?.("");
-    }
-  }
-
-  function chooseDate(nextDate: Date) {
-    const nextValue = toDateInput(nextDate);
-    const nextStartTime = startTime || "09:00";
-    const nextEndTime = endTime > nextStartTime ? endTime : "09:30";
-    setDate(nextValue);
-    setStartTime(nextStartTime);
-    setEndTime(nextEndTime);
-    setCalendarMonth(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1, 12));
-    update(nextValue, nextStartTime, nextEndTime);
-  }
-
-  const [endHour, endMinute] = endTime.split(":");
-  const [startHour, startMinute] = startTime.split(":");
-  const composedValue = composeValue(date, endHour, endMinute);
-  const composedStartValue = startTime
-    ? composeValue(date, startHour, startMinute)
-    : "";
-  const selectedDate = parseDateInput(date);
-  const todayValue = toDateInput(new Date());
-  const controlHeight = compact ? "min-h-10" : "min-h-11";
   const calendarDays = useMemo(() => {
     const start = startOfCalendarMonth(calendarMonth);
     return Array.from({ length: 42 }, (_, index) => {
@@ -369,233 +234,406 @@ export default function DeadlineField({
     });
   }, [calendarMonth]);
 
-  useEffect(() => {
-    if (!calendarOpen) return;
+  function openPicker() {
+    const activeDate = parseDateInput(date) ?? new Date();
+    setDraftDate(date);
+    setDraftStartTime(startTime);
+    setDraftEndTime(endTime || "17:00");
+    setCalendarMonth(new Date(activeDate.getFullYear(), activeDate.getMonth(), 1, 12));
+    setFocusedDate(date || toDateInput(activeDate));
+    setFeedback("");
+    setPickerOpen(true);
+  }
 
-    function closeCalendar(event: PointerEvent) {
-      if (!calendarRef.current?.contains(event.target as Node)) {
-        setCalendarOpen(false);
+  function closePicker(restoreFocus = false) {
+    setPickerOpen(false);
+    setFeedback("");
+    if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus());
+  }
+
+  function applyDraft() {
+    setDate(draftDate);
+    if (draftDate) {
+      setStartTime(draftStartTime);
+      setEndTime(draftEndTime);
+      onChange?.(composeValue(draftDate, draftEndTime));
+      onStartChange?.(composeValue(draftDate, draftStartTime));
+    } else {
+      onChange?.("");
+      onStartChange?.("");
+    }
+    closePicker(true);
+  }
+
+  function chooseDate(nextDate: Date) {
+    const nextValue = toDateInput(nextDate);
+    setDraftDate(nextValue);
+    setFocusedDate(nextValue);
+    setCalendarMonth(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1, 12));
+    setFeedback("");
+  }
+
+  function focusCalendarDate(nextDate: Date) {
+    const nextValue = toDateInput(nextDate);
+    setFocusedDate(nextValue);
+    setCalendarMonth(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1, 12));
+    requestAnimationFrame(() => {
+      calendarGridRef.current?.querySelector<HTMLButtonElement>(`[data-date="${nextValue}"]`)?.focus();
+    });
+  }
+
+  function handleCalendarKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>, day: Date) {
+    let amount = 0;
+    if (event.key === "ArrowLeft") amount = -1;
+    if (event.key === "ArrowRight") amount = 1;
+    if (event.key === "ArrowUp") amount = -7;
+    if (event.key === "ArrowDown") amount = 7;
+    if (event.key === "Home") amount = -((day.getDay() + 6) % 7);
+    if (event.key === "End") amount = 6 - ((day.getDay() + 6) % 7);
+    if (amount) {
+      event.preventDefault();
+      const next = new Date(day);
+      next.setDate(day.getDate() + amount);
+      focusCalendarDate(next);
+    } else if (["PageUp", "PageDown"].includes(event.key)) {
+      event.preventDefault();
+      const next = new Date(day);
+      next.setMonth(day.getMonth() + (event.key === "PageUp" ? -1 : 1));
+      focusCalendarDate(next);
+    }
+  }
+
+  function trapPopoverFocus(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(
+      popoverRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      ) ?? []
+    );
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  function stepStart(amount: -1 | 1) {
+    const currentStart = Math.max(0, TIMES.indexOf(draftStartTime || "09:00"));
+    const currentEnd = Math.max(currentStart + 1, TIMES.indexOf(draftEndTime));
+    const duration = Math.max(1, currentEnd - currentStart);
+    const nextStart = Math.min(TIMES.length - 2, Math.max(0, currentStart + amount));
+    const desiredEnd = nextStart + duration;
+    const nextEnd = Math.min(TIMES.length - 1, desiredEnd);
+    setDraftStartTime(TIMES[nextStart]);
+    setDraftEndTime(TIMES[nextEnd]);
+    setFeedback(
+      desiredEnd === nextEnd
+        ? `Giờ kết thúc tự đổi để giữ thời lượng ${formatDuration(duration)}.`
+        : "Giờ kết thúc đã đặt thành 11:30 CH; thời lượng được rút ngắn."
+    );
+  }
+
+  function stepEnd(amount: -1 | 1) {
+    const startIndex = draftStartTime ? TIMES.indexOf(draftStartTime) : -1;
+    const currentEnd = Math.max(0, TIMES.indexOf(draftEndTime));
+    const nextEnd = Math.min(TIMES.length - 1, Math.max(startIndex + 1, currentEnd + amount));
+    if (nextEnd === currentEnd && amount < 0 && startIndex >= 0) {
+      setFeedback("Giờ kết thúc phải sau giờ bắt đầu.");
+      return;
+    }
+    setDraftEndTime(TIMES[nextEnd]);
+    setFeedback("");
+  }
+
+  function enableStartTime() {
+    const endIndex = TIMES.indexOf(draftEndTime);
+    const startIndex = endIndex > 0 ? endIndex - 1 : TIMES.indexOf("09:00");
+    setDraftStartTime(TIMES[Math.max(0, startIndex)] ?? "09:00");
+    setFeedback("");
+  }
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+    function closeOnOutsidePress(event: PointerEvent) {
+      const target = event.target as Node;
+      if (
+        !pickerRef.current?.contains(target) &&
+        !popoverRef.current?.contains(target)
+      ) {
+        setPickerOpen(false);
+        setFeedback("");
       }
     }
-
     function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setCalendarOpen(false);
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setPickerOpen(false);
+        setFeedback("");
+        requestAnimationFrame(() => triggerRef.current?.focus());
+      }
     }
-
-    document.addEventListener("pointerdown", closeCalendar, true);
+    document.addEventListener("pointerdown", closeOnOutsidePress, true);
     document.addEventListener("keydown", closeOnEscape);
     return () => {
-      document.removeEventListener("pointerdown", closeCalendar, true);
+      document.removeEventListener("pointerdown", closeOnOutsidePress, true);
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, [calendarOpen]);
+  }, [pickerOpen]);
+
+  useLayoutEffect(() => {
+    if (!pickerOpen) return;
+
+    function positionPopover() {
+      const trigger = triggerRef.current;
+      const popover = popoverRef.current;
+      if (!trigger || !popover) return;
+
+      const viewportPadding = 16;
+      const gap = 8;
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const width = Math.min(336, viewportWidth - viewportPadding * 2);
+      const naturalHeight = popover.scrollHeight;
+      const triggerRect = trigger.getBoundingClientRect();
+
+      if (viewportWidth < 640) {
+        const maxHeight = viewportHeight - viewportPadding * 2;
+        const height = Math.min(naturalHeight, maxHeight);
+        setFloatingPosition({
+          top: viewportHeight - viewportPadding - height,
+          left: viewportPadding,
+          width,
+          maxHeight,
+          ready: true,
+        });
+        return;
+      }
+
+      const availableBelow = viewportHeight - triggerRect.bottom - gap - viewportPadding;
+      const availableAbove = triggerRect.top - gap - viewportPadding;
+      const fitsBelow = naturalHeight <= availableBelow;
+      const fitsAbove = naturalHeight <= availableAbove;
+      const openAbove = !fitsBelow && (fitsAbove || availableAbove > availableBelow);
+      const maxHeight = Math.max(0, openAbove ? availableAbove : availableBelow);
+      const height = Math.min(naturalHeight, maxHeight);
+      const top = openAbove
+        ? Math.max(viewportPadding, triggerRect.top - gap - height)
+        : triggerRect.bottom + gap;
+      const preferredLeft = triggerRect.right - width;
+      const left = Math.min(
+        viewportWidth - viewportPadding - width,
+        Math.max(viewportPadding, preferredLeft)
+      );
+
+      setFloatingPosition({ top, left, width, maxHeight, ready: true });
+    }
+
+    positionPopover();
+    const resizeObserver = new ResizeObserver(positionPopover);
+    if (popoverRef.current) resizeObserver.observe(popoverRef.current);
+    window.addEventListener("resize", positionPopover);
+    window.addEventListener("scroll", positionPopover, true);
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", positionPopover);
+      window.removeEventListener("scroll", positionPopover, true);
+    };
+  }, [pickerOpen, calendarMonth, feedback]);
+
+  useEffect(() => {
+    if (!pickerOpen || !floatingPosition.ready) return;
+    requestAnimationFrame(() => {
+      calendarGridRef.current
+        ?.querySelector<HTMLButtonElement>(`[data-date="${focusedDate}"]`)
+        ?.focus();
+    });
+  }, [pickerOpen, floatingPosition.ready, focusedDate]);
+
+  const selectedDraftDate = parseDateInput(draftDate);
+  const todayValue = toDateInput(new Date());
+  const timeSummary = date
+    ? startTime
+      ? `${formatTime(startTime)} – ${formatTime(endTime)}`
+      : `Hạn chót ${formatTime(endTime)}`
+    : "Chọn ngày và giờ phải hoàn thành";
 
   return (
     <div className={className}>
-      {name && <input type="hidden" name={name} value={composedValue} />}
-      {startName && (
-        <input type="hidden" name={startName} value={composedStartValue} />
-      )}
+      {name && <input type="hidden" name={name} value={composeValue(date, endTime)} />}
+      {startName && <input type="hidden" name={startName} value={composeValue(date, startTime)} />}
       <div className="flex items-center justify-between gap-3">
-        <span id={labelId} className="text-xs font-medium text-zinc-500">
-          {label}
-        </span>
+        <span id={labelId} className="text-xs font-medium text-zinc-500">{label}</span>
         <span className="text-[11px] text-zinc-400">Không bắt buộc</span>
       </div>
 
-      <div className="mt-1.5 space-y-2" role="group" aria-labelledby={labelId}>
-        <div ref={calendarRef} className="relative" data-floating-layer>
-          <button
-            type="button"
-            onClick={() => {
-              const activeDate = selectedDate ?? new Date();
-              setCalendarMonth(
-                new Date(activeDate.getFullYear(), activeDate.getMonth(), 1, 12)
-              );
-              setCalendarOpen((open) => !open);
-            }}
-            className={`tf-deadline-control flex w-full items-center text-left ${controlHeight}`}
-            aria-haspopup="dialog"
-            aria-expanded={calendarOpen}
-          >
-            <CalendarDays
-              size={17}
-              className={`ml-3 shrink-0 ${date ? "text-brand-700" : "text-zinc-400"}`}
-              aria-hidden="true"
-            />
-            <span className="min-w-0 flex-1 px-3 py-1">
-              <span className="block text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-400">
-                Ngày
-              </span>
-              <span
-                className={`block truncate text-sm font-medium tabular-nums ${
-                  date ? "text-zinc-800" : "text-zinc-400"
-                }`}
-              >
-                {formatDate(date)}
-              </span>
+      <div
+        ref={pickerRef}
+        className="relative mt-1.5"
+        data-floating-layer
+        data-open={pickerOpen ? "true" : undefined}
+      >
+        <button
+          ref={triggerRef}
+          type="button"
+          onClick={() => (pickerOpen ? closePicker() : openPicker())}
+          className={`tf-deadline-control flex w-full items-center text-left active:scale-[0.99] ${compact ? "min-h-10" : "min-h-11"}`}
+          aria-labelledby={labelId}
+          aria-controls={pickerOpen ? pickerId : undefined}
+          aria-haspopup="dialog"
+          aria-expanded={pickerOpen}
+        >
+          <CalendarDays size={17} className={`ml-3 shrink-0 ${date ? "text-brand-700" : "text-zinc-400"}`} aria-hidden="true" />
+          <span className="min-w-0 flex-1 px-3 py-1">
+            <span className={`block truncate text-sm font-medium tabular-nums ${date ? "text-zinc-800" : "text-zinc-500"}`}>
+              {formatDate(date)}
             </span>
-            <ChevronDown
-              size={15}
-              className={`mr-3 shrink-0 text-zinc-400 transition-transform ${
-                calendarOpen ? "rotate-180" : ""
-              }`}
-              aria-hidden="true"
-            />
-          </button>
+            <span className="block truncate text-[11px] tabular-nums text-zinc-400">{timeSummary}</span>
+          </span>
+          <ChevronDown size={15} className={`mr-3 shrink-0 text-zinc-400 transition-transform duration-150 ${pickerOpen ? "rotate-180" : ""}`} aria-hidden="true" />
+        </button>
+      </div>
 
-          {calendarOpen && (
-            <div
-              role="dialog"
-              aria-label="Chọn ngày hạn chót"
-              className="tf-deadline-calendar absolute left-0 top-full z-30 mt-2 w-full min-w-[15rem] rounded-xl border border-zinc-200 bg-white p-3"
-            >
-              <div className="flex items-center justify-between gap-2 px-1">
-                <p className="text-sm font-semibold capitalize text-zinc-800">
-                  {new Intl.DateTimeFormat("vi-VN", {
-                    month: "long",
-                    year: "numeric",
-                  }).format(calendarMonth)}
-                </p>
+      {pickerOpen && typeof document !== "undefined" && createPortal(
+          <div
+            ref={popoverRef}
+            id={pickerId}
+            role="dialog"
+            aria-label="Chọn hạn chót"
+            data-floating-layer
+            onKeyDown={trapPopoverFocus}
+            style={{
+              top: floatingPosition.top,
+              left: floatingPosition.left,
+              width: floatingPosition.width,
+              maxHeight: floatingPosition.maxHeight || undefined,
+              visibility: floatingPosition.ready ? "visible" : "hidden",
+            }}
+            className="tf-scheduling-popover fixed z-[60] overflow-y-auto overscroll-contain rounded-[10px] border border-zinc-200 bg-white"
+          >
+            <div className="p-3.5">
+              <div className="flex items-center justify-between gap-2 px-0.5">
+                <p className="text-sm font-semibold text-zinc-800">{formatMonth(calendarMonth)}</p>
                 <div className="flex gap-1">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setCalendarMonth(
-                        new Date(
-                          calendarMonth.getFullYear(),
-                          calendarMonth.getMonth() - 1,
-                          1,
-                          12
-                        )
-                      )
-                    }
-                    className="inline-flex size-7 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 focus-visible:outline-2 focus-visible:outline-brand-500"
-                    aria-label="Tháng trước"
-                  >
-                    <ChevronLeft size={15} aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setCalendarMonth(
-                        new Date(
-                          calendarMonth.getFullYear(),
-                          calendarMonth.getMonth() + 1,
-                          1,
-                          12
-                        )
-                      )
-                    }
-                    className="inline-flex size-7 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 focus-visible:outline-2 focus-visible:outline-brand-500"
-                    aria-label="Tháng sau"
-                  >
-                    <ChevronRight size={15} aria-hidden="true" />
-                  </button>
+                  {[-1, 1].map((direction) => (
+                    <button
+                      key={direction}
+                      type="button"
+                      onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + direction, 1, 12))}
+                      className="inline-flex size-8 items-center justify-center rounded-[7px] text-zinc-600 transition-[background-color,color,transform] duration-150 hover:bg-zinc-100 hover:text-zinc-900 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-brand-500"
+                      aria-label={direction < 0 ? "Tháng trước" : "Tháng sau"}
+                    >
+                      {direction < 0 ? <ChevronLeft size={16} aria-hidden="true" /> : <ChevronRight size={16} aria-hidden="true" />}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              <div className="mt-3 grid grid-cols-7 gap-y-1 text-center">
+              <div ref={calendarGridRef} className="mt-3 grid grid-cols-7 gap-1 text-center" role="grid" aria-label={formatMonth(calendarMonth)}>
                 {WEEKDAYS.map((weekday) => (
-                  <span
-                    key={weekday}
-                    className="pb-1 text-[10px] font-semibold text-zinc-400"
-                  >
-                    {weekday}
-                  </span>
+                  <span key={weekday} role="columnheader" className="flex h-6 items-center justify-center text-[10px] font-semibold text-zinc-500">{weekday}</span>
                 ))}
                 {calendarDays.map((day) => {
                   const dayValue = toDateInput(day);
-                  const isSelected = Boolean(selectedDate && dayValue === date);
-                  const isToday = dayValue === todayValue;
-                  const isOutsideMonth = day.getMonth() !== calendarMonth.getMonth();
-
+                  const selected = Boolean(selectedDraftDate && dayValue === draftDate);
+                  const today = dayValue === todayValue;
+                  const outside = day.getMonth() !== calendarMonth.getMonth();
                   return (
                     <button
                       key={dayValue}
                       type="button"
+                      data-date={dayValue}
+                      role="gridcell"
+                      tabIndex={dayValue === focusedDate ? 0 : -1}
+                      onFocus={() => setFocusedDate(dayValue)}
+                      onKeyDown={(event) => handleCalendarKeyDown(event, day)}
                       onClick={() => chooseDate(day)}
-                      className={`mx-auto inline-flex size-7 items-center justify-center rounded-full text-[11px] font-medium tabular-nums transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500 ${
-                        isSelected
-                          ? "bg-brand-500 text-zinc-950 shadow-sm"
-                          : isToday
-                            ? "ring-1 ring-inset ring-brand-500 text-brand-800"
-                            : isOutsideMonth
-                              ? "text-zinc-300 hover:bg-zinc-50 hover:text-zinc-500"
-                              : "text-zinc-700 hover:bg-brand-50 hover:text-brand-800"
+                      className={`relative mx-auto inline-flex size-8 items-center justify-center rounded-[7px] text-xs font-medium tabular-nums transition-[background-color,color,transform] duration-150 active:scale-[0.98] focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500 ${
+                        selected ? "bg-brand-500 text-zinc-950" : outside ? "text-zinc-300 hover:bg-zinc-100 hover:text-zinc-500" : "text-zinc-700 hover:bg-zinc-100"
                       }`}
-                      aria-label={new Intl.DateTimeFormat("vi-VN", {
-                        weekday: "long",
-                        day: "numeric",
-                        month: "long",
-                        year: "numeric",
-                      }).format(day)}
-                      aria-pressed={isSelected}
+                      aria-label={new Intl.DateTimeFormat("vi-VN", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(day)}
+                      aria-selected={selected}
                     >
                       {day.getDate()}
+                      {today && !selected && <span className="absolute bottom-0.5 size-1 rounded-full bg-brand-600" aria-hidden="true" />}
                     </button>
                   );
                 })}
               </div>
+            </div>
 
-              <div className="mt-3 flex gap-2 border-t border-zinc-100 pt-3">
+            <div className="border-t border-zinc-100 px-3.5 py-2.5">
+              {draftStartTime ? (
+                <div className="space-y-2">
+                  <InlineTimeControl
+                    label="Bắt đầu"
+                    value={draftStartTime}
+                    optional
+                    onClear={() => {
+                      setDraftStartTime("");
+                      setFeedback("");
+                    }}
+                    onStep={stepStart}
+                  />
+                  <InlineTimeControl label="Kết thúc" value={draftEndTime} onStep={stepEnd} />
+                </div>
+              ) : (
+                <div>
+                  <InlineTimeControl label="Hạn chót" value={draftEndTime} onStep={stepEnd} />
+                  <button
+                    type="button"
+                    onClick={enableStartTime}
+                    className="ml-[4.875rem] mt-2 inline-flex min-h-8 w-[calc(100%_-_4.875rem)] items-center justify-center gap-1.5 rounded-[7px] border border-dashed border-zinc-200 bg-zinc-50 px-2 text-[11px] font-semibold text-zinc-600 transition-[background-color,border-color,color,transform] duration-150 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-800 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-brand-500"
+                  >
+                    <Plus size={13} aria-hidden="true" />
+                    Thêm giờ bắt đầu
+                  </button>
+                </div>
+              )}
+              <div aria-live="polite">
+                {feedback && (
+                  <p className="mt-2 text-[10px] leading-4 text-zinc-500">{feedback}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="sticky bottom-0 z-10 flex min-h-14 items-center gap-2 border-t border-zinc-100 bg-white px-3.5 py-2.5">
+              {draftDate || date ? (
                 <button
                   type="button"
                   onClick={() => {
-                    setDate("");
-                    update("", startTime, endTime);
-                    setCalendarOpen(false);
+                    setDraftDate("");
+                    setFeedback("");
                   }}
-                  disabled={!date}
-                  className="min-h-8 flex-1 rounded-full bg-zinc-100 px-3 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="mr-auto rounded-[7px] px-2 py-2 text-xs font-medium text-zinc-500 transition-[background-color,color,transform] duration-150 hover:bg-zinc-100 hover:text-zinc-800 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-brand-500"
                 >
-                  Xoá hạn
+                  Xóa hạn
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setCalendarOpen(false)}
-                  className="min-h-8 flex-1 rounded-full bg-brand-500 px-3 text-xs font-semibold text-zinc-950 transition-colors hover:bg-brand-600"
-                >
-                  Xong
-                </button>
-              </div>
+              ) : (
+                <span className="mr-auto" />
+              )}
+              <button
+                type="button"
+                onClick={() => closePicker(true)}
+                className="min-h-9 rounded-[7px] px-3 text-xs font-semibold text-zinc-600 transition-[background-color,transform] duration-150 hover:bg-zinc-100 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-brand-500"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={applyDraft}
+                className="min-h-9 rounded-[7px] bg-brand-500 px-4 text-xs font-semibold text-zinc-950 transition-[background-color,transform] duration-150 hover:bg-brand-600 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+              >
+                Áp dụng
+              </button>
             </div>
-          )}
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <TimeSpinner
-            label="Bắt đầu"
-            value={startTime}
-            disabled={!date}
-            compact={compact}
-            align="left"
-            optional
-            onChange={(nextStartTime) => {
-              if (nextStartTime === "23:30") return;
-              let nextEndTime = endTime;
-              if (nextStartTime && nextEndTime <= nextStartTime) {
-                const nextIndex = TIME_OPTIONS.indexOf(nextStartTime) + 1;
-                nextEndTime = TIME_OPTIONS[nextIndex] ?? "23:30";
-                setEndTime(nextEndTime);
-              }
-              setStartTime(nextStartTime);
-              update(date, nextStartTime, nextEndTime);
-            }}
-          />
-          <TimeSpinner
-            label="Kết thúc"
-            value={endTime}
-            disabled={!date}
-            compact={compact}
-            onChange={(nextEndTime) => {
-              if (startTime && nextEndTime <= startTime) return;
-              setEndTime(nextEndTime);
-              update(date, startTime, nextEndTime);
-            }}
-          />
-        </div>
-      </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

@@ -19,6 +19,7 @@ import {
 import ClientSelect, { type ClientOption } from "@/components/ClientSelect";
 import QuickClientCreator from "@/components/QuickClientCreator";
 import ProjectAccountSelect, { preventMissingProjectAccount, type ProjectAccountOption } from "@/components/ProjectAccountSelect";
+import { DateRangeField } from "@/components/TemporalFields";
 import { useActionFeedback, useInteraction } from "@/components/InteractionProvider";
 import { PROJECT_TYPES, type ProjectCategory } from "@/lib/types";
 import type { PurchaseOrderDraft } from "@/lib/purchaseOrder";
@@ -408,32 +409,12 @@ function ProjectDetailsForm({
         )}
       </div>
 
-      <fieldset>
-        <legend className="tf-label mb-2">Thời gian thực hiện</legend>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="block">
-            <span className="text-xs font-medium text-zinc-500">Bắt đầu</span>
-            <input
-              name="executionStartAt"
-              type="date"
-              className="tf-field mt-1"
-            />
-          </label>
-          <label className="block">
-            <span className="text-xs font-medium text-zinc-500">
-              Kết thúc{" "}
-              <span className="font-normal text-zinc-400">
-                (nếu nhiều ngày)
-              </span>
-            </span>
-            <input
-              name="executionEndAt"
-              type="date"
-              className="tf-field mt-1"
-            />
-          </label>
-        </div>
-      </fieldset>
+      <DateRangeField
+        label="Thời gian thực hiện"
+        startName="executionStartAt"
+        endName="executionEndAt"
+        helperText="Chọn một ngày, hoặc thêm ngày kết thúc nếu dự án chạy nhiều ngày."
+      />
 
       {category === "CLIENT" && canEditRevenue && (
         <label className="block max-w-full sm:max-w-[calc(50%_-_0.375rem)]">

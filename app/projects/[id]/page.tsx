@@ -15,7 +15,7 @@ import { prisma } from "@/lib/prisma";
 import { canViewRevenue as hasRevenueAccess, requireUser } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
 import Board from "@/components/Board";
-import MembersBar from "@/components/MembersBar";
+import ProjectMembersPanel from "@/components/ProjectMembersPanel";
 import ProjectEditButton from "@/components/ProjectEditButton";
 import ProjectActionsMenu from "@/components/ProjectActionsMenu";
 import ProjectDescriptionDisclosure from "@/components/ProjectDescriptionDisclosure";
@@ -91,6 +91,7 @@ export default async function ProjectPage({
       },
       tasks: {
         include: {
+          creator: { select: { id: true, name: true, avatarUrl: true } },
           comments: {
             include: {
               author: { select: { id: true, name: true, avatarUrl: true } },
@@ -240,6 +241,10 @@ export default async function ProjectPage({
     dueDate: t.dueDate?.toISOString() ?? null,
     order: t.order,
     assigneeId: t.assigneeId,
+    creator: t.creator,
+    completedAt: t.completedAt?.toISOString() ?? null,
+    createdAt: t.createdAt.toISOString(),
+    updatedAt: t.updatedAt.toISOString(),
     comments: t.comments.map((c) => ({
       id: c.id,
       body: c.body,
@@ -513,7 +518,7 @@ export default async function ProjectPage({
                   <UsersRound size={14} aria-hidden="true" />
                   {members.length} thành viên
                 </span>
-                <MembersBar
+                <ProjectMembersPanel
                   projectId={project.id}
                   members={members}
                   availableUsers={availableUsers}
