@@ -4,7 +4,10 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import ExcelJS from "exceljs";
 import JSZip from "jszip";
-import { createExcelIntakeTemplate } from "../lib/costflow/quotationExcel";
+import { createExcelIntakeTemplate, createExcelRoundTripWorkbook } from "../lib/costflow/quotationExcel";
+import { createRoundTripProjection } from "../lib/costflow/excelRoundTrip";
+import { blankPairedRow } from "../lib/costflow/pairedDraft";
+import type { PairedDraft } from "../lib/costflow/types";
 
 test("v4 workbook reopens with paired layout, three levels and preview-only formulas", async () => {
   const bytes = await createExcelIntakeTemplate({ projectName: "Project mẫu", customer: "Khách hàng mẫu", generatedAt: "2026-10-10T00:00:00.000Z" });
@@ -78,4 +81,30 @@ test("derived v4 artifact reopens without formula errors, active content or exte
   assert.ok(!entryNames.some(name => /vbaProject\.bin|externalLinks|connections\.xml|embeddings\//i.test(name)));
   const xmlText = (await Promise.all(entryNames.filter(name => name.endsWith(".xml") || name.endsWith(".rels")).map(name => zip.file(name)!.async("string")))).join("\n");
   for (const privateToken of ["EVIDENCE_PRIVATE", "PASSWORD_PRIVATE", "SECRET_PRIVATE", "APPROVAL_PRIVATE", "CASH_PRIVATE"]) assert.ok(!xmlText.includes(privateToken));
+});
+
+test("hybrid workbook keeps visible numerics and hidden exact canonical text for all eight primitives", async () => {
+  const draft: PairedDraft = {
+    linePricingSchemaVersion: 2, id: "draft-exact", version: 1, createdBy: "actor-1", workspaceMode: "paired",
+    title: "Exact", clientId: "", customer: "", notes: "", globalEvidenceIds: [], rows: [],
+  };
+  const row = blankPairedRow("row-exact", null, "ITEM");
+  row.name = "Exact";
+  row.sell = { ...row.sell, quantity: "9007199254740993", days: "0.333333333333333333333333", unitPrice: "0", vatPercent: "0" };
+  row.buy = { ...row.buy, quantity: "1.2345", days: "2.5", unitPrice: "9999999999999999.99", vatPercent: "100" };
+  draft.rows = [row];
+  const bytes = await createExcelRoundTripWorkbook(createRoundTripProjection("project-exact", draft));
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(bytes);
+  const visible = workbook.getWorksheet("BAO_GIA_IC")!;
+  const canonical = workbook.getWorksheet("_IMPORT")!;
+  for (const address of ["F7", "G7", "H7", "J7", "P7", "Q7", "R7", "T7"]) {
+    assert.equal(typeof visible.getCell(address).value, "number", `${address} must remain a familiar Excel number`);
+  }
+  assert.deepEqual(canonical.getRow(2).values?.slice(7, 15), [
+    "9007199254740993", "0.333333333333333333333333", "0", "0",
+    "1.2345", "2.5", "9999999999999999.99", "100",
+  ]);
+  for (let column = 7; column <= 14; column++) assert.equal(canonical.getRow(2).getCell(column).numFmt, "@");
+  assert.match((visible.getCell("K7").value as ExcelJS.CellFormulaValue).formula, /F7\*G7\*H7/);
 });

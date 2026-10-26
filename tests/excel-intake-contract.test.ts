@@ -14,6 +14,14 @@ const cell = (value: unknown, row: number, column: number, formula?: string) => 
   ...(formula ? { observation: { formula, cachedValue: "999999" } } : {}),
 });
 
+const pairedCell = (visible: unknown, canonical: string, row: number, column: number) => ({
+  ...cell(visible, row, column),
+  canonical: {
+    value: canonical,
+    source: { sheet: "_IMPORT", row: row - 5, column, cell: `${String.fromCharCode(64 + column)}${row - 5}` },
+  },
+});
+
 function item(overrides: Partial<ExcelIntakeRowInput> = {}): ExcelIntakeRowInput {
   return {
     level: cell(2, 8, 1),
@@ -92,4 +100,34 @@ test("customer projection is allowlisted and rejects every private sentinel", ()
   for (const token of ["NCC nội bộ", "Ghi chú IC", "candidate-2", "_IMPORT", "999999", "evidence"]) {
     assert.ok(!JSON.stringify(customer).includes(token), `customer projection leaked ${token}`);
   }
+});
+
+test("hybrid decimals keep canonical exact values and emit stable per-cell conflicts", () => {
+  const exact = item({
+    sell: {
+      ...item().sell,
+      quantity: pairedCell(9007199254740992, "9007199254740993", 8, 7),
+      days: pairedCell(0.3333333333333333, "0.333333333333333333333333", 8, 8),
+      unitPrice: pairedCell(0, "0", 8, 9),
+      vatPercent: pairedCell(0, "0", 8, 10),
+    },
+  });
+  const normalized = normalizeExcelIntake(document([group, exact]));
+  assert.equal(normalized.rows[1].sell.quantity, "9007199254740993");
+  assert.equal(normalized.rows[1].sell.days, "0.333333333333333333333333");
+  assert.equal(normalized.rows[1].sell.unitPrice, "0");
+  assert.equal(normalized.rows[1].sell.vatPercent, "0");
+  assert.deepEqual(normalized.decimalConflicts.map(conflict => [conflict.field, conflict.visible, conflict.canonical, conflict.source.cell]), [
+    ["sell.quantity", "9007199254740992", "9007199254740993", "G8"],
+    ["sell.days", "0.3333333333333333", "0.333333333333333333333333", "H8"],
+  ]);
+  assert.equal(new Set(normalized.decimalConflicts.map(conflict => conflict.conflictId)).size, 2);
+});
+
+test("Excel decimal parser accepts unambiguous Vietnamese/canonical notation and blocks ambiguous separators", () => {
+  const localized = item({ sell: { ...item().sell, quantity: cell("1.234,56", 8, 7), days: cell("1234.56", 8, 8), unitPrice: cell("1,234", 8, 9) } });
+  const normalized = normalizeExcelIntake(document([group, localized]));
+  assert.equal(normalized.rows[1].sell.quantity, "1234.56");
+  assert.equal(normalized.rows[1].sell.days, "1234.56");
+  assert.ok(normalized.errors.some(error => error.code === "AMBIGUOUS_DECIMAL" && error.field === "sell.unitPrice"));
 });
