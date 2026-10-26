@@ -153,12 +153,29 @@ async function requireExcelIntakeActor(tx: AuthorityTx, actorId: string, project
 
 export async function createExcelIntakePreviewSession(tx: AuthorityTx, input: CreateExcelIntakePreviewSessionInput) {
   const now = input.now ?? new Date();
+  const scopeKey = authorityScopeKey(input.operationKind, input.draftId);
+  await tx.excelIntakePreviewSession.updateMany({
+    where: {
+      projectId: input.projectId,
+      actorId: input.actorId,
+      operationKind: input.operationKind,
+      scopeKey,
+      status: "ACTIVE",
+    },
+    data: {
+      status: "SUPERSEDED",
+      supersededAt: now,
+      sourceBytes: null,
+      canonicalPayload: Prisma.DbNull,
+      displayPayload: Prisma.DbNull,
+    },
+  });
   return tx.excelIntakePreviewSession.create({
     data: {
       projectId: input.projectId,
       actorId: input.actorId,
       operationKind: input.operationKind,
-      scopeKey: authorityScopeKey(input.operationKind, input.draftId),
+      scopeKey,
       draftId: input.draftId ?? null,
       sourceKind: input.sourceKind,
       sourceRevision: input.sourceRevision,
@@ -263,6 +280,42 @@ export async function redactExcelIntakePreviewSession(tx: AuthorityTx, sessionId
     where: { id: sessionId, status: "ACTIVE" },
     data: { status, sourceBytes: null, canonicalPayload: Prisma.DbNull, displayPayload: Prisma.DbNull, ...lifecycle },
   });
+}
+
+export async function cancelExcelIntakePreviewSession(actor: Actor, projectId: string, sessionId: string): Promise<PreviewSessionView> {
+  return prisma.$transaction(async tx => {
+    await requireExcelIntakeActor(tx, actor.id, projectId);
+    let session = await tx.excelIntakePreviewSession.findFirst({
+      where: { id: sessionId, projectId, actorId: actor.id },
+      include: { operationReceipt: true, sourceEvidence: true },
+    });
+    if (!session) throw new Error("Không tìm thấy phiên xem trước hoặc bạn không có quyền.");
+    const now = new Date();
+    if (session.status === "ACTIVE") {
+      await redactExcelIntakePreviewSession(tx, session.id, session.expiresAt.getTime() <= now.getTime() ? "EXPIRED" : "CANCELLED", now);
+      session = await tx.excelIntakePreviewSession.findFirstOrThrow({
+        where: { id: session.id },
+        include: { operationReceipt: true, sourceEvidence: true },
+      });
+    }
+    if (session.status === "CONSUMED") {
+      const envelope = session.operationReceipt ? receiptEnvelope<Record<string, unknown>>(session.operationReceipt.result) : null;
+      const source = session.sourceEvidence ? {
+        filename: session.sourceEvidence.filename,
+        mimeType: session.sourceEvidence.mimeType,
+        size: session.sourceEvidence.size,
+        sha256: session.sourceEvidence.sha256,
+        downloadUrl: `/api/projects/${projectId}/costflow/excel-intake/sessions/${session.id}/source`,
+      } : null;
+      return { state: "READ_ONLY_CONSUMED", previewSessionId: session.id, operationKind: session.operationKind as ExcelIntakeOperationKind, expiresAt: session.expiresAt.toISOString(), display: envelope?.review ?? null, result: envelope?.output ?? null, source };
+    }
+    return {
+      state: nonActionableState(session.status) as "NON_ACTIONABLE_EXPIRED" | "NON_ACTIONABLE_SUPERSEDED" | "NON_ACTIONABLE_CANCELLED",
+      previewSessionId: session.id,
+      operationKind: session.operationKind as ExcelIntakeOperationKind,
+      expiresAt: session.expiresAt.toISOString(),
+    };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15000 });
 }
 
 export async function loadActionableExcelIntakePreviewSession(tx: AuthorityTx, input: {
