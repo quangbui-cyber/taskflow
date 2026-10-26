@@ -5,6 +5,7 @@ import { preflightExcelWorkbook } from "./excelIntakeSecurity";
 import { blankPairedRow, hydrateLinePricingData, normalizePairedRows } from "./pairedDraft";
 import { pricedTotal } from "./pairedPricing";
 import type { FinanceData, PairedDraft, PairedRow } from "./types";
+import type { ExcelDecimalConflict } from "./excelIntake";
 
 export const EXCEL_ROUND_TRIP_SCHEMA_VERSION = 1;
 
@@ -43,6 +44,7 @@ export type RoundTripDiff = {
   mergedRows: PairedRow[];
   oldTotals: { sell: ReturnType<typeof pricedTotal>; buy: ReturnType<typeof pricedTotal> };
   newTotals: { sell: ReturnType<typeof pricedTotal>; buy: ReturnType<typeof pricedTotal> };
+  decimalConflicts?: ExcelDecimalConflict[];
 };
 
 type Actor = { id: string; role: string };

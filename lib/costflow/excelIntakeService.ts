@@ -3,7 +3,7 @@ import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { EXCEL_INTAKE_SCHEMA_VERSION } from "./excelIntake";
+import { EXCEL_INTAKE_SCHEMA_VERSION, resolveExcelIntakeDecimalConflicts, type ExcelDecimalResolution } from "./excelIntake";
 import type { ExcelIntakePreview } from "./excelIntakeParser";
 import { previewRoundTripMerge, applyRoundTripDiff, createRoundTripProjection, type RoundTripDiff, type RoundTripImport } from "./excelRoundTrip";
 import { emptyFinance, type FinanceData, type PairedRow } from "./types";
@@ -13,6 +13,7 @@ import { calculateLineCost, compare, decimal } from "./money";
 type Actor = { id: string; role: string };
 type AuthorityTx = Prisma.TransactionClient;
 type StringMap = Record<string, string>;
+type DecimalResolutionMap = Record<string, ExcelDecimalResolution>;
 
 export type ConfirmExcelIntakeCommand = {
   projectId: string;
@@ -20,7 +21,7 @@ export type ConfirmExcelIntakeCommand = {
   expectedVersion: number;
   idempotencyKey: string;
   corrections?: StringMap;
-  decimalResolutions?: StringMap;
+  decimalResolutions?: DecimalResolutionMap;
 };
 export type ConfirmExcelIntakeResult = { draftId: string; version: number; idempotent: boolean };
 export type ConfirmRoundTripMergeCommand = {
@@ -29,7 +30,7 @@ export type ConfirmRoundTripMergeCommand = {
   previewSessionId: string;
   idempotencyKey: string;
   selectedDeletionIds: string[];
-  decimalResolutions?: StringMap;
+  decimalResolutions?: DecimalResolutionMap;
 };
 export type ConfirmRoundTripMergeResult = { draftId: string; draftVersion: number; version: number; idempotent: boolean; rows: PairedRow[] };
 
@@ -186,7 +187,7 @@ export async function createNewDraftExcelIntakePreview(actor: Actor, input: Crea
         "sell.unit", "sell.quantity", "sell.days", "sell.unitPrice", "sell.vatPercent", "sell.basis", "sell.note",
         "buy.unit", "buy.quantity", "buy.days", "buy.unitPrice", "buy.vatPercent", "buy.basis", "buy.note", "buy.supplier",
       ].map(field => `${row.candidateKey}.${field}`)),
-      allowedDecimalResolutionKeys: [],
+      allowedDecimalResolutionKeys: input.preview.decimalConflicts.map(conflict => conflict.conflictId),
     };
     const session = await createExcelIntakePreviewSession(tx, {
       projectId: input.projectId,
@@ -215,7 +216,7 @@ export async function createRoundTripExcelIntakePreview(actor: Actor, input: Cre
     expectedDraftFingerprint: preview.imported.fingerprint,
     imported: preview.imported,
     diff: preview.diff,
-    allowedDecimalResolutionKeys: [],
+    allowedDecimalResolutionKeys: preview.diff.decimalConflicts?.map(conflict => conflict.conflictId) ?? [],
   };
   const display: RoundTripPreviewDisplay = { draft: preview.draft, diff: preview.diff };
   return prisma.$transaction(async tx => {
@@ -397,6 +398,13 @@ function validateAllowedMap(input: StringMap | undefined, allowedKeys: string[],
   return sorted;
 }
 
+function validatedDecimalResolutions(input: DecimalResolutionMap | undefined, allowedKeys: string[]) {
+  const resolutions = validateAllowedMap(input, allowedKeys, "Cách xử lý số thập phân") as DecimalResolutionMap;
+  if (Object.keys(resolutions).length !== allowedKeys.length || allowedKeys.some(key => !(key in resolutions))) throw new Error("Cần chọn đầy đủ cách xử lý cho từng ô số thập phân xung đột.");
+  if (Object.values(resolutions).some(value => value !== "VISIBLE" && value !== "CANONICAL")) throw new Error("Cách xử lý số thập phân không hợp lệ cho phiên xem trước này.");
+  return resolutions;
+}
+
 function correctedValue(preview: ExcelIntakePreview, corrections: StringMap, rowKey: string, field: string, fallback: string | null) {
   void preview;
   return String(corrections[`${rowKey}.${field}`] ?? fallback ?? "").trim();
@@ -474,12 +482,14 @@ export async function confirmExcelIntake(actor: Actor, command: ConfirmExcelInta
     if (canonicalHash(payload) !== session.canonicalFingerprint || payload.preview.schemaVersion !== EXCEL_INTAKE_SCHEMA_VERSION || payload.preview.errors.length) throw new Error("Xem trước còn lỗi cần sửa.");
     if (payload.expectedVersion !== command.expectedVersion) throw new Error("Dữ liệu đã thay đổi. Tải lại trước khi tạo nháp.");
     const corrections = validateAllowedMap(command.corrections, payload.allowedCorrectionKeys, "Ô sửa");
-    validateAllowedMap(command.decimalResolutions, payload.allowedDecimalResolutionKeys, "Cách xử lý số thập phân");
+    const decimalResolutions = validatedDecimalResolutions(command.decimalResolutions, payload.allowedDecimalResolutionKeys);
+    const conflictCorrectionKeys = new Set(payload.preview.decimalConflicts.map(conflict => `${conflict.candidateKey}.${conflict.field}`));
+    if (Object.keys(corrections).some(key => conflictCorrectionKeys.has(key))) throw new Error("Ô có xung đột số thập phân phải dùng lựa chọn theo từng ô, không được ghi đè trực tiếp.");
     let workspace = await tx.costFlowWorkspace.findUnique({ where: { projectId: command.projectId } });
     if (!workspace) workspace = await tx.costFlowWorkspace.create({ data: { projectId: command.projectId, data: json(emptyFinance()) } });
     if (workspace.version !== payload.expectedVersion) throw new Error("Dữ liệu đã thay đổi. Tải lại trước khi tạo nháp.");
     const data = hydrateLinePricingData(workspace.data as unknown as FinanceData);
-    const rows = buildRows(payload.preview, corrections);
+    const rows = buildRows(resolveExcelIntakeDecimalConflicts(payload.preview, decimalResolutions), corrections);
     const draftId = randomUUID();
     data.quotationDrafts = [...(data.quotationDrafts ?? []), {
       linePricingSchemaVersion: 2,
@@ -521,7 +531,7 @@ export async function confirmRoundTripMerge(actor: Actor, command: ConfirmRoundT
     const session = await loadActionableExcelIntakePreviewSession(tx, { sessionId: command.previewSessionId, projectId: command.projectId, actorId: actor.id, operationKind: "ROUND_TRIP", draftId: command.draftId });
     const payload = session.canonicalPayload as unknown as RoundTripCanonicalPayload;
     if (canonicalHash(payload) !== session.canonicalFingerprint || !payload.diff.previewFingerprint) throw new Error("Xem trước round-trip không còn khớp.");
-    validateAllowedMap(command.decimalResolutions, payload.allowedDecimalResolutionKeys, "Cách xử lý số thập phân");
+    validatedDecimalResolutions(command.decimalResolutions, payload.allowedDecimalResolutionKeys);
     const workspace = await tx.costFlowWorkspace.findUnique({ where: { projectId: command.projectId } });
     if (!workspace || workspace.version !== payload.expectedWorkspaceVersion) throw new Error("Nháp trên máy chủ đã thay đổi. Tải lại và xuất workbook mới trước khi thử lại.");
     const data = hydrateLinePricingData(workspace.data as unknown as FinanceData);

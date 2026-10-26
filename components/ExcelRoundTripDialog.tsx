@@ -29,6 +29,7 @@ export default function ExcelRoundTripDialog({ projectId, draftId, dirty, onAppl
   const [preview, setPreview] = useState<PreviewSession | null>(null);
   const [resumeSessionId, setResumeSessionId] = useState("");
   const [selectedDeletionIds, setSelectedDeletionIds] = useState<string[]>([]);
+  const [decimalResolutions, setDecimalResolutions] = useState<Record<string, "VISIBLE" | "CANONICAL">>({});
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [pending, startTransition] = useTransition();
@@ -41,6 +42,7 @@ export default function ExcelRoundTripDialog({ projectId, draftId, dirty, onAppl
     setPreview(result);
     setResumeSessionId(result.previewSessionId);
     setSelectedDeletionIds([]);
+    setDecimalResolutions({});
     setError("");
     setSuccess("");
     operationId.current = crypto.randomUUID();
@@ -78,6 +80,7 @@ export default function ExcelRoundTripDialog({ projectId, draftId, dirty, onAppl
         draftId,
         previewSessionId: preview.previewSessionId,
         selectedDeletionIds,
+        decimalResolutions,
         idempotencyKey: `excel-round-trip:${operationId.current}`,
       });
       if ("error" in result) {
@@ -92,6 +95,7 @@ export default function ExcelRoundTripDialog({ projectId, draftId, dirty, onAppl
   };
   const diff = preview?.display?.diff;
   const actionable = preview?.state === "ACTIONABLE" && !!diff;
+  const unresolvedDecimals = diff?.decimalConflicts?.filter(conflict => !decimalResolutions[conflict.conflictId]).length ?? 0;
   const deletionNames = diff?.deletionCandidates.filter(row => selectedDeletionIds.includes(row.itemId)).map(row => row.name) ?? [];
 
   return <div className="tf-round-trip-actions">
@@ -112,13 +116,14 @@ export default function ExcelRoundTripDialog({ projectId, draftId, dirty, onAppl
         {preview?.state === "READ_ONLY_CONSUMED" && <Alert tone="success" title="Bản xem lại chỉ đọc">Phiên đã được áp dụng và không thể chạy lại. {preview.source && <a href={preview.source.downloadUrl}>Tải nguồn {preview.source.filename}</a>}</Alert>}
         {preview?.state.startsWith("NON_ACTIONABLE_") && <Alert tone="warning" title="Phiên không còn hiệu lực">Phiên đã hết hạn, bị thay thế hoặc bị hủy; payload xem trước đã được xóa.</Alert>}
         {diff && <div className="tf-round-trip-groups" aria-readonly={!actionable}>
+          {!!diff.decimalConflicts?.length && <section><h3>Xung đột số thập phân ({diff.decimalConflicts.length})</h3>{diff.decimalConflicts.map(conflict => <fieldset key={conflict.conflictId} disabled={!actionable}><legend>{conflict.field} · ô {conflict.source.cell}</legend><p>Hiển thị: {conflict.visible} · chính xác: {conflict.canonical}</p><label><input type="radio" name={conflict.conflictId} checked={decimalResolutions[conflict.conflictId] === "VISIBLE"} onChange={() => setDecimalResolutions(current => ({ ...current, [conflict.conflictId]: "VISIBLE" }))} /> Dùng giá trị hiển thị</label><label><input type="radio" name={conflict.conflictId} checked={decimalResolutions[conflict.conflictId] === "CANONICAL"} onChange={() => setDecimalResolutions(current => ({ ...current, [conflict.conflictId]: "CANONICAL" }))} /> Giữ giá trị chính xác</label></fieldset>)}</section>}
           <section><h3>Thêm mới ({diff.adds.length})</h3>{diff.adds.map(row => <p key={row.previewKey}>{row.row.name || "Dòng mới"} · ô {row.source.cell}</p>)}</section>
           <section><h3>Thay đổi ({diff.changes.length})</h3>{diff.changes.map((change, index) => <p key={`${change.itemId}-${change.field}-${index}`}><strong>{change.field}</strong>: {String(change.oldValue) || "—"} → {String(change.newValue) || "—"} · ô {change.source.cell}</p>)}</section>
           <section><h3>Di chuyển ({diff.moves.length})</h3>{diff.moves.map(move => <p key={move.itemId}>{move.itemId}: {move.oldParentItemId || "Gốc"} → {move.newParentItemId || "Gốc"} · ô {move.source.cell}</p>)}</section>
           <section><h3>Dòng có thể xóa ({diff.deletionCandidates.length})</h3><p className="tf-ui-help">Mặc định không xóa. Chỉ dòng được chọn dưới đây mới bị xóa.</p>{diff.deletionCandidates.map(row => <label key={row.itemId}><input type="checkbox" disabled={!actionable} checked={selectedDeletionIds.includes(row.itemId)} onChange={event => setSelectedDeletionIds(current => event.target.checked ? [...current, row.itemId] : current.filter(id => id !== row.itemId))} /> {row.name}</label>)}</section>
           {deletionNames.length > 0 && <Alert tone="warning" title="Xác nhận xóa">Sẽ xóa: {deletionNames.join(", ")}. Các dòng chưa chọn vẫn được giữ nguyên.</Alert>}
           <div className="tf-round-trip-summary">Tổng mới được máy chủ tính lại. Thêm {diff.adds.length}, sửa {diff.changes.length}, di chuyển {diff.moves.length}, xác nhận xóa {selectedDeletionIds.length}.</div>
-          <Button onClick={apply} loading={pending} disabled={!actionable}>Áp dụng thay đổi đã chọn</Button>
+          <Button onClick={apply} loading={pending} disabled={!actionable || unresolvedDecimals > 0}>Áp dụng thay đổi đã chọn</Button>
         </div>}
       </div>
     </Dialog>

@@ -81,6 +81,7 @@ export type ExcelDecimalConflict = {
   canonicalSource: ExcelIntakeSourceCoordinate;
   reason: "VISIBLE_CANONICAL_MISMATCH" | "AMBIGUOUS_DECIMAL";
 };
+export type ExcelDecimalResolution = "VISIBLE" | "CANONICAL";
 export type ExcelIntakeWarning = { code: "FORMULA_IGNORED"; message: string; field: string; source: ExcelIntakeSourceCoordinate; blocking: false };
 export type NormalizedExcelIntake = {
   schemaVersion: typeof EXCEL_INTAKE_SCHEMA_VERSION;
@@ -214,6 +215,25 @@ export function normalizeExcelIntake(input: ExcelIntakeInput): NormalizedExcelIn
     };
   });
   return { schemaVersion: EXCEL_INTAKE_SCHEMA_VERSION, source: { ...input.source }, metadata: { ...input.metadata }, rows, observations, errors, warnings, decimalConflicts };
+}
+
+export function resolveExcelIntakeDecimalConflicts<T extends NormalizedExcelIntake>(input: T, resolutions: Record<string, ExcelDecimalResolution>): T {
+  const conflicts = new Map(input.decimalConflicts.map(conflict => [conflict.conflictId, conflict]));
+  const keys = Object.keys(resolutions);
+  if (keys.some(key => !conflicts.has(key)) || keys.some(key => resolutions[key] !== "VISIBLE" && resolutions[key] !== "CANONICAL")) {
+    throw new Error("Cách xử lý số thập phân không hợp lệ cho phiên xem trước này.");
+  }
+  if (keys.length !== conflicts.size || [...conflicts.keys()].some(key => !(key in resolutions))) {
+    throw new Error("Cần chọn đầy đủ cách xử lý cho từng ô số thập phân xung đột.");
+  }
+  const resolved = structuredClone(input) as T;
+  for (const conflict of input.decimalConflicts) {
+    const row = resolved.rows.find(candidate => candidate.candidateKey === conflict.candidateKey);
+    if (!row) throw new Error("Xung đột số thập phân không còn khớp dòng xem trước.");
+    const field = conflict.field.split(".")[1] as "quantity" | "days" | "unitPrice" | "vatPercent";
+    row[conflict.side][field] = resolutions[conflict.conflictId] === "VISIBLE" ? conflict.visible : conflict.canonical;
+  }
+  return resolved;
 }
 
 export function projectCustomerExcelIntake(input: NormalizedExcelIntake) {
