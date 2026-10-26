@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { createExcelPreviewState, reduceExcelPreviewState } from "../lib/costflow/excelPreviewState";
+import { excelIntakeDiagnosticTargetId } from "../lib/costflow/excelIntake";
 
 test("shared preview state stages source changes and isolates every revision", () => {
   const projectionA = { rows: [{ candidateKey: "A" }] };
@@ -45,6 +46,20 @@ test("Excel intake dialog exposes both sources, exact issue focus and Foundation
   assert.match(source, /excel-intake-row-/);
   assert.match(source, /aria-live/);
   assert.match(source, /disabled=[\s\S]*blocking|blocking[\s\S]*disabled/);
+});
+
+test("duplicate fields and decimal conflicts target their exact owning controls", () => {
+  const source = (candidateKey: string, row: number, cell: string) => ({ sheet: "BAO_GIA_IC", row, column: 9, cell });
+  const first = { code: "INVALID_NUMBER" as const, message: "Sai", candidateKey: "candidate-1", side: "sell" as const, field: "sell.unitPrice", source: source("candidate-1", 3, "I3"), blocking: true as const };
+  const second = { ...first, candidateKey: "candidate-2", source: source("candidate-2", 4, "I4") };
+  assert.equal(excelIntakeDiagnosticTargetId(first), "excel-intake-row-candidate-1-sell-unitPrice");
+  assert.equal(excelIntakeDiagnosticTargetId(second), "excel-intake-row-candidate-2-sell-unitPrice");
+  assert.notEqual(excelIntakeDiagnosticTargetId(first), excelIntakeDiagnosticTargetId(second));
+
+  const mismatch = { conflictId: "candidate-2:sell.unitPrice:I4", candidateKey: "candidate-2", side: "sell" as const, field: "sell.unitPrice" as const, visible: "1.234", canonical: "1234", source: source("candidate-2", 4, "I4"), canonicalSource: { sheet: "_IMPORT", row: 3, column: 9, cell: "I3" }, reason: "VISIBLE_CANONICAL_MISMATCH" as const };
+  const ambiguous = { ...mismatch, conflictId: "candidate-2:sell.unitPrice:I5", source: source("candidate-2", 5, "I5"), reason: "AMBIGUOUS_DECIMAL" as const };
+  assert.equal(excelIntakeDiagnosticTargetId(mismatch), "excel-intake-conflict-candidate-2-sell-unitPrice-candidate-2-sell-unitPrice-I4");
+  assert.equal(excelIntakeDiagnosticTargetId(ambiguous), "excel-intake-conflict-candidate-2-sell-unitPrice-candidate-2-sell-unitPrice-I5");
 });
 
 test("reducer preserves raw cells and corrections across stale or failed responses", async () => {
