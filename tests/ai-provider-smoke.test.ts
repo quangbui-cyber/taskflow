@@ -52,6 +52,7 @@ test("approved AI packages import offline and strict provenance remains enforced
       import("@arizeai/openinference-instrumentation-openai"),
       import("@arizeai/phoenix-client"),
       import("@arizeai/phoenix-evals"),
+      import("promptfoo"),
     ]);
 
     assert.ok(packages.every((loaded) => typeof loaded === "object"));
@@ -112,6 +113,14 @@ test("AI configuration is disabled by default and rejects unapproved or unbounde
   assert.throws(
     () => loadAiConfig({ ...base, AI_MAX_CONCURRENCY: "0" }),
     /concurrency/i,
+  );
+  assert.throws(
+    () => loadAiConfig({ ...base, AI_TIMEOUT_MS: "999999" }),
+    /timeout/i,
+  );
+  assert.throws(
+    () => loadAiConfig({ ...base, AI_TASKS: "DOCUMENT_EXTRACTION,UNKNOWN" }),
+    /task ID/i,
   );
 });
 
