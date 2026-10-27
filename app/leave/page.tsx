@@ -3,6 +3,7 @@ import { CalendarDays } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
+import HubTabs from "@/components/HubTabs";
 import {
   LeaveCancelButton,
   LeaveDecisionButtons,
@@ -26,8 +27,6 @@ import {
 } from "@/lib/leave";
 import { loadLeaveManagers } from "@/lib/leaveData";
 
-const LEAVE_BLUE_DARK = "#1d4ed8";
-const LEAVE_BLUE_SOFT = "#eff6ff";
 
 type LeaveRow = {
   type: string;
@@ -137,12 +136,11 @@ export default async function LeavePage({
       <div>
         <div className="flex items-center gap-3">
           <span
-            className="flex h-10 w-10 items-center justify-center rounded-[8px]"
-            style={{ backgroundColor: LEAVE_BLUE_SOFT, color: LEAVE_BLUE_DARK }}
+            className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-brand-50 text-brand-700"
           >
             <CalendarDays size={20} aria-hidden="true" />
           </span>
-          <h1 className="tf-page-title" style={{ color: LEAVE_BLUE_DARK }}>
+          <h1 className="tf-page-title">
             Nghỉ phép
           </h1>
         </div>
@@ -260,6 +258,7 @@ export default async function LeavePage({
       <div className="tf-shell">
         <Sidebar user={user} projects={sidebarProjects} activeSection="leave" />
         <main className="tf-main">
+          <HubTabs section="leave" role={user.role} isHrManager={user.isHrManager} />
           <div className="tf-page space-y-6">
             {header}
 
@@ -450,6 +449,7 @@ export default async function LeavePage({
       <div className="tf-shell">
         <Sidebar user={user} projects={sidebarProjects} activeSection="leave" />
         <main className="tf-main">
+          <HubTabs section="leave" role={user.role} isHrManager={user.isHrManager} />
           <div className="tf-page space-y-6">
             {header}
             <section className="tf-panel overflow-hidden">
@@ -629,6 +629,7 @@ export default async function LeavePage({
       <Sidebar user={user} projects={sidebarProjects} activeSection="leave" />
 
       <main className="tf-main">
+        <HubTabs section="leave" role={user.role} isHrManager={user.isHrManager} />
         <div className="tf-page space-y-6">
           {header}
 

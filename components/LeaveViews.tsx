@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { useActionState, useRef, useState, useTransition } from "react";
 import { Check, Plus, Save, Send, X } from "lucide-react";
 import {
   cancelLeaveRequest,
@@ -15,6 +15,7 @@ import {
   useActionFeedback,
   useInteraction,
 } from "@/components/InteractionProvider";
+import { DateRangeField } from "@/components/TemporalFields";
 import {
   HALF_DAY_OPTIONS,
   LEAVE_TYPES,
@@ -59,14 +60,20 @@ export function LeaveRequestForm({
   const [endDate, setEndDate] = useState(today);
   const [halfDay, setHalfDay] = useState("");
   const [state, formAction, pending] = useActionState<LeaveState, FormData>(
-    createLeaveRequest,
+    async (previous, formData) => {
+      const result = await createLeaveRequest(previous, formData);
+      if (result.success) {
+        formRef.current?.reset();
+        setType(LEAVE_TYPES[0].key);
+        setStartDate(today);
+        setEndDate(today);
+        setHalfDay("");
+      }
+      return result;
+    },
     {}
   );
   useActionFeedback(state);
-
-  useEffect(() => {
-    if (state.success) formRef.current?.reset();
-  }, [state.success]);
 
   const start = parseLeaveDate(startDate);
   const end = parseLeaveDate(endDate);
@@ -87,32 +94,25 @@ export function LeaveRequestForm({
       </div>
       <form ref={formRef} action={formAction} className="space-y-4 p-5">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <label className="block">
-            <span className="text-xs font-medium text-zinc-500">Từ ngày</span>
-            <input
-              name="startDate"
-              type="date"
+          <div className="sm:col-span-2">
+            <DateRangeField
+              label="Ngày nghỉ"
+              startName="startDate"
+              endName="endDate"
+              startValue={startDate}
+              endValue={endDate}
               required
-              value={startDate}
-              onChange={(event) => {
-                setStartDate(event.target.value);
-                if (event.target.value > endDate) setEndDate(event.target.value);
+              allowOpenEnd={false}
+              minDate={today}
+              maxEndYearOfStart
+              onChange={(start, end) => {
+                setStartDate(start);
+                setEndDate(end || start);
+                if (start !== (end || start)) setHalfDay("");
               }}
-              className="tf-field mt-1.5"
+              helperText="Đơn nghỉ không thể kéo dài qua hai năm."
             />
-          </label>
-          <label className="block">
-            <span className="text-xs font-medium text-zinc-500">Đến ngày</span>
-            <input
-              name="endDate"
-              type="date"
-              required
-              min={startDate}
-              value={endDate}
-              onChange={(event) => setEndDate(event.target.value)}
-              className="tf-field mt-1.5"
-            />
-          </label>
+          </div>
           <label className="block">
             <span className="text-xs font-medium text-zinc-500">Thời gian</span>
             <select

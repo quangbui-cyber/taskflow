@@ -2,6 +2,7 @@ import { UserRound } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
+import HubTabs from "@/components/HubTabs";
 import { ProfileInfoForm, ProfilePasswordForm } from "@/components/ProfileForms";
 import { ProfileSignatureForm } from "@/components/ProfileSignatureForm";
 import { readOwnSignatureAsset } from "@/lib/workflow/signatureAssets";
@@ -20,7 +21,7 @@ export default async function ProfilePage({
   const [google, sidebarProjects, signatureAsset, signatureSecurity] = await Promise.all([
     prisma.user.findUnique({
       where: { id: user.id },
-      select: { googleToken: true, googleEmail: true, googleScopes: true },
+      select: { googleToken: true, googleEmail: true, googleScopes: true, birthday: true },
     }),
     prisma.project.findMany({
     where: { members: { some: { userId: user.id } } },
@@ -49,6 +50,7 @@ export default async function ProfilePage({
       <Sidebar user={user} projects={sidebarProjects} activeSection="profile" />
 
       <main className="tf-main">
+        <HubTabs section="profile" role={user.role} isHrManager={user.isHrManager} />
         <div className="tf-page-narrow space-y-6">
           <div>
             <div className="flex items-center gap-3">
@@ -75,10 +77,12 @@ export default async function ProfilePage({
 
           {/* key theo dữ liệu đã lưu: sau khi lưu, form nhận lại giá trị mới từ server */}
           <ProfileInfoForm
-            key={`${user.name}:${user.avatarUrl?.length ?? 0}:${user.avatarUrl?.slice(-24) ?? ""}`}
+            key={`${google?.birthday?.toISOString() ?? ""}:${user.name}:${user.avatarUrl?.length ?? 0}:${user.avatarUrl?.slice(-24) ?? ""}`}
             userId={user.id}
             name={user.name}
             avatarUrl={user.avatarUrl ?? null}
+            birthdayDay={google?.birthday?.getUTCDate() ?? null}
+            birthdayMonth={google?.birthday ? google.birthday.getUTCMonth() + 1 : null}
           />
           <ProfileSignatureForm
             initialSignatureData={signatureAsset?.dataUrl ?? null}

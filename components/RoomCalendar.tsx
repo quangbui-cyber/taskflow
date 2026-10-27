@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Clock, DoorOpen, Plus, UserRound, UsersRound, Video, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Clock, DoorOpen, Plus, UserRound, Video, X } from "lucide-react";
+import Avatar from "@/components/Avatar";
 import MeetingComposer, { type MeetingSlot } from "@/components/MeetingComposer";
 import type { MeetingComposerData } from "@/lib/meetingComposerData";
 import {
@@ -16,6 +17,13 @@ import { toDateInputVN } from "@/lib/dates";
 import { vnDateTimeToUtc } from "@/lib/meetings";
 
 export type CalendarRoom = { id: string; name: string; capacity: number | null };
+export type CalendarAttendee = {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  /** "PENDING" | "ACCEPTED" | "DECLINED" */
+  response: string;
+};
 export type CalendarMeeting = {
   id: string;
   roomId: string;
@@ -23,7 +31,9 @@ export type CalendarMeeting = {
   startAt: string;
   endAt: string;
   organizerName: string;
-  attendeeCount: number;
+  organizer: { id: string; name: string; avatarUrl: string | null };
+  /** Đồng nghiệp được mời (không gồm người tổ chức), theo thứ tự mời */
+  attendees: CalendarAttendee[];
   /** Người xem là người tổ chức hoặc được mời */
   isMine: boolean;
   /** Chỉ gửi cho người trong cuộc họp */
@@ -41,6 +51,14 @@ const ROOM_COLORS = [
 const WEEKDAYS = ["Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy", "Chủ nhật"];
 const WEEKDAYS_SHORT = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
 const HOUR_PX = 60;
+// Khung chi tiết hiện tối đa ngần này người, còn lại gom vào nút "+N người khác".
+const PEOPLE_PREVIEW = 6;
+const RESPONSE_ORDER = ["ACCEPTED", "PENDING", "DECLINED"] as const;
+const RESPONSE_INFO: Record<string, { label: string; summary: string; chip: string }> = {
+  ACCEPTED: { label: "Đồng ý", summary: "đồng ý", chip: "bg-green-100 text-green-800" },
+  PENDING: { label: "Chưa trả lời", summary: "chưa trả lời", chip: "bg-zinc-100 text-zinc-600" },
+  DECLINED: { label: "Từ chối", summary: "từ chối", chip: "bg-red-100 text-red-800" },
+};
 const DEFAULT_START = 7 * 60;
 const DEFAULT_END = 20 * 60;
 const SLOT_MIN = 30;
@@ -507,6 +525,7 @@ export default function RoomCalendar({
 
       {selected && (
         <MeetingPopover
+          key={selected.meeting.id}
           ref={popoverRef}
           meeting={selected.meeting}
           rect={selected.rect}
@@ -552,37 +571,69 @@ function MeetingPopover({
   dayLabel: string;
   onClose: () => void;
 }) {
+  const [showAll, setShowAll] = useState(false);
   const start = new Date(meeting.startAt);
   const end = new Date(meeting.endAt);
-  // Đặt bên phải khối họp; hết chỗ thì sang bên trái, màn hình hẹp thì căn giữa.
+  // Người tổ chức đứng đầu và luôn tính là đồng ý; sau đó là người được mời theo thứ tự mời.
+  const people = [
+    { ...meeting.organizer, response: "ACCEPTED", isOrganizer: true },
+    ...meeting.attendees.map((attendee) => ({ ...attendee, isOrganizer: false })),
+  ];
+  const shownPeople = showAll ? people : people.slice(0, PEOPLE_PREVIEW);
+  const hiddenCount = people.length - shownPeople.length;
+  const counts = RESPONSE_ORDER.map((key) => ({
+    key,
+    count: people.filter((person) => person.response === key).length,
+  })).filter((item) => item.count > 0);
+
+  // Điện thoại: bảng trượt từ dưới lên. Máy tính: khung nổi bên phải khối họp,
+  // hết chỗ thì sang bên trái, vẫn không đủ thì căn giữa.
   const viewportW = window.innerWidth;
-  const width = Math.min(300, viewportW - 24);
+  const viewportH = window.innerHeight;
+  const sheet = viewportW < 768;
+  const width = Math.min(360, viewportW - 24);
   const left =
     rect.right + 8 + width <= viewportW - 12
       ? rect.right + 8
       : rect.left - 8 - width >= 12
         ? rect.left - 8 - width
         : (viewportW - width) / 2;
-  const top = Math.min(Math.max(12, rect.top), window.innerHeight - 280);
+  // Ước lượng chiều cao để đẩy khung lên khi gần đáy màn hình; vẫn tràn thì khung tự cuộn.
+  const estimatedHeight = 300 + shownPeople.length * 46 + (hiddenCount > 0 ? 36 : 0);
+  const top = Math.max(12, Math.min(rect.top, viewportH - estimatedHeight - 12));
 
-  return (
+  const panel = (
     <div
-      ref={ref}
+      ref={sheet ? undefined : ref}
       role="dialog"
       aria-label={meeting.title}
-      className="tf-modal-enter fixed z-40 rounded-[10px] border border-zinc-200 bg-white p-4 shadow-2xl"
-      style={{ left, top, width }}
+      className={
+        sheet
+          ? "fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-[18px] bg-white px-5 pb-7 pt-2 shadow-2xl"
+          : "tf-modal-enter fixed z-40 overflow-y-auto rounded-[12px] border border-zinc-200 bg-white p-4 shadow-2xl"
+      }
+      style={sheet ? undefined : { left, top, width, maxHeight: viewportH - top - 12 }}
     >
+      {sheet && <span aria-hidden="true" className="mx-auto mb-3 block h-[5px] w-10 rounded-full bg-zinc-300" />}
       <div className="flex items-start justify-between gap-3">
-        <h3 className="text-[15px] font-semibold leading-6 text-zinc-900">{meeting.title}</h3>
-        <button type="button" onClick={onClose} className="-mr-1 -mt-1 rounded-[6px] p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700" aria-label="Đóng">
-          <X size={16} aria-hidden="true" />
+        <h3 className={`font-semibold text-zinc-900 ${sheet ? "text-lg leading-6" : "text-[15px] leading-6"}`}>
+          {meeting.title}
+        </h3>
+        <button
+          type="button"
+          onClick={onClose}
+          className={`rounded-[6px] text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 ${
+            sheet ? "-mr-2 -mt-1 flex h-11 w-11 shrink-0 items-center justify-center" : "-mr-1 -mt-1 p-1"
+          }`}
+          aria-label="Đóng"
+        >
+          <X size={sheet ? 18 : 16} aria-hidden="true" />
         </button>
       </div>
       {meeting.isMine && (
         <span className="tf-badge mt-1 bg-brand-50 text-brand-800">Bạn có trong cuộc họp này</span>
       )}
-      <ul className="mt-3 space-y-2 text-[13px] text-zinc-600">
+      <ul className={`mt-3 space-y-2 text-zinc-600 ${sheet ? "text-sm" : "text-[13px]"}`}>
         <li className="flex items-center gap-2">
           <Clock size={15} className="shrink-0 text-zinc-400" aria-hidden="true" />
           <span className="tabular-nums">
@@ -593,23 +644,63 @@ function MeetingPopover({
           <DoorOpen size={15} className="shrink-0 text-zinc-400" aria-hidden="true" />
           Phòng {roomName}
         </li>
-        <li className="flex items-center gap-2">
-          <UserRound size={15} className="shrink-0 text-zinc-400" aria-hidden="true" />
-          {meeting.organizerName} tổ chức
-        </li>
-        <li className="flex items-center gap-2">
-          <UsersRound size={15} className="shrink-0 text-zinc-400" aria-hidden="true" />
-          {meeting.attendeeCount ? `${meeting.attendeeCount} người được mời` : "Không mời đồng nghiệp (họp với khách)"}
-        </li>
       </ul>
+
+      <div className="mt-3 border-t border-zinc-100 pt-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+          <span className="text-[13px] font-semibold text-zinc-900">{people.length} người tham gia</span>
+          <span className="text-xs text-zinc-500">
+            {counts.map((item) => `${item.count} ${RESPONSE_INFO[item.key].summary}`).join(" · ")}
+          </span>
+        </div>
+        <ul className="mt-2 space-y-1">
+          {shownPeople.map((person) => {
+            const info = RESPONSE_INFO[person.response] ?? RESPONSE_INFO.PENDING;
+            return (
+              <li key={person.id} className={`flex items-center gap-2.5 ${sheet ? "min-h-12" : "min-h-10"}`}>
+                <span className="relative shrink-0">
+                  <Avatar id={person.id} name={person.name} avatarUrl={person.avatarUrl} className="h-8 w-8 text-[13px]" />
+                  {person.response === "ACCEPTED" && (
+                    <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-white bg-green-600 text-white">
+                      <Check size={9} strokeWidth={4} aria-hidden="true" />
+                    </span>
+                  )}
+                  {person.response === "DECLINED" && (
+                    <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-white bg-red-600 text-white">
+                      <X size={9} strokeWidth={4} aria-hidden="true" />
+                    </span>
+                  )}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium leading-[18px] text-zinc-900">{person.name}</span>
+                  {person.isOrganizer && <span className="block text-xs leading-4 text-zinc-500">Người tổ chức</span>}
+                </span>
+                <span className={`tf-badge shrink-0 !min-h-0 text-[11px] font-semibold ${info.chip}`}>{info.label}</span>
+              </li>
+            );
+          })}
+        </ul>
+        {hiddenCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowAll(true)}
+            className="mt-1 min-h-9 text-[13px] font-semibold text-brand-800 hover:underline"
+          >
+            +{hiddenCount} người khác
+          </button>
+        )}
+        {meeting.attendees.length === 0 && (
+          <p className="mt-1 text-xs text-zinc-500">Không mời đồng nghiệp (họp với khách)</p>
+        )}
+      </div>
       {meeting.isMine ? (
-        <div className="mt-4 flex flex-wrap justify-end gap-2">
+        <div className={sheet ? "mt-4 grid grid-cols-2 gap-2" : "mt-4 flex flex-wrap justify-end gap-2"}>
           {meeting.meetingUrl && (
             <a
               href={meeting.meetingUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="tf-button-secondary !min-h-9 !px-3 text-xs"
+              className={sheet ? "tf-button-secondary !min-h-11 text-sm" : "tf-button-secondary !min-h-9 !px-3 text-xs"}
             >
               <Video size={14} aria-hidden="true" />
               Vào họp online
@@ -618,12 +709,25 @@ function MeetingPopover({
           <Link
             href={`/meetings?focus=${meeting.id}#meeting-${meeting.id}`}
             prefetch={false}
-            className="tf-button-primary !min-h-9 !px-3 text-xs"
+            className={
+              sheet
+                ? `tf-button-primary !min-h-11 text-sm ${meeting.meetingUrl ? "" : "col-span-2"}`
+                : "tf-button-primary !min-h-9 !px-3 text-xs"
+            }
           >
             Xem chi tiết
           </Link>
         </div>
       ) : null}
+    </div>
+  );
+
+  if (!sheet) return panel;
+  // Lớp mờ nằm trong ref để chạm vào nó chỉ đóng bảng, không lọt xuống ô lịch bên dưới.
+  return (
+    <div ref={ref}>
+      <div aria-hidden="true" onClick={onClose} className="fixed inset-0 z-40 bg-zinc-950/45" />
+      {panel}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { financeEnabled } from "@/lib/features";
 import Sidebar from "@/components/Sidebar";
+import HubTabs from "@/components/HubTabs";
 import FinanceSupplierDirectory from "@/components/SupplierDirectory";
 import { SupplierDirectory as CostFlowSupplierDirectory } from "@/components/costflow/suppliers/SupplierDirectory";
 import { listCompanySuppliers } from "@/lib/costflow/supplierReadModel";
@@ -52,6 +53,7 @@ export default async function SuppliersPage() {
       <Sidebar user={user} projects={sidebarProjects} activeSection="suppliers" />
 
       <main className="tf-main">
+        <HubTabs section="suppliers" role={user.role} />
         <div className="tf-page space-y-6">
           <div>
             <div className="flex items-center gap-3">

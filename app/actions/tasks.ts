@@ -13,6 +13,7 @@ import { PRIORITIES, STATUSES } from "@/lib/types";
 import { readTaskCreationFiles } from "@/lib/taskCreationFiles";
 import { driveFolderKeys, queueDrivePush, renameDriveFolderSafe, trashTaskFolderSafe } from "@/lib/driveStorage";
 import { after } from "next/server";
+import { validTaskTimeRange } from "@/lib/taskTimeRange";
 
 async function projectChat(projectId: string) {
   const project = await prisma.project.findUnique({
@@ -116,7 +117,9 @@ export async function createTask(
   const status = String(formData.get("status") ?? "TODO");
   const priority = String(formData.get("priority") ?? "MEDIUM");
   const assigneeId = String(formData.get("assigneeId") ?? "") || null;
+  const startDateRaw = String(formData.get("startDate") ?? "").trim();
   const dueDateRaw = String(formData.get("dueDate") ?? "").trim();
+  const startDate = startDateRaw ? parseDueDate(startDateRaw) : null;
   const dueDate = dueDateRaw ? parseDueDate(dueDateRaw) : null;
 
   if (!title) return { error: "Tiêu đề task không được để trống." };
@@ -124,7 +127,12 @@ export async function createTask(
   if (!PRIORITY_KEYS.has(priority)) {
     return { error: "Độ ưu tiên không hợp lệ." };
   }
-  if (dueDate === undefined) return { error: "Hạn chót không hợp lệ." };
+  if (startDate === undefined || dueDate === undefined) {
+    return { error: "Thời gian công việc không hợp lệ." };
+  }
+  if (!validTaskTimeRange(startDate, dueDate)) {
+    return { error: "Giờ kết thúc phải sau giờ bắt đầu trong cùng ngày." };
+  }
 
   const user = await assertMember(projectId);
   if (assigneeId && !(await isProjectMember(projectId, assigneeId))) {
@@ -153,6 +161,7 @@ export async function createTask(
       projectId,
       status,
       priority,
+      startDate,
       dueDate,
       assigneeId,
       creatorId: user.id,
@@ -197,26 +206,47 @@ export async function updateTask(
     description?: string | null;
     result?: string | null;
     priority?: string;
+    startDate?: string | null;
     dueDate?: string | null;
     assigneeId?: string | null;
     status?: string;
   }
-) {
+): Promise<ActionState> {
   const task = await prisma.task.findUnique({ where: { id: taskId } });
-  if (!task) return;
+  if (!task) return { error: "Task không tồn tại." };
   const actor = await assertMember(task.projectId);
-  if (data.status !== undefined && !STATUS_KEYS.has(data.status)) return;
-  if (data.priority !== undefined && !PRIORITY_KEYS.has(data.priority)) return;
+  if (data.title !== undefined && !data.title.trim()) {
+    return { error: "Tiêu đề task không được để trống." };
+  }
+  if (data.status !== undefined && !STATUS_KEYS.has(data.status)) {
+    return { error: "Trạng thái không hợp lệ." };
+  }
+  if (data.priority !== undefined && !PRIORITY_KEYS.has(data.priority)) {
+    return { error: "Độ ưu tiên không hợp lệ." };
+  }
   if (
     data.assigneeId !== undefined &&
     data.assigneeId !== null &&
     !(await isProjectMember(task.projectId, data.assigneeId))
   ) {
-    return;
+    return { error: "Người được giao không thuộc project này." };
   }
+  const startDate =
+    data.startDate !== undefined ? parseDueDate(data.startDate) : undefined;
   const dueDate =
     data.dueDate !== undefined ? parseDueDate(data.dueDate) : undefined;
-  if (data.dueDate !== undefined && dueDate === undefined) return;
+  if (data.startDate !== undefined && startDate === undefined) {
+    return { error: "Thời gian bắt đầu không hợp lệ." };
+  }
+  if (data.dueDate !== undefined && dueDate === undefined) {
+    return { error: "Thời gian kết thúc không hợp lệ." };
+  }
+  const nextStartDate =
+    data.startDate !== undefined ? startDate ?? null : task.startDate;
+  const nextDueDate = data.dueDate !== undefined ? dueDate ?? null : task.dueDate;
+  if (!validTaskTimeRange(nextStartDate, nextDueDate)) {
+    return { error: "Giờ kết thúc phải sau giờ bắt đầu trong cùng ngày." };
+  }
 
   const updatedTask = await prisma.task.update({
     where: { id: taskId },
@@ -227,6 +257,7 @@ export async function updateTask(
         : {}),
       ...(data.result !== undefined ? { result: data.result } : {}),
       ...(data.priority !== undefined ? { priority: data.priority } : {}),
+      ...(data.startDate !== undefined ? { startDate } : {}),
       ...(data.dueDate !== undefined
         ? { dueDate }
         : {}),
@@ -341,6 +372,7 @@ export async function updateTask(
   }
   revalidatePath(`/projects/${task.projectId}`);
   revalidatePath("/");
+  return {};
 }
 
 /** Di chuyển task sang cột khác / vị trí khác (kéo thả) */

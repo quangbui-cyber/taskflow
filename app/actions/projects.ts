@@ -460,6 +460,45 @@ export async function addMember(
   return {};
 }
 
+export async function addMembers(
+  projectId: string,
+  inviteeIds: string[]
+): Promise<ActionState> {
+  const user = await requireUser();
+  const membership = await getMembership(projectId, user.id);
+  if (!membership) return { error: "Bạn không thuộc project này." };
+
+  const uniqueIds = [...new Set(inviteeIds.map((id) => id.trim()).filter(Boolean))];
+  if (uniqueIds.length === 0) return { error: "Hãy chọn ít nhất một thành viên." };
+  if (uniqueIds.length > 100) return { error: "Chỉ có thể thêm tối đa 100 người mỗi lần." };
+
+  const invitees = await prisma.user.findMany({
+    where: { id: { in: uniqueIds }, isActive: true },
+    select: { id: true },
+  });
+  if (invitees.length !== uniqueIds.length) {
+    return { error: "Có tài khoản không tồn tại hoặc đã bị vô hiệu hóa. Hãy tải lại và chọn lại." };
+  }
+
+  const existingMembers = await prisma.projectMember.findMany({
+    where: { projectId, userId: { in: uniqueIds } },
+    select: { userId: true },
+  });
+  const existingIds = new Set(existingMembers.map((member) => member.userId));
+  const newMemberIds = uniqueIds.filter((id) => !existingIds.has(id));
+  if (newMemberIds.length === 0) return { error: "Những người đã chọn đều ở trong project." };
+
+  await prisma.projectMember.createMany({
+    data: newMemberIds.map((userId) => ({ projectId, userId, role: "member" })),
+    skipDuplicates: true,
+  });
+  queueChatMemberSync(projectId, newMemberIds);
+  queueDriveSharingSync(projectId);
+
+  revalidatePath(`/projects/${projectId}`);
+  return { success: `Đã thêm ${newMemberIds.length} thành viên vào project.` };
+}
+
 export async function addMemberGroup(
   projectId: string,
   groupId: string

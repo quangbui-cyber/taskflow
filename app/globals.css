@@ -418,6 +418,49 @@ select.tf-field:not(.appearance-none) {
   box-shadow: 0 0 0 3px rgb(168 212 49 / 0.2);
 }
 
++.tf-deadline-control {
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: #fff;
+  transition: border-color 160ms ease, box-shadow 160ms ease,
+    background-color 160ms ease;
+}
+
+.tf-deadline-control:hover {
+  border-color: #b7bdc7;
+}
+
+.tf-deadline-control:focus-within {
+  border-color: #a1a1aa;
+  box-shadow: 0 0 0 3px rgb(168 212 49 / 0.14);
+}
+
+.tf-scheduling-popover {
+  box-shadow: 0 14px 32px rgb(39 39 42 / 0.12),
+    0 2px 8px rgb(39 39 42 / 0.06);
+  animation: tf-calendar-enter 170ms ease-out both;
+  scrollbar-width: thin;
+  scrollbar-color: #d4d4d8 transparent;
+}
+
+@keyframes tf-calendar-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tf-scheduling-popover {
+    animation: none;
+  }
+}
+
+
 .tf-label {
   display: block;
   margin-bottom: 6px;
@@ -557,6 +600,241 @@ select.tf-field:not(.appearance-none) {
     animation-iteration-count: 1 !important;
   }
 }
++/* ---- Trang chủ: hiệu ứng nhẹ, chạy một lần khi mở trang ----
+   Chỉ dùng opacity/transform/clip-path để trình duyệt không phải tính lại bố cục. */
+
+/* Các khung hiện lần lượt; độ trễ đặt qua --tf-delay. */
+.tf-rise {
+  animation: tf-rise 460ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: var(--tf-delay, 0ms);
+}
+
+@keyframes tf-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Lời chào "tự viết" từ trái sang phải. Mép âm để không cắt nét bay của font. */
+.tf-handwrite {
+  animation: tf-handwrite 1100ms cubic-bezier(0.45, 0.05, 0.3, 1) 250ms both;
+}
+
+@keyframes tf-handwrite {
+  from {
+    clip-path: inset(-25% 100% -25% -5%);
+  }
+  to {
+    clip-path: inset(-25% -5% -25% -5%);
+  }
+}
+
+/* Ô Truy cập nhanh nhấc lên khi rê chuột, icon nhún nhẹ. */
+.tf-quick-action {
+  transition:
+    transform 180ms ease-out,
+    box-shadow 180ms ease-out,
+    border-color 180ms ease-out,
+    background-color 180ms ease-out;
+}
+
+.tf-quick-action:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px -8px rgb(70 90 22 / 0.35);
+}
+
+.tf-quick-action:hover .tf-quick-icon {
+  animation: tf-icon-hop 420ms cubic-bezier(0.3, 0.6, 0.3, 1);
+}
+
+@keyframes tf-icon-hop {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+  40% {
+    transform: translateY(-3px) rotate(-8deg);
+  }
+  70% {
+    transform: translateY(0) rotate(4deg);
+  }
+}
+
+/* Bánh kem lắc nhẹ hai lần. */
+.tf-wiggle {
+  animation: tf-wiggle 900ms ease-in-out 700ms 2;
+}
+
+@keyframes tf-wiggle {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  25% {
+    transform: rotate(-9deg);
+  }
+  75% {
+    transform: rotate(9deg);
+  }
+}
+
+/* Pháo giấy: lớp phủ không nhận chuột, mỗi mảnh chạy một lần rồi mờ hẳn. */
+.tf-confetti {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.tf-confetti-burst {
+  overflow: visible;
+}
+
+.tf-confetti-piece {
+  position: absolute;
+  border-radius: 2px;
+  opacity: 0;
+}
+
+.tf-confetti-fall .tf-confetti-piece {
+  top: -12px;
+  animation: tf-confetti-fall var(--tf-duration, 1900ms) cubic-bezier(0.3, 0.4, 0.6, 1)
+    var(--tf-delay, 0ms) both;
+}
+
+.tf-confetti-burst .tf-confetti-piece {
+  left: 50%;
+  top: 50%;
+  animation: tf-confetti-burst 900ms cubic-bezier(0.15, 0.7, 0.35, 1) var(--tf-delay, 0ms) both;
+}
+
+@keyframes tf-confetti-fall {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--tf-dx, 0), var(--tf-fall, 150px)) rotate(var(--tf-rotate, 360deg));
+  }
+}
+
+@keyframes tf-confetti-burst {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.6) rotate(0);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--tf-dx, 0)), calc(-50% + var(--tf-dy, 0)))
+      scale(1) rotate(var(--tf-rotate, 180deg));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tf-rise,
+  .tf-handwrite,
+  .tf-wiggle,
+  .tf-quick-action:hover .tf-quick-icon {
+    animation: none;
+  }
+
+  .tf-quick-action:hover {
+    transform: none;
+  }
+
+  .tf-confetti {
+    display: none;
+  }
+}
+
+/* Ánh sáng chạy vòng quanh viền khung chào. Viền là phần nền 2px của khung
+   ngoài; một dải conic-gradient xoay phía sau (chỉ dùng transform nên nhẹ). */
+.tf-glow-border {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 2px;
+  background: #e4e4e7;
+}
+
+.tf-glow-border::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  top: 50%;
+  width: 200%;
+  aspect-ratio: 1;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg 280deg,
+    rgb(199 227 101 / 0.7) 310deg,
+    #a8d431 340deg,
+    #587216 352deg,
+    transparent 360deg
+  );
+  transform: translate(-50%, -50%) rotate(0deg);
+  animation: tf-glow-spin 6s linear infinite;
+}
+
+@keyframes tf-glow-spin {
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tf-glow-border::before {
+    display: none;
+  }
+}
+
+/* Bong bóng trang trí trong khung chào trôi nhẹ qua lại (chỉ transform). */
+.tf-float-a {
+  animation: tf-float-a 9s ease-in-out infinite alternate;
+}
+
+.tf-float-b {
+  animation: tf-float-b 11s ease-in-out infinite alternate;
+}
+
+@keyframes tf-float-a {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(-18px, 14px) scale(1.06);
+  }
+}
+
+@keyframes tf-float-b {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(22px, -12px) scale(0.94);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tf-float-a,
+  .tf-float-b {
+    animation: none;
+  }
+}
+
 @media print {
   @page costflow { size: A4 landscape; margin: 10mm; }
   .tf-costflow-print { page: costflow; }

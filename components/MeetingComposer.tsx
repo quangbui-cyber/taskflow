@@ -5,10 +5,8 @@ import { useRouter } from "next/navigation";
 import {
   CalendarPlus,
   Check,
-  ChevronDown,
   DoorOpen,
   Pencil,
-  UsersRound,
   Video,
   X,
 } from "lucide-react";
@@ -20,11 +18,12 @@ import {
 import Avatar from "@/components/Avatar";
 import GoogleMeetLinkButton from "@/components/GoogleMeetLinkButton";
 import { useActionFeedback } from "@/components/InteractionProvider";
+import PeoplePicker, { type PeoplePickerAvailability } from "@/components/PeoplePicker";
+import { ScheduleField } from "@/components/TemporalFields";
 import { formatHour, toDateInputVN } from "@/lib/dates";
 import {
   MEETING_DESCRIPTION_MAX,
   MEETING_TITLE_MAX,
-  MEETING_TIME_SLOTS,
   formatMeetingTime,
   presetMeetingAttendees,
   rangesOverlap,
@@ -84,12 +83,6 @@ type FormValues = {
 };
 
 const INITIAL_STATE: MeetingActionState = {};
-
-/** Mốc sau `time` đúng `steps` lần 30 phút, không vượt quá mốc cuối ngày (23:30) */
-function slotAfter(time: string, steps: number): string {
-  const index = MEETING_TIME_SLOTS.indexOf(time);
-  return MEETING_TIME_SLOTS[Math.min(index + steps, MEETING_TIME_SLOTS.length - 1)];
-}
 
 const DEFAULT_START_TIME = "09:00";
 const DEFAULT_END_TIME = "10:00";
@@ -205,7 +198,6 @@ export default function MeetingComposer({
       ? valuesFromMeeting(meeting)
       : { ...defaultValues(presetAttendeeIds), ...initialSlot }
   );
-  const [query, setQuery] = useState("");
   const action = useMemo(
     () => (meeting ? updateMeeting.bind(null, meeting.id) : createMeeting),
     [meeting]
@@ -224,10 +216,6 @@ export default function MeetingComposer({
   const recorderId = selected.has(values.recorderId) ? values.recorderId : "";
   const organizerName = people.find((person) => person.id === organizerId)?.name ?? "Người tổ chức";
   const selectedPeople = invitable.filter((person) => selected.has(person.id));
-  const normalizedQuery = query.trim().toLowerCase();
-  const filteredPeople = invitable.filter((person) =>
-    `${person.name} ${person.email}`.toLowerCase().includes(normalizedQuery)
-  );
 
   const startMs = vnDateTimeToUtc(values.date, values.startTime)?.getTime() ?? null;
   const endMs = vnDateTimeToUtc(values.date, values.endTime)?.getTime() ?? null;
@@ -280,6 +268,20 @@ export default function MeetingComposer({
     daySchedules.get(userId)?.some((slot) => slot.clash) ?? false;
   const busySelectedCount = values.attendeeIds.filter(isBusy).length;
   const selectedRoomClash = values.roomId ? roomClashes.get(values.roomId) : undefined;
+  const pickerAvailability = useMemo<Record<string, PeoplePickerAvailability>>(() => {
+    if (!timeValid) return {};
+    return Object.fromEntries(
+      invitable.map((person) => {
+        const clashes = (daySchedules.get(person.id) ?? []).filter((slot) => slot.clash);
+        return [
+          person.id,
+          clashes.length > 0
+            ? { status: "busy" as const, label: `Bận ${clashes.map((slot) => slot.label).join(", ")}` }
+            : { status: "free" as const },
+        ];
+      })
+    );
+  }, [daySchedules, invitable, timeValid]);
 
   function close() {
     setOpen(false);
@@ -288,45 +290,6 @@ export default function MeetingComposer({
 
   function set<K extends keyof FormValues>(key: K, value: FormValues[K]) {
     setValues((current) => ({ ...current, [key]: value }));
-  }
-
-  function setStartTime(startTime: string) {
-    setValues((current) => ({
-      ...current,
-      startTime,
-      // Dời giờ bắt đầu ra sau giờ kết thúc thì tự đẩy giờ kết thúc thành +1 tiếng.
-      endTime: current.endTime > startTime ? current.endTime : slotAfter(startTime, 2),
-    }));
-  }
-
-  function toggleAttendee(userId: string) {
-    const next = new Set(selected);
-    if (next.has(userId)) next.delete(userId);
-    else next.add(userId);
-    set("attendeeIds", [...next]);
-  }
-
-  /** Thành viên của nhóm có thể mời được (bỏ người đã bị vô hiệu hoá, người tổ chức...). */
-  function groupMemberIds(group: MeetingGroupOption) {
-    const allowed = new Set(invitable.map((person) => person.id));
-    return group.memberIds.filter((id) => allowed.has(id));
-  }
-
-  /** Nhóm coi như đang được chọn khi mọi thành viên mời được của nhóm đều đã chọn. */
-  function isGroupSelected(group: MeetingGroupOption) {
-    const memberIds = groupMemberIds(group);
-    return memberIds.length > 0 && memberIds.every((id) => selected.has(id));
-  }
-
-  /** Bấm lần đầu chọn cả nhóm, bấm lần nữa bỏ chọn cả nhóm. */
-  function toggleGroup(group: MeetingGroupOption) {
-    const memberIds = groupMemberIds(group);
-    if (isGroupSelected(group)) {
-      const remove = new Set(memberIds);
-      set("attendeeIds", values.attendeeIds.filter((id) => !remove.has(id)));
-    } else {
-      set("attendeeIds", [...new Set([...values.attendeeIds, ...memberIds])]);
-    }
   }
 
   function openDialog() {
@@ -342,7 +305,6 @@ export default function MeetingComposer({
     } else {
       setValues(valuesFromMeeting(meeting));
     }
-    setQuery("");
     setOpen(true);
   }
 
@@ -407,7 +369,7 @@ export default function MeetingComposer({
             role="dialog"
             aria-modal="true"
             aria-labelledby={dialogTitleId}
-            className="tf-modal-enter flex max-h-[calc(100vh-32px)] w-full max-w-2xl flex-col overflow-hidden rounded-[10px] border border-zinc-200 bg-white text-left shadow-2xl"
+            className="tf-modal-enter flex h-[min(860px,calc(100vh-32px))] w-full max-w-6xl flex-col overflow-hidden rounded-[10px] border border-zinc-200 bg-white text-left shadow-2xl"
           >
             <header className="flex shrink-0 items-start justify-between gap-5 border-b border-zinc-200 px-5 py-4 sm:px-6">
               <div>
@@ -436,7 +398,8 @@ export default function MeetingComposer({
               }}
               className="flex min-h-0 flex-1 flex-col"
             >
-              <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5 sm:px-6">
+              <div className="grid min-h-0 flex-1 overflow-y-auto lg:grid-cols-[minmax(0,1.12fr)_minmax(380px,0.88fr)] lg:overflow-hidden">
+                <div className="space-y-5 px-5 py-5 sm:px-6 lg:min-h-0 lg:overflow-y-auto">
                 <label className="block">
                   <span className="tf-label">Tiêu đề</span>
                   <input
@@ -452,60 +415,21 @@ export default function MeetingComposer({
                   />
                 </label>
 
-                <div>
-                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)]">
-                    <label className="block">
-                      <span className="tf-label">Ngày</span>
-                      <input
-                        name="date"
-                        type="date"
-                        value={values.date}
-                        onChange={(event) => set("date", event.target.value)}
-                        required
-                        className="tf-field"
-                      />
-                    </label>
-                    {(
-                      [
-                        ["startTime", "Bắt đầu", setStartTime],
-                        ["endTime", "Kết thúc", (time: string) => set("endTime", time)],
-                      ] as const
-                    ).map(([name, label, onSelect]) => (
-                      <label key={name} className="block">
-                        <span className="tf-label">{label}</span>
-                        <span className="relative block">
-                          <select
-                            name={name}
-                            value={values[name]}
-                            onChange={(event) => onSelect(event.target.value)}
-                            required
-                            className="tf-field appearance-none !pr-10 tabular-nums"
-                          >
-                            {/* Cuộc họp cũ có giờ lẻ vẫn hiện đúng giờ đang lưu cho tới khi chọn lại. */}
-                            {!MEETING_TIME_SLOTS.includes(values[name]) && (
-                              <option value={values[name]}>{values[name]}</option>
-                            )}
-                            {MEETING_TIME_SLOTS.map((slot) => (
-                              <option key={slot} value={slot}>
-                                {slot}
-                              </option>
-                            ))}
-                          </select>
-                          <ChevronDown
-                            size={16}
-                            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500"
-                            aria-hidden="true"
-                          />
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                  {!timeValid && (
-                    <p className="mt-2 text-xs text-red-600">
-                      Giờ kết thúc phải sau giờ bắt đầu.
-                    </p>
-                  )}
-                </div>
+                <ScheduleField
+                  label="Thời gian họp"
+                  date={values.date}
+                  startTime={values.startTime}
+                  endTime={values.endTime}
+                  disablePast
+                  onChange={(date, startTime, endTime) =>
+                    setValues((current) => ({
+                      ...current,
+                      date,
+                      startTime,
+                      endTime,
+                    }))
+                  }
+                />
 
                 <fieldset>
                   <legend className="tf-label">Phòng họp</legend>
@@ -599,146 +523,6 @@ export default function MeetingComposer({
                 </label>
                 <GoogleMeetLinkButton disabled={pending} onLink={(url) => set("meetingUrl", url)} />
 
-                <fieldset>
-                  <legend className="tf-label">
-                    Người tham dự
-                    <span className="ml-1.5 font-normal text-zinc-400">
-                      · đã chọn {values.attendeeIds.length}
-                    </span>
-                  </legend>
-                  {values.attendeeIds.map((id) => (
-                    <input key={id} type="hidden" name="attendeeIds" value={id} />
-                  ))}
-                  {groups.length > 0 && (
-                    <div className="mb-2 flex flex-wrap gap-1.5">
-                      {groups.map((group) => {
-                        const active = isGroupSelected(group);
-                        return (
-                          <button
-                            key={group.id}
-                            type="button"
-                            onClick={() => toggleGroup(group)}
-                            aria-pressed={active}
-                            className={`inline-flex min-h-8 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors ${
-                              active
-                                ? "border-brand-400 bg-brand-100 text-brand-900 hover:bg-brand-50"
-                                : "border-zinc-200 bg-white text-zinc-600 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-800"
-                            }`}
-                            title={
-                              active
-                                ? `Bỏ chọn cả nhóm ${group.name}`
-                                : `Thêm cả nhóm ${group.name}`
-                            }
-                          >
-                            <UsersRound size={13} aria-hidden="true" />
-                            {group.name}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                  <div className="overflow-hidden rounded-[8px] border border-zinc-200">
-                    <div className="border-b border-zinc-100 p-2">
-                      <input
-                        type="search"
-                        value={query}
-                        onChange={(event) => setQuery(event.target.value)}
-                        placeholder="Tìm theo tên hoặc email"
-                        className="tf-field !min-h-9 !py-1.5"
-                        aria-label="Tìm người tham dự"
-                      />
-                    </div>
-                    <div className="grid max-h-48 grid-cols-1 overflow-y-auto p-2 sm:grid-cols-2">
-                      {filteredPeople.map((person) => {
-                        const slots = daySchedules.get(person.id) ?? [];
-                        const busy = slots.some((slot) => slot.clash);
-                        return (
-                          <label
-                            key={person.id}
-                            className="flex cursor-pointer items-start gap-2 rounded-[7px] px-2 py-2 hover:bg-zinc-50"
-                            title={person.email}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selected.has(person.id)}
-                              onChange={() => toggleAttendee(person.id)}
-                              className="mt-1.5 h-4 w-4 shrink-0 accent-[#a8d431]"
-                            />
-                            <Avatar
-                              id={person.id}
-                              name={person.name}
-                              avatarUrl={person.avatarUrl}
-                              className="h-7 w-7 text-xs"
-                            />
-                            <span className="min-w-0">
-                              <span className="block truncate text-sm font-medium text-zinc-700">
-                                {person.name}
-                              </span>
-                              <span
-                                className={`block text-xs ${
-                                  busy
-                                    ? "font-medium text-red-600"
-                                    : timeValid
-                                      ? "text-emerald-700"
-                                      : "text-zinc-400"
-                                }`}
-                              >
-                                {busy ? "Bận giờ này" : timeValid ? "Rảnh giờ này" : person.email}
-                              </span>
-                              {slots.length > 0 && (
-                                <span className="mt-0.5 block text-[11px] leading-4 text-zinc-500">
-                                  Đã có họp:{" "}
-                                  {slots.map((slot, index) => (
-                                    <span key={slot.key}>
-                                      {index > 0 && ", "}
-                                      <span
-                                        className={`whitespace-nowrap tabular-nums ${
-                                          slot.clash ? "font-semibold text-red-600" : ""
-                                        }`}
-                                      >
-                                        {slot.label}
-                                      </span>
-                                    </span>
-                                  ))}
-                                </span>
-                              )}
-                            </span>
-                          </label>
-                        );
-                      })}
-                      {filteredPeople.length === 0 && (
-                        <p className="p-2 text-sm text-zinc-400">Không có nhân sự phù hợp.</p>
-                      )}
-                    </div>
-                  </div>
-                  {busySelectedCount > 0 && (
-                    <p className="mt-2 text-xs text-amber-700">
-                      {busySelectedCount} người đã chọn đang có cuộc họp khác trong khung giờ này.
-                      Bạn vẫn có thể mời, hoặc đổi giờ để mọi người cùng rảnh.
-                    </p>
-                  )}
-                </fieldset>
-
-                <label className="block">
-                  <span className="tf-label">Người ghi biên bản</span>
-                  <select
-                    name="recorderId"
-                    value={recorderId}
-                    onChange={(event) => set("recorderId", event.target.value)}
-                    className="tf-field"
-                  >
-                    <option value="">{organizerName} (người tổ chức)</option>
-                    {selectedPeople.map((person) => (
-                      <option key={person.id} value={person.id}>
-                        {person.name}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="mt-1.5 block text-xs text-zinc-500">
-                    Người này ghi âm và gửi biên bản. Không chọn ai thì người tổ chức tự ghi.
-                  </span>
-                </label>
-
                 <label className="block">
                   <span className="tf-label">Nội dung (không bắt buộc)</span>
                   <textarea
@@ -750,6 +534,106 @@ export default function MeetingComposer({
                     className="tf-field min-h-24 resize-y leading-6"
                   />
                 </label>
+
+                <section className="rounded-[9px] border border-zinc-200 bg-zinc-50/60 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-zinc-900">
+                        Người tham dự ({values.attendeeIds.length})
+                      </h3>
+                      <p className="mt-0.5 text-xs text-zinc-500">
+                        Kiểm tra lại danh sách trước khi gửi lời mời.
+                      </p>
+                    </div>
+                    {busySelectedCount > 0 ? (
+                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
+                        {busySelectedCount} người trùng lịch
+                      </span>
+                    ) : values.attendeeIds.length > 0 ? (
+                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                        Tất cả đang rảnh
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {selectedPeople.length > 0 ? (
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {selectedPeople.map((person) => (
+                        <button
+                          key={person.id}
+                          type="button"
+                          onClick={() =>
+                            set(
+                              "attendeeIds",
+                              values.attendeeIds.filter((id) => id !== person.id)
+                            )
+                          }
+                          className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 py-1 pl-1 pr-2 text-xs font-medium text-zinc-700 hover:border-brand-400"
+                          title={`Bỏ chọn ${person.name}`}
+                        >
+                          <Avatar
+                            id={person.id}
+                            name={person.name}
+                            avatarUrl={person.avatarUrl}
+                            className="h-6 w-6 text-[10px]"
+                          />
+                          {person.name}
+                          <X size={12} aria-hidden="true" />
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-3 rounded-[7px] border border-dashed border-zinc-300 px-3 py-4 text-center text-xs text-zinc-400">
+                      Chưa chọn người tham dự.
+                    </p>
+                  )}
+
+                  <label className="mt-4 block border-t border-zinc-200 pt-3">
+                    <span className="tf-label">Người ghi biên bản</span>
+                    <select
+                      name="recorderId"
+                      value={recorderId}
+                      onChange={(event) => set("recorderId", event.target.value)}
+                      className="tf-field"
+                    >
+                      <option value="">{organizerName} (người tổ chức)</option>
+                      {selectedPeople.map((person) => (
+                        <option key={person.id} value={person.id}>
+                          {person.name}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="mt-1.5 block text-xs text-zinc-500">
+                      Người này ghi âm và gửi biên bản. Không chọn ai thì người tổ chức tự ghi.
+                    </span>
+                  </label>
+                </section>
+                </div>
+
+                <div className="flex min-h-[560px] flex-col border-t border-zinc-200 bg-zinc-50/50 lg:min-h-0 lg:border-l lg:border-t-0">
+                  <div className="shrink-0 border-b border-zinc-200 bg-white px-4 py-3">
+                    <h3 className="text-sm font-semibold text-zinc-900">Thêm người tham dự</h3>
+                    <p className="mt-0.5 text-xs text-zinc-500">
+                      {projectId && !meeting
+                        ? "Đã chọn sẵn thành viên dự án. Tìm thêm hoặc bỏ người không cần thiết."
+                        : "Tìm theo tên, tình trạng rảnh hoặc nhóm làm việc."}
+                    </p>
+                  </div>
+
+                  {values.attendeeIds.map((id) => (
+                    <input key={id} type="hidden" name="attendeeIds" value={id} />
+                  ))}
+                  <PeoplePicker
+                    people={invitable}
+                    selectedIds={values.attendeeIds}
+                    onSelectedIdsChange={(ids) => set("attendeeIds", ids)}
+                    groups={groups}
+                    availability={pickerAvailability}
+                    showAvailabilityFilter={timeValid}
+                    showSelectedSummary={false}
+                    compactGroups
+                  />
+                </div>
               </div>
 
               <div className="flex shrink-0 justify-end gap-2.5 border-t border-zinc-200 px-5 py-4 sm:px-6">

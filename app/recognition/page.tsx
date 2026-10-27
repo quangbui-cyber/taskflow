@@ -13,10 +13,12 @@ import RecognitionComposer from "@/components/RecognitionComposer";
 import RecognitionMonthSelect from "@/components/RecognitionMonthSelect";
 import RecognitionWebhookSettings from "@/components/RecognitionWebhookSettings";
 import Sidebar from "@/components/Sidebar";
+import HubTabs from "@/components/HubTabs";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getRecognitionWebhookStatus } from "@/lib/recognitionGoogleChat";
 import {
+  BIRTHDAY_RECOGNITION_CATEGORY,
   RECOGNITION_WEEKLY_STAR_LIMIT,
   recognitionCategoryLabel,
   recognitionMonthOptions,
@@ -178,7 +180,7 @@ export default async function RecognitionPage({
       take: 100,
     }),
     prisma.recognition.findMany({
-      where: { createdAt: dateWhere },
+      where: { createdAt: dateWhere, category: { not: BIRTHDAY_RECOGNITION_CATEGORY } },
       select: { senderId: true, recipientId: true },
     }),
     prisma.project.findMany({
@@ -198,6 +200,7 @@ export default async function RecognitionPage({
     prisma.recognition.count({
       where: {
         senderId: user.id,
+        category: { not: BIRTHDAY_RECOGNITION_CATEGORY },
         createdAt: { gte: currentWeek.start, lt: currentWeek.end },
       },
     }),
@@ -241,6 +244,7 @@ export default async function RecognitionPage({
       <Sidebar user={user} projects={sidebarProjects} activeSection="recognition" />
 
       <main className="tf-main">
+        <HubTabs section="recognition" role={user.role} isHrManager={user.isHrManager} />
         <div className="tf-page !max-w-[1220px] !pt-12">
           <header className="mb-[54px] flex items-start justify-between gap-5">
             <div>

@@ -14,7 +14,14 @@ export async function getCurrentUser() {
       isActive: true,
       sessionVersion: session.sessionVersion,
     },
-    select: { id: true, email: true, name: true, role: true, avatarUrl: true },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      avatarUrl: true,
+      isHrManager: true,
+    },
   });
 }
 

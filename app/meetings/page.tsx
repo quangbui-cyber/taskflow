@@ -9,6 +9,7 @@ import {
 import MeetingComposer from "@/components/MeetingComposer";
 import RoomCalendar, { type CalendarMeeting } from "@/components/RoomCalendar";
 import Sidebar from "@/components/Sidebar";
+import HubTabs from "@/components/HubTabs";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { meetingRecapsEnabled, meetingsEnabled } from "@/lib/features";
@@ -334,8 +335,11 @@ export default async function MeetingsPage({
             endAt: true,
             meetingUrl: true,
             organizerId: true,
-            organizer: { select: { name: true } },
-            attendees: { select: { userId: true } },
+            organizer: { select: { id: true, name: true, avatarUrl: true } },
+            attendees: {
+              select: { userId: true, response: true, user: { select: { name: true, avatarUrl: true } } },
+              orderBy: { createdAt: "asc" },
+            },
           },
           orderBy: { startAt: "asc" },
           take: 500,
@@ -377,7 +381,13 @@ export default async function MeetingsPage({
       startAt: meeting.startAt.toISOString(),
       endAt: meeting.endAt.toISOString(),
       organizerName: meeting.organizer.name,
-      attendeeCount: meeting.attendees.length,
+      organizer: meeting.organizer,
+      attendees: meeting.attendees.map((attendee) => ({
+        id: attendee.userId,
+        name: attendee.user.name,
+        avatarUrl: attendee.user.avatarUrl,
+        response: attendee.response,
+      })),
       isMine,
       meetingUrl: isMine ? meeting.meetingUrl : null,
     };
@@ -394,6 +404,7 @@ export default async function MeetingsPage({
       <Sidebar user={user} projects={sidebarProjects} activeSection="meetings" />
 
       <main className="tf-main">
+        <HubTabs section="meetings" role={user.role} />
         <div className="tf-page !max-w-[1220px] space-y-6">
           <header className="flex flex-wrap items-start justify-between gap-4">
             <div>

@@ -10,6 +10,7 @@ import { ImportedSuppliersDialog, SupplierCreateDialog, type FileSupplierGroup }
 import type { SupplierOption } from "@/components/SupplierQuickForm";
 import { searchKey } from "@/lib/supplierMatch";
 import { useInteraction } from "@/components/InteractionProvider";
+import { DateRangeField } from "@/components/TemporalFields";
 import {
   costAmount,
   costVat,
@@ -713,32 +714,19 @@ export default function FinanceSheetEditor({
                   />
                 </label>
               ))}
-              <label className="block">
-                <span className="tf-label">Thời gian: từ ngày</span>
-                <input
-                  type="date"
-                  value={header.eventStart}
+              <div className="sm:col-span-2 lg:col-span-2">
+                <DateRangeField
+                  label="Thời gian chương trình"
+                  startValue={header.eventStart}
+                  endValue={header.eventEnd}
                   disabled={disabled}
-                  onChange={(event) => {
-                    setHeader((current) => ({ ...current, eventStart: event.target.value }));
+                  onChange={(eventStart, eventEnd) => {
+                    setHeader((current) => ({ ...current, eventStart, eventEnd }));
                     setDirty(true);
                   }}
-                  className="tf-field disabled:bg-zinc-50"
+                  helperText="Chọn một ngày, hoặc thêm ngày kết thúc nếu chương trình kéo dài nhiều ngày."
                 />
-              </label>
-              <label className="block">
-                <span className="tf-label">Đến ngày (nếu nhiều ngày)</span>
-                <input
-                  type="date"
-                  value={header.eventEnd}
-                  disabled={disabled}
-                  onChange={(event) => {
-                    setHeader((current) => ({ ...current, eventEnd: event.target.value }));
-                    setDirty(true);
-                  }}
-                  className="tf-field disabled:bg-zinc-50"
-                />
-              </label>
+              </div>
               {showSell && (
                 <label className="block">
                   <span className="tf-label">VAT bán ra</span>

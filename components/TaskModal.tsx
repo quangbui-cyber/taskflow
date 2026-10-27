@@ -44,6 +44,9 @@ export default function TaskModal({
   const [openPicker, setOpenPicker] = useState<"followers" | "priority" | null>(
     null
   );
+  const [startDate, setStartDate] = useState(
+    task.startDate ? toDeadlineLocalValue(task.startDate) : ""
+  );
   const [dueDate, setDueDate] = useState(
     task.dueDate ? toDeadlineLocalValue(task.dueDate) : ""
   );
@@ -128,6 +131,7 @@ export default function TaskModal({
           assigneeId: assigneeId || null,
           // Gửi thời điểm tuyệt đối (ISO) tính theo múi giờ trình duyệt,
           // để server (chạy UTC trên Vercel) lưu đúng, không lệch giờ.
+          startDate: startDate ? new Date(startDate).toISOString() : null,
           dueDate: dueDate ? new Date(dueDate).toISOString() : null,
         });
         notify({ message: "Đã lưu thay đổi task.", tone: "success" });
@@ -395,8 +399,10 @@ export default function TaskModal({
             </label>
 
             <DeadlineField
-              label="Hạn chót"
+              label="Thời gian thực hiện"
+              startValue={startDate}
               value={dueDate}
+              onStartChange={setStartDate}
               onChange={setDueDate}
               className="col-span-2"
             />
