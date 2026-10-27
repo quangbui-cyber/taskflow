@@ -16,6 +16,7 @@ export type ActiveSection =
   | "leave"
   | "notifications"
   | "profile"
+  | "hr"
   | "admin";
 
 export type HubKey = "home" | "work" | "projects" | "performance" | "people";
@@ -24,6 +25,8 @@ export type NavFlags = {
   showMeetings: boolean;
   showRevenue: boolean;
   showSuppliers: boolean;
+  /** Admin hoặc người phụ trách nhân sự. */
+  showHr: boolean;
 };
 
 export type HubSection = {
@@ -94,6 +97,12 @@ export const HUBS: Hub[] = [
       { key: "recognition", label: "Góc cảm ơn", href: "/recognition" },
       { key: "leave", label: "Nghỉ phép", href: "/leave" },
       { key: "profile", label: "Hồ sơ của tôi", href: "/profile" },
+      {
+        key: "hr",
+        label: "Hồ sơ nhân sự",
+        href: "/hr",
+        visible: (flags) => flags.showHr,
+      },
     ],
   },
 ];

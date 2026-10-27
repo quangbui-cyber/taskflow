@@ -405,8 +405,8 @@ export default async function HomePage({
               aria-labelledby="greeting-heading"
               className="relative flex flex-wrap items-center justify-between gap-x-6 gap-y-4 overflow-hidden rounded-[18px] bg-white px-6 py-6 sm:px-7"
             >
-              <span className="pointer-events-none absolute -right-12 -top-24 h-56 w-56 rounded-full bg-brand-50" aria-hidden="true" />
-              <span className="pointer-events-none absolute -bottom-20 right-56 h-32 w-32 rounded-full bg-brand-100" aria-hidden="true" />
+              <span className="pointer-events-none absolute -right-12 -top-24 h-56 w-56 tf-float-a rounded-full bg-brand-50" aria-hidden="true" />
+              <span className="pointer-events-none absolute -bottom-20 right-56 h-32 w-32 tf-float-b rounded-full bg-brand-100" aria-hidden="true" />
               {/* Chuông thông báo ở góc phải khung chào. Màn hình nhỏ đã có chuông
                   ở thanh trên cùng nên ẩn đi để không lặp. */}
               <Link

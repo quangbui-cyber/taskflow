@@ -244,7 +244,7 @@ export default async function RecognitionPage({
       <Sidebar user={user} projects={sidebarProjects} activeSection="recognition" />
 
       <main className="tf-main">
-        <HubTabs section="recognition" role={user.role} />
+        <HubTabs section="recognition" role={user.role} isHrManager={user.isHrManager} />
         <div className="tf-page !max-w-[1220px] !pt-12">
           <header className="mb-[54px] flex items-start justify-between gap-5">
             <div>
