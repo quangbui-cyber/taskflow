@@ -25,7 +25,10 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@arizeai/openinference-instrumentation-openai": "4.4.2",
+    "@arizeai/phoenix-otel": "2.3.0",
     "@hello-pangea/dnd": "^18.0.1",
+    "@llamaindex/openai": "0.4.23",
     "@neondatabase/serverless": "1.2.0",
     "@opennextjs/cloudflare": "^1.19.1",
     "@prisma/adapter-neon": "^6.19.3",
@@ -37,11 +40,13 @@
     "bcryptjs": "^3.0.3",
     "exceljs": "4.4.0",
     "jose": "^6.2.3",
-    "jszip": "^3.10.2",
     "jsqr": "^1.4.0",
+    "jszip": "^3.10.2",
+    "llamaindex": "0.12.1",
     "lucide-react": "^1.24.0",
     "next": "16.4.2",
     "nodemailer": "^10.2.1",
+    "openai": "7.45.0",
     "pdf-parse": "^2.4.5",
     "pdfjs-dist": "^5.4.296",
     "pg": "^8.23.1",
@@ -52,9 +57,12 @@
     "react-dom": "19.2.4",
     "server-only": "^0.0.1",
     "unpdf": "^1.8.1",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "zod": "4.6.7"
   },
   "devDependencies": {
+    "@arizeai/phoenix-client": "7.16.2",
+    "@arizeai/phoenix-evals": "2.7.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/nodemailer": "^8.0.2",
@@ -65,6 +73,7 @@
     "cross-env": "^10.1.0",
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
+    "promptfoo": "0.125.1",
     "tailwindcss": "^4",
     "tsx": "^4.23.0",
     "typescript": "^5",
