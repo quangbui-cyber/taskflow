@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
+  Bell,
   BriefcaseBusiness,
   Cake,
   CalendarClock,
@@ -44,6 +45,7 @@ import Sidebar from "@/components/Sidebar";
 import Avatar from "@/components/Avatar";
 import TaskListItem from "@/components/TaskListItem";
 import BirthdayWishButton from "@/components/BirthdayWishButton";
+import Confetti from "@/components/Confetti";
 import { handwriting } from "@/app/fonts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -52,6 +54,11 @@ const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
 const PROJECT_STATUS_ORDER: Record<string, number> = { ON_PROCESS: 0, BIDDING: 1 };
 
 const UPCOMING_BIRTHDAY_LIMIT = 6;
+
+/** Độ trễ cho hiệu ứng .tf-rise để các khung hiện lần lượt. */
+function riseDelay(ms: number) {
+  return { "--tf-delay": `${ms}ms` } as CSSProperties;
+}
 
 function greetingFor(now: Date) {
   const hour = Number(
@@ -107,9 +114,9 @@ function QuickAction({
     <Link
       href={href}
       prefetch={false}
-      className="flex items-center gap-3 rounded-[12px] border border-transparent bg-brand-50 px-3 py-2.5 text-sm font-semibold text-zinc-800 transition-colors hover:border-brand-300 hover:bg-white"
+      className="tf-quick-action flex items-center gap-3 rounded-[12px] border border-transparent bg-brand-50 px-3 py-2.5 text-sm font-semibold text-zinc-800 hover:border-brand-300 hover:bg-white"
     >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-brand-400 text-zinc-950">
+      <span className="tf-quick-icon flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-brand-400 text-zinc-950">
         <Icon size={17} strokeWidth={2} aria-hidden="true" />
       </span>
       {label}
@@ -123,17 +130,21 @@ function Card({
   action,
   children,
   labelledBy,
+  delay = 0,
 }: {
   title: string;
   icon?: LucideIcon;
   action?: ReactNode;
   children: ReactNode;
   labelledBy: string;
+  /** Độ trễ (ms) để khung hiện sau các khung phía trên. */
+  delay?: number;
 }) {
   return (
     <section
       aria-labelledby={labelledBy}
-      className="rounded-[16px] border border-zinc-200 bg-white p-5"
+      className="tf-rise rounded-[16px] border border-zinc-200 bg-white p-5"
+      style={riseDelay(delay)}
     >
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2
@@ -201,6 +212,7 @@ export default async function HomePage({
     latestRecognitions,
     leaveManagers,
     birthdayPeople,
+    unreadNotifications,
   ] = await Promise.all([
     prisma.user.findUniqueOrThrow({
       where: { id: user.id },
@@ -292,6 +304,7 @@ export default async function HomePage({
       where: { isActive: true, deletedAt: null, birthday: { not: null } },
       select: { id: true, name: true, avatarUrl: true, birthday: true },
     }),
+    prisma.notification.count({ where: { userId: user.id, read: false } }),
   ]);
 
   // Sinh nhật: ai có sinh nhật hôm nay và trong 30 ngày tới (chỉ ngày/tháng).
@@ -386,44 +399,67 @@ export default async function HomePage({
 
       <main className="tf-main bg-zinc-50">
         <div className="mx-auto max-w-[1240px] space-y-5 px-4 py-6 sm:px-8 lg:px-10">
-          <section
-            aria-labelledby="greeting-heading"
-            className="relative flex flex-wrap items-center justify-between gap-x-6 gap-y-4 overflow-hidden rounded-[20px] border border-zinc-200 bg-white px-6 py-6 sm:px-7"
-          >
-            <span className="pointer-events-none absolute -right-12 -top-24 h-56 w-56 rounded-full bg-brand-50" aria-hidden="true" />
-            <span className="pointer-events-none absolute -bottom-20 right-56 h-32 w-32 rounded-full bg-brand-100" aria-hidden="true" />
-            <div className="relative min-w-0 flex-[1_1_360px]">
-              <Image
-                src="/creative-station-logo.png"
-                width={1914}
-                height={370}
-                alt="Creative Station"
-                // Màn hình nhỏ đã có logo ở thanh trên cùng.
-                className="hidden h-[30px] w-auto md:block"
-                priority
-              />
-              <p className="text-[13px] md:mt-3 text-zinc-600 first-letter:uppercase">{dateLabel}</p>
-              <h1
-                id="greeting-heading"
-                className={`${handwriting.className} text-[38px] leading-[48px] text-brand-800 sm:text-[46px] sm:leading-[56px]`}
+          {/* Khung ngoài vẽ viền có ánh sáng chạy vòng (.tf-glow-border). */}
+          <div className="tf-rise tf-glow-border rounded-[20px]">
+            <section
+              aria-labelledby="greeting-heading"
+              className="relative flex flex-wrap items-center justify-between gap-x-6 gap-y-4 overflow-hidden rounded-[18px] bg-white px-6 py-6 sm:px-7"
+            >
+              <span className="pointer-events-none absolute -right-12 -top-24 h-56 w-56 rounded-full bg-brand-50" aria-hidden="true" />
+              <span className="pointer-events-none absolute -bottom-20 right-56 h-32 w-32 rounded-full bg-brand-100" aria-hidden="true" />
+              {/* Chuông thông báo ở góc phải khung chào. Màn hình nhỏ đã có chuông
+                  ở thanh trên cùng nên ẩn đi để không lặp. */}
+              <Link
+                href="/notifications"
+                prefetch={false}
+                aria-label={
+                  unreadNotifications > 0
+                    ? `Thông báo (${unreadNotifications} chưa đọc)`
+                    : "Thông báo"
+                }
+                title="Thông báo"
+                className="absolute right-5 top-5 z-10 hidden h-10 w-10 items-center justify-center rounded-full border border-brand-200 bg-white text-brand-700 shadow-sm transition-colors hover:border-brand-300 hover:bg-brand-50 md:flex"
               >
-                {greetingFor(now)}, {givenName(user.name)}!
-              </h1>
-              <p className="mt-1.5 text-sm italic leading-6 text-zinc-700">&ldquo;{quote}&rdquo;</p>
-            </div>
-            <div className="relative flex flex-wrap gap-2.5">
-              <StatLink
-                href="/tasks"
-                value={urgentTasks.length}
-                label="Việc gấp"
-                tone={urgentTasks.length === 0 ? "text-brand-700" : "text-red-600"}
-              />
-              {showMeetings && (
-                <StatLink href="/meetings?view=mine" value={meetingsToday.length} label="Họp hôm nay" />
-              )}
-              <StatLink href="/leave" value={formatLeaveDays(leave.remaining)} label="Ngày phép còn" />
-            </div>
-          </section>
+                <Bell size={19} strokeWidth={1.9} aria-hidden="true" />
+                {unreadNotifications > 0 && (
+                  <span className="absolute -right-1 -top-1 min-w-[18px] rounded-full border-2 border-white bg-red-500 px-1 text-center text-[10px] font-bold leading-[14px] text-white">
+                    {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                  </span>
+                )}
+              </Link>
+              <div className="relative min-w-0 flex-[1_1_360px]">
+                <Image
+                  src="/creative-station-logo.png"
+                  width={1914}
+                  height={370}
+                  alt="Creative Station"
+                  // Màn hình nhỏ đã có logo ở thanh trên cùng.
+                  className="hidden h-[30px] w-auto md:block"
+                  priority
+                />
+                <p className="text-[13px] md:mt-3 text-zinc-600 first-letter:uppercase">{dateLabel}</p>
+                <h1
+                  id="greeting-heading"
+                  className={`${handwriting.className} tf-handwrite text-[38px] leading-[48px] text-brand-800 sm:text-[46px] sm:leading-[56px]`}
+                >
+                  {greetingFor(now)}, {givenName(user.name)}!
+                </h1>
+                <p className="mt-1.5 text-sm italic leading-6 text-zinc-700">&ldquo;{quote}&rdquo;</p>
+              </div>
+              <div className="relative flex flex-wrap gap-2.5 md:mr-14">
+                <StatLink
+                  href="/tasks"
+                  value={urgentTasks.length}
+                  label="Việc gấp"
+                  tone={urgentTasks.length === 0 ? "text-brand-700" : "text-red-600"}
+                />
+                {showMeetings && (
+                  <StatLink href="/meetings?view=mine" value={meetingsToday.length} label="Họp hôm nay" />
+                )}
+                <StatLink href="/leave" value={formatLeaveDays(leave.remaining)} label="Ngày phép còn" />
+              </div>
+            </section>
+          </div>
 
           {birthdaysToday.slice(0, 3).map((person) => {
             const wishes = wishesFor(person.id);
@@ -432,13 +468,11 @@ export default async function HomePage({
               <section
                 key={person.id}
                 aria-label={`Sinh nhật ${person.name}`}
-                className="relative flex flex-wrap items-center gap-x-5 gap-y-3.5 overflow-hidden rounded-[18px] border-[1.5px] border-brand-300 bg-brand-50 px-5 py-4"
+                className="tf-rise relative flex flex-wrap items-center gap-x-5 gap-y-3.5 overflow-hidden rounded-[18px] border-[1.5px] border-brand-300 bg-brand-50 px-5 py-4"
+                style={riseDelay(80)}
               >
-                <span className="pointer-events-none absolute left-[40%] top-2.5 h-2 w-2 rotate-[20deg] rounded-[2px] bg-brand-400" aria-hidden="true" />
-                <span className="pointer-events-none absolute bottom-3 left-[48%] h-1.5 w-1.5 rounded-full bg-amber-400" aria-hidden="true" />
-                <span className="pointer-events-none absolute left-[56%] top-4 h-1 w-2.5 -rotate-[30deg] rounded-[2px] bg-brand-700" aria-hidden="true" />
-                <span className="pointer-events-none absolute bottom-4 left-[63%] h-[7px] w-[7px] rotate-45 rounded-[2px] bg-brand-300" aria-hidden="true" />
-                <span className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[14px] bg-brand-400 text-zinc-950">
+                <Confetti />
+                <span className="tf-wiggle relative flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[14px] bg-brand-400 text-zinc-950">
                   <Cake size={26} strokeWidth={1.8} aria-hidden="true" />
                 </span>
                 <div className="relative min-w-0 flex-[1_1_300px]">
@@ -491,7 +525,11 @@ export default async function HomePage({
             );
           })}
 
-          <nav aria-label="Truy cập nhanh" className="rounded-[16px] border border-zinc-200 bg-white p-4">
+          <nav
+            aria-label="Truy cập nhanh"
+            className="tf-rise rounded-[16px] border border-zinc-200 bg-white p-4"
+            style={riseDelay(140)}
+          >
             <h2 className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-zinc-600">Truy cập nhanh</h2>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
               <QuickAction href="/tasks" label="Việc của tôi" icon={CheckCircle2} />
@@ -513,6 +551,7 @@ export default async function HomePage({
                 title="Việc cần chú ý"
                 icon={CheckCircle2}
                 labelledBy="attention-heading"
+                delay={200}
                 action={<CardLink href="/tasks">Mở Công việc →</CardLink>}
               >
                 {urgentTasks.length > 0 ? (
@@ -552,6 +591,7 @@ export default async function HomePage({
                 title="Góc cảm ơn"
                 icon={Heart}
                 labelledBy="thanks-heading"
+                delay={280}
                 action={<CardLink href="/recognition">Xem tất cả →</CardLink>}
               >
                 <div className="flex flex-wrap gap-4">
@@ -627,7 +667,7 @@ export default async function HomePage({
             </div>
 
             <aside aria-label="Thông tin của tôi" className="min-w-0 space-y-4">
-              <Card title="Sinh nhật sắp tới" icon={Cake} labelledBy="birthdays-heading">
+              <Card title="Sinh nhật sắp tới" icon={Cake} labelledBy="birthdays-heading" delay={220}>
                 {birthdays.length > 0 ? (
                   <ul>
                     {birthdays.slice(0, UPCOMING_BIRTHDAY_LIMIT).map((person) => {
@@ -701,7 +741,7 @@ export default async function HomePage({
               </Card>
 
               {showMeetings && (
-                <Card title="Lịch họp hôm nay" icon={CalendarClock} labelledBy="meetings-heading">
+                <Card title="Lịch họp hôm nay" icon={CalendarClock} labelledBy="meetings-heading" delay={280}>
                   {meetingsToday.length > 0 ? (
                     <ul className="mb-3 space-y-1">
                       {meetingsToday.slice(0, 4).map((meeting) => (
@@ -737,7 +777,7 @@ export default async function HomePage({
                 </Card>
               )}
 
-              <Card title="Nghỉ phép của bạn" icon={Plane} labelledBy="leave-heading">
+              <Card title="Nghỉ phép của bạn" icon={Plane} labelledBy="leave-heading" delay={340}>
                 <div className="flex justify-between text-[13px]">
                   <b>Phép năm {year}</b>
                   <span className="text-zinc-600">
@@ -761,7 +801,7 @@ export default async function HomePage({
               </Card>
 
               {absentToday.length > 0 && (
-                <Card title="Hôm nay vắng mặt" icon={UserRoundX} labelledBy="absent-heading">
+                <Card title="Hôm nay vắng mặt" icon={UserRoundX} labelledBy="absent-heading" delay={400}>
                   <ul className="space-y-1.5">
                     {absentToday.map((request) => (
                       <li key={request.id} className="flex items-center gap-2.5">
@@ -789,6 +829,7 @@ export default async function HomePage({
                 title={`Dự án đang chạy · ${runningProjects.length}`}
                 icon={BriefcaseBusiness}
                 labelledBy="projects-heading"
+                delay={400}
                 action={<CardLink href="/projects">Tất cả</CardLink>}
               >
                 {runningProjects.length > 0 ? (

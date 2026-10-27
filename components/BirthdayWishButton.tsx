@@ -7,6 +7,7 @@ import {
   createRecognition,
   type RecognitionActionState,
 } from "@/app/actions/recognitions";
+import Confetti from "@/components/Confetti";
 import { useActionFeedback } from "@/components/InteractionProvider";
 import { BIRTHDAY_RECOGNITION_CATEGORY } from "@/lib/recognitions";
 
@@ -57,8 +58,10 @@ export default function BirthdayWishButton({
   if (alreadyWished || state.success) {
     return (
       <span
-        className={`inline-flex shrink-0 items-center gap-1.5 rounded-full bg-brand-100 font-semibold text-brand-800 ${sizeClass} ${textClass}`}
+        className={`relative inline-flex shrink-0 items-center gap-1.5 rounded-full bg-brand-100 font-semibold text-brand-800 ${sizeClass} ${textClass}`}
       >
+        {/* Vừa gửi xong: bung pháo giấy nhỏ quanh nút. */}
+        {state.success && <Confetti variant="burst" count={14} />}
         <Check size={size === "sm" ? 13 : 16} aria-hidden="true" />
         Đã chúc
       </span>

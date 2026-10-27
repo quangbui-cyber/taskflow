@@ -195,8 +195,8 @@ export default async function Sidebar({
           <Link
             href="/profile"
             prefetch={false}
-            aria-label={`Tài khoản của tôi: ${user.name}`}
-            title="Tài khoản của tôi: đổi tên, ảnh đại diện, mật khẩu"
+            aria-label={`Hồ sơ của tôi: ${user.name}`}
+            title="Hồ sơ của tôi: tên, ảnh đại diện, sinh nhật, mật khẩu"
             aria-current={activeSection === "profile" ? "page" : undefined}
             className="rounded-full"
           >
@@ -272,7 +272,7 @@ export default async function Sidebar({
                   prefetch={false}
                   aria-current={activeSection === "profile" ? "page" : undefined}
                   className="min-w-0 flex-1 rounded-[6px] px-1 py-0.5 transition-colors hover:bg-zinc-100"
-                  title="Tài khoản của tôi: đổi tên, ảnh đại diện, mật khẩu"
+                  title="Hồ sơ của tôi: tên, ảnh đại diện, sinh nhật, mật khẩu"
                 >
                   <p className="truncate text-sm font-medium">{user.name}</p>
                   <p className="truncate text-xs text-zinc-500">{user.email}</p>

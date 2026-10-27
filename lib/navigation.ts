@@ -1,6 +1,6 @@
 // Điều hướng chính: 5 khu vực trên thanh icon bên trái, mỗi khu vực có các mục
-// con hiện thành tab ở đầu trang (HubTabs). Thông báo, tài khoản và cài đặt
-// nằm ở góc dưới thanh icon nên không thuộc khu vực nào.
+// con hiện thành tab ở đầu trang (HubTabs). Thông báo và cài đặt
+// nằm ở góc dưới thanh icon nên không thuộc khu vực nào; Hồ sơ của tôi thuộc Đội ngũ.
 
 export type ActiveSection =
   | "home"
@@ -93,6 +93,7 @@ export const HUBS: Hub[] = [
     sections: [
       { key: "recognition", label: "Góc cảm ơn", href: "/recognition" },
       { key: "leave", label: "Nghỉ phép", href: "/leave" },
+      { key: "profile", label: "Hồ sơ của tôi", href: "/profile" },
     ],
   },
 ];

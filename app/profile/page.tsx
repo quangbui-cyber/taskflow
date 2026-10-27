@@ -2,6 +2,7 @@ import { UserRound } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
+import HubTabs from "@/components/HubTabs";
 import { ProfileInfoForm, ProfilePasswordForm } from "@/components/ProfileForms";
 import GoogleConnectionCard from "@/components/GoogleConnectionCard";
 import { canManageChatSpaces, canSendGmail, googleWorkspaceConfigured } from "@/lib/googleWorkspace";
@@ -43,6 +44,7 @@ export default async function ProfilePage({
       <Sidebar user={user} projects={sidebarProjects} activeSection="profile" />
 
       <main className="tf-main">
+        <HubTabs section="profile" role={user.role} />
         <div className="tf-page-narrow space-y-6">
           <div>
             <div className="flex items-center gap-3">
@@ -54,7 +56,7 @@ export default async function ProfilePage({
               <h1
                 className="tf-page-title"
               >
-                Tài khoản của tôi
+                Hồ sơ của tôi
               </h1>
             </div>
             <p className="tf-page-subtitle">{user.email}</p>
