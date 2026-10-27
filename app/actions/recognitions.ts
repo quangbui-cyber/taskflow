@@ -11,6 +11,12 @@ import {
 import { notify } from "@/lib/notify";
 import { prisma } from "@/lib/prisma";
 import {
+  canWishBirthday,
+  latestBirthdayOccurrence,
+  vietnamDayStart,
+} from "@/lib/birthdays";
+import {
+  BIRTHDAY_RECOGNITION_CATEGORY,
   RECOGNITION_CATEGORIES,
   RECOGNITION_WEEKLY_STAR_LIMIT,
   RECOGNITION_VISIBILITIES,
@@ -83,29 +89,54 @@ export async function createRecognition(
   if (message.length > 500) {
     return { error: "Lời cảm ơn không được dài quá 500 ký tự." };
   }
-  if (!categoryKeys.has(category)) return { error: "Chủ đề không hợp lệ." };
+  const isBirthdayWish = category === BIRTHDAY_RECOGNITION_CATEGORY;
+  if (!isBirthdayWish && !categoryKeys.has(category)) {
+    return { error: "Chủ đề không hợp lệ." };
+  }
   if (!visibilityKeys.has(visibility)) {
     return { error: "Phạm vi hiển thị không hợp lệ." };
   }
 
-  const currentWeek = recognitionWeekRange();
-  const sentThisWeek = await prisma.recognition.count({
-    where: {
-      senderId: user.id,
-      createdAt: { gte: currentWeek.start, lt: currentWeek.end },
-    },
-  });
-  if (sentThisWeek >= RECOGNITION_WEEKLY_STAR_LIMIT) {
-    return {
-      error: `Bạn đã dùng hết ${RECOGNITION_WEEKLY_STAR_LIMIT} ngôi sao của tuần này. Ví sao sẽ đầy lại vào thứ Hai tuần sau.`,
-    };
+  if (!isBirthdayWish) {
+    const currentWeek = recognitionWeekRange();
+    const sentThisWeek = await prisma.recognition.count({
+      where: {
+        senderId: user.id,
+        category: { not: BIRTHDAY_RECOGNITION_CATEGORY },
+        createdAt: { gte: currentWeek.start, lt: currentWeek.end },
+      },
+    });
+    if (sentThisWeek >= RECOGNITION_WEEKLY_STAR_LIMIT) {
+      return {
+        error: `Bạn đã dùng hết ${RECOGNITION_WEEKLY_STAR_LIMIT} ngôi sao của tuần này. Ví sao sẽ đầy lại vào thứ Hai tuần sau.`,
+      };
+    }
   }
 
   const recipient = await prisma.user.findFirst({
-    where: { id: recipientId, isActive: true },
-    select: { id: true, name: true },
+    where: { id: recipientId, isActive: true, deletedAt: null },
+    select: { id: true, name: true, birthday: true },
   });
   if (!recipient) return { error: "Không tìm thấy người nhận đang hoạt động." };
+
+  if (isBirthdayWish) {
+    if (!recipient.birthday || !canWishBirthday(recipient.birthday)) {
+      return { error: `Hôm nay chưa phải dịp sinh nhật của ${recipient.name}.` };
+    }
+    const alreadyWished = await prisma.recognition.count({
+      where: {
+        senderId: user.id,
+        recipientId: recipient.id,
+        category: BIRTHDAY_RECOGNITION_CATEGORY,
+        createdAt: {
+          gte: vietnamDayStart(latestBirthdayOccurrence(recipient.birthday)),
+        },
+      },
+    });
+    if (alreadyWished > 0) {
+      return { error: `Bạn đã gửi lời chúc sinh nhật đến ${recipient.name} rồi.` };
+    }
+  }
 
   const recognition = await prisma.recognition.create({
     data: {
@@ -120,7 +151,9 @@ export async function createRecognition(
 
   await notify([recipient.id], {
     type: "RECOGNITION_RECEIVED",
-    message: `${user.name} đã gửi cho bạn một ngôi sao trong Góc cảm ơn`,
+    message: isBirthdayWish
+      ? `${user.name} đã gửi lời chúc mừng sinh nhật đến bạn`
+      : `${user.name} đã gửi cho bạn một ngôi sao trong Góc cảm ơn`,
     recognitionId: recognition.id,
   });
 
@@ -134,11 +167,14 @@ export async function createRecognition(
     });
   }
 
+  revalidatePath("/");
   revalidatePath("/recognition");
   revalidatePath("/notifications");
 
   return {
-    success: `Đã gửi một ngôi sao đến ${recipient.name}.`,
+    success: isBirthdayWish
+      ? `Đã gửi lời chúc mừng sinh nhật đến ${recipient.name}.`
+      : `Đã gửi một ngôi sao đến ${recipient.name}.`,
     recognitionId: recognition.id,
   };
 }
