@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Check, ChevronRight, FileText, Calculator, FileCheck, Receipt, Landmark } from "lucide-react";
 import type { Finance, CostFlowTabId } from "@/components/CostFlowPanel";
 import { displayMoney, totals } from "@/lib/costflow/money";
@@ -25,6 +25,7 @@ type StageConfig = {
 };
 
 export default function FinancialLifecycleBar({ finance, activeTab, onSelectTab }: Props) {
+  const lifecycleBarRef = useRef<HTMLElement>(null);
   const data = finance.data;
   const requests = finance.requests;
   const quotations = useMemo(() => finance.data.quotations ?? [], [finance.data.quotations]);
@@ -148,6 +149,28 @@ export default function FinancialLifecycleBar({ finance, activeTab, onSelectTab 
     finance.customerAccounting, currentProjectStageIndex
   ]);
 
+  useEffect(() => {
+    const scroller = lifecycleBarRef.current;
+    const stageId = stages.some(stage => stage.id === activeTab)
+      ? activeTab
+      : stages.find(stage => stage.isCurrentProjectStage)?.id;
+    const selected = stageId
+      ? scroller?.querySelector<HTMLButtonElement>(`[data-stage-id="${stageId}"]`)
+      : null;
+    if (!scroller || !selected) return;
+
+    const selectedStart = selected.offsetLeft;
+    const selectedEnd = selectedStart + selected.offsetWidth;
+    const visibleStart = scroller.scrollLeft;
+    const visibleEnd = visibleStart + scroller.clientWidth;
+    if (selectedStart >= visibleStart && selectedEnd <= visibleEnd) return;
+
+    scroller.scrollTo({
+      left: Math.max(0, selectedStart - (scroller.clientWidth - selected.offsetWidth) / 2),
+      behavior: "auto",
+    });
+  }, [activeTab, stages]);
+
   return (
     <section className="tf-lifecycle-container" aria-label="Tiến trình tài chính dự án">
       <div className="tf-lifecycle-header">
@@ -157,7 +180,7 @@ export default function FinancialLifecycleBar({ finance, activeTab, onSelectTab 
         </span>
       </div>
 
-      <nav className="tf-lifecycle-bar" aria-label="Các giai đoạn tài chính">
+      <nav ref={lifecycleBarRef} className="tf-lifecycle-bar" aria-label="Các giai đoạn tài chính">
         <ol className="tf-lifecycle-steps">
           {stages.map((stage, idx) => {
             const isSelected = activeTab === stage.id;
@@ -168,6 +191,7 @@ export default function FinancialLifecycleBar({ finance, activeTab, onSelectTab 
                 <button
                   type="button"
                   onClick={() => onSelectTab(stage.id)}
+                  data-stage-id={stage.id}
                   className={`tf-lifecycle-step-btn ${
                     isSelected ? "is-selected" : ""
                   } is-${stage.statusTone} ${stage.isCurrentProjectStage ? "is-project-stage" : ""}`}

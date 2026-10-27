@@ -68,3 +68,19 @@ test("CostFlowPanel: Sprint 2 UX - Scope sub-views, dual-labeling and prioritize
   assert.match(code, /myActionCount/, "Must calculate pending approvals for current user");
   assert.match(code, /myActionCount > 0 \? myActionCount : pendingRequests/, "Must prioritize myActionCount for approvals badge");
 });
+
+test("CostFlow navigation: reveals active destinations inside horizontal scrollers", () => {
+  const moduleTabs = source("components/ui/ModuleUI.tsx");
+  const lifecycle = source("components/costflow/navigation/FinancialLifecycleBar.tsx");
+  const styles = source("app/modules.css");
+
+  assert.match(moduleTabs, /navRef/, "Module tabs must retain their horizontal scroller");
+  assert.match(moduleTabs, /button\[aria-pressed="true"\]/, "Module tabs must locate the active destination");
+  assert.match(moduleTabs, /scroller\.scrollTo/, "Module tabs must reveal an off-screen active destination");
+  assert.match(lifecycle, /lifecycleBarRef/, "Lifecycle must retain its horizontal scroller");
+  assert.match(lifecycle, /data-stage-id/, "Lifecycle stages must expose stable reveal targets");
+  assert.match(lifecycle, /scroller\.scrollTo/, "Lifecycle must reveal the selected or current stage");
+  assert.match(styles, /\.tf-module-tabs::\-webkit-scrollbar/, "Module tabs must expose a horizontal scroll affordance");
+  assert.match(styles, /\.tf-lifecycle-bar::\-webkit-scrollbar/, "Lifecycle must expose a horizontal scroll affordance");
+  assert.match(styles, /overscroll-behavior-inline:\s*contain/, "Horizontal navigation must contain touch overscroll");
+});
