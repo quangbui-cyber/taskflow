@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireRevenueViewer } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
+import HubTabs from "@/components/HubTabs";
 import RevenueBreakdown, { type RevenueRow } from "@/components/RevenueBreakdown";
 import RevenuePipeline from "@/components/RevenuePipeline";
 import RevenueWinRate from "@/components/RevenueWinRate";
@@ -30,8 +31,6 @@ const WON = ["ON_PROCESS", "DONE"];
 const LOST = ["CANCEL", "FAIL"];
 const RECOGNIZED_REVENUE = ["ON_PROCESS", "DONE"];
 const REVENUE_BLUE = "#2563eb";
-const REVENUE_BLUE_DARK = "#1d4ed8";
-const REVENUE_BLUE_SOFT = "#eff6ff";
 
 // Bảng màu tiết chế: một tông xanh đậm dần theo tiến trình (Bidding → Done),
 // xám cho trạng thái tạm dừng/huỷ, chỉ Fail dùng đỏ nhạt để nổi bật.
@@ -285,19 +284,16 @@ export default async function RevenuePage({
       <Sidebar user={user} projects={sidebarProjects} activeSection="revenue" />
 
       <main className="tf-main">
+        <HubTabs section="revenue" role={user.role} />
         <div className="tf-page space-y-6">
           <div>
             <div className="flex items-center gap-3">
               <span
-                className="flex h-10 w-10 items-center justify-center rounded-[8px]"
-                style={{
-                  backgroundColor: REVENUE_BLUE_SOFT,
-                  color: REVENUE_BLUE_DARK,
-                }}
+                className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-brand-50 text-brand-700"
               >
                 <CircleDollarSign size={20} aria-hidden="true" />
               </span>
-              <h1 className="tf-page-title" style={{ color: REVENUE_BLUE_DARK }}>
+              <h1 className="tf-page-title">
                 Doanh số
               </h1>
             </div>

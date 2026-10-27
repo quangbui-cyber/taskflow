@@ -5,6 +5,11 @@ export const RECOGNITION_CATEGORIES = [
   { key: "CARE", label: "Quan tâm đồng đội" },
 ] as const;
 
+// Lời chúc sinh nhật đi chung luồng Góc cảm ơn nhưng không chọn được trong
+// hộp chủ đề, không trừ sao tuần và không tính vào Ngôi sao tháng.
+export const BIRTHDAY_RECOGNITION_CATEGORY = "BIRTHDAY";
+export const BIRTHDAY_RECOGNITION_LABEL = "Chúc mừng sinh nhật";
+
 export const RECOGNITION_VISIBILITIES = [
   { key: "COMPANY", label: "Mọi người trong công ty" },
   { key: "PRIVATE", label: "Chỉ người nhận" },
@@ -13,6 +18,7 @@ export const RECOGNITION_VISIBILITIES = [
 export const RECOGNITION_WEEKLY_STAR_LIMIT = 5;
 
 export function recognitionCategoryLabel(key: string) {
+  if (key === BIRTHDAY_RECOGNITION_CATEGORY) return BIRTHDAY_RECOGNITION_LABEL;
   return (
     RECOGNITION_CATEGORIES.find((category) => category.key === key)?.label ??
     RECOGNITION_CATEGORIES[0].label

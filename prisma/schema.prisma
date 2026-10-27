@@ -53,6 +53,8 @@ model User {
   uploadedDocuments      DocumentFile[]           @relation("DocumentFileUploader")
   createdDocumentLinks   DocumentLink[]           @relation("DocumentLinkCreator")
   annualLeaveDays        Float                    @default(12) // số ngày phép năm do Admin đặt
+  // Ngày sinh (chỉ dùng ngày/tháng để báo sinh nhật trên trang chủ); null = chưa khai.
+  birthday               DateTime?                @db.Date
   // Quản lý nghỉ phép: duyệt đơn của người chưa có quản lý, nhận thông báo kết quả mọi đơn
   isLeaveManager         Boolean                  @default(false)
   leaveRequests          LeaveRequest[]           @relation("LeaveRequester")
@@ -533,7 +535,7 @@ model Recognition {
   senderId      String
   recipientId   String
   message       String
-  category      String         @default("KINDNESS") // KINDNESS | SUPPORT | INSPIRATION | CARE
+  category      String         @default("KINDNESS") // KINDNESS | SUPPORT | INSPIRATION | CARE | BIRTHDAY
   visibility    String         @default("COMPANY") // COMPANY | PRIVATE
   sender        User           @relation("RecognitionSender", fields: [senderId], references: [id], onDelete: Cascade)
   recipient     User           @relation("RecognitionRecipient", fields: [recipientId], references: [id], onDelete: Cascade)

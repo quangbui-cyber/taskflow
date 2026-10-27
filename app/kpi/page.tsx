@@ -3,6 +3,7 @@ import { ChevronRight, Target } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
+import HubTabs from "@/components/HubTabs";
 import {
   KpiCompanyPlanEditor,
   KpiPlanLockBar,
@@ -24,8 +25,6 @@ import {
 import { loadKpiOverview, loadMemberContribution } from "@/lib/kpiData";
 import { formatVND } from "@/lib/types";
 
-const KPI_BLUE_DARK = "#1d4ed8";
-const KPI_BLUE_SOFT = "#eff6ff";
 
 function formatDateTime(date: Date) {
   return new Intl.DateTimeFormat("vi-VN", {
@@ -214,20 +213,17 @@ export default async function KpiPage({
       <Sidebar user={user} projects={sidebarProjects} activeSection="kpi" />
 
       <main className="tf-main">
+        <HubTabs section="kpi" role={user.role} />
         <div className="tf-page space-y-6">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <div className="flex items-center gap-3">
                 <span
-                  className="flex h-10 w-10 items-center justify-center rounded-[8px]"
-                  style={{
-                    backgroundColor: KPI_BLUE_SOFT,
-                    color: KPI_BLUE_DARK,
-                  }}
+                  className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-brand-50 text-brand-700"
                 >
                   <Target size={20} aria-hidden="true" />
                 </span>
-                <h1 className="tf-page-title" style={{ color: KPI_BLUE_DARK }}>
+                <h1 className="tf-page-title">
                   KPI doanh số
                 </h1>
               </div>
