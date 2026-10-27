@@ -3,7 +3,7 @@
  * (giờ Việt Nam) và bị chặn trước khi gọi nếu vượt mức — không có lần chạy nào tự lặp lại.
  *
  * Đổi mức bằng biến môi trường (số nguyên dương), không cần sửa code:
- * - RECAP_MAX_AUDIO_MINUTES:   độ dài tối đa một file ghi âm (mặc định 240 phút = 4 giờ, đủ cho họp 2–3 giờ)
+ * - RECAP_MAX_AUDIO_MINUTES:   độ dài tối đa một file ghi âm (mặc định 225 phút = 3 giờ 45, đủ cho họp 2–3 giờ)
  * - RECAP_DAILY_AUDIO_MINUTES: tổng phút chép lời mỗi ngày của cả công ty (mặc định 900 = 15 giờ)
  * - RECAP_DAILY_SUMMARIES:     tổng lượt viết biên bản mỗi ngày của cả công ty (mặc định 60)
  */
@@ -36,7 +36,7 @@ function positiveInt(value: string | undefined, fallback: number): number {
 
 export function recapLimits(env: NodeJS.ProcessEnv = process.env): RecapLimits {
   return {
-    maxAudioMinutes: positiveInt(env.RECAP_MAX_AUDIO_MINUTES, 240),
+    maxAudioMinutes: positiveInt(env.RECAP_MAX_AUDIO_MINUTES, 225),
     dailyAudioMinutes: positiveInt(env.RECAP_DAILY_AUDIO_MINUTES, 900),
     dailySummaries: positiveInt(env.RECAP_DAILY_SUMMARIES, 60),
     perMeetingTranscriptions: RECAP_PER_MEETING_TRANSCRIPTIONS,

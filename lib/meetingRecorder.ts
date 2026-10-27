@@ -4,8 +4,8 @@
 
 /** Cứ mỗi 5 giây, trình duyệt giao một đoạn ghi và app lưu ngay xuống máy. */
 export const RECORDING_CHUNK_MS = 5000;
-/** 32 kbps mono: đủ rõ cho giọng nói, khoảng 14 MB mỗi giờ. */
-export const RECORDING_BITS_PER_SECOND = 32_000;
+/** 48 kbps mono: giọng nói rõ hơn, khoảng 22 MB mỗi giờ (3 giờ 45 phút ≈ 81 MB, dưới mức 100 MB của Groq). */
+export const RECORDING_BITS_PER_SECOND = 48_000;
 
 /** Ưu tiên Opus/WebM (Chrome, Edge, Firefox), rồi MP4/AAC (Safari). */
 export const RECORDING_MIME_CANDIDATES = [

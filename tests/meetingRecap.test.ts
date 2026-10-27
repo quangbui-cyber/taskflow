@@ -606,9 +606,9 @@ const usage = (over: Partial<Record<string, number>> = {}) => ({
 });
 
 test("limits have safe defaults and can be raised with env vars, ignoring junk", () => {
-  // 4 giờ mỗi file: đủ cho họp 2–3 giờ (ghi trong app 32 kbps ≈ 58 MB, dưới mức 100 MB của Groq).
+  // 3 giờ 45 mỗi file: đủ cho họp 2–3 giờ (ghi trong app 48 kbps ≈ 81 MB, dưới mức 100 MB của Groq).
   assert.deepEqual(recapLimits(env({})), {
-    maxAudioMinutes: 240,
+    maxAudioMinutes: 225,
     dailyAudioMinutes: 900,
     dailySummaries: 60,
     perMeetingTranscriptions: 3,
@@ -631,7 +631,7 @@ test("transcription is blocked for over-long files, busy meetings and an exhaust
   const limits = recapLimits(env({}));
   assert.equal(transcriptionLimitReason(limits, usage(), 3600), null);
   assert.equal(transcriptionLimitReason(limits, usage(), 3 * 60 * 60), null); // họp 3 giờ
-  assert.match(transcriptionLimitReason(limits, usage(), 241 * 60) ?? "", /vượt giới hạn 240 phút/);
+  assert.match(transcriptionLimitReason(limits, usage(), 226 * 60) ?? "", /vượt giới hạn 225 phút/);
   assert.match(transcriptionLimitReason(limits, usage({ meetingTranscriptionsToday: 3 }), 60) ?? "", /3 lần hôm nay/);
   assert.match(
     transcriptionLimitReason(limits, usage({ audioSecondsToday: 890 * 60 }), 11 * 60) ?? "",
