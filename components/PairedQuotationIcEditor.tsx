@@ -62,6 +62,7 @@ import WorksheetSaveBar from "./costflow/paired/WorksheetSaveBar";
 import WorksheetDetailDrawer from "./costflow/paired/WorksheetDetailDrawer";
 import { PERCENT_FORMATTER } from "./costflow/paired/WorksheetHelpers";
 import ExcelRoundTripDialog from "./ExcelRoundTripDialog";
+import { SupplierEditor } from "./costflow/suppliers/SupplierEditor";
 
 export default function PairedQuotationIcEditor({
   finance,
@@ -145,13 +146,7 @@ export default function PairedQuotationIcEditor({
   const [dragId, setDragId] = useState<string | null>(null);
   const [drop, setDrop] = useState<{ id: string; position: "before" | "inside" | "after" } | null>(null);
   const [createdBeneficiaries, setCreatedBeneficiaries] = useState<{ id: string; name: string }[]>([]);
-  const [newBeneficiary, setNewBeneficiary] = useState<{
-    itemId: string;
-    name: string;
-    bank: string;
-    account: string;
-    sourceFileId: string;
-  } | null>(null);
+  const [newBeneficiary, setNewBeneficiary] = useState<{ itemId: string } | null>(null);
 
   // View Filter: mode="quote" is SELL-only, mode="ic" is BUY-focused, mode="paired" allows ALL | SELL | BUY
   const [viewFilter, setViewFilter] = useState<"ALL" | "SELL" | "BUY">(
@@ -850,13 +845,7 @@ export default function PairedQuotationIcEditor({
         onRequestDelete={setDeleteTargetId}
         onOpenEvidence={targets => setEvidenceTargets(targets)}
         onCreateBeneficiaryClick={itemId =>
-          setNewBeneficiary({
-            itemId,
-            name: "",
-            bank: "",
-            account: "",
-            sourceFileId: ""
-          })
+          setNewBeneficiary({ itemId })
         }
         onModeChangePrompt={setModeChange}
         onError={msg => setState({ error: msg })}
@@ -899,12 +888,22 @@ export default function PairedQuotationIcEditor({
         open={!!newBeneficiary}
         onClose={() => setNewBeneficiary(null)}
         title="Tạo nhà cung cấp trong danh bạ chung"
-        description="NCC theo JSON project đã chuyển sang chỉ đọc. Tạo NCC tại danh bạ toàn công ty rồi quay lại chọn phiên bản hiện hành."
+        description="Tạo NCC dùng chung toàn công ty. Sau khi lưu, hệ thống sẽ chọn ngay NCC này cho dòng IC đang mở."
       >
-        <div className="flex items-center justify-between gap-3">
-          <p className="tf-ui-help">File tham chiếu NCC đã có (không bắt buộc). Hoặc tải file tham chiếu mới (không bắt buộc); Kế toán xác nhận đúng phiên bản ở lần thanh toán đầu hoặc sau thay đổi.</p>
-          <Button variant="primary" onClick={() => router.push("/suppliers")}>Mở danh bạ NCC</Button>
-        </div>
+        {newBeneficiary && (
+          <SupplierEditor
+            embedded
+            projectId={finance.project.id}
+            onCreated={supplier => {
+              const targetItemId = newBeneficiary.itemId;
+              setCreatedBeneficiaries(current => current.some(item => item.id === supplier.id) ? current : [...current, supplier]);
+              setRows(current => current.map(row => row.itemId === targetItemId
+                ? { ...row, buy: { ...row.buy, vendorId: supplier.id } }
+                : row));
+              setNewBeneficiary(null);
+            }}
+          />
+        )}
       </Dialog>
 
       <Dialog

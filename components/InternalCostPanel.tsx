@@ -38,6 +38,7 @@ import { completeIcLines } from "@/lib/costflow/budgetDraft";
 import { matchIcLineToQuotation } from "@/lib/costflow/budgetQuotation";
 import { currentPurchaseOrders } from "@/lib/costflow/budgetSources";
 import type { IcLine, IcRevision } from "@/lib/costflow/types";
+import { SupplierEditor } from "@/components/costflow/suppliers/SupplierEditor";
 
 import { STATE_LABELS as STATE } from "@/lib/costflow/labels";
 
@@ -104,13 +105,8 @@ export default function InternalCostPanel({
   const [selectedLineIds, setSelectedLineIds] = useState<string[]>([]);
   const [bulkVendorOpen, setBulkVendorOpen] = useState(false);
   const [bulkVendorId, setBulkVendorId] = useState("");
-  const [createdBeneficiaries] = useState<{ id: string; name: string }[]>([]);
-  const [newBeneficiary, setNewBeneficiary] = useState<{
-    name: string;
-    bank: string;
-    account: string;
-    sourceFileId: string;
-  } | null>(null);
+  const [createdBeneficiaries, setCreatedBeneficiaries] = useState<{ id: string; name: string }[]>([]);
+  const [newBeneficiary, setNewBeneficiary] = useState(false);
   const [actionVersion] = useState(finance.version);
   const [bulkEvidenceOpen, setBulkEvidenceOpen] = useState(false);
   const [bulkEvidenceIds, setBulkEvidenceIds] = useState<string[]>([]);
@@ -1529,7 +1525,7 @@ export default function InternalCostPanel({
               onChange={event => {
                 if (event.target.value === "__CREATE_BENEFICIARY__") {
                   setBulkVendorOpen(false);
-                  setNewBeneficiary({ name: "", bank: "", account: "", sourceFileId: "" });
+                  setNewBeneficiary(true);
                   return;
                 }
                 setBulkVendorId(event.target.value);
@@ -1548,18 +1544,26 @@ export default function InternalCostPanel({
       )}
 
       <Dialog
-        open={!!newBeneficiary}
+        open={newBeneficiary}
         onClose={() => {
-          setNewBeneficiary(null);
+          setNewBeneficiary(false);
           setBulkVendorOpen(true);
         }}
         title="Tạo nhà cung cấp trong danh bạ chung"
-        description="Dữ liệu chi phí cũ theo Project chỉ còn để đối chiếu. Tạo NCC tại danh bạ toàn công ty rồi quay lại chọn phiên bản hiện hành."
+        description="Tạo NCC dùng chung toàn công ty. Sau khi lưu, hệ thống sẽ chọn ngay NCC này cho các dòng IC đã chọn."
       >
-        <div className="flex items-center justify-between gap-3">
-          <p className="tf-ui-help">File chứng minh ngân hàng không bắt buộc; Kế toán xác nhận đúng phiên bản ở lần thanh toán đầu hoặc sau thay đổi.</p>
-          <Link href="/suppliers" className="tf-button-primary tf-button-size-md shrink-0">Mở danh bạ NCC</Link>
-        </div>
+        {newBeneficiary && (
+          <SupplierEditor
+            embedded
+            projectId={finance.project.id}
+            onCreated={supplier => {
+              setCreatedBeneficiaries(current => current.some(item => item.id === supplier.id) ? current : [...current, supplier]);
+              setBulkVendorId(supplier.id);
+              setNewBeneficiary(false);
+              setBulkVendorOpen(true);
+            }}
+          />
+        )}
       </Dialog>
 
       {visibleRevision && (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import { supplierAction, type SupplierActionState } from "@/app/actions/costflow";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Field";
@@ -19,19 +19,46 @@ function Submit({ pending, children = "Lưu thay đổi" }: { pending: boolean; 
   return <Button type="submit" loading={pending} loadingLabel="Đang lưu…">{children}</Button>;
 }
 
-export function SupplierEditor({ supplier }: { supplier?: CompanySupplier }) {
+export function SupplierEditor({
+  supplier,
+  initialLegalName = "",
+  embedded = false,
+  projectId,
+  onCreated,
+}: {
+  supplier?: CompanySupplier;
+  initialLegalName?: string;
+  embedded?: boolean;
+  projectId?: string;
+  onCreated?: (supplier: { id: string; name: string }) => void;
+}) {
   const [state, action, pending] = useActionState(supplierAction, initialState);
-  if (!supplier) return <Panel className="space-y-4">
-    <div><h2 className="text-lg font-semibold">Thêm nhà cung cấp</h2><p className="tf-ui-help">Tạo một NCC dùng chung toàn công ty. File xác minh không bắt buộc.</p></div>
-    <form action={action} className="space-y-4">
+  const createFormRef = useRef<HTMLFormElement>(null);
+  const reportedSupplierId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!state.supplierId || !onCreated || reportedSupplierId.current === state.supplierId) return;
+    const name = String(new FormData(createFormRef.current ?? undefined).get("legalName") ?? "").trim();
+    if (!name) return;
+    reportedSupplierId.current = state.supplierId;
+    onCreated({ id: state.supplierId, name });
+  }, [onCreated, state.supplierId]);
+
+  if (!supplier) {
+    const createForm = <>
+      {!embedded && <div><h2 className="text-lg font-semibold">Thêm nhà cung cấp</h2><p className="tf-ui-help">Tạo một NCC dùng chung toàn công ty. File xác minh không bắt buộc.</p></div>}
+      <form ref={createFormRef} action={action} className="space-y-4">
       <input type="hidden" name="supplierCommand" value="CREATE" />
-      <div className="grid gap-3 md:grid-cols-2"><Input name="legalName" label="Tên pháp lý" required /><Input name="taxCode" label="Mã số thuế" /></div>
+      {projectId && <input type="hidden" name="projectId" value={projectId} />}
+      <div className="grid gap-3 md:grid-cols-2"><Input name="legalName" label="Tên pháp lý" defaultValue={initialLegalName} required /><Input name="taxCode" label="Mã số thuế" /></div>
       <Input name="address" label="Địa chỉ" />
       <div className="grid gap-3 md:grid-cols-2"><Input name="contactName" label="Người liên hệ" /><Input name="contactPhone" label="Điện thoại" /><Input name="contactEmail" label="Email" type="email" /></div>
       <div className="grid gap-3 md:grid-cols-2"><Input name="bankName" label="Ngân hàng" required /><Input name="bankCode" label="Mã ngân hàng" /><Input name="accountHolder" label="Tên tài khoản" required /><Input name="accountNumber" label="Số tài khoản" required /></div>
       <Result state={state} /><Submit pending={pending}>Thêm NCC</Submit>
-    </form>
-  </Panel>;
+      </form>
+    </>;
+    return embedded ? <div className="space-y-4">{createForm}</div> : <Panel className="space-y-4">{createForm}</Panel>;
+  }
 
   return <div className="space-y-4">
     <form action={action} className="space-y-4">
