@@ -192,3 +192,50 @@ test("OpenAI adapter rejects candidate sources outside the authorized payload af
   );
   assert.equal(attempts, 2);
 });
+
+test("caller cancellation stops without a repair attempt", async () => {
+  const config = loadAiConfig({
+    AI_ENABLED: "true",
+    AI_PROVIDER: "openai",
+    AI_GENERATION_MODEL: "gpt-6-luna",
+    AI_EMBEDDING_MODEL: "text-embedding-3-small",
+    AI_TIMEOUT_MS: "30000",
+    AI_MAX_OUTPUT_TOKENS: "4000",
+    AI_MAX_CONCURRENCY: "2",
+    OPENAI_API_KEY: "test-only",
+  });
+  let attempts = 0;
+  const invoke: StructuredOutputInvoker = async ({ abort }) => {
+    attempts += 1;
+    assert.equal(abort.aborted, true);
+    throw new DOMException("Cancelled", "AbortError");
+  };
+  const model = new OpenAiGenerationModel(config, invoke);
+  const controller = new AbortController();
+  controller.abort();
+
+  await assert.rejects(
+    model.extract(
+      {
+        task: "DOCUMENT_EXTRACTION",
+        instruction: "Extract candidates only.",
+        authorizedSources: [
+          {
+            span: {
+              spanId: "span-authorized",
+              sourceRevisionId: "rev-1",
+              page: 1,
+              cellRange: null,
+              quote: "1.250.000",
+            },
+            content: "Gross amount: 1.250.000",
+          },
+        ],
+      },
+      controller.signal,
+    ),
+    (error: unknown) =>
+      error instanceof AiProviderFailure && error.code === "TIMEOUT",
+  );
+  assert.equal(attempts, 1);
+});

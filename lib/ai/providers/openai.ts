@@ -154,10 +154,14 @@ function assertAuthorizedOutput(
   }
 }
 
-function mapFailure(error: unknown, timedOut: boolean): AiProviderFailure {
+function mapFailure(
+  error: unknown,
+  timedOut: boolean,
+  cancelled: boolean,
+): AiProviderFailure {
   if (error instanceof AiProviderFailure) return error;
-  if (timedOut) {
-    return new AiProviderFailure("TIMEOUT", "AI provider timed out.", {
+  if (timedOut || cancelled) {
+    return new AiProviderFailure("TIMEOUT", "AI provider timed out or was cancelled.", {
       cause: error,
     });
   }
@@ -239,7 +243,7 @@ export class OpenAiGenerationModel implements GenerationModel {
           usage: response.usage,
         };
       } catch (error) {
-        lastError = mapFailure(error, scope.timedOut());
+        lastError = mapFailure(error, scope.timedOut(), abort.aborted);
         if (
           attempt === 1 ||
           (lastError instanceof AiProviderFailure &&
@@ -251,6 +255,6 @@ export class OpenAiGenerationModel implements GenerationModel {
         scope.cleanup();
       }
     }
-    throw mapFailure(lastError, false);
+    throw mapFailure(lastError, false, abort.aborted);
   }
 }
