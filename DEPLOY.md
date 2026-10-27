@@ -340,8 +340,8 @@ App tự chặn **trước khi** gọi AI, không có lần chạy nào tự l�
 
 | Giới hạn | Mặc định | Đổi bằng biến môi trường |
 |---|---|---|
-| Độ dài tối đa mỗi file ghi âm | 180 phút | `RECAP_MAX_AUDIO_MINUTES` |
-| Tổng phút chép lời mỗi ngày (cả công ty) | 600 phút ≈ tối đa $1.1/ngày | `RECAP_DAILY_AUDIO_MINUTES` |
+| Độ dài tối đa mỗi file ghi âm | 240 phút (4 giờ) | `RECAP_MAX_AUDIO_MINUTES` |
+| Tổng phút chép lời mỗi ngày (cả công ty) | 900 phút ≈ tối đa $1.7/ngày | `RECAP_DAILY_AUDIO_MINUTES` |
 | Tổng lượt viết biên bản mỗi ngày (cả công ty) | 60 lượt ≈ tối đa $9/ngày (từ 2027 ≈ $18) | `RECAP_DAILY_SUMMARIES` |
 | Mỗi cuộc họp mỗi ngày | chép lời 3 lần, viết biên bản 6 lần | — |
 

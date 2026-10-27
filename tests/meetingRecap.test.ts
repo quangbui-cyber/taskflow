@@ -275,7 +275,7 @@ test("the second pass runs only for real damage and within the daily audio budge
   assert.equal(retranscribeAllowed(limits, quiet, { badSeconds: 53, audioSeconds: 182 }), true);
   assert.equal(retranscribeAllowed(limits, quiet, { badSeconds: 5, audioSeconds: 182 }), false);
   assert.equal(
-    retranscribeAllowed(limits, { ...quiet, audioSecondsToday: 600 * 60 - 100 }, { badSeconds: 53, audioSeconds: 182 }),
+    retranscribeAllowed(limits, { ...quiet, audioSecondsToday: 900 * 60 - 100 }, { badSeconds: 53, audioSeconds: 182 }),
     false
   );
 });
@@ -606,16 +606,17 @@ const usage = (over: Partial<Record<string, number>> = {}) => ({
 });
 
 test("limits have safe defaults and can be raised with env vars, ignoring junk", () => {
+  // 4 giờ mỗi file: đủ cho họp 2–3 giờ (ghi trong app 32 kbps ≈ 58 MB, dưới mức 100 MB của Groq).
   assert.deepEqual(recapLimits(env({})), {
-    maxAudioMinutes: 180,
-    dailyAudioMinutes: 600,
+    maxAudioMinutes: 240,
+    dailyAudioMinutes: 900,
     dailySummaries: 60,
     perMeetingTranscriptions: 3,
     perMeetingSummaries: 6,
   });
-  const custom = recapLimits(env({ RECAP_MAX_AUDIO_MINUTES: "240", RECAP_DAILY_AUDIO_MINUTES: "-5", RECAP_DAILY_SUMMARIES: "abc" }));
-  assert.equal(custom.maxAudioMinutes, 240);
-  assert.equal(custom.dailyAudioMinutes, 600);
+  const custom = recapLimits(env({ RECAP_MAX_AUDIO_MINUTES: "300", RECAP_DAILY_AUDIO_MINUTES: "-5", RECAP_DAILY_SUMMARIES: "abc" }));
+  assert.equal(custom.maxAudioMinutes, 300);
+  assert.equal(custom.dailyAudioMinutes, 900);
   assert.equal(custom.dailySummaries, 60);
 });
 
@@ -629,13 +630,14 @@ test("audio length comes from the browser, or is estimated from file size at 128
 test("transcription is blocked for over-long files, busy meetings and an exhausted daily budget", () => {
   const limits = recapLimits(env({}));
   assert.equal(transcriptionLimitReason(limits, usage(), 3600), null);
-  assert.match(transcriptionLimitReason(limits, usage(), 181 * 60) ?? "", /vượt giới hạn 180 phút/);
+  assert.equal(transcriptionLimitReason(limits, usage(), 3 * 60 * 60), null); // họp 3 giờ
+  assert.match(transcriptionLimitReason(limits, usage(), 241 * 60) ?? "", /vượt giới hạn 240 phút/);
   assert.match(transcriptionLimitReason(limits, usage({ meetingTranscriptionsToday: 3 }), 60) ?? "", /3 lần hôm nay/);
   assert.match(
-    transcriptionLimitReason(limits, usage({ audioSecondsToday: 590 * 60 }), 11 * 60) ?? "",
+    transcriptionLimitReason(limits, usage({ audioSecondsToday: 890 * 60 }), 11 * 60) ?? "",
     /còn 10 phút chép lời/
   );
-  assert.equal(transcriptionLimitReason(limits, usage({ audioSecondsToday: 590 * 60 }), 10 * 60), null);
+  assert.equal(transcriptionLimitReason(limits, usage({ audioSecondsToday: 890 * 60 }), 10 * 60), null);
 });
 
 test("recap writing is capped per meeting (regenerate) and company-wide", () => {
@@ -670,4 +672,12 @@ test("a timed-out AI call is never retried, so it cannot be billed twice", async
   calls = 0;
   await assert.rejects(summarizeTranscript({ system: "S", user: "U", env: env({ GEMINI_API_KEY: "k" }) }), /quá lâu/);
   assert.equal(calls, 1);
+});
+
+test("a full-length in-app recording still fits Groq's file size limit", async () => {
+  const { RECORDING_BITS_PER_SECOND } = await import("../lib/meetingRecorder");
+  const { RECAP_MAX_AUDIO_BYTES } = await import("../lib/meetingRecap");
+  const longest = recapLimits(env({})).maxAudioMinutes * 60 * (RECORDING_BITS_PER_SECOND / 8);
+  // Chừa 20% cho phần đầu file/container.
+  assert.ok(longest * 1.2 < RECAP_MAX_AUDIO_BYTES, `${Math.round(longest / 1e6)} MB`);
 });
