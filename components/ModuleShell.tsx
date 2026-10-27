@@ -1,6 +1,7 @@
 import "server-only";
 import type { ReactNode } from "react";
 import Sidebar from "@/components/Sidebar";
+import HubTabs from "@/components/HubTabs";
 import { prisma } from "@/lib/prisma";
 import type { requireUser } from "@/lib/auth";
 
@@ -28,6 +29,9 @@ export default async function ModuleShell({ user, projectId, workflow = false, s
   });
   return <div className="tf-shell">
     <Sidebar user={user} projects={projects} activeProjectId={projectId} activeSection={suppliers ? "suppliers" : workflow ? "workflow" : "home"} />
-    <main className="tf-main tf-module-main">{children}</main>
+    <main className="tf-main tf-module-main">
+      {!projectId && (workflow || suppliers) && <HubTabs section={suppliers ? "suppliers" : "workflow"} role={user.role} />}
+      {children}
+    </main>
   </div>;
 }

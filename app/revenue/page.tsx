@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireRevenueViewer } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
+import HubTabs from "@/components/HubTabs";
 import RevenueBreakdown, { type RevenueRow } from "@/components/RevenueBreakdown";
 import RevenuePipeline from "@/components/RevenuePipeline";
 import RevenueWinRate from "@/components/RevenueWinRate";
@@ -285,6 +286,7 @@ export default async function RevenuePage({
       <Sidebar user={user} projects={sidebarProjects} activeSection="revenue" />
 
       <main className="tf-main">
+        <HubTabs section="revenue" role={user.role} />
         <div className="tf-page space-y-6">
           <div>
             <div className="flex items-center gap-3">

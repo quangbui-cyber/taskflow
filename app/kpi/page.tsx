@@ -3,6 +3,7 @@ import { ChevronRight, Target } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
+import HubTabs from "@/components/HubTabs";
 import {
   KpiCompanyPlanEditor,
   KpiPlanLockBar,
@@ -214,6 +215,7 @@ export default async function KpiPage({
       <Sidebar user={user} projects={sidebarProjects} activeSection="kpi" />
 
       <main className="tf-main">
+        <HubTabs section="kpi" role={user.role} />
         <div className="tf-page space-y-6">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>

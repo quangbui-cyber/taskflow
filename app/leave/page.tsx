@@ -3,6 +3,7 @@ import { CalendarDays } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
+import HubTabs from "@/components/HubTabs";
 import {
   LeaveCancelButton,
   LeaveDecisionButtons,
@@ -260,6 +261,7 @@ export default async function LeavePage({
       <div className="tf-shell">
         <Sidebar user={user} projects={sidebarProjects} activeSection="leave" />
         <main className="tf-main">
+          <HubTabs section="leave" role={user.role} />
           <div className="tf-page space-y-6">
             {header}
 
@@ -450,6 +452,7 @@ export default async function LeavePage({
       <div className="tf-shell">
         <Sidebar user={user} projects={sidebarProjects} activeSection="leave" />
         <main className="tf-main">
+          <HubTabs section="leave" role={user.role} />
           <div className="tf-page space-y-6">
             {header}
             <section className="tf-panel overflow-hidden">
@@ -629,6 +632,7 @@ export default async function LeavePage({
       <Sidebar user={user} projects={sidebarProjects} activeSection="leave" />
 
       <main className="tf-main">
+        <HubTabs section="leave" role={user.role} />
         <div className="tf-page space-y-6">
           {header}
 

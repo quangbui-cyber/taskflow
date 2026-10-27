@@ -13,6 +13,7 @@ import RecognitionComposer from "@/components/RecognitionComposer";
 import RecognitionMonthSelect from "@/components/RecognitionMonthSelect";
 import RecognitionWebhookSettings from "@/components/RecognitionWebhookSettings";
 import Sidebar from "@/components/Sidebar";
+import HubTabs from "@/components/HubTabs";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getRecognitionWebhookStatus } from "@/lib/recognitionGoogleChat";
@@ -241,6 +242,7 @@ export default async function RecognitionPage({
       <Sidebar user={user} projects={sidebarProjects} activeSection="recognition" />
 
       <main className="tf-main">
+        <HubTabs section="recognition" role={user.role} />
         <div className="tf-page !max-w-[1220px] !pt-12">
           <header className="mb-[54px] flex items-start justify-between gap-5">
             <div>
