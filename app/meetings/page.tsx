@@ -9,6 +9,7 @@ import {
 import MeetingComposer from "@/components/MeetingComposer";
 import RoomCalendar, { type CalendarMeeting } from "@/components/RoomCalendar";
 import Sidebar from "@/components/Sidebar";
+import HubTabs from "@/components/HubTabs";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { meetingRecapsEnabled, meetingsEnabled } from "@/lib/features";
@@ -394,6 +395,7 @@ export default async function MeetingsPage({
       <Sidebar user={user} projects={sidebarProjects} activeSection="meetings" />
 
       <main className="tf-main">
+        <HubTabs section="meetings" role={user.role} />
         <div className="tf-page !max-w-[1220px] space-y-6">
           <header className="flex flex-wrap items-start justify-between gap-4">
             <div>

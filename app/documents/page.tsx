@@ -2,6 +2,7 @@ import { FolderOpen } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
+import HubTabs from "@/components/HubTabs";
 import DocumentSets from "@/components/DocumentSets";
 import { canManageDocuments } from "@/lib/documents";
 
@@ -72,6 +73,7 @@ export default async function DocumentsPage() {
       <Sidebar user={user} projects={sidebarProjects} activeSection="documents" />
 
       <main className="tf-main">
+        <HubTabs section="documents" role={user.role} />
         <div className="tf-page space-y-6">
           <div>
             <div className="flex items-center gap-3">

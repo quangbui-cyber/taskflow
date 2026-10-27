@@ -9,11 +9,12 @@ const source = file => readFileSync(path.join(root, file), "utf8");
 
 test("company supplier directory is discoverable and reports truthful verification states", () => {
   const page = source("app/suppliers/page.tsx");
-  const sidebar = source("components/Sidebar.tsx");
+  // Thanh điều hướng dựng từ cấu hình khu vực; Danh bạ NCC nằm trong khu vực Dự án.
+  const navigation = source("lib/navigation.ts");
   const directory = source("components/costflow/suppliers/SupplierDirectory.tsx");
   const editor = source("components/costflow/suppliers/SupplierEditor.tsx");
   assert.match(page, /listCompanySuppliers/);
-  assert.match(sidebar, /href="\/suppliers"/);
+  assert.match(navigation, /label: "Danh bạ NCC", href: "\/suppliers"/);
   assert.match(directory, /Tìm nhà cung cấp/);
   assert.match(directory, /Chưa xác minh|Đã xác minh|Bị từ chối/);
   assert.match(directory, /API ngân hàng[^<]*chưa tích hợp/i);

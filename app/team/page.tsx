@@ -11,6 +11,7 @@ import {
 } from "@/lib/performance";
 import { isOverdue } from "@/lib/dates";
 import Sidebar from "@/components/Sidebar";
+import HubTabs from "@/components/HubTabs";
 import Avatar from "@/components/Avatar";
 import PerformanceBar from "@/components/PerformanceBar";
 import TaskListItem from "@/components/TaskListItem";
@@ -294,6 +295,7 @@ export default async function TeamPage({
       <Sidebar user={user} projects={sidebarProjects} activeSection="team" />
 
       <main className="tf-main">
+        <HubTabs section="team" role={user.role} />
         <div className="tf-page space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
