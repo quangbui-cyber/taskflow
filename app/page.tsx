@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
+  Bell,
   BriefcaseBusiness,
   Cake,
   CalendarClock,
@@ -211,6 +212,7 @@ export default async function HomePage({
     latestRecognitions,
     leaveManagers,
     birthdayPeople,
+    unreadNotifications,
   ] = await Promise.all([
     prisma.user.findUniqueOrThrow({
       where: { id: user.id },
@@ -302,6 +304,7 @@ export default async function HomePage({
       where: { isActive: true, deletedAt: null, birthday: { not: null } },
       select: { id: true, name: true, avatarUrl: true, birthday: true },
     }),
+    prisma.notification.count({ where: { userId: user.id, read: false } }),
   ]);
 
   // Sinh nhật: ai có sinh nhật hôm nay và trong 30 ngày tới (chỉ ngày/tháng).
@@ -396,44 +399,67 @@ export default async function HomePage({
 
       <main className="tf-main bg-zinc-50">
         <div className="mx-auto max-w-[1240px] space-y-5 px-4 py-6 sm:px-8 lg:px-10">
-          <section
-            aria-labelledby="greeting-heading"
-            className="tf-rise relative flex flex-wrap items-center justify-between gap-x-6 gap-y-4 overflow-hidden rounded-[20px] border border-zinc-200 bg-white px-6 py-6 sm:px-7"
-          >
-            <span className="pointer-events-none absolute -right-12 -top-24 h-56 w-56 rounded-full bg-brand-50" aria-hidden="true" />
-            <span className="pointer-events-none absolute -bottom-20 right-56 h-32 w-32 rounded-full bg-brand-100" aria-hidden="true" />
-            <div className="relative min-w-0 flex-[1_1_360px]">
-              <Image
-                src="/creative-station-logo.png"
-                width={1914}
-                height={370}
-                alt="Creative Station"
-                // Màn hình nhỏ đã có logo ở thanh trên cùng.
-                className="hidden h-[30px] w-auto md:block"
-                priority
-              />
-              <p className="text-[13px] md:mt-3 text-zinc-600 first-letter:uppercase">{dateLabel}</p>
-              <h1
-                id="greeting-heading"
-                className={`${handwriting.className} tf-handwrite text-[38px] leading-[48px] text-brand-800 sm:text-[46px] sm:leading-[56px]`}
+          {/* Khung ngoài vẽ viền có ánh sáng chạy vòng (.tf-glow-border). */}
+          <div className="tf-rise tf-glow-border rounded-[20px]">
+            <section
+              aria-labelledby="greeting-heading"
+              className="relative flex flex-wrap items-center justify-between gap-x-6 gap-y-4 overflow-hidden rounded-[18px] bg-white px-6 py-6 sm:px-7"
+            >
+              <span className="pointer-events-none absolute -right-12 -top-24 h-56 w-56 rounded-full bg-brand-50" aria-hidden="true" />
+              <span className="pointer-events-none absolute -bottom-20 right-56 h-32 w-32 rounded-full bg-brand-100" aria-hidden="true" />
+              {/* Chuông thông báo ở góc phải khung chào. Màn hình nhỏ đã có chuông
+                  ở thanh trên cùng nên ẩn đi để không lặp. */}
+              <Link
+                href="/notifications"
+                prefetch={false}
+                aria-label={
+                  unreadNotifications > 0
+                    ? `Thông báo (${unreadNotifications} chưa đọc)`
+                    : "Thông báo"
+                }
+                title="Thông báo"
+                className="absolute right-5 top-5 z-10 hidden h-10 w-10 items-center justify-center rounded-full border border-brand-200 bg-white text-brand-700 shadow-sm transition-colors hover:border-brand-300 hover:bg-brand-50 md:flex"
               >
-                {greetingFor(now)}, {givenName(user.name)}!
-              </h1>
-              <p className="mt-1.5 text-sm italic leading-6 text-zinc-700">&ldquo;{quote}&rdquo;</p>
-            </div>
-            <div className="relative flex flex-wrap gap-2.5">
-              <StatLink
-                href="/tasks"
-                value={urgentTasks.length}
-                label="Việc gấp"
-                tone={urgentTasks.length === 0 ? "text-brand-700" : "text-red-600"}
-              />
-              {showMeetings && (
-                <StatLink href="/meetings?view=mine" value={meetingsToday.length} label="Họp hôm nay" />
-              )}
-              <StatLink href="/leave" value={formatLeaveDays(leave.remaining)} label="Ngày phép còn" />
-            </div>
-          </section>
+                <Bell size={19} strokeWidth={1.9} aria-hidden="true" />
+                {unreadNotifications > 0 && (
+                  <span className="absolute -right-1 -top-1 min-w-[18px] rounded-full border-2 border-white bg-red-500 px-1 text-center text-[10px] font-bold leading-[14px] text-white">
+                    {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                  </span>
+                )}
+              </Link>
+              <div className="relative min-w-0 flex-[1_1_360px]">
+                <Image
+                  src="/creative-station-logo.png"
+                  width={1914}
+                  height={370}
+                  alt="Creative Station"
+                  // Màn hình nhỏ đã có logo ở thanh trên cùng.
+                  className="hidden h-[30px] w-auto md:block"
+                  priority
+                />
+                <p className="text-[13px] md:mt-3 text-zinc-600 first-letter:uppercase">{dateLabel}</p>
+                <h1
+                  id="greeting-heading"
+                  className={`${handwriting.className} tf-handwrite text-[38px] leading-[48px] text-brand-800 sm:text-[46px] sm:leading-[56px]`}
+                >
+                  {greetingFor(now)}, {givenName(user.name)}!
+                </h1>
+                <p className="mt-1.5 text-sm italic leading-6 text-zinc-700">&ldquo;{quote}&rdquo;</p>
+              </div>
+              <div className="relative flex flex-wrap gap-2.5 md:mr-14">
+                <StatLink
+                  href="/tasks"
+                  value={urgentTasks.length}
+                  label="Việc gấp"
+                  tone={urgentTasks.length === 0 ? "text-brand-700" : "text-red-600"}
+                />
+                {showMeetings && (
+                  <StatLink href="/meetings?view=mine" value={meetingsToday.length} label="Họp hôm nay" />
+                )}
+                <StatLink href="/leave" value={formatLeaveDays(leave.remaining)} label="Ngày phép còn" />
+              </div>
+            </section>
+          </div>
 
           {birthdaysToday.slice(0, 3).map((person) => {
             const wishes = wishesFor(person.id);

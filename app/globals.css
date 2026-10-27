@@ -723,3 +723,45 @@ select.tf-field:not(.appearance-none) {
     display: none;
   }
 }
+
+/* Ánh sáng chạy vòng quanh viền khung chào. Viền là phần nền 2px của khung
+   ngoài; một dải conic-gradient xoay phía sau (chỉ dùng transform nên nhẹ). */
+.tf-glow-border {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 2px;
+  background: #e4e4e7;
+}
+
+.tf-glow-border::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  top: 50%;
+  width: 200%;
+  aspect-ratio: 1;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg 280deg,
+    rgb(199 227 101 / 0.7) 310deg,
+    #a8d431 340deg,
+    #587216 352deg,
+    transparent 360deg
+  );
+  transform: translate(-50%, -50%) rotate(0deg);
+  animation: tf-glow-spin 6s linear infinite;
+}
+
+@keyframes tf-glow-spin {
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tf-glow-border::before {
+    display: none;
+  }
+}
