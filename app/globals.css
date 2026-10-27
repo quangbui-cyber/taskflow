@@ -765,3 +765,37 @@ select.tf-field:not(.appearance-none) {
     display: none;
   }
 }
+
+/* Bong bóng trang trí trong khung chào trôi nhẹ qua lại (chỉ transform). */
+.tf-float-a {
+  animation: tf-float-a 9s ease-in-out infinite alternate;
+}
+
+.tf-float-b {
+  animation: tf-float-b 11s ease-in-out infinite alternate;
+}
+
+@keyframes tf-float-a {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(-18px, 14px) scale(1.06);
+  }
+}
+
+@keyframes tf-float-b {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(22px, -12px) scale(0.94);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tf-float-a,
+  .tf-float-b {
+    animation: none;
+  }
+}

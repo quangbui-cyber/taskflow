@@ -44,7 +44,7 @@ export default async function ProfilePage({
       <Sidebar user={user} projects={sidebarProjects} activeSection="profile" />
 
       <main className="tf-main">
-        <HubTabs section="profile" role={user.role} />
+        <HubTabs section="profile" role={user.role} isHrManager={user.isHrManager} />
         <div className="tf-page-narrow space-y-6">
           <div>
             <div className="flex items-center gap-3">

@@ -1,15 +1,18 @@
 import Link from "next/link";
 import { canViewRevenue } from "@/lib/auth";
 import { financeEnabled, meetingsEnabled } from "@/lib/features";
+import { canManageHr } from "@/lib/employeeRecords";
 import { hubForSection, visibleSections, type ActiveSection } from "@/lib/navigation";
 
 /** Tab các mục con của khu vực đang mở, đặt ở đầu vùng nội dung của trang. */
 export default function HubTabs({
   section,
   role,
+  isHrManager = false,
 }: {
   section: ActiveSection;
   role?: string;
+  isHrManager?: boolean;
 }) {
   const hub = hubForSection(section);
   if (!hub) return null;
@@ -17,6 +20,7 @@ export default function HubTabs({
     showMeetings: meetingsEnabled(),
     showRevenue: canViewRevenue(role ?? ""),
     showSuppliers: financeEnabled(),
+    showHr: canManageHr({ role, isHrManager }),
   });
   if (sections.length < 2) return null;
 

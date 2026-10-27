@@ -23,6 +23,7 @@ import {
   type ActiveSection,
   type HubKey,
 } from "@/lib/navigation";
+import { canManageHr } from "@/lib/employeeRecords";
 import { prisma } from "@/lib/prisma";
 import type { ProjectCategory } from "@/lib/types";
 
@@ -125,6 +126,7 @@ export default async function Sidebar({
     email: string;
     role?: string;
     avatarUrl?: string | null;
+    isHrManager?: boolean;
   };
   // Cây dự án đã chuyển sang trang /projects; giữ prop để các trang cũ không phải đổi.
   projects?: ProjectItem[];
@@ -138,6 +140,7 @@ export default async function Sidebar({
     showMeetings: meetingsEnabled(),
     showRevenue: canViewRevenue(user.role ?? ""),
     showSuppliers: financeEnabled(),
+    showHr: canManageHr(user),
   };
   const activeHub = activeProjectId ? "projects" : hubForSection(activeSection)?.key;
   const isAdmin = user.role === "ADMIN";

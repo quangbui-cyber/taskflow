@@ -55,6 +55,10 @@ model User {
   annualLeaveDays        Float                    @default(12) // số ngày phép năm do Admin đặt
   // Ngày sinh (chỉ dùng ngày/tháng để báo sinh nhật trên trang chủ); null = chưa khai.
   birthday               DateTime?                @db.Date
+  // Phụ trách nhân sự: xem và sửa Hồ sơ nhân sự của mọi người (Admin luôn có quyền).
+  isHrManager            Boolean                  @default(false)
+  employeeRecord         EmployeeRecord?          @relation("EmployeeRecordOwner")
+  updatedEmployeeRecords EmployeeRecord[]         @relation("EmployeeRecordUpdater")
   // Quản lý nghỉ phép: duyệt đơn của người chưa có quản lý, nhận thông báo kết quả mọi đơn
   isLeaveManager         Boolean                  @default(false)
   leaveRequests          LeaveRequest[]           @relation("LeaveRequester")
@@ -793,4 +797,24 @@ model DriveFolder {
   folderId  String   @unique
   name      String
   updatedAt DateTime @updatedAt
+}
+
+// Hồ sơ nhân sự do HR quản lý. Chỉ Admin và người phụ trách nhân sự xem/sửa được
+// (lib/employeeRecords.ts canManageHr). Không ghi các trường này ra log.
+model EmployeeRecord {
+  id           String    @id @default(cuid())
+  userId       String    @unique
+  user         User      @relation("EmployeeRecordOwner", fields: [userId], references: [id], onDelete: Cascade)
+  fullName     String
+  employeeCode String? // mã nhân sự bên phần mềm HR, ví dụ NV043
+  dateOfBirth  DateTime? @db.Date
+  gender       String? // MALE | FEMALE | OTHER
+  idNumber     String? // số CCCD/CMND
+  address      String?
+  phone        String?
+  startDate    DateTime? @db.Date // ngày bắt đầu làm việc
+  updatedById  String?
+  updatedBy    User?     @relation("EmployeeRecordUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }
