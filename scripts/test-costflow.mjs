@@ -2,9 +2,14 @@ import { spawnSync } from "node:child_process";
 
 // An explicit dedicated URL is required for legacy integration suites; Phase 10 gap suites create and remove unique schemas on the pinned local taskflow database.
 const integration = process.argv.includes("--integration");
+const unitOnly = process.argv.includes("--unit");
 const checkIntegrationDatabaseUrl = process.argv.includes("--check-integration-database-url");
 const listOnly = process.argv.includes("--list");
 const phase8 = !process.argv.includes("--without-phase8");
+if (integration && unitOnly) {
+  console.error("Choose either --unit or --integration, not both.");
+  process.exit(1);
+}
 if (integration) {
   let url;
   try { url = new URL(process.env.COSTFLOW_TEST_DATABASE_URL || ""); } catch { url = null; }
@@ -34,6 +39,7 @@ const phase12Suites = [
   "tests/costflow-phase12-release-gate.test.mjs",
 ];
 const unitSuites = [
+  "tests/ai-contracts.test.ts", "tests/ai-security.test.ts", "tests/ai-authority-boundary.test.ts", "tests/ai-observability.test.ts",
   "tests/costflow.test.ts", "tests/budget.test.ts", "tests/ic-effectiveness.test.ts", "tests/payment-policy.test.ts",
   "tests/payment-diff.test.ts", "tests/payment-read-model.test.ts", "tests/payment-security.test.ts", "tests/payment-ui-contract.test.ts", "tests/ic-approval-review.test.ts",
   "tests/vendor-payment-flow.test.ts", "tests/vendor-payment-ui-contract.test.ts",
@@ -59,21 +65,25 @@ const integrationSuites = integration ? [
   // The sheet integration runs above through the Phase 12 disposable-schema negative matrix.
   ...(phase8 ? ["tests/actual-cost-control-center.integration.test.ts", "tests/customer-liquidation.integration.test.ts"] : []),
 ] : [];
-const files = [...phase10GapSuites, ...unitSuites, ...integrationSuites];
+const files = unitOnly
+  ? unitSuites
+  : [...phase10GapSuites, ...unitSuites, ...integrationSuites];
 for (const suite of unitSuites) console.log(`UNIT ${suite}`);
 for (const suite of integrationSuites) console.log(`INTEGRATION ${suite}`);
 if (listOnly) process.exit(0);
 const env = { ...process.env };
 if (integration) env.DATABASE_URL = env.COSTFLOW_TEST_DATABASE_URL;
 else delete env.COSTFLOW_TEST_DATABASE_URL;
-const phase12Result = spawnSync(
-  process.execPath,
-  ["--conditions=react-server", "--import=tsx", "--test", "--test-concurrency=1", ...phase12Suites],
-  {
-    stdio: "inherit",
-    env: { ...process.env, DATABASE_URL: phase12DatabaseUrl },
-  },
-);
-if ((phase12Result.status ?? 1) !== 0) process.exit(phase12Result.status ?? 1);
+if (!unitOnly) {
+  const phase12Result = spawnSync(
+    process.execPath,
+    ["--conditions=react-server", "--import=tsx", "--test", "--test-concurrency=1", ...phase12Suites],
+    {
+      stdio: "inherit",
+      env: { ...process.env, DATABASE_URL: phase12DatabaseUrl },
+    },
+  );
+  if ((phase12Result.status ?? 1) !== 0) process.exit(phase12Result.status ?? 1);
+}
 const result = spawnSync(process.execPath, ["--conditions=react-server", "--import=tsx", "--test", "--test-concurrency=1", ...files], { stdio: "inherit", env });
 process.exit(result.status ?? 1);
