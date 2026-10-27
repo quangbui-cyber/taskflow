@@ -210,8 +210,8 @@ export default function ExcelIntakeDialog({ projectId, version, disabled = false
     <Button ref={triggerRef} variant="secondary" size="sm" disabled={disabled} onClick={() => dispatch({ type: "OPEN" })}>Nhập từ Excel</Button>
     <Dialog open={state.open} onClose={() => dispatch({ type: "CLOSE" })} title="Nhập Báo giá & IC" description="Dán bảng hoặc tải XLSX để xem trước. Chưa có hồ sơ nào được ghi." className="excel-intake-dialog"
       footer={<>
-        <Button variant="secondary" onClick={preview} loading={state.pending}>Cập nhật xem trước</Button>
-        <Button onClick={confirm} loading={confirmPending} disabled={state.pending || confirmPending || blocking > 0 || unresolvedDecimals > 0 || !state.preview || !actionable}>Tạo nháp mới</Button>
+        <Button variant="secondary" onClick={preview} loading={state.pending}>Xem trước dữ liệu</Button>
+        <Button onClick={confirm} loading={confirmPending} disabled={state.pending || confirmPending || blocking > 0 || unresolvedDecimals > 0 || !state.preview || !actionable}>Tạo nháp Báo giá &amp; IC</Button>
       </>}>
       <div className="excel-intake-source-grid">
         <Button variant={state.mode === "PASTE" ? "primary" : "secondary"} onClick={() => proposeSourceChange({ type: "SET_MODE", mode: "PASTE" })}>Dán bảng</Button>
@@ -222,10 +222,10 @@ export default function ExcelIntakeDialog({ projectId, version, disabled = false
       {state.mode === "PASTE" ? <Textarea label="Dữ liệu nhiều ô" value={state.paste} onChange={event => proposeSourceChange({ type: "SET_SOURCE", key: "paste", value: event.target.value })} /> :
         <Field label="Tệp XLSX" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event: ChangeEvent<HTMLInputElement>) => proposeSourceChange({ type: "SET_FILE", file: event.target.files?.[0] ?? null })} />}
       <div className="excel-intake-source-grid">
-        <Field label="Mã phiên xem trước" value={state.resumeSessionId} onChange={event => dispatch({ type: "SET_SOURCE", key: "resumeSessionId", value: event.target.value })} placeholder="Dán mã để tiếp tục hoặc xem lại" />
-        <Button variant="secondary" onClick={resume} disabled={!state.resumeSessionId.trim()} loading={state.pending}>Mở phiên</Button>
+        <Field label="Mở lại phiên xem trước" hint="Dán mã phiên đã lưu để tiếp tục sửa hoặc xem lại dữ liệu trước đó." value={state.resumeSessionId} onChange={event => dispatch({ type: "SET_SOURCE", key: "resumeSessionId", value: event.target.value })} placeholder="Dán mã phiên" />
+        <Button variant="secondary" onClick={resume} disabled={!state.resumeSessionId.trim()} loading={state.pending}>Mở phiên đã lưu</Button>
       </div>
-      <p className="tf-ui-help" aria-live="polite">{authority.notice || (state.pending ? "Đang kiểm tra dữ liệu…" : state.error || (visiblePreview ? `Đã nhận diện ${visiblePreview.adapter} · ${visiblePreview.rows.length} dòng.` : "Chọn nguồn rồi cập nhật xem trước."))}</p>
+      <p className="tf-ui-help" aria-live="polite">{authority.notice || (state.pending ? "Đang kiểm tra dữ liệu…" : state.error || (visiblePreview ? `Đã nhận diện ${visiblePreview.adapter} · ${visiblePreview.rows.length} dòng.` : "Chọn nguồn rồi xem trước dữ liệu."))}</p>
       {state.session && <p className="tf-ui-help">Phiên {state.session.previewSessionId} · hết hạn {new Date(state.session.expiresAt).toLocaleString("vi-VN")}</p>}
       {state.error && <Alert tone="danger" title="Chưa thể xem trước">{state.error} Dữ liệu và các ô đã sửa vẫn được giữ.</Alert>}
       {confirmError && <Alert tone="danger" title="Chưa thể tạo nháp">{confirmError} Dữ liệu và các ô đã sửa vẫn được giữ.</Alert>}

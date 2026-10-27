@@ -472,6 +472,7 @@ export default function EditIcLineModal({
                           onChange={(e) => setDescription(e.target.value)}
                           placeholder="VD: Xe 45 chỗ đưa đón, MC Teambuilding, Teabreak..."
                           required
+                          hideRequiredText
                         />
                       </div>
                       <div className="sm:col-span-1">
@@ -481,6 +482,7 @@ export default function EditIcLineModal({
                           onChange={(e) => setUnit(e.target.value)}
                           placeholder="Khách, Gói, Ngày..."
                           required
+                          hideRequiredText
                         />
                         {isAutoInheritedUnit && (
                           <span className="text-[10px] text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-1 font-medium">
@@ -500,6 +502,7 @@ export default function EditIcLineModal({
                           value={quantity}
                           onChange={(e) => setQuantity(e.target.value)}
                           required
+                          hideRequiredText
                         />
                         {isAutoInheritedQty && (
                           <span className="text-[10px] text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-1 font-medium">
@@ -517,6 +520,7 @@ export default function EditIcLineModal({
                           value={days}
                           onChange={(e) => setDays(e.target.value)}
                           required
+                          hideRequiredText
                         />
                         {initialQuoteDays && days !== initialQuoteDays && (
                           <Button variant="ghost" size="sm" onClick={() => setDays(initialQuoteDays)}>
@@ -534,6 +538,7 @@ export default function EditIcLineModal({
                           onChange={(e) => setUnitPrice(e.target.value)}
                           placeholder="VD: 5000000"
                           required
+                          hideRequiredText
                         />
                       </div>
 
@@ -569,7 +574,7 @@ export default function EditIcLineModal({
                         <span>Tạm tính chi phí mua:</span>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-3 font-mono">
+                      <div className="flex flex-wrap items-center gap-3 tabular-nums">
                         <div>
                           <span className="text-[var(--text-secondary)]">Net: </span>
                           <strong className="text-[var(--foreground)]">

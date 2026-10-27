@@ -1446,9 +1446,18 @@ dialog.tf-ui-dialog.tf-approval-inspection-modal::backdrop {
   .tf-payment-cash-editor .tf-ui-actions > * { width: 100%; }
 }
 .excel-intake-dialog {
+  display: flex;
+  flex-direction: column;
   width: min(1180px, calc(100vw - 32px));
   max-width: 1180px;
+  overflow: hidden;
 }
+
+.excel-intake-dialog > .tf-ui-dialog-header,
+.excel-intake-dialog > .tf-ui-help,
+.excel-intake-dialog > .tf-ui-actions { flex: 0 0 auto; }
+.excel-intake-dialog > .my-5 { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 4px; }
+.excel-intake-dialog > .tf-ui-actions { position: sticky; bottom: 0; z-index: 2; padding-top: 14px; border-top: 1px solid var(--border); background: var(--surface); }
 
 .excel-intake-source-grid {
   display: grid;
@@ -1680,19 +1689,6 @@ dialog.tf-ui-dialog.tf-ic-line-drawer > .my-5 > .tf-edit-ic-line-modal,
   color: var(--foreground);
   letter-spacing: -0.01em;
   text-transform: uppercase;
-}
-
-.tf-lifecycle-current-badge {
-  font-size: 12px;
-  color: var(--text-secondary);
-  background: var(--surface-soft);
-  padding: 3px 8px;
-  border-radius: var(--radius-pill, 999px);
-  border: 1px solid var(--border);
-}
-
-.tf-lifecycle-current-badge strong {
-  color: #465a16;
 }
 
 .tf-lifecycle-bar {

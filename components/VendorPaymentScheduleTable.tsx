@@ -8,7 +8,6 @@ import {
   Plus,
   CheckCircle2,
   Clock,
-  AlertTriangle,
   SlidersHorizontal,
   Send,
   Trash2,
@@ -64,7 +63,6 @@ export default function VendorPaymentScheduleTable({
 }: Props) {
   const [editingVendorId, setEditingVendorId] = useState<string | null>(null);
   const [filterVendorId, setFilterVendorId] = useState<string>("all");
-  const [filterUrgentOnly, setFilterUrgentOnly] = useState<boolean>(false);
 
   const beneficiaries = useMemo(() => finance.data.beneficiaries || [], [finance.data.beneficiaries]);
   const storedMilestones = useMemo(() => finance.data.vendorPaymentMilestones || [], [finance.data.vendorPaymentMilestones]);
@@ -138,14 +136,8 @@ export default function VendorPaymentScheduleTable({
     if (filterVendorId !== "all") {
       result = result.filter((g) => g.vendorId === filterVendorId);
     }
-    if (filterUrgentOnly) {
-      const now = bangkokDate();
-      result = result.filter((g) =>
-        g.milestones.some((m) => m.dueDate && m.dueDate <= now)
-      );
-    }
     return result;
-  }, [vendorGroups, filterVendorId, filterUrgentOnly]);
+  }, [vendorGroups, filterVendorId]);
 
   // Editing vendor modal state
   const vendorBeingEdited = vendorGroups.find((g) => g.vendorId === editingVendorId);
@@ -313,14 +305,6 @@ export default function VendorPaymentScheduleTable({
             ))}
           </Select>
 
-          <Button
-            variant={filterUrgentOnly ? "primary" : "secondary"}
-            size="sm"
-            onClick={() => setFilterUrgentOnly(!filterUrgentOnly)}
-          >
-            <AlertTriangle size={14} className="mr-1" />
-            {filterUrgentOnly ? "Hiện tất cả đợt" : "Chỉ hiện đợt cần chi gấp"}
-          </Button>
         </div>
 
         <div className="text-xs text-[var(--text-secondary)] flex items-center gap-1.5">

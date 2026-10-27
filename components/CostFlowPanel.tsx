@@ -157,7 +157,6 @@ function SummaryItem({ label, value, hint, accent }: { label: string; value: str
 export default function CostFlowPanel({ finance, user, projectHeading, initialTab }: { finance: Finance; user: { id: string; role: string }; projectHeading: ReactNode; initialTab?: string }) {
   const [tab, setTabState] = useState<CostFlowTabId | null>(resolveTab(initialTab));
   const [scopeSubTab, setScopeSubTab] = useState<"quotes" | "acceptance" | "liquidation">("quotes");
-  const [scopeCreateDialogOpen, setScopeCreateDialogOpen] = useState(false);
   const anchor = useSyncExternalStore(subscribeRequestAnchor, requestAnchor, serverRequestAnchor);
   const canCreate = finance.fullAccess && ["ADMIN", "ACCOUNT"].includes(user.role);
   const latestQuotation = finance.data.quotations?.at(-1);
@@ -256,9 +255,9 @@ export default function CostFlowPanel({ finance, user, projectHeading, initialTa
       <div className="tf-costflow-hero-heading">{projectHeading}<div className="flex flex-wrap items-center gap-2">
         {activeTab === "overview" && <Link className="tf-button-secondary" href={WORKFLOW_HUB_HREF}>Hồ sơ & Trình duyệt</Link>}
         {activeTab === "scope" && canCreate && !finance.data.closed && (
-          <Button size="sm" onClick={() => setScopeCreateDialogOpen(true)}>
-            <Plus size={15} aria-hidden="true" />Tạo báo giá mới
-          </Button>
+          <Link className="tf-button-primary tf-button-size-sm" href={worksheetHref()}>
+            <Plus size={15} aria-hidden="true" />Tạo Báo giá &amp; IC mới
+          </Link>
         )}
         {activeTab === "ic" && canCreate && !finance.data.closed && (
           <Link className="tf-button-primary tf-button-size-sm" href={worksheetHref(working ?? effective)}>
@@ -302,7 +301,6 @@ export default function CostFlowPanel({ finance, user, projectHeading, initialTa
           finance={finance}
           user={user}
           onSelectTab={setTab}
-          onOpenCreateQuotation={() => setScopeCreateDialogOpen(true)}
           worksheetHref={worksheetHref(working ?? effective)}
         />
 
@@ -383,8 +381,6 @@ export default function CostFlowPanel({ finance, user, projectHeading, initialTa
             userId={user.id}
             finance={finance}
             canCreate={canCreate && !finance.data.closed}
-            createDialogOpen={scopeCreateDialogOpen}
-            onOpenCreateChange={setScopeCreateDialogOpen}
           />
         )}
         {scopeSubTab === "acceptance" && (

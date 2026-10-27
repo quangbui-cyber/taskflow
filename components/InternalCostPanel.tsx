@@ -531,11 +531,6 @@ export default function InternalCostPanel({
 
       {/* 2. WARNING / WORKING REVISION ALERTS */}
       {workingError && <Alert tone="danger" title={workingError} />}
-      {working && (
-        <Alert tone="info" title={`Đang xử lý revision IC-R${working.number}`}>
-          Project đang có một revision trong vòng xử lý ({STATE[visibleRequest?.state ?? "DRAFT"]}). Bản đã gửi cần rút ở tab Trình duyệt nếu muốn chỉnh sửa.
-        </Alert>
-      )}
 
       {/* 3. DRAFTS IN PROGRESS (IF ANY) */}
       {internalDrafts.length > 0 && (

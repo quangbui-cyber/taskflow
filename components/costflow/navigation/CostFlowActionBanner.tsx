@@ -20,7 +20,6 @@ type Props = {
   finance: Finance;
   user: { id: string; role: string };
   onSelectTab: (tab: CostFlowTabId) => void;
-  onOpenCreateQuotation?: () => void;
   worksheetHref?: string;
 };
 
@@ -46,7 +45,6 @@ export default function CostFlowActionBanner({
   finance,
   user,
   onSelectTab,
-  onOpenCreateQuotation,
   worksheetHref,
 }: Props) {
   const { data, requests, fullAccess } = finance;
@@ -116,10 +114,10 @@ export default function CostFlowActionBanner({
         title: "Bước 1: Khởi tạo Báo giá đầu tiên cho dự án",
         description: "Bắt đầu bằng cách tạo cấu trúc hạng mục và đơn giá bán cho khách hàng. Đây sẽ là căn cứ để xây dựng giá vốn (IC).",
         icon: Sparkles,
-        primaryAction: canCreate && onOpenCreateQuotation
+        primaryAction: canCreate && worksheetHref
           ? {
-              label: "Tạo báo giá mới",
-              onClick: onOpenCreateQuotation,
+              label: "Tạo Báo giá & IC",
+              href: worksheetHref,
             }
           : {
               label: "Mở Scope & Báo giá",
@@ -242,7 +240,6 @@ export default function CostFlowActionBanner({
     myReturnedRequests.length,
     quotations.length,
     canCreate,
-    onOpenCreateQuotation,
     onSelectTab,
     effectiveRevision,
     requests,

@@ -13,8 +13,6 @@ import {
   Clock,
   Sparkles,
   ExternalLink,
-  Copy,
-  LayoutTemplate,
   Download,
   Trash2
 } from "lucide-react";
@@ -34,8 +32,6 @@ type Props = {
   finance: Finance;
   canCreate: boolean;
   userId?: string;
-  createDialogOpen?: boolean;
-  onOpenCreateChange?: (open: boolean) => void;
 };
 
 function DraftDeleteButton({ finance, draft }: { finance: Finance; draft: PairedDraft }) {
@@ -85,20 +81,11 @@ function DraftDeleteButton({ finance, draft }: { finance: Finance; draft: Paired
 export default function QuotationPanel({
   finance,
   canCreate,
-  userId,
-  createDialogOpen: controlledCreateDialogOpen,
-  onOpenCreateChange
+  userId
 }: Props) {
   const quotations = useMemo(() => finance.data.quotations ?? [], [finance.data.quotations]);
   const [selectedId, setSelectedId] = useState<string>("");
-  const [internalCreateDialogOpen, setInternalCreateDialogOpen] = useState(false);
-  const isCreateDialogOpen = controlledCreateDialogOpen !== undefined ? controlledCreateDialogOpen : internalCreateDialogOpen;
-  const setCreateDialogOpen = (open: boolean) => {
-    onOpenCreateChange?.(open);
-    setInternalCreateDialogOpen(open);
-  };
   const [previewQuotation, setPreviewQuotation] = useState<Quotation | null>(null);
-  const [cloneSourceId, setCloneSourceId] = useState<string>(quotations.at(-1)?.id ?? "");
 
   // Active or selected quotation
   const selected = useMemo(() => {
@@ -107,6 +94,7 @@ export default function QuotationPanel({
   }, [quotations, selectedId]);
 
   const latestQuotation = quotations.at(-1);
+  const pairedWorkspaceHref = `/projects/${finance.project.id}/costflow/paired${latestQuotation ? `?quotationId=${encodeURIComponent(latestQuotation.id)}` : ""}`;
   const isLatest = selected && latestQuotation && selected.id === latestQuotation.id;
 
   // Active customer projection for selected quote
@@ -158,10 +146,10 @@ export default function QuotationPanel({
                 Tải mẫu Excel v4
               </a>
               <ExcelIntakeDialog projectId={finance.project.id} version={finance.version} />
-              <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
+              <Link className="tf-button-primary tf-button-size-sm" href={pairedWorkspaceHref}>
                 <Plus size={15} className="mr-1" aria-hidden="true" />
-                Tạo báo giá mới
-              </Button>
+                Tạo Báo giá &amp; IC mới
+              </Link>
             </>
           )}
         </div>
@@ -364,10 +352,10 @@ export default function QuotationPanel({
             description="Bạn có thể bắt đầu bằng việc tạo báo giá từ template mẫu của công ty hoặc tạo bảng trống."
             action={
               canCreate && !finance.data.closed ? (
-                <Button onClick={() => setCreateDialogOpen(true)}>
+                <Link className="tf-button-primary tf-button-size-md" href={pairedWorkspaceHref}>
                   <Plus size={16} className="mr-1" aria-hidden="true" />
-                  Tạo báo giá đầu tiên
-                </Button>
+                  Tạo Báo giá &amp; IC
+                </Link>
               ) : undefined
             }
           />
@@ -519,99 +507,7 @@ export default function QuotationPanel({
         </Panel>
       </div>
 
-      {/* 5. DIALOG: TẠO BÁO GIÁ MỚI */}
-      <Dialog
-        open={isCreateDialogOpen}
-        onClose={() => setCreateDialogOpen(false)}
-        title="Tạo báo giá mới"
-        description="Chọn phương thức khởi tạo phù hợp với yêu cầu của dự án."
-      >
-        <div className="space-y-4 py-2">
-          {/* Option 1: Template */}
-          <Link
-            className="flex items-start gap-3 p-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] transition-all hover:border-[var(--primary)] hover:bg-[var(--surface-soft)] text-left group"
-            href={`/projects/${finance.project.id}/costflow/quotations/new`}
-            onClick={() => setCreateDialogOpen(false)}
-          >
-            <div className="p-2.5 rounded bg-[var(--primary-soft)] text-[#465a16] border border-[#dfecb1] shrink-0">
-              <LayoutTemplate size={22} aria-hidden="true" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between">
-                <h4 className="font-bold text-sm text-[var(--foreground)] group-hover:text-[#465a16]">
-                  Dùng Template chuẩn công ty
-                </h4>
-                <Badge tone="success">Khuyên dùng</Badge>
-              </div>
-              <p className="text-xs text-[var(--text-secondary)] mt-1">
-                Kế thừa cấu trúc định dạng chuẩn cho Teambuilding, Gala, Hội nghị với công thức tham số tự động.
-              </p>
-            </div>
-          </Link>
-
-          {/* Option 2: Clone from historical quote */}
-          {quotations.length > 0 && (
-            <div className="p-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] space-y-3">
-              <div className="flex items-start gap-3">
-                <div className="p-2.5 rounded bg-[var(--surface-soft)] text-[var(--info)] border border-[var(--border)] shrink-0">
-                  <Copy size={22} aria-hidden="true" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-bold text-sm text-[var(--foreground)]">
-                    Sao chép từ phiên bản đã có
-                  </h4>
-                  <p className="text-xs text-[var(--text-secondary)] mt-1">
-                    Nhân bản toàn bộ các nhóm và hạng mục từ một báo giá đã chốt trong dự án để tiếp tục điều chỉnh.
-                  </p>
-                </div>
-              </div>
-              <div className="pt-2 flex items-center gap-2">
-                <div className="flex-1">
-                  <Select
-                    label="Chọn bản báo giá nguồn"
-                    value={cloneSourceId}
-                    onChange={e => setCloneSourceId(e.target.value)}
-                  >
-                    {[...quotations].reverse().map(q => (
-                      <option key={q.id} value={q.id}>
-                        BG-{String(q.number).padStart(2, "0")} · {q.title}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                <Link
-                  className="tf-button-secondary text-sm mt-5 whitespace-nowrap"
-                  href={`/projects/${finance.project.id}/costflow/quotations/new?quotationId=${encodeURIComponent(cloneSourceId)}`}
-                  onClick={() => setCreateDialogOpen(false)}
-                >
-                  Sao chép bản này
-                </Link>
-              </div>
-            </div>
-          )}
-
-          {/* Option 3: Blank Canvas */}
-          <Link
-            className="flex items-start gap-3 p-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] transition-all hover:border-[var(--primary)] hover:bg-[var(--surface-soft)] text-left group"
-            href={`/projects/${finance.project.id}/costflow/quotations/new?start=blank`}
-            onClick={() => setCreateDialogOpen(false)}
-          >
-            <div className="p-2.5 rounded bg-[var(--surface-soft)] text-[var(--muted)] border border-[var(--border)] shrink-0">
-              <Plus size={22} aria-hidden="true" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h4 className="font-bold text-sm text-[var(--foreground)] group-hover:text-[#465a16]">
-                Bắt đầu từ bảng trống
-              </h4>
-              <p className="text-xs text-[var(--text-secondary)] mt-1">
-                Tự xây dựng cấu trúc nhóm và hạng mục hoàn toàn mới từ đầu.
-              </p>
-            </div>
-          </Link>
-        </div>
-      </Dialog>
-
-      {/* 6. DIALOG: XEM TRƯỚC BẢN KHÁCH HÀNG */}
+      {/* 5. DIALOG: XEM TRƯỚC BẢN KHÁCH HÀNG */}
       {previewQuotation && (
         <Dialog
           open={!!previewQuotation}

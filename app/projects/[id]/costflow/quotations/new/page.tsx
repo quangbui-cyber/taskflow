@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { loadFinance } from "@/lib/costflow/service";
 import ModuleShell from "@/components/ModuleShell";
@@ -18,6 +18,9 @@ export default async function QuotationPage({ params, searchParams }: {
   if (!finance || !finance.fullAccess || finance.data.closed || !["ACCOUNT", "ADMIN"].includes(user.role)) notFound();
   if (quotationId && !finance.data.quotations?.some(quotation => quotation.id === quotationId)) notFound();
   if (draftId && !finance.data.quotationDrafts?.some(draft => draft.id === draftId && draft.createdBy === user.id && (draft.workspaceMode ?? "paired") === "quote" && (!quotationId || draft.sourceQuotationId === quotationId || draft.latestQuotationId === quotationId))) notFound();
+  if (!draftId && (quotationId || start === "blank")) {
+    redirect(`/projects/${id}/costflow/paired${quotationId ? `?quotationId=${encodeURIComponent(quotationId)}` : ""}`);
+  }
   const choosingSource = !quotationId && !draftId && start !== "blank";
   const catalog = choosingSource ? await loadQuotationReuseCatalog(id, user) : [];
   return <ModuleShell user={user} projectId={id}>

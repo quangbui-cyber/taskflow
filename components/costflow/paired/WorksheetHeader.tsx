@@ -73,11 +73,11 @@ export default function WorksheetHeader({
       {/* SECTION HEADING */}
       <div className="tf-section-heading tf-paired-workspace-heading">
         <div>
-          <div className="flex items-center gap-2">
-            <p className="tf-paired-eyebrow">
-              {mode === "quote" ? "Scope / Báo giá" : mode === "ic" ? "IC từ báo giá" : "Báo giá & IC song song"}
-            </p>
-          </div>
+          {mode !== "paired" && (
+            <div className="flex items-center gap-2">
+              <p className="tf-paired-eyebrow">{mode === "quote" ? "Scope / Báo giá" : "IC từ báo giá"}</p>
+            </div>
+          )}
           <h2>{title || "Chưa đặt tên báo giá"}</h2>
           {embedded && mode === "quote" && (
             <p className="tf-ui-help">{clientName || "Chưa chọn khách hàng"}</p>

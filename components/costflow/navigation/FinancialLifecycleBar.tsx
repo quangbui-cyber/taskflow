@@ -175,9 +175,6 @@ export default function FinancialLifecycleBar({ finance, activeTab, onSelectTab 
     <section className="tf-lifecycle-container" aria-label="Tiến trình tài chính dự án">
       <div className="tf-lifecycle-header">
         <span className="tf-lifecycle-heading-title">Tiến trình tài chính</span>
-        <span className="tf-lifecycle-current-badge">
-          Giai đoạn hiện tại: <strong>{stages.find(s => s.isCurrentProjectStage)?.label}</strong>
-        </span>
       </div>
 
       <nav ref={lifecycleBarRef} className="tf-lifecycle-bar" aria-label="Các giai đoạn tài chính">
