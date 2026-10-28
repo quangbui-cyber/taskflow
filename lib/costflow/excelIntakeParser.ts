@@ -6,6 +6,8 @@ import { EXCEL_INTAKE_LIMITS, preflightExcelWorkbook, type ExcelWorkbookUpload }
 export type ExcelIntakeMapping = { sheet?: string; range?: string; headerRow?: number };
 export type ExcelIntakePreview = NormalizedExcelIntake & { fingerprint: string; adapter: "PASTE" | "STANDARD_V4" | "FAMILIAR_THREE_LEVEL" | "AI_REVIEWED"; confidence: number;
   mappingProvenance?: { version: string; fingerprint: string; runId: string | null; adapterId: string | null; confirmedCriticalCells: string[]; reviewed: true };
+  mappingProposal?: { sheet: string; range: string; headerRow: number; kind: "QUOTATION" | "IC" | "PAIRED"; columns: Record<string, number | undefined>; rows: { row: number; rowType: "GROUP" | "ITEM"; level: 1 | 2 | 3; parentRow: number | null }[]; confidence: number;
+    additional?: { sheet: string; range: string; headerRow: number; kind: "QUOTATION" | "IC" | "PAIRED"; columns: Record<string, number | undefined>; rows: { row: number; rowType: "GROUP" | "ITEM"; level: 1 | 2 | 3; parentRow: number | null }[]; confidence: number } };
   mappingObservations?: string[] };
 
 const canonicalHeaders = ["LEVEL", "ROW_TYPE", "PARENT_ROW", "NAME", "DESCRIPTION", "SELL_UNIT", "SELL_QUANTITY", "SELL_DAYS", "SELL_UNIT_PRICE", "SELL_VAT", "SELL_BASIS", "SELL_NOTE", "BUY_UNIT", "BUY_QUANTITY", "BUY_DAYS", "BUY_UNIT_PRICE", "BUY_VAT", "BUY_BASIS", "SUPPLIER", "BUY_NOTE"];

@@ -75,7 +75,7 @@ function runtimeConfig() {
   };
 }
 
-export async function createAiRun(actorId: string, projectId: string, rawCommand: unknown) {
+export async function createAiRun(actorId: string, projectId: string, rawCommand: unknown, options?: { forceNew?: boolean }) {
   const command = validateAiRunCommand(rawCommand);
   const config = runtimeConfig();
   if (!config.tasks.includes(command.task)) throw new AiRunDisabledError("This analysis task is unavailable.");
@@ -99,10 +99,10 @@ export async function createAiRun(actorId: string, projectId: string, rawCommand
     scopeKey: scope.scopeKey, runType: command.task, idempotencyKey: identity.idempotencyKey,
   } };
   const existing = await prisma.aiRun.findUnique({ where: unique, select: { id: true, status: true, scopeHash: true, configVersion: true } });
-  if (existing && existing.status !== "FAILED" && existing.scopeHash === scope.scopeHash && existing.configVersion === config.configVersion) {
+  if (!options?.forceNew && existing && existing.status !== "FAILED" && existing.scopeHash === scope.scopeHash && existing.configVersion === config.configVersion) {
     return { id: existing.id, status: existing.status, reused: true };
   }
-  const idempotencyKey = existing ? digest([identity.idempotencyKey, randomUUID()]) : identity.idempotencyKey;
+  const idempotencyKey = existing || options?.forceNew ? digest([identity.idempotencyKey, randomUUID()]) : identity.idempotencyKey;
   try {
     const startedAt = new Date();
     const run = await prisma.$transaction(async (tx) => tx.aiRun.create({ data: {

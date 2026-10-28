@@ -198,8 +198,8 @@ export function normalizeExcelIntake(input: ExcelIntakeInput): NormalizedExcelIn
   const warnings: ExcelIntakeWarning[] = [];
   const decimalConflicts: ExcelDecimalConflict[] = [];
   const observations: NormalizedExcelIntake["observations"] = [];
-  const sourceRowToCandidate = new Map<number, string>();
-  input.rows.forEach((row, index) => sourceRowToCandidate.set(row.level.source.row, `candidate-${index + 1}`));
+  const sourceRowToCandidate = new Map<string, string>();
+  input.rows.forEach((row, index) => sourceRowToCandidate.set(`${row.level.source.sheet}:${row.level.source.row}`, `candidate-${index + 1}`));
   const rows = input.rows.map((row, index): NormalizedExcelIntakeRow => {
     const candidateKey = `candidate-${index + 1}`;
     const levelNumber = Number(text(row.level));
@@ -208,7 +208,7 @@ export function normalizeExcelIntake(input: ExcelIntakeInput): NormalizedExcelIn
     const rowType = rowTypeText === "GROUP" ? "GROUP" : "ITEM";
     if (rowTypeText !== "GROUP" && rowTypeText !== "ITEM") issue(errors, candidateKey, "INVALID_ROW_TYPE", "rowType", row.rowType.source, "Loại dòng phải là GROUP hoặc ITEM.");
     const parentSourceRow = Number(text(row.parentRow));
-    const parentCandidateKey = Number.isInteger(parentSourceRow) ? sourceRowToCandidate.get(parentSourceRow) ?? null : null;
+    const parentCandidateKey = Number.isInteger(parentSourceRow) ? sourceRowToCandidate.get(`${row.level.source.sheet}:${parentSourceRow}`) ?? null : null;
     const validStructure = rowType === "GROUP" ? level === 1 && !parentCandidateKey : level === 1 ? !parentCandidateKey : Boolean(parentCandidateKey);
     if (!validStructure) issue(errors, candidateKey, "INVALID_HIERARCHY", "parentRow", row.parentRow.source, "Cấp và dòng cha không tạo thành cấu trúc ba cấp hợp lệ.");
     const sell = sideValue(row.sell, "sell", candidateKey, rowType, errors, decimalConflicts);

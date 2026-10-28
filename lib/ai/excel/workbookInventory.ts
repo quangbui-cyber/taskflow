@@ -21,6 +21,8 @@ export async function inventoryExcelWorkbook(bytes: Uint8Array, upload: ExcelWor
   const copy = Buffer.from(bytes);
   await workbook.xlsx.load(copy.buffer.slice(copy.byteOffset, copy.byteOffset + copy.byteLength) as ArrayBuffer);
   const candidates = workbook.worksheets.filter(sheet => sheet.state === "visible" && !/nhà cung cấp|supplier|evidence|chứng từ|_import/i.test(sheet.name) && sheet.actualRowCount > 0);
+  const excludedSheets = workbook.worksheets.filter(sheet => !candidates.includes(sheet)).map(sheet =>
+    `Excluded sheet ${sheet.name}: ${sheet.state !== "visible" ? "HIDDEN_SHEET" : "REFERENCE_OR_EMPTY"}`);
   if (candidates.length < 1 || candidates.length > 2) throw new Error("AI mapping chỉ nhận một workbook với tối đa hai sheet dữ liệu.");
   const sheets: InventorySheet[] = candidates.map(sheet => {
     const bounds = /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/i.exec(String(sheet.dimensions));
@@ -56,5 +58,6 @@ export async function inventoryExcelWorkbook(bytes: Uint8Array, upload: ExcelWor
   const fingerprint = createHash("sha256").update(JSON.stringify(sheets.map(sheet => ({ name: sheet.name, range: sheet.range,
     types: [...sheet.cells.values()].filter(cell => cell.row <= sheet.firstRow + 20).map(({ row, column, type, format }) => [row, column, type, format]),
     merged: sheet.mergedRanges, hiddenRows: sheet.hiddenRows, hiddenColumns: sheet.hiddenColumns })))).digest("hex");
-  return { version: EXCEL_MAPPING_VERSION, fingerprint, sheets, observations: sheets.flatMap(sheet => sheet.observations.map(note => `${sheet.name}: ${note}`)) };
+  return { version: EXCEL_MAPPING_VERSION, fingerprint, sheets, observations: [
+    ...excludedSheets, ...sheets.flatMap(sheet => sheet.observations.map(note => `${sheet.name}: ${note}`))] };
 }

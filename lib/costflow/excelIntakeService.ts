@@ -625,6 +625,20 @@ export async function confirmExcelIntake(actor: Actor, command: ConfirmExcelInta
     const output: ConfirmExcelIntakeResult = { draftId, version: payload.expectedVersion + 1, idempotent: false };
     const review = { operationKind: "NEW_DRAFT", source: resolvedPreview.source, corrections, decimalResolutions, resolvedPreview, finalRows: structuredClone(rows), finalVersion: output.version };
     const receipt = await claimExcelIntakeOperationReceipt(tx, { projectId: command.projectId, previewSessionId: session.id, idempotencyKey: command.idempotencyKey, actorId: actor.id, operationKind: "NEW_DRAFT", canonicalFingerprint: operationFingerprint, result: { output, review }, linkedRecordKind: "PAIRED_DRAFT", linkedRecordId: draftId });
+    const provenance = payload.preview.mappingProvenance;
+    if (provenance?.runId && payload.preview.mappingProposal) {
+      const mappingRun = await tx.aiRun.findFirst({ where: { id: provenance.runId, projectId: command.projectId,
+        actorId: actor.id, runType: "EXCEL_STRUCTURE", status: "SUCCEEDED" },
+        include: { sources: { include: { sourceRevision: true } } } });
+      if (!mappingRun || mappingRun.sources.length !== 1 || mappingRun.sources[0].sourceRevision.sha256 !== session.sourceSha256) {
+        throw new Error("Nguồn AI mapping không còn khớp phiên xem trước.");
+      }
+      const adapterVersion = `${provenance.version}:${receipt.id}`;
+      await tx.aiMappingAdapter.create({ data: { projectId: command.projectId, scopeKey: mappingRun.scopeKey,
+        structureFingerprint: provenance.fingerprint, adapterVersion,
+        mapping: json(payload.preview.mappingProposal), confirmedRunId: mappingRun.id,
+        confirmedById: actor.id, status: "ACTIVE" } });
+    }
     if (session.sourceKind === "XLSX") await copySuccessfulExcelSourceEvidence(tx, { sessionId: session.id, receiptId: receipt.id, linkedRecordKind: "PAIRED_DRAFT", linkedRecordId: draftId });
     await tx.costFlowHistory.create({ data: { projectId: command.projectId, version: output.version, actorId: actor.id, action: "CONFIRM_EXCEL_INTAKE", snapshot: json(data) } });
     await consumeExcelIntakePreviewSession(tx, { sessionId: session.id, receiptId: receipt.id, resultKind: "PAIRED_DRAFT", resultId: draftId });
