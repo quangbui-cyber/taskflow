@@ -7,6 +7,7 @@ import {
   resolveAiReadScope,
 } from "../lib/ai/access/resolveAiReadScope";
 import { snapshotSelectedAiSources } from "../lib/ai/sources/sourceRevisions";
+import { deriveAiRunIdentity, validateAiRunCommand } from "../lib/ai/runs/aiRunService";
 
 test("selected AI sources reject empty, duplicate and unsupported references", () => {
   assert.throws(() => parseAiSourceSelection([]));
@@ -80,4 +81,21 @@ test("same filename with changed bytes creates a different revision", async () =
   bytes = new Uint8Array([2]);
   const changed = await snapshotSelectedAiSources("actor", [origin], store);
   assert.notEqual(changed[0].id, first[0].id);
+});
+
+test("run creation requires explicit ANALYZE intent and a supported extraction source", () => {
+  assert.throws(() => validateAiRunCommand({ intent: "UPLOAD", task: "DOCUMENT_EXTRACTION", sourceIds: ["PROJECT_FILE:a"] }));
+  assert.throws(() => validateAiRunCommand({ intent: "ANALYZE", task: "DOCUMENT_EXTRACTION", sourceIds: [] }));
+  assert.throws(() => validateAiRunCommand({ intent: "ANALYZE", task: "DOCUMENT_EXTRACTION", sourceIds: ["COSTFLOW_EVIDENCE:a"] }));
+  assert.deepEqual(validateAiRunCommand({ intent: "ANALYZE", task: "DOCUMENT_EXTRACTION", sourceIds: ["COSTFLOW_PO:a"] }).sourceIds, ["COSTFLOW_PO:a"]);
+});
+
+test("run identity changes with source bytes, visibility or pipeline config", () => {
+  const base = { task: "DOCUMENT_EXTRACTION", scopeHash: "scope-a", sourceHashes: ["hash-a"],
+    parserVersion: "parser-1", pipelineVersion: "pipeline-1", promptVersion: "prompt-1", configVersion: "config-1" };
+  const identity = deriveAiRunIdentity(base);
+  assert.equal(identity.idempotencyKey, deriveAiRunIdentity(base).idempotencyKey);
+  assert.notEqual(identity.idempotencyKey, deriveAiRunIdentity({ ...base, sourceHashes: ["hash-b"] }).idempotencyKey);
+  assert.notEqual(identity.idempotencyKey, deriveAiRunIdentity({ ...base, scopeHash: "scope-b" }).idempotencyKey);
+  assert.notEqual(identity.idempotencyKey, deriveAiRunIdentity({ ...base, configVersion: "config-2" }).idempotencyKey);
 });
