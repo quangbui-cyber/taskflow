@@ -108,4 +108,8 @@ test("model receives only minimized masked structure and cannot return values", 
     usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
   }) };
   assert.equal((await proposeExcelMapping(inventory, badModel, new AbortController().signal)).status, "MANUAL_MAPPING");
+  const timeoutModel = { extract: async () => { throw new DOMException("Timed out", "TimeoutError"); } };
+  const timeoutResult = await proposeExcelMapping(inventory, timeoutModel, new AbortController().signal);
+  assert.equal(timeoutResult.status, "MANUAL_MAPPING");
+  assert.equal(timeoutResult.proposal, null);
 });
