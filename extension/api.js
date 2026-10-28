@@ -130,7 +130,8 @@ export async function uploadAndStartRecap({
   const token = explicitToken || config.token;
   const baseUrl = explicitBaseUrl || config.baseUrl;
   const safeName = fileName || `rec_${meetingId}_${Date.now()}.webm`;
-  const pathname = `meetings/${meetingId}/recaps/${safeName}`;
+  // Phải khớp recapAudioPathname() ở backend (lib/meetingRecap.ts), nếu không server từ chối cấp token
+  const pathname = `meeting-recaps/${meetingId}/audio.webm`;
 
   // 1. Kiểm tra hạn mức trước khi tải
   await checkRecapQuota(meetingId, { durationSeconds, size: fileBlob.size });
@@ -157,14 +158,20 @@ export async function uploadAndStartRecap({
     throw new Error("Không lấy được token tải file lên kho lưu trữ.");
   }
 
-  // 3. Tải thẳng file lên Vercel Blob API (chuẩn API của Vercel Blob client)
+  // 3. Tải thẳng file lên Vercel Blob API (cùng header mà upload() của @vercel/blob/client gửi)
+  const clientToken = uploadTokenRes.clientToken;
   const blobApiUrl = `https://vercel.com/api/blob/?pathname=${encodeURIComponent(pathname)}`;
   const blobPutResponse = await fetch(blobApiUrl, {
     method: "PUT",
     headers: {
-      Authorization: `Bearer ${uploadTokenRes.clientToken}`,
-      "x-api-version": "7",
-      "Content-Type": fileBlob.type || "audio/webm",
+      Authorization: `Bearer ${clientToken}`,
+      "x-api-version": "13",
+      // Token dạng vercel_blob_client_<storeId>_...
+      "x-vercel-blob-store-id": clientToken.split("_")[3] || "",
+      // Kho Blob của myCreative là private (giống lib/recapUploadClient.ts)
+      "x-vercel-blob-access": "private",
+      // Bỏ ";codecs=opus" để khớp allowedContentTypes của server
+      "x-content-type": "audio/webm",
     },
     body: fileBlob,
   });
@@ -175,7 +182,8 @@ export async function uploadAndStartRecap({
   }
 
   const uploadedBlob = await blobPutResponse.json().catch(() => ({}));
-  const uploadedPathname = uploadedBlob.url || uploadedBlob.pathname || pathname;
+  // Server kiểm tra pathname (không phải URL đầy đủ) và dùng nó để head()/xoá file
+  const uploadedPathname = uploadedBlob.pathname || pathname;
 
   // 4. Kích hoạt xử lý chép lời & tóm tắt biên bản
   const recapRes = await apiRequest(`/api/ext/meetings/${meetingId}/recap`, {
