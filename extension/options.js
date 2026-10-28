@@ -104,5 +104,22 @@ btnSaveServer.onclick = async () => {
   await renderStatus();
 };
 
+// Tự cập nhật trạng thái khi extension nhận được token từ trang kết nối
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && (changes.mycreative_token || changes.mycreative_base_url)) {
+    renderStatus();
+  }
+});
+
+// Mở từ bước kết nối lần đầu (?setup=mic): xin quyền micro luôn nếu chưa có
+async function autoSetupMic() {
+  if (new URLSearchParams(window.location.search).get("setup") !== "mic") return;
+  const state = await navigator.permissions
+    .query({ name: "microphone" })
+    .then((p) => p.state)
+    .catch(() => "prompt");
+  if (state !== "granted") btnRequestMic.click();
+}
+
 renderStatus();
-checkMicPermission();
+checkMicPermission().then(autoSetupMic);

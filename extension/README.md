@@ -28,11 +28,10 @@ Extension "1 click ghi biên bản" cho cuộc họp Google Meet, tích hợp tr
 ## Cách sử dụng
 
 1. **Kết nối tài khoản (1 lần duy nhất)**:
-   - Bấm chuột phải vào icon Extension → chọn **Tùy chọn (Options)** (hoặc bấm vào icon rồi chọn Kết nối ngay).
-   - Bấm **Đăng nhập & Cấp quyền** → hệ thống mở trang `/profile/extension` trên myCreative.
-   - Bấm **Cho phép kết nối Extension** → Token tự động sao chép vào bộ nhớ tạm.
-   - Dán token vào ô cài đặt Extension và bấm **Lưu**.
-   - Bấm **Cấp quyền Micro** một lần để cho phép thu giọng nói của bạn.
+   - Bấm icon Extension → **Kết nối ngay** → hệ thống mở trang `/profile/extension` trên myCreative (đăng nhập nếu được hỏi).
+   - Bấm **Cho phép kết nối Extension**. Extension tự nhận và lưu token, trang hiện "Đã kết nối Extension".
+   - Lần đầu, Extension tự mở trang cài đặt để xin quyền micro: bấm **Cho phép** ở hộp thoại của Chrome.
+   - Nếu trang báo "Chưa thấy Extension trả lời" (chưa cài, hoặc Extension bản cũ): bấm **Sao chép**, rồi dán token vào ô Token trong trang cài đặt của Extension và bấm **Lưu**.
 
 2. **Ghi biên bản khi họp Google Meet**:
    - Mở tab cuộc họp Google Meet.
