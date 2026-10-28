@@ -83,20 +83,28 @@ function StatLink({
   value,
   label,
   tone = "text-brand-700",
+  pulse = false,
 }: {
   href: string;
   value: string | number;
   label: string;
   tone?: string;
+  pulse?: boolean;
 }) {
   return (
     <Link
       href={href}
       prefetch={false}
-      className="min-w-[104px] rounded-[14px] border border-zinc-200 bg-white px-4 py-3 text-center transition-colors hover:border-brand-300"
+      className="group min-w-[104px] rounded-[14px] border border-zinc-200 bg-white px-4 py-3 text-center transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-sm"
     >
-      <span className={`block text-2xl font-bold leading-7 tabular-nums ${tone}`}>{value}</span>
-      <span className="text-xs text-zinc-600">{label}</span>
+      <span
+        className={`block text-2xl font-bold leading-7 tabular-nums transition-transform duration-200 group-hover:scale-105 ${tone} ${
+          pulse ? "animate-pulse" : ""
+        }`}
+      >
+        {value}
+      </span>
+      <span className="text-xs text-zinc-600 transition-colors group-hover:text-zinc-900">{label}</span>
     </Link>
   );
 }
@@ -418,11 +426,13 @@ export default async function HomePage({
                     : "Thông báo"
                 }
                 title="Thông báo"
-                className="absolute right-5 top-5 z-10 hidden h-10 w-10 items-center justify-center rounded-full border border-brand-200 bg-white text-brand-700 shadow-sm transition-colors hover:border-brand-300 hover:bg-brand-50 md:flex"
+                className={`group absolute right-5 top-5 z-10 hidden h-10 w-10 items-center justify-center rounded-full border border-brand-200 bg-white text-brand-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-300 hover:bg-brand-50 md:flex ${
+                  unreadNotifications > 0 ? "tf-bell-shake" : ""
+                }`}
               >
-                <Bell size={19} strokeWidth={1.9} aria-hidden="true" />
+                <Bell size={19} strokeWidth={1.9} className="transition-transform duration-200 group-hover:rotate-12" aria-hidden="true" />
                 {unreadNotifications > 0 && (
-                  <span className="absolute -right-1 -top-1 min-w-[18px] rounded-full border-2 border-white bg-red-500 px-1 text-center text-[10px] font-bold leading-[14px] text-white">
+                  <span className="absolute -right-1 -top-1 min-w-[18px] rounded-full border-2 border-white bg-red-500 px-1 text-center text-[10px] font-bold leading-[14px] text-white animate-pulse">
                     {unreadNotifications > 99 ? "99+" : unreadNotifications}
                   </span>
                 )}
@@ -452,6 +462,7 @@ export default async function HomePage({
                   value={urgentTasks.length}
                   label="Việc gấp"
                   tone={urgentTasks.length === 0 ? "text-brand-700" : "text-red-600"}
+                  pulse={urgentTasks.length > 0}
                 />
                 {showMeetings && (
                   <StatLink href="/meetings?view=mine" value={meetingsToday.length} label="Họp hôm nay" />
@@ -565,7 +576,9 @@ export default async function HomePage({
                   </div>
                 ) : (
                   <p className="flex items-center gap-2.5 rounded-[10px] bg-brand-50 px-3.5 py-3 text-sm text-brand-800">
-                    <CheckCheck size={17} aria-hidden="true" />
+                    <span className="tf-pop-in flex shrink-0 items-center justify-center">
+                      <CheckCheck size={17} aria-hidden="true" />
+                    </span>
                     Bạn không có việc gấp hôm nay, cứ thong thả nhé.
                   </p>
                 )}
@@ -597,7 +610,7 @@ export default async function HomePage({
                 <div className="flex flex-wrap gap-4">
                   <div className="flex flex-[1_1_200px] flex-col items-center gap-1.5 rounded-[14px] border border-brand-200 bg-brand-50 p-4 text-center">
                     <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-brand-800">
-                      <Star size={12} fill="currentColor" aria-hidden="true" />
+                      <Star size={12} fill="currentColor" className="tf-star-twinkle text-brand-600" aria-hidden="true" />
                       Ngôi sao tháng {monthLabel}
                     </span>
                     {star ? (
@@ -606,7 +619,7 @@ export default async function HomePage({
                           id={star.id}
                           name={star.name}
                           avatarUrl={star.avatarUrl}
-                          className="mt-1 h-14 w-14 text-base ring-[3px] ring-brand-400 ring-offset-2"
+                          className="mt-1 h-14 w-14 text-base ring-[3px] ring-brand-400 ring-offset-2 transition-transform duration-200 hover:scale-105"
                         />
                         <b className="text-[15px] text-zinc-950">{star.name}</b>
                         <span className="text-xs text-brand-800">
@@ -626,9 +639,9 @@ export default async function HomePage({
                           key={recognition.id}
                           href={`/recognition?focus=${recognition.id}`}
                           prefetch={false}
-                          className="flex gap-3 border-b border-zinc-100 py-2.5 last:border-b-0"
+                          className="group flex gap-3 -mx-2 rounded-[10px] px-2 py-2 border-b border-zinc-100 last:border-b-0 transition-colors hover:bg-zinc-50"
                         >
-                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700">
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700 transition-transform duration-200 group-hover:scale-110">
                             {recognition.category === BIRTHDAY_RECOGNITION_CATEGORY ? (
                               <Cake size={14} aria-hidden="true" />
                             ) : (
@@ -749,13 +762,13 @@ export default async function HomePage({
                           <Link
                             href={`/meetings?view=mine&focus=${meeting.id}`}
                             prefetch={false}
-                            className="flex gap-3 rounded-[8px] py-1.5 hover:bg-zinc-50"
+                            className="group flex gap-3 rounded-[8px] px-1.5 py-1.5 transition-all duration-150 hover:bg-zinc-50 hover:translate-x-1"
                           >
                             <span className="w-12 shrink-0 text-[13px] font-semibold tabular-nums text-brand-700">
                               {minuteToTime(vnMinuteOfDay(meeting.startAt))}
                             </span>
                             <span className="min-w-0">
-                              <span className="block truncate text-[13px] font-medium text-zinc-900">{meeting.title}</span>
+                              <span className="block truncate text-[13px] font-medium text-zinc-900 transition-colors group-hover:text-brand-800">{meeting.title}</span>
                               {meeting.room && (
                                 <span className="block truncate text-xs text-zinc-600">{meeting.room.name}</span>
                               )}
@@ -770,7 +783,7 @@ export default async function HomePage({
                   <Link
                     href="/meetings"
                     prefetch={false}
-                    className="flex h-9 items-center justify-center rounded-[10px] bg-brand-700 text-[13px] font-semibold text-white hover:bg-brand-800"
+                    className="flex h-9 items-center justify-center rounded-[10px] bg-brand-700 text-[13px] font-semibold text-white transition-all duration-150 hover:bg-brand-800 hover:shadow-sm"
                   >
                     Đặt phòng họp
                   </Link>
@@ -789,12 +802,15 @@ export default async function HomePage({
                   role="img"
                   aria-label={`Đã dùng ${formatLeaveDays(leave.used)} trên ${formatLeaveDays(leave.quota)} ngày phép`}
                 >
-                  <div className="h-full rounded-full bg-brand-500" style={{ width: `${usedPercent}%` }} />
+                  <div
+                    className="tf-progress-fill h-full rounded-full bg-brand-500"
+                    style={{ "--tf-progress-width": `${usedPercent}%` } as CSSProperties}
+                  />
                 </div>
                 <Link
                   href="/leave"
                   prefetch={false}
-                  className="flex h-9 items-center justify-center rounded-[10px] border-[1.5px] border-brand-500 text-[13px] font-semibold text-brand-800 hover:bg-brand-50"
+                  className="flex h-9 items-center justify-center rounded-[10px] border-[1.5px] border-brand-500 text-[13px] font-semibold text-brand-800 transition-all duration-150 hover:bg-brand-50 hover:shadow-sm"
                 >
                   Xin nghỉ phép
                 </Link>
@@ -839,15 +855,15 @@ export default async function HomePage({
                         <Link
                           href={`/projects/${project.id}`}
                           prefetch={false}
-                          className="flex items-center gap-2.5 border-b border-zinc-100 py-2 text-[13px] last:border-b-0 hover:text-brand-700"
+                          className="group flex items-center gap-2.5 border-b border-zinc-100 px-1 py-2 text-[13px] last:border-b-0 hover:text-brand-700 transition-all duration-150 hover:translate-x-1"
                         >
                           <span
-                            className="h-2 w-2 shrink-0 rounded-full"
+                            className="h-2 w-2 shrink-0 rounded-full transition-transform duration-150 group-hover:scale-125"
                             style={{ backgroundColor: projectStatusColor(project.status) }}
                             aria-hidden="true"
                           />
                           <span className="min-w-0 flex-1 truncate font-medium">{project.name}</span>
-                          <span className="text-xs tabular-nums text-zinc-600">
+                          <span className="text-xs tabular-nums text-zinc-600 group-hover:text-brand-700">
                             {project.tasks.length}/{project._count.tasks}
                           </span>
                         </Link>

@@ -723,11 +723,95 @@ select.tf-field:not(.appearance-none) {
   }
 }
 
+/* Chuông thông báo: rung nhẹ khi có tin mới chưa đọc và khi hover */
+.tf-bell-shake {
+  animation: tf-bell-shake 1100ms ease-in-out 800ms 2;
+}
+
+.tf-bell-shake:hover {
+  animation: tf-bell-shake 600ms ease-in-out;
+}
+
+@keyframes tf-bell-shake {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  20% {
+    transform: rotate(14deg);
+  }
+  40% {
+    transform: rotate(-12deg);
+  }
+  60% {
+    transform: rotate(8deg);
+  }
+  80% {
+    transform: rotate(-4deg);
+  }
+}
+
+/* Thanh tiến độ ngày phép chạy từ 0 đến % thực tế */
+.tf-progress-fill {
+  width: var(--tf-progress-width, 0%);
+  animation: tf-progress-fill 900ms cubic-bezier(0.2, 0.8, 0.2, 1) 350ms both;
+}
+
+@keyframes tf-progress-fill {
+  from {
+    width: 0%;
+  }
+  to {
+    width: var(--tf-progress-width, 0%);
+  }
+}
+
+/* Icon trạng thái hoàn tất / rỗng nảy nhẹ */
+.tf-pop-in {
+  animation: tf-pop-in 500ms cubic-bezier(0.175, 0.885, 0.32, 1.275) 300ms both;
+}
+
+@keyframes tf-pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.18);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Ngôi sao tháng lấp lánh nhẹ */
+.tf-star-twinkle {
+  animation: tf-star-twinkle 2.4s ease-in-out infinite;
+}
+
+@keyframes tf-star-twinkle {
+  0%,
+  100% {
+    transform: scale(1) rotate(0);
+    filter: drop-shadow(0 0 0 transparent);
+  }
+  50% {
+    transform: scale(1.25) rotate(15deg);
+    filter: drop-shadow(0 0 4px rgb(168 212 49 / 0.8));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tf-rise,
   .tf-handwrite,
   .tf-wiggle,
-  .tf-quick-action:hover .tf-quick-icon {
+  .tf-quick-action:hover .tf-quick-icon,
+  .tf-bell-shake,
+  .tf-progress-fill,
+  .tf-pop-in,
+  .tf-star-twinkle {
     animation: none;
   }
 
@@ -737,6 +821,10 @@ select.tf-field:not(.appearance-none) {
 
   .tf-confetti {
     display: none;
+  }
+
+  .tf-progress-fill {
+    width: var(--tf-progress-width, 0%);
   }
 }
 
