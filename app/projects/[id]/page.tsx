@@ -2,11 +2,13 @@ import Link from "next/link";
 import { parseCommentMentions } from "@/lib/commentMentions";
 import {
   ArrowLeft,
-  Banknote,
+  BriefcaseBusiness,
+  Building2,
+  CalendarDays,
   FileText,
-  Kanban,
   MessagesSquare,
-  Pencil,
+  ShieldCheck,
+  UsersRound,
 } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -16,6 +18,7 @@ import Board from "@/components/Board";
 import ProjectMembersPanel from "@/components/ProjectMembersPanel";
 import ProjectEditButton from "@/components/ProjectEditButton";
 import ProjectActionsMenu from "@/components/ProjectActionsMenu";
+import ProjectDescriptionDisclosure from "@/components/ProjectDescriptionDisclosure";
 import { chatAppConfigured, chatAppProblem } from "@/lib/googleChatApp";
 import ProjectChatSpacePanel from "@/components/ProjectChatSpacePanel";
 import { canAddChatApp, canManageChatSpaces, googleWorkspaceConfigured } from "@/lib/googleWorkspace";
@@ -25,18 +28,31 @@ import ProjectStatusSelect from "@/components/ProjectStatusSelect";
 import MeetingComposer from "@/components/MeetingComposer";
 import { financeEnabled, meetingsEnabled } from "@/lib/features";
 import { loadMeetingComposerData } from "@/lib/meetingComposerData";
-import { ProjectBoardProvider } from "@/components/ProjectBoardContext";
-import ProjectBoardToolbar from "@/components/ProjectBoardToolbar";
 import {
   formatVND,
   projectStatusColor,
+  projectTypeInfo,
+  projectCategoryInfo,
   type MemberDTO,
   type TaskDTO,
 } from "@/lib/types";
-import { toDateInputVN } from "@/lib/dates";
+import { formatExecutionRange, toDateInputVN } from "@/lib/dates";
 import { FINANCE_APPROVER_ROLES, canSetFinanceApprovers } from "@/lib/financePolicy";
 import { ROLE_LABELS, isUserRole } from "@/lib/roles";
 import { storedFileDriveUrl } from "@/lib/storedFileResponse";
+
+function extractProjectMetadata(description: string | null) {
+  if (!description) return { poNumber: null, poDate: null };
+  const lines = description.split(/\r?\n/).map((line) => line.trim());
+  const poNumber =
+    lines.find((line) => /^PO:\s*/i.test(line))?.replace(/^PO:\s*/i, "") ??
+    null;
+  const poDate =
+    lines
+      .find((line) => /^Ngày PO:\s*/i.test(line))
+      ?.replace(/^Ngày PO:\s*/i, "") ?? null;
+  return { poNumber, poDate };
+}
 
 export default async function ProjectPage({
   params,
@@ -269,6 +285,15 @@ export default async function ProjectPage({
         })
       : null;
   const canViewRevenue = hasRevenueAccess(user.role) && project.category === "CLIENT";
+  const categoryInfo = projectCategoryInfo(project.category);
+  const projectMetadata = extractProjectMetadata(project.description);
+  const typeInfo = projectTypeInfo(project.type);
+  const executionRange = formatExecutionRange(
+    project.executionStartAt,
+    project.executionEndAt
+  );
+  const accountName =
+    project.account?.user?.name ?? project.account?.name ?? null;
   const initialTaskId = project.tasks.some((task) => task.id === requestedTaskId)
     ? requestedTaskId ?? null
     : null;
@@ -319,42 +344,180 @@ export default async function ProjectPage({
   }
 
   return (
-    <ProjectBoardProvider>
-      <div className="tf-shell">
-        <Sidebar user={user} projects={sidebarProjects} activeProjectId={id} />
+    <div className="tf-shell">
+      <Sidebar user={user} projects={sidebarProjects} activeProjectId={id} />
 
-        <main className="tf-main flex flex-col overflow-hidden bg-white md:h-screen md:max-h-screen">
-          <header className="border-b border-zinc-200/80 bg-white px-4 pt-3.5 pb-2 sm:px-6">
-            {/* Top Row: Title, Status, Divider, Members (Left) | Budget, Chat, Actions (Right) */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+      <main className="tf-main flex flex-col overflow-hidden bg-white md:h-screen md:max-h-screen">
+        <header className="border-b border-zinc-200 bg-white px-4 pt-4 sm:px-6">
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="flex min-w-0 flex-1 items-start gap-3">
                 <span
-                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                  className="mt-1.5 h-3 w-3 shrink-0 rounded-full"
                   style={{
                     backgroundColor: projectStatusColor(project.status),
                   }}
-                  aria-hidden="true"
                 />
-                <h1 className="truncate text-base font-bold text-zinc-950 sm:text-lg">
-                  {project.client?.name &&
-                  !project.name
-                    .toLowerCase()
-                    .includes(project.client.name.toLowerCase()) ? (
-                    <span className="font-semibold text-zinc-600">
-                      [{project.client.name}]{" "}
-                    </span>
-                  ) : null}
-                  {project.name}
-                </h1>
+                <div className="min-w-0">
+                  <h1 className="line-clamp-2 text-lg font-semibold text-zinc-950 sm:truncate sm:text-xl">
+                    {project.name}
+                  </h1>
+                </div>
+              </div>
 
+              <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
                 <ProjectStatusSelect
                   projectId={project.id}
                   status={project.status}
                   canEdit={isOwner || user.role === "ADMIN"}
                 />
+                {canViewRevenue && (
+                  <span className="whitespace-nowrap px-1 text-sm font-semibold text-zinc-800">
+                    {formatVND(project.revenue)}
+                  </span>
+                )}
+                <ProjectEditButton
+                  project={{
+                    id: project.id,
+                    name: project.name,
+                    description: project.description,
+                    type: project.type,
+                    category: project.category,
+                    responsibleTeamId: project.responsibleTeamId,
+                    responsibleGroupId: project.responsibleGroupId,
+                    hasPurchaseOrder: Boolean(project.purchaseOrderNumber),
+                    executionStartAt: project.executionStartAt
+                      ? toDateInputVN(project.executionStartAt)
+                      : null,
+                    executionEndAt: project.executionEndAt
+                      ? toDateInputVN(project.executionEndAt)
+                      : null,
+                    revenue: hasRevenueAccess(user.role) ? project.revenue : null,
+                    clientId: project.clientId,
+                    clientName: project.client?.name ?? null,
+                    accountId: project.accountId,
+                    accountName:
+                      project.account?.user?.name ??
+                      project.account?.name ??
+                      null,
+                    icApproverId: project.icApproverId,
+                    acApproverId: project.acApproverId,
+                  }}
+                  approverOptions={approverUsers.map((approver) => ({
+                    id: approver.id,
+                    name: approver.name,
+                    email: approver.email,
+                    avatarUrl: approver.avatarUrl,
+                    meta: isUserRole(approver.role) ? ROLE_LABELS[approver.role] : null,
+                  }))}
+                  canEditApprovers={canEditApprovers}
+                  clients={clients}
+                  responsibilityOptions={{
+                    teams,
+                    groups: memberGroups.map(({ id, name }) => ({ id, name })),
+                  }}
+                  accounts={accounts.map((account) => ({
+                    id: account.id,
+                    name:
+                      account.user?.name ??
+                      `${account.name} (dữ liệu cũ - cần liên kết)`,
+                    email: account.user?.email ?? null,
+                    avatarUrl: account.user?.avatarUrl ?? null,
+                    meta: account.team.name,
+                    teamName: account.team.name,
+                  }))}
+                  canEdit={isOwner || user.role === "ADMIN"}
+                  canEditRevenue={hasRevenueAccess(user.role)}
+                />
+                {meetingData && (
+                  <MeetingComposer
+                    {...meetingData.composerProps}
+                    organizerId={user.id}
+                    initialAttendeeIds={meetingAttendeeIds}
+                    projectId={project.id}
+                    triggerLabel="Tạo cuộc họp"
+                    triggerClassName="tf-button-secondary !min-h-9 !px-3 !py-1.5 text-sm"
+                  />
+                )}
+                {project.googleChatSpaceUri && (
+                  <a
+                    href={project.googleChatSpaceUri}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="tf-button-secondary !min-h-9 !px-3 !py-1.5 text-sm"
+                  >
+                    <MessagesSquare size={15} strokeWidth={1.8} aria-hidden="true" />
+                    Nhóm Chat
+                  </a>
+                )}
+                {isOwner && <ProjectActionsMenu projectId={project.id} />}
+              </div>
+            </div>
 
-                <div className="mx-0.5 hidden h-4 w-px bg-zinc-200 sm:block" />
+            <div className="flex flex-col gap-3 border-t border-zinc-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-xs text-zinc-500">
+                <span className={`tf-badge ${categoryInfo.className}`}>
+                  {categoryInfo.label}
+                </span>
+                {project.category === "CLIENT" && (
+                  <span className={`tf-badge ${typeInfo.className}`}>
+                    {typeInfo.label}
+                  </span>
+                )}
+                {executionRange && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <CalendarDays size={14} aria-hidden="true" />
+                    Thực hiện: {executionRange}
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1.5">
+                  <UsersRound size={14} aria-hidden="true" />
+                  {project.category === "CLIENT"
+                    ? project.account?.team.name ?? "Cần gán Account"
+                    : project.responsibleGroup?.name ?? project.responsibleTeam?.name ?? "Chưa gán Team/phòng ban"}
+                </span>
+                {project.client?.name && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Building2 size={14} aria-hidden="true" />
+                    {project.client.name}
+                  </span>
+                )}
+                {projectMetadata.poNumber && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <FileText size={14} aria-hidden="true" />
+                    PO {projectMetadata.poNumber}
+                  </span>
+                )}
+                {projectMetadata.poDate && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <CalendarDays size={14} aria-hidden="true" />
+                    {projectMetadata.poDate}
+                  </span>
+                )}
+                {project.category === "CLIENT" && (
+                  <span
+                    className={`inline-flex items-center gap-1.5 ${
+                      accountName ? "" : "font-medium text-amber-600"
+                    }`}
+                  >
+                    <BriefcaseBusiness size={14} aria-hidden="true" />
+                    {accountName ?? "Cần gán Account"}
+                  </span>
+                )}
+                {canViewRevenue && showFinance && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <ShieldCheck size={14} aria-hidden="true" />
+                    Duyệt IC: {project.icApprover?.name ?? "chưa chọn"} · Duyệt AC:{" "}
+                    {project.acApprover?.name ?? "chưa chọn"}
+                  </span>
+                )}
+              </div>
 
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-500">
+                  <UsersRound size={14} aria-hidden="true" />
+                  {members.length} thành viên
+                </span>
                 <ProjectMembersPanel
                   projectId={project.id}
                   members={members}
@@ -378,210 +541,64 @@ export default async function ProjectPage({
                   currentUserId={user.id}
                 />
               </div>
-
-              <div className="flex shrink-0 items-center gap-2 sm:gap-2.5">
-                {canViewRevenue && (
-                  <div className="inline-flex items-center gap-1.5 rounded-full border border-[#d6f0ab] bg-[#edf8d8] px-3.5 py-1 text-xs font-medium text-zinc-800 shadow-xs sm:text-sm">
-                    <span className="font-normal text-zinc-500">Ngân sách:</span>
-                    <span className="font-bold text-zinc-950">
-                      {formatVND(project.revenue)}
-                    </span>
-                  </div>
-                )}
-
-                {project.googleChatSpaceUri && (
-                  <a
-                    href={project.googleChatSpaceUri}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-[9px] bg-[#a3e635] px-3.5 py-1.5 text-xs font-semibold text-zinc-950 shadow-xs transition hover:bg-[#8fd822] sm:text-sm"
-                  >
-                    <MessagesSquare size={15} strokeWidth={2} aria-hidden="true" />
-                    Nhóm Chat
-                  </a>
-                )}
-
-                <ProjectActionsMenu
-                  projectId={project.id}
-                  isOwner={isOwner || user.role === "ADMIN"}
-                >
-                  {(isOwner || user.role === "ADMIN") && (
-                    <ProjectEditButton
-                      project={{
-                        id: project.id,
-                        name: project.name,
-                        description: project.description,
-                        type: project.type,
-                        category: project.category,
-                        responsibleTeamId: project.responsibleTeamId,
-                        responsibleGroupId: project.responsibleGroupId,
-                        hasPurchaseOrder: Boolean(project.purchaseOrderNumber),
-                        executionStartAt: project.executionStartAt
-                          ? toDateInputVN(project.executionStartAt)
-                          : null,
-                        executionEndAt: project.executionEndAt
-                          ? toDateInputVN(project.executionEndAt)
-                          : null,
-                        revenue: hasRevenueAccess(user.role)
-                          ? project.revenue
-                          : null,
-                        clientId: project.clientId,
-                        clientName: project.client?.name ?? null,
-                        accountId: project.accountId,
-                        accountName:
-                          project.account?.user?.name ??
-                          project.account?.name ??
-                          null,
-                        icApproverId: project.icApproverId,
-                        acApproverId: project.acApproverId,
-                      }}
-                      approverOptions={approverUsers.map((approver) => ({
-                        id: approver.id,
-                        name: approver.name,
-                        email: approver.email,
-                        avatarUrl: approver.avatarUrl,
-                        meta: isUserRole(approver.role)
-                          ? ROLE_LABELS[approver.role]
-                          : null,
-                      }))}
-                      canEditApprovers={canEditApprovers}
-                      clients={clients}
-                      responsibilityOptions={{
-                        teams,
-                        groups: memberGroups.map(({ id, name }) => ({
-                          id,
-                          name,
-                        })),
-                      }}
-                      accounts={accounts.map((account) => ({
-                        id: account.id,
-                        name:
-                          account.user?.name ??
-                          `${account.name} (dữ liệu cũ - cần liên kết)`,
-                        email: account.user?.email ?? null,
-                        avatarUrl: account.user?.avatarUrl ?? null,
-                        meta: account.team.name,
-                        teamName: account.team.name,
-                      }))}
-                      canEdit={isOwner || user.role === "ADMIN"}
-                      canEditRevenue={hasRevenueAccess(user.role)}
-                      renderTrigger={(openModal) => (
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={openModal}
-                          className="flex min-h-8 w-full items-center gap-2 rounded-[6px] px-2.5 text-left text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100"
-                        >
-                          <Pencil size={14} strokeWidth={1.8} aria-hidden="true" />
-                          Sửa thông tin dự án
-                        </button>
-                      )}
-                    />
-                  )}
-
-                  {meetingData && (
-                    <MeetingComposer
-                      {...meetingData.composerProps}
-                      organizerId={user.id}
-                      initialAttendeeIds={meetingAttendeeIds}
-                      projectId={project.id}
-                      triggerLabel="Tạo cuộc họp"
-                      triggerClassName="flex min-h-8 w-full items-center gap-2 rounded-[6px] px-2.5 text-left text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100"
-                    />
-                  )}
-                </ProjectActionsMenu>
-              </div>
             </div>
 
-            {/* Subheader Row: Tabs on left, Quick search / Filter / Create task on right */}
-            <div className="mt-3 flex flex-col gap-2.5 border-t border-zinc-100 pt-2.5 sm:flex-row sm:items-center sm:justify-between">
-              <nav
-                className="tf-scroll-tabs flex items-center gap-1.5 overflow-x-auto text-xs sm:text-sm"
-                aria-label="Project tabs"
+            {project.description && (
+              <ProjectDescriptionDisclosure
+                description={project.description}
+              />
+            )}
+          </div>
+
+          <nav
+            className="tf-scroll-tabs mt-3 flex gap-1 border-t border-zinc-100 py-3"
+            aria-label="Project tabs"
+          >
+            <Link
+              href={`/projects/${project.id}`}
+              className={`rounded-[7px] px-3 py-1.5 text-sm font-medium transition-colors ${
+                activeTab === "tasks"
+                  ? "bg-brand-50 text-brand-800"
+                  : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
+              }`}
+            >
+              Task
+            </Link>
+            {hasFinanceTab && (
+              <Link
+                href={`/projects/${project.id}?tab=finance`}
+                className="rounded-[7px] px-3 py-1.5 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
               >
-                <Link
-                  href={`/projects/${project.id}`}
-                  className={`inline-flex items-center gap-1.5 rounded-[8px] px-3 py-1.5 font-medium transition-colors ${
-                    activeTab === "tasks"
-                      ? "bg-[#ebf8d8] font-semibold text-brand-950"
-                      : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
-                  }`}
-                >
-                  <Kanban
-                    size={14}
-                    className={
-                      activeTab === "tasks" ? "text-brand-800" : "text-zinc-400"
-                    }
-                  />
-                  <span>Task</span>
-                  <span
-                    className={`rounded-full px-1.5 py-0.5 text-[11px] font-bold ${
-                      activeTab === "tasks"
-                        ? "bg-[#c8ee80] text-brand-950"
-                        : "bg-zinc-100 text-zinc-500"
-                    }`}
-                  >
-                    {tasks.length}
-                  </span>
-                </Link>
-
-                <Link
-                  href={`/projects/${project.id}?tab=files`}
-                  className={`inline-flex items-center gap-1.5 rounded-[8px] px-3 py-1.5 font-medium transition-colors ${
-                    activeTab === "files"
-                      ? "bg-[#ebf8d8] font-semibold text-brand-950"
-                      : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
-                  }`}
-                >
-                  <FileText
-                    size={14}
-                    className={
-                      activeTab === "files" ? "text-brand-800" : "text-zinc-400"
-                    }
-                  />
-                  <span>Tài liệu</span>
-                  {project.files.length > 0 && (
-                    <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[11px] font-medium text-zinc-500">
-                      {project.files.length}
-                    </span>
-                  )}
-                </Link>
-
-                {hasFinanceTab && (
-                  <Link
-                    href={`/projects/${project.id}?tab=finance`}
-                    className="inline-flex items-center gap-1.5 rounded-[8px] px-3 py-1.5 font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
-                  >
-                    <Banknote size={14} className="text-zinc-400" />
-                    <span>Tài chính</span>
-                  </Link>
-                )}
-
-                <Link
-                  href={`/projects/${project.id}?tab=webhook`}
-                  className={`inline-flex items-center gap-1.5 rounded-[8px] px-3 py-1.5 font-medium transition-colors ${
-                    activeTab === "webhook"
-                      ? "bg-[#ebf8d8] font-semibold text-brand-950"
-                      : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
-                  }`}
-                >
-                  <MessagesSquare
-                    size={14}
-                    className={
-                      activeTab === "webhook"
-                        ? "text-brand-800"
-                        : "text-zinc-400"
-                    }
-                  />
-                  <span>Google Chat</span>
-                </Link>
-              </nav>
-
-              {activeTab === "tasks" && (
-                <ProjectBoardToolbar members={members} />
+                Tài chính
+              </Link>
+            )}
+            <Link
+              href={`/projects/${project.id}?tab=files`}
+              className={`rounded-[7px] px-3 py-1.5 text-sm font-medium transition-colors ${
+                activeTab === "files"
+                  ? "bg-brand-50 text-brand-800"
+                  : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
+              }`}
+            >
+              Tài liệu
+              {project.files.length > 0 && (
+                <span className="ml-1.5 text-xs text-zinc-400">
+                  {project.files.length}
+                </span>
               )}
-            </div>
-          </header>
+            </Link>
+            <Link
+              href={`/projects/${project.id}?tab=webhook`}
+              className={`rounded-[7px] px-3 py-1.5 text-sm font-medium transition-colors ${
+                activeTab === "webhook"
+                  ? "bg-brand-50 text-brand-800"
+                  : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
+              }`}
+            >
+              Google Chat
+            </Link>
+          </nav>
+        </header>
 
         {activeTab === "webhook" ? (
           <div className="flex-1 space-y-4 overflow-auto bg-[#f7f8fa] p-4 sm:p-6">
@@ -629,8 +646,7 @@ export default async function ProjectPage({
             initialTaskId={initialTaskId}
           />
         )}
-        </main>
-      </div>
-    </ProjectBoardProvider>
+      </main>
+    </div>
   );
 }

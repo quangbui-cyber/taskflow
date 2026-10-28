@@ -26,7 +26,6 @@ export default function ProjectEditButton({
   canEdit,
   canEditRevenue,
   canEditApprovers,
-  renderTrigger,
 }: {
   project: ProjectResponsibility & {
     id: string;
@@ -52,7 +51,6 @@ export default function ProjectEditButton({
   canEdit: boolean;
   canEditRevenue: boolean;
   canEditApprovers: boolean;
-  renderTrigger?: (openModal: () => void) => React.ReactNode;
 }) {
   const { notify } = useInteraction();
   const [open, setOpen] = useState(false);
@@ -71,26 +69,20 @@ export default function ProjectEditButton({
     {},
   );
 
-  const openModal = () => {
-    setCategory(project.category);
-    setOpen(true);
-  };
-
   return (
     <>
-      {renderTrigger ? (
-        renderTrigger(openModal)
-      ) : (
-        canEdit && (
-          <button
-            type="button"
-            onClick={openModal}
-            className="tf-button-secondary !min-h-9 !px-3 !py-1.5 text-sm"
-          >
-            <Pencil size={15} strokeWidth={1.8} aria-hidden="true" />
-            Sửa
-          </button>
-        )
+      {canEdit && (
+        <button
+          type="button"
+          onClick={() => {
+            setCategory(project.category);
+            setOpen(true);
+          }}
+          className="tf-button-secondary !min-h-9 !px-3 !py-1.5 text-sm"
+        >
+          <Pencil size={15} strokeWidth={1.8} aria-hidden="true" />
+          Sửa
+        </button>
       )}
 
       {open && (

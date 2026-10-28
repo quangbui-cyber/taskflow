@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, UserPlus, UsersRound, X } from "lucide-react";
+import { CheckCircle2, Plus, UserPlus, UsersRound, X } from "lucide-react";
 import { addMembers, removeMember } from "@/app/actions/projects";
 import type { MemberDTO } from "@/lib/types";
 import Avatar from "@/components/Avatar";
@@ -80,48 +80,35 @@ export default function ProjectMembersPanel({
 
   return (
     <>
-      <div className="flex items-center gap-1.5">
-        <button
-          type="button"
-          onClick={() => {
-            setTab("current");
-            setMessage("");
-            setOpen(true);
-          }}
-          className="flex items-center -space-x-2 transition-transform hover:scale-[1.02]"
-          title={`${members.length} thành viên (Bấm để xem danh sách)`}
-          aria-label="Xem thành viên dự án"
-        >
-          {members.slice(0, 3).map((member) => (
+      <button
+        type="button"
+        onClick={() => {
+          setTab("add");
+          setMessage("");
+          setOpen(true);
+        }}
+        className="flex min-h-9 items-center rounded-[7px] border border-zinc-200 bg-white px-2 py-1 transition-colors hover:border-brand-300 hover:bg-brand-50"
+        aria-label="Thêm hoặc quản lý thành viên"
+      >
+        <span className="flex -space-x-2">
+          {members.slice(0, 4).map((member) => (
             <Avatar
               key={member.userId}
               id={member.userId}
               name={member.user.name}
               avatarUrl={member.user.avatarUrl}
-              className="h-7 w-7 border-2 border-white text-[10px] shadow-xs"
+              className="h-7 w-7 border-2 border-white text-[10px]"
             />
           ))}
-          {members.length > 3 && (
-            <span className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-zinc-100 text-[10px] font-semibold text-zinc-600 shadow-xs">
-              +{members.length - 3}
-            </span>
-          )}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setTab("add");
-            setMessage("");
-            setOpen(true);
-          }}
-          className="flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-zinc-300 bg-white text-zinc-500 shadow-xs transition-colors hover:border-zinc-400 hover:bg-zinc-50 hover:text-zinc-800"
-          title="Thêm thành viên vào dự án"
-          aria-label="Thêm thành viên"
-        >
-          <UserPlus size={13} strokeWidth={2} aria-hidden="true" />
-        </button>
-      </div>
+        </span>
+        {members.length > 4 && (
+          <span className="ml-1 text-xs text-zinc-500">+{members.length - 4}</span>
+        )}
+        <span className="ml-2 hidden items-center gap-1.5 border-l border-zinc-200 pl-2 text-xs font-medium text-zinc-600 sm:flex">
+          <Plus size={14} aria-hidden="true" />
+          Thêm người
+        </span>
+      </button>
 
       {open && (
         <div
