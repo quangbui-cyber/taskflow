@@ -1,10 +1,39 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, ShieldCheck } from "lucide-react";
+import { Check, CheckCircle2, Copy, ShieldCheck } from "lucide-react";
+
+/** Chờ Extension báo đã nhận token; quá thời gian này thì chuyển sang dán tay. */
+const EXTENSION_REPLY_TIMEOUT_MS = 3000;
+
+type ConnectResult = { ok: boolean; error?: string; user?: { name?: string } };
+
+/**
+ * Gửi token cho Extension (content script lắng nghe trên trang này) và đợi kết quả.
+ * Trả về null nếu không có Extension nào trả lời.
+ */
+function sendTokenToExtension(token: string): Promise<ConnectResult | null> {
+  return new Promise((resolve) => {
+    const finish = (result: ConnectResult | null) => {
+      window.clearTimeout(timer);
+      window.removeEventListener("message", onMessage);
+      resolve(result);
+    };
+    const onMessage = (event: MessageEvent) => {
+      if (event.source !== window || event.origin !== window.location.origin) return;
+      if (event.data?.type !== "MYCREATIVE_RECORDER_CONNECT_RESULT") return;
+      finish(event.data as ConnectResult);
+    };
+    const timer = window.setTimeout(() => finish(null), EXTENSION_REPLY_TIMEOUT_MS);
+
+    window.addEventListener("message", onMessage);
+    window.postMessage({ type: "MYCREATIVE_RECORDER_TOKEN", token }, window.location.origin);
+  });
+}
 
 export default function ExtensionConnectButton({ userName }: { userName: string }) {
   const [loading, setLoading] = useState(false);
+  const [connected, setConnected] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,11 +58,15 @@ export default function ExtensionConnectButton({ userName }: { userName: string 
         throw new Error(data.error || "Không thể cấp quyền kết nối.");
       }
 
-      setToken(data.token);
+      const result = await sendTokenToExtension(data.token);
+      if (result?.ok) {
+        setConnected(true);
+        return;
+      }
 
-      // Thử gửi token vào window hoặc clipboard để extension tự bắt
-      navigator.clipboard.writeText(data.token).catch(() => undefined);
-      window.postMessage({ type: "MYCREATIVE_RECORDER_TOKEN", token: data.token }, "*");
+      // Chưa cài Extension, Extension bản cũ, hoặc Extension từ chối: cho dán token bằng tay
+      if (result?.error) setError(result.error);
+      setToken(data.token);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Đã có lỗi xảy ra");
     } finally {
@@ -49,14 +82,29 @@ export default function ExtensionConnectButton({ userName }: { userName: string 
     });
   }
 
-  if (token) {
+  if (connected) {
     return (
-      <div className="space-y-4 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
-        <div className="flex items-center gap-2 text-emerald-800 text-xs font-semibold">
-          <ShieldCheck size={18} /> Đã cấp quyền kết nối thành công!
+      <div className="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
+        <div className="flex items-center gap-2 text-emerald-800 text-sm font-semibold">
+          <CheckCircle2 size={18} /> Đã kết nối Extension
         </div>
         <p className="text-xs text-emerald-700">
-          Mã token đã được tự động sao chép vào bộ nhớ tạm (clipboard). Bạn hãy dán mã vào ô cài đặt trong Extension:
+          Bạn có thể đóng tab này, mở một cuộc họp Google Meet rồi bấm icon myCreative Recorder để ghi biên bản.
+        </p>
+      </div>
+    );
+  }
+
+  if (token) {
+    return (
+      <div className="space-y-4 rounded-xl border border-amber-200 bg-amber-50/70 p-4">
+        <div className="flex items-center gap-2 text-amber-800 text-xs font-semibold">
+          <ShieldCheck size={18} /> Chưa thấy Extension trả lời, hãy kết nối bằng tay
+        </div>
+        {error && <p className="text-xs text-red-600">{error}</p>}
+        <p className="text-xs text-amber-800">
+          Kiểm tra Extension đã cài bản mới nhất và tải lại trang này. Nếu vẫn không được, bấm Sao chép rồi dán mã
+          vào ô Token trong trang cài đặt của Extension:
         </p>
         <div className="flex items-center gap-2">
           <input
@@ -74,9 +122,6 @@ export default function ExtensionConnectButton({ userName }: { userName: string 
             {copied ? "Đã chép" : "Sao chép"}
           </button>
         </div>
-        <p className="text-[11px] text-zinc-500">
-          Sau khi dán token vào Extension, bạn có thể đóng tab này và bắt đầu sử dụng.
-        </p>
       </div>
     );
   }

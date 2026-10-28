@@ -2,7 +2,7 @@
  * myCreative Recorder - Service Worker (Background Script)
  */
 
-import { lookupMeeting, checkAuth } from "./api.js";
+import { lookupMeeting, connectWithToken, CONNECT_ORIGINS } from "./api.js";
 
 const OFFSCREEN_PATH = "offscreen.html";
 
@@ -203,6 +203,33 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
   }
 });
 
+// Nhận token từ trang kết nối (content-connect.js), kiểm tra rồi lưu
+async function handleConnectToken(message, sender) {
+  let origin = "";
+  try {
+    origin = sender.origin || new URL(sender.url).origin;
+  } catch {
+    origin = "";
+  }
+  // Chỉ tin trang myCreative thật, không tin trang bất kỳ khác (vd. *.vercel.app)
+  if (!sender.tab || !CONNECT_ORIGINS.includes(origin)) {
+    return { ok: false, error: "Trang này không được phép kết nối Extension." };
+  }
+
+  try {
+    const { mycreative_token: previousToken } = await chrome.storage.local.get("mycreative_token");
+    const user = await connectWithToken({ token: message.token, baseUrl: origin });
+
+    // Lần kết nối đầu tiên: mở trang cài đặt để xin quyền micro luôn
+    if (!previousToken) {
+      chrome.tabs.create({ url: chrome.runtime.getURL("options.html?setup=mic") });
+    }
+    return { ok: true, user };
+  } catch (err) {
+    return { ok: false, error: err.message || "Kết nối thất bại." };
+  }
+}
+
 // Cung cấp cấu hình cho offscreen document (nơi không truy cập được chrome.storage)
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "GET_CONFIG") {
@@ -212,6 +239,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         baseUrl: data.mycreative_base_url || "https://mycreative.vercel.app",
       });
     });
+    return true; // Phản hồi bất đồng bộ
+  }
+
+  if (message.type === "CONNECT_TOKEN") {
+    handleConnectToken(message, sender).then(sendResponse);
     return true; // Phản hồi bất đồng bộ
   }
 

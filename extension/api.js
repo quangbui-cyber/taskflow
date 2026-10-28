@@ -39,6 +39,33 @@ export async function setConfig({ token, baseUrl }) {
   await chrome.storage.local.set(payload);
 }
 
+/** Các trang web được phép gửi token cho extension (khớp content_scripts trong manifest.json) */
+export const CONNECT_ORIGINS = [DEFAULT_BASE_URL, "http://localhost:3000"];
+
+/**
+ * Kiểm tra token với server rồi mới lưu (kèm thông tin tài khoản).
+ * Địa chỉ máy chủ lấy theo trang gửi token nên người dùng không phải nhập.
+ */
+export async function connectWithToken({ token, baseUrl }) {
+  const cleanToken = String(token || "").trim();
+  if (!cleanToken) throw new Error("Token trống.");
+
+  const response = await fetch(`${baseUrl}/api/ext/me`, {
+    headers: { Accept: "application/json", Authorization: `Bearer ${cleanToken}` },
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data?.user) {
+    throw new Error(data?.error || "Token không hợp lệ hoặc đã bị thu hồi.");
+  }
+
+  await chrome.storage.local.set({
+    mycreative_token: cleanToken,
+    mycreative_base_url: baseUrl,
+    mycreative_user: data.user,
+  });
+  return data.user;
+}
+
 export async function clearToken() {
   await chrome.storage.local.remove(["mycreative_token", "mycreative_user"]);
 }
