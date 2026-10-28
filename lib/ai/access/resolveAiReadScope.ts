@@ -137,17 +137,22 @@ export const prismaAiScopeReader: AiScopeReader = {
   },
 };
 
+export async function requireAiProjectRead(actorId: string, projectId: string, reader: AiScopeReader = prismaAiScopeReader) {
+  const [actor, project] = await Promise.all([reader.actor(actorId), reader.project(projectId)]);
+  if (!actor?.isActive || !project ||
+      (actor.role !== "ADMIN" && project.ownerId !== actorId && !project.memberIds.includes(actorId))) {
+    throw new AiSourceNotFoundError();
+  }
+  return { actor, project };
+}
+
 export async function resolveAiReadScope(
   actorId: string,
   input: { projectId: string; sourceIds: readonly string[]; purpose: string },
   reader: AiScopeReader = prismaAiScopeReader,
 ): Promise<AiReadScope> {
   const selection = parseAiSourceSelection(input.sourceIds);
-  const [actor, project] = await Promise.all([reader.actor(actorId), reader.project(input.projectId)]);
-  if (!actor?.isActive || !project ||
-      (actor.role !== "ADMIN" && project.ownerId !== actorId && !project.memberIds.includes(actorId))) {
-    throw new AiSourceNotFoundError();
-  }
+  const { actor, project } = await requireAiProjectRead(actorId, input.projectId, reader);
   const sources: AiSourceMetadata[] = [];
   for (const ref of selection) {
     const metadata = await reader.source(ref, project.id);
