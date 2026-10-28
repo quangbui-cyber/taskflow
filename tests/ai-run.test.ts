@@ -33,6 +33,30 @@ test("authorization rejects foreign and missing source before reading bytes", as
   assert.equal(byteReads, 0);
 });
 
+test("scope hash changes with visibility and invoice pair requires one business identity", async () => {
+  let memberIds = ["actor"];
+  const metadata = (id: string) => ({
+    kind: "VENDOR_INVOICE_FILE" as const, id, projectId: "project", name: `${id}.pdf`,
+    mimeType: id === "xml" ? "application/xml" : "application/pdf",
+    version: "a".repeat(64), authorityStatus: "CONFIRMED", immutable: true,
+    businessKey: id === "wrong" ? "different-invoice" : "invoice-1",
+  });
+  const reader = {
+    actor: async () => ({ id: "actor", role: "ACCOUNT", isActive: true }),
+    project: async () => ({ id: "project", ownerId: "owner", memberIds }),
+    source: async (ref: { id: string }) => metadata(ref.id),
+  };
+  const input = { projectId: "project", sourceIds: ["VENDOR_INVOICE_FILE:xml", "VENDOR_INVOICE_FILE:pdf"], purpose: "DOCUMENT_EXTRACTION" };
+  const first = await resolveAiReadScope("actor", input, reader);
+  memberIds = ["actor", "other"];
+  const changed = await resolveAiReadScope("actor", input, reader);
+  assert.notEqual(first.scopeHash, changed.scopeHash);
+  await assert.rejects(
+    () => resolveAiReadScope("actor", { ...input, sourceIds: ["VENDOR_INVOICE_FILE:xml", "VENDOR_INVOICE_FILE:wrong"] }, reader),
+    AiSourceNotFoundError,
+  );
+});
+
 test("same filename with changed bytes creates a different revision", async () => {
   const origin = {
     kind: "PROJECT_FILE" as const, id: "file", projectId: "project", name: "po.pdf",
