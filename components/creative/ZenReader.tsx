@@ -18,7 +18,6 @@ import {
   estimateReadingMinutes,
   formatCreativeDate,
   isGapLine,
-  isTextLine,
 } from "@/lib/creative";
 import {
   markArticleAsRead,
@@ -26,7 +25,7 @@ import {
   toggleSaveArticle,
 } from "@/app/actions/creative";
 
-type Mode = "vi" | "en" | "bilingual";
+type Mode = "vi" | "en";
 
 interface ZenReaderProps {
   article: {
@@ -219,7 +218,7 @@ export default function ZenReader({
             <span>Góc Đọc & Cảm Hứng</span>
           </Link>
 
-          {/* Công tắc chọn chế độ đọc */}
+          {/* Công tắc chọn ngôn ngữ đọc */}
           <div className="inline-flex rounded-full border border-zinc-200 bg-white p-0.5 shadow-xs">
             <button
               type="button"
@@ -231,17 +230,6 @@ export default function ZenReader({
               }`}
             >
               Tiếng Việt
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("bilingual")}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-all duration-150 ${
-                mode === "bilingual"
-                  ? "bg-zinc-900 text-white shadow-xs"
-                  : "text-zinc-600 hover:text-zinc-900"
-              }`}
-            >
-              Song ngữ
             </button>
             <button
               type="button"
@@ -324,79 +312,6 @@ export default function ZenReader({
                   </div>
                 );
               })}
-            </div>
-          )}
-
-          {/* Chế độ 3: SONG NGỮ SONG SONG (BILINGUAL) */}
-          {mode === "bilingual" && (
-            <div>
-              {/* DESKTOP (md trở lên): 2 cột thẳng hàng từng dòng */}
-              <div className="hidden md:block">
-                <div className="grid grid-cols-2 gap-8 pb-4 mb-4 border-b border-zinc-200/80 text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                  <div>Nguyên bản tiếng Anh</div>
-                  <div className="text-zinc-700">Bản dịch tiếng Việt</div>
-                </div>
-                <div className="space-y-4">
-                  {origLines.map((origLine, idx) => {
-                    const viLine = linesVi[idx];
-                    const isGap = isGapLine(origLine) || (viLine && isGapLine(viLine));
-
-                    if (isGap) {
-                      return <div key={idx} className="h-6 col-span-2" aria-hidden="true" />;
-                    }
-
-                    return (
-                      <div
-                        key={idx}
-                        className="grid grid-cols-2 gap-8 items-start rounded-lg p-1.5 -mx-1.5 transition-colors hover:bg-zinc-100/60"
-                      >
-                        {/* Cột trái: Tiếng Anh xám */}
-                        <div className="text-[17px] sm:text-[18px] leading-relaxed text-zinc-500 font-normal">
-                          {isTextLine(origLine) ? <FormattedLine text={origLine.t} /> : null}
-                        </div>
-                        {/* Cột phải: Tiếng Việt rõ nét */}
-                        <div className="text-[19px] sm:text-[20px] leading-relaxed text-zinc-900 font-medium">
-                          {viLine && isTextLine(viLine) ? (
-                            <FormattedLine text={viLine.t} />
-                          ) : (
-                            <span className="text-zinc-400 italic">...</span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* MOBILE (dưới md): Xen kẽ từng dòng */}
-              <div className="block md:hidden space-y-4">
-                {origLines.map((origLine, idx) => {
-                  const viLine = linesVi[idx];
-                  const isGap = isGapLine(origLine) || (viLine && isGapLine(viLine));
-
-                  if (isGap) {
-                    return <div key={idx} className="h-6" aria-hidden="true" />;
-                  }
-
-                  return (
-                    <div
-                      key={idx}
-                      className="rounded-lg bg-white/50 p-2.5 border border-zinc-200/50 space-y-1"
-                    >
-                      {isTextLine(origLine) && (
-                        <div className="text-xs italic text-zinc-500 leading-normal">
-                          <FormattedLine text={origLine.t} />
-                        </div>
-                      )}
-                      {viLine && isTextLine(viLine) && (
-                        <div className="text-base text-zinc-900 font-medium leading-relaxed">
-                          <FormattedLine text={viLine.t} />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
             </div>
           )}
         </article>
