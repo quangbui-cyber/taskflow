@@ -9,6 +9,7 @@ export type ActiveSection =
   | "documents"
   | "projects"
   | "workflow"
+  | "ai"
   | "suppliers"
   | "team"
   | "kpi"
@@ -68,6 +69,7 @@ export const HUBS: Hub[] = [
     sections: [
       { key: "projects", label: "Danh sách dự án", href: "/projects" },
       { key: "workflow", label: "Hồ sơ & Trình duyệt", href: "/workflow" },
+      { key: "ai", label: "Tra cứu nội bộ", href: "/ai" },
       {
         key: "suppliers",
         label: "Nhà cung cấp",

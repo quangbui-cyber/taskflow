@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { Alert, EmptyState, Panel } from "@/components/ui/Presentation";
+import { Alert, EmptyState } from "@/components/ui/Presentation";
 import { Button } from "@/components/ui/Button";
 import AiRunLauncher from "./AiRunLauncher";
 import AiRunHistory, { type AiRunView } from "./AiRunHistory";
 import AiReviewWorkspace from "./AiReviewWorkspace";
 import AiFindingQueue from "./AiFindingQueue";
+import AiAssistantWorkspace from "./AiAssistantWorkspace";
 
 export type AiSourceOption = {
   id: string; name: string; kind: string; mimeType: string; version: string;
@@ -46,6 +47,6 @@ export default function ProjectAiWorkspace({ projectId, projectName, sources, pr
         if ([401, 403, 404].includes(response.status)) { revoke(); return; }
         if (response.ok) openRun(await response.json() as AiRunView);
       }} />}
-    {tab === "assistant" && <Panel><h2 className="tf-ui-heading">Trợ lý tri thức</h2><p className="tf-ui-help">Chưa có câu hỏi trong phiên này.</p></Panel>}
+    {tab === "assistant" && <AiAssistantWorkspace scope={{ kind: "project", projectId, projectName }} />}
   </section>;
 }
