@@ -1,0 +1,3 @@
+ALTER TABLE "AiRun"
+  ADD COLUMN "timeoutAt" TIMESTAMP(3),
+  ADD COLUMN "cancelledAt" TIMESTAMP(3);

@@ -85,6 +85,9 @@ test("explicit run is reused only for the same authorized source and disappears 
       const command = { intent: "ANALYZE", task: "DOCUMENT_EXTRACTION", sourceIds: [`PROJECT_FILE:${fileId}`] };
       const first = await createAiRun(actorId, projectId, command);
       assert.equal(first.reused, false);
+      const persisted = await client.aiRun.findUniqueOrThrow({ where: { id: first.id }, select: { timeoutAt: true, cancelledAt: true, startedAt: true } });
+      assert.equal(persisted.timeoutAt?.getTime(), persisted.startedAt.getTime() + 1000);
+      assert.equal(persisted.cancelledAt, null);
       const repeated = await createAiRun(actorId, projectId, command);
       assert.equal(repeated.id, first.id);
       assert.equal(repeated.reused, true);

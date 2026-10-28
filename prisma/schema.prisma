@@ -2368,6 +2368,8 @@ model AiRun {
   scopeHash        String
   idempotencyKey   String
   startedAt        DateTime               @default(now())
+  timeoutAt        DateTime?
+  cancelledAt      DateTime?
   completedAt      DateTime?
   failureCode      String?
   inputTokens      Int?

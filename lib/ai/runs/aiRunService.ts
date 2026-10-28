@@ -104,6 +104,7 @@ export async function createAiRun(actorId: string, projectId: string, rawCommand
   }
   const idempotencyKey = existing ? digest([identity.idempotencyKey, randomUUID()]) : identity.idempotencyKey;
   try {
+    const startedAt = new Date();
     const run = await prisma.$transaction(async (tx) => tx.aiRun.create({ data: {
       project: { connect: { id: projectId } }, actor: { connect: { id: actorId } },
       scopeKey: scope.scopeKey, runType: command.task, status: "READY",
@@ -111,6 +112,7 @@ export async function createAiRun(actorId: string, projectId: string, rawCommand
       pipelineVersion: PIPELINE_VERSION, promptVersion: PROMPT_VERSION,
       configVersion: config.configVersion, provider: config.provider, model: config.model,
       scopeVersion: "1", scopeHash: scope.scopeHash, idempotencyKey,
+      startedAt, timeoutAt: new Date(startedAt.getTime() + config.timeoutMs),
       sources: { create: revisions.map((revision, index) => ({
         sourceRevision: { connect: { id_scopeKey: { id: revision.id, scopeKey: scope.scopeKey } } },
         role: command.pairRoles?.[command.sourceIds[index]] ?? "PRIMARY",
@@ -129,7 +131,7 @@ export async function createAiRun(actorId: string, projectId: string, rawCommand
 export async function readAiRun(actorId: string, projectId: string, runId: string) {
   const run = await prisma.aiRun.findFirst({ where: { id: runId, projectId },
     select: { id: true, actorId: true, runType: true, status: true, createdAt: true,
-      completedAt: true, failureCode: true, scopeHash: true,
+      timeoutAt: true, cancelledAt: true, completedAt: true, failureCode: true, scopeHash: true,
       sources: { select: { role: true, sourceRevision: { select: {
         originKind: true, originId: true, filename: true, sha256: true,
       } } } } } });
@@ -137,6 +139,7 @@ export async function readAiRun(actorId: string, projectId: string, runId: strin
   const sourceIds = run.sources.map(({ sourceRevision }) => `${sourceRevision.originKind}:${sourceRevision.originId}`);
   await resolveAiReadScope(actorId, { projectId, sourceIds, purpose: run.runType });
   return { id: run.id, task: run.runType, status: run.status, createdAt: run.createdAt,
+    timeoutAt: run.timeoutAt, cancelledAt: run.cancelledAt,
     completedAt: run.completedAt, failureCode: run.failureCode,
     sources: run.sources.map(({ role, sourceRevision }) => ({ role,
       filename: sourceRevision.filename, sha256: sourceRevision.sha256 })) };
