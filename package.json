@@ -16,6 +16,7 @@
     "lint": "eslint",
     "test:costflow": "node scripts/test-costflow.mjs",
     "test:ai-smoke": "node --conditions=react-server --import tsx --test tests/ai-provider-smoke.test.ts",
+    "test:ai-evals": "node --conditions=react-server --import tsx scripts/ai-evals/run.ts",
     "test": "TZ=Asia/Ho_Chi_Minh node --import tsx --test tests/*.test.ts",
     "postinstall": "prisma generate",
     "seed": "prisma db seed",

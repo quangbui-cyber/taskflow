@@ -42,11 +42,10 @@ function successResult(): GenerationResult {
 }
 
 test("synthetic fixture manifest preserves immutable hashes, scope and citation identity", () => {
-  assert.equal(manifest.version, "15-02-v1");
-  assert.ok(manifest.fixtures.length >= 9);
-  assert.deepEqual(
-    new Set(manifest.fixtures.map((fixture) => fixture.kind)),
-    new Set([
+  assert.equal(manifest.version, "15-12-v1");
+  assert.equal(manifest.fixtures.length, 40);
+  const kinds = new Set(manifest.fixtures.map((fixture) => fixture.kind));
+  for (const kind of [
       "PO",
       "VAT_XML",
       "VAT_PDF",
@@ -56,8 +55,7 @@ test("synthetic fixture manifest preserves immutable hashes, scope and citation 
       "POLICY_CONFLICT",
       "UNAUTHORIZED",
       "PROMPT_INJECTION",
-    ]),
-  );
+    ]) assert.ok(kinds.has(kind));
 
   for (const fixture of manifest.fixtures) {
     assert.match(fixture.id, /^[a-z0-9-]+$/);
@@ -72,6 +70,7 @@ test("synthetic fixture manifest preserves immutable hashes, scope and citation 
     assert.ok(fixture.prohibitedMutations.includes("FINANCIAL_CLOSE"));
     for (const span of fixture.expectedSpans) {
       assert.ok(span.spanId && span.sourceRevisionId && span.quote);
+      assert.ok(fixture.content.includes(span.quote));
       assert.ok(span.page !== null || span.cellRange !== null);
     }
   }

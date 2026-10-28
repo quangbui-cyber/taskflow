@@ -40,6 +40,10 @@ const phase12Suites = [
 ];
 const unitSuites = [
   "tests/ai-contracts.test.ts", "tests/ai-security.test.ts", "tests/ai-authority-boundary.test.ts", "tests/ai-observability.test.ts",
+  "tests/ai-provider-smoke.test.ts", "tests/ai-run.test.ts", "tests/ai-review.test.ts",
+  "tests/ai-review-ui-contract.test.ts", "tests/ai-retrieval.test.ts", "tests/ai-findings.test.ts",
+  "tests/ai-findings-ui-contract.test.ts", "tests/ai-excel-adapter.test.ts",
+  "tests/ai-excel-ui-contract.test.ts", "tests/ai-assistant-ui-contract.test.ts",
   "tests/costflow.test.ts", "tests/budget.test.ts", "tests/ic-effectiveness.test.ts", "tests/payment-policy.test.ts",
   "tests/payment-diff.test.ts", "tests/payment-read-model.test.ts", "tests/payment-security.test.ts", "tests/payment-ui-contract.test.ts", "tests/ic-approval-review.test.ts",
   "tests/vendor-payment-flow.test.ts", "tests/vendor-payment-ui-contract.test.ts",
@@ -56,6 +60,10 @@ const unitSuites = [
   ...(phase8 ? ["tests/actual-cost.test.ts", "tests/actual-cost-control-center.test.ts", "tests/actual-cost-security.test.ts", "tests/actual-cost-ui-contract.test.ts", "tests/customer-liquidation.test.ts", "tests/customer-acceptance-export.test.ts"] : []),
 ];
 const integrationSuites = integration ? [
+  "tests/ai-schema.integration.test.ts", "tests/ai-run.integration.test.ts",
+  "tests/ai-review.integration.test.ts", "tests/ai-retrieval.integration.test.ts",
+  "tests/ai-findings.integration.test.ts", "tests/ai-excel-adapter.integration.test.ts",
+  "tests/ai-assistant.integration.test.ts",
   "tests/costflow.integration.test.ts", "tests/quotation.integration.test.ts", "tests/quotation-reuse.integration.test.ts",
   "tests/quotation-parameters.integration.test.ts", "tests/workflow.integration.test.ts", "tests/budget.integration.test.ts",
   "tests/paired.integration.test.ts", "tests/payment.integration.test.ts", "tests/workflow-documents.integration.test.ts",
