@@ -9,7 +9,7 @@ import {
   Heart,
   Search,
 } from "lucide-react";
-import { serifHeading } from "@/app/fonts";
+import { creativeHeading } from "@/app/fonts";
 import {
   estimateReadingMinutes,
   formatCreativeDate,
@@ -154,7 +154,7 @@ export default function CreativeArchive({ articles }: CreativeArchiveProps) {
 
                   {/* Tiêu đề tiếng Anh gốc IN HOA */}
                   <h2
-                    className={`${serifHeading.className} mt-3 text-lg font-bold leading-snug tracking-tight text-zinc-950 italic group-hover:text-brand-900`}
+                    className={`${creativeHeading.className} mt-3 text-base sm:text-lg font-extrabold leading-snug tracking-tight text-zinc-950 group-hover:text-brand-800 transition-colors`}
                   >
                     {article.originalTitle}
                   </h2>

@@ -12,7 +12,7 @@ import {
   Heart,
   Share2,
 } from "lucide-react";
-import { serifBody, serifHeading } from "@/app/fonts";
+import { creativeHeading, serifBody } from "@/app/fonts";
 import {
   type ArticleLine,
   estimateReadingMinutes,
@@ -272,7 +272,7 @@ export default function ZenReader({
 
           {/* Tiêu đề tiếng Anh gốc IN HOA */}
           <h1
-            className={`${serifHeading.className} text-2xl font-bold tracking-tight text-zinc-950 sm:text-3xl md:text-4xl italic`}
+            className={`${creativeHeading.className} text-2xl font-extrabold tracking-tight text-zinc-950 sm:text-3xl md:text-4xl`}
           >
             {article.originalTitle}
           </h1>

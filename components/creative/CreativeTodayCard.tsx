@@ -3,7 +3,7 @@
 import { useTransition, useState } from "react";
 import Link from "next/link";
 import { BookOpen, Bookmark, CheckCircle2, ChevronRight, Sparkles } from "lucide-react";
-import { serifHeading } from "@/app/fonts";
+import { creativeHeading } from "@/app/fonts";
 import { estimateReadingMinutes, formatCreativeDate } from "@/lib/creative";
 import { toggleSaveArticle } from "@/app/actions/creative";
 
@@ -94,7 +94,7 @@ export default function CreativeTodayCard({ article, isWeekend = false }: Creati
         <Link href={`/creative/${article.slug}`} prefetch={false} className="group block">
           {/* Tiêu đề tiếng Anh gốc IN HOA */}
           <h2
-            className={`${serifHeading.className} text-xl font-bold tracking-tight text-zinc-950 sm:text-2xl italic leading-snug group-hover:text-brand-900 transition-colors`}
+            className={`${creativeHeading.className} text-lg sm:text-xl font-extrabold tracking-tight text-zinc-950 leading-snug group-hover:text-brand-800 transition-colors`}
           >
             {article.originalTitle}
           </h2>
