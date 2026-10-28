@@ -6,6 +6,50 @@ import { AiSourceNotFoundError } from "@/lib/ai/access/resolveAiReadScope";
 import { prisma } from "@/lib/prisma";
 
 export type AiReviewChoice = "ACCEPT_AI" | "CORRECT" | "MANUAL" | "REJECT";
+export type AiApplyDecision = "KEEP_CURRENT" | "APPLY_REVIEWED";
+
+export type ReviewedField = {
+  id: string;
+  fieldKey: string;
+  reviewStatus: string;
+  aiValue: string | null;
+  correctedValue: string | null;
+  manualValue: string | null;
+  sourceSpanId: string | null;
+};
+
+export function prepareAiFieldDecisions(fields: readonly ReviewedField[], current: Record<string, string | null>) {
+  return fields.map((field) => {
+    const reviewedValue = field.reviewStatus === "CORRECT" ? field.correctedValue :
+      field.reviewStatus === "MANUAL" ? field.manualValue :
+      field.reviewStatus === "ACCEPT_AI" ? field.aiValue : null;
+    return { candidateFieldId: field.id, fieldKey: field.fieldKey,
+      currentValue: current[field.fieldKey] ?? null, reviewedValue,
+      sourceSpanId: field.sourceSpanId, conflict: reviewedValue !== null &&
+        reviewedValue !== (current[field.fieldKey] ?? null),
+      defaultDecision: "KEEP_CURRENT" as const };
+  });
+}
+
+export function resolveAiApplySelections(
+  prepared: ReturnType<typeof prepareAiFieldDecisions>,
+  selections: readonly { candidateFieldId: string; decision: AiApplyDecision }[],
+) {
+  if (new Set(selections.map((selection) => selection.candidateFieldId)).size !== selections.length) {
+    throw new Error("Duplicate field decision.");
+  }
+  return selections.map((selection) => {
+    if (!["KEEP_CURRENT", "APPLY_REVIEWED"].includes(selection.decision)) throw new Error("Invalid field decision.");
+    const field = prepared.find((item) => item.candidateFieldId === selection.candidateFieldId);
+    if (!field) throw new Error("Unknown field decision.");
+    if (selection.decision === "APPLY_REVIEWED" && field.reviewedValue === null) {
+      throw new Error("Rejected or unreviewed field cannot be applied.");
+    }
+    return { candidateFieldId: field.candidateFieldId, fieldKey: field.fieldKey,
+      currentValue: field.currentValue, reviewedValue: field.reviewedValue,
+      decision: selection.decision, sourceSpanId: field.sourceSpanId };
+  }).filter((item) => item.decision === "APPLY_REVIEWED");
+}
 
 const criticalField = /(?:vendor|supplier|identity|tax|number|date|issued|amount|gross|net|vat|price|quantity|poIds|lineage|source)/i;
 const moneyField = /(?:amount|gross|net|vat|price|quantity|revenue)/i;

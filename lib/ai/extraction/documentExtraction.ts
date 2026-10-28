@@ -56,14 +56,45 @@ function plainCandidate(source: DocumentSource, fieldKey: string, text: string, 
     provenance: "DETERMINISTIC" };
 }
 
-function xmlCandidate(source: DocumentSource, fieldKey: string, xml: string, tag: string): DocumentCandidate | null {
-  const match = new RegExp(`<${tag}(?:\\s[^>]*)?>([^<]+)<\\/${tag}>`, "i").exec(xml);
-  if (!match?.[1] || match.index === undefined) return null;
-  const raw = match[1].trim();
-  if (!raw || /&(?:#|[a-z])/i.test(raw)) return null;
-  const start = match.index + match[0].indexOf(match[1]);
+type XmlLeaf = { tag: string; path: string; value: string; start: number; end: number };
+
+function scanXmlLeaves(xml: string): XmlLeaf[] {
+  if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw new Error("XML entities are unsupported.");
+  const leaves: XmlLeaf[] = [];
+  const stack: string[] = [];
+  const tokens = /<([^>]+)>|([^<]+)/g;
+  for (const token of xml.matchAll(tokens)) {
+    if (token[2] !== undefined) {
+      const value = token[2].trim();
+      if (value && stack.length && !value.includes("&")) {
+        const start = token.index + token[2].indexOf(value);
+        leaves.push({ tag: stack.at(-1)!, path: `/${stack.join("/")}`,
+          value, start, end: start + value.length });
+      }
+      continue;
+    }
+    const body = token[1].trim();
+    if (body.startsWith("?") || body.startsWith("!")) continue;
+    if (body.startsWith("/")) {
+      const closing = body.slice(1).trim().split(/\s/)[0];
+      if (stack.pop() !== closing) throw new Error("Malformed XML nesting.");
+      continue;
+    }
+    if (!body.endsWith("/")) stack.push(body.split(/\s/)[0]);
+  }
+  if (stack.length) throw new Error("Malformed XML nesting.");
+  return leaves;
+}
+
+function xmlCandidate(source: DocumentSource, fieldKey: string, leaves: readonly XmlLeaf[], tag: string): DocumentCandidate | null {
+  const matches = leaves.filter((leaf) => leaf.tag === tag);
+  const selected = tag === "MST" ? matches.filter((leaf) => /\/NBan\/MST$/i.test(leaf.path)) : matches;
+  const available = tag === "MST" && selected.length === 0 ? matches : selected;
+  if (available.length !== 1) return null;
+  const leaf = available[0];
+  const raw = leaf.value;
   return { rowKey: "document", fieldKey, value: raw, sourceRevisionId: source.sourceRevisionId,
-    sourceText: raw, locator: { xmlPath: `/HDon/${tag}`, textStart: start, textEnd: start + match[1].length },
+    sourceText: raw, locator: { xmlPath: leaf.path, textStart: leaf.start, textEnd: leaf.end },
     provenance: "DETERMINISTIC" };
 }
 
@@ -90,7 +121,10 @@ export async function buildDeterministicCandidates(input: BuildInput): Promise<D
       invoiceNumber: "SHDon", symbol: "KHHDon", issuedAt: "NLap",
       sellerTaxCode: "MST", netAmount: "TgTCThue", vatAmount: "TgTThue", grossAmount: "TgTTTBSo",
     } as const;
-    const candidates = Object.entries(mapping).map(([field, tag]) => xmlCandidate(xmlSource, field, xml, tag));
+    let leaves: XmlLeaf[];
+    try { leaves = scanXmlLeaves(xml); }
+    catch { return { status: "REFUSED", candidates: [], missing: [], warnings: ["Malformed or unsafe XML."] }; }
+    const candidates = Object.entries(mapping).map(([field, tag]) => xmlCandidate(xmlSource, field, leaves, tag));
     const outcome = result(candidates, Object.keys(mapping));
     if (outcome.status === "READY") {
       try {
