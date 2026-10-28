@@ -41,7 +41,7 @@ test("shared preview state stages source changes and isolates every revision", (
 
 test("Excel intake dialog exposes both sources, exact issue focus and Foundation primitives", async () => {
   const source = await readFile(path.join(process.cwd(), "components/ExcelIntakeDialog.tsx"), "utf8");
-  for (const label of ["Dán bảng", "Tải XLSX", "Sheet", "Vùng dữ liệu", "Lỗi cần sửa", "Cảnh báo", "Sheet · dòng · ô", "Tạo nháp mới"]) assert.ok(source.includes(label), label);
+  for (const label of ["Dán bảng", "Tải XLSX", "Sheet", "Vùng dữ liệu", "Lỗi cần sửa", "Cảnh báo", "Sheet · dòng · ô", "Tạo nháp Báo giá &amp; IC"]) assert.ok(source.includes(label), label);
   for (const primitive of ["Dialog", "Field", "Alert", "Table", "Button"]) assert.match(source, new RegExp(`\\b${primitive}\\b`));
   assert.match(source, /excel-intake-row-/);
   assert.match(source, /aria-live/);
