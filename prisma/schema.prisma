@@ -68,6 +68,7 @@ model User {
   acApprovals            Project[]                @relation("ProjectAcApprover")
   createdSuppliers       Supplier[]               @relation("SupplierCreator")
   updatedSuppliers       Supplier[]               @relation("SupplierUpdater")
+  extensionTokens        ExtensionToken[]
   createdFinanceSheets   FinanceSheet[]           @relation("FinanceSheetCreator")
   updatedFinanceSheets   FinanceSheet[]           @relation("FinanceSheetUpdater")
   submittedFinanceSheets FinanceSheet[]           @relation("FinanceSheetSubmitter")
@@ -680,6 +681,7 @@ model Meeting {
   status        String            @default("SCHEDULED") // "SCHEDULED" | "CANCELLED"
   sequence      Int               @default(0) // tăng mỗi lần sửa/huỷ để lịch trong email cập nhật đúng bản mới nhất
   meetingUrl    String? // link họp online (Meet, Zoom...) do người đặt tự dán
+  meetCode      String? // mã phòng Meet "abc-defg-hij" tách từ meetingUrl, dùng cho Chrome extension
   roomId        String?
   room          MeetingRoom?      @relation(fields: [roomId], references: [id], onDelete: SetNull)
   organizerId   String
@@ -701,6 +703,7 @@ model Meeting {
   @@index([organizerId, startAt])
   @@index([recorderId])
   @@index([projectId])
+  @@index([meetCode])
 }
 
 model MeetingAttendee {
@@ -820,4 +823,18 @@ model EmployeeRecord {
   updatedBy    User?     @relation("EmployeeRecordUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+}
+
+// Token xác thực cho Chrome Extension "1 click ghi biên bản"
+model ExtensionToken {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique // sha256 của token; token gốc chỉ trả về một lần khi kết nối
+  label      String    // Tên thiết bị/trình duyệt, ví dụ: "Chrome trên MacBook của An"
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
 }

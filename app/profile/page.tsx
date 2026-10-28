@@ -5,7 +5,9 @@ import Sidebar from "@/components/Sidebar";
 import HubTabs from "@/components/HubTabs";
 import { ProfileInfoForm, ProfilePasswordForm } from "@/components/ProfileForms";
 import GoogleConnectionCard from "@/components/GoogleConnectionCard";
+import ExtensionTokensCard from "@/components/ExtensionTokensCard";
 import { canManageChatSpaces, canSendGmail, googleWorkspaceConfigured } from "@/lib/googleWorkspace";
+import { listUserExtensionTokens } from "@/lib/extensionAuth";
 
 
 export default async function ProfilePage({
@@ -14,15 +16,18 @@ export default async function ProfilePage({
   searchParams: Promise<{ google?: string }>;
 }) {
   const [user, params] = await Promise.all([requireUser(), searchParams]);
-  const profile = await prisma.user.findUnique({
-    where: { id: user.id },
-    select: {
-      googleToken: true,
-      googleEmail: true,
-      googleScopes: true,
-      birthday: true,
-    },
-  });
+  const [profile, extensionTokens] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: user.id },
+      select: {
+        googleToken: true,
+        googleEmail: true,
+        googleScopes: true,
+        birthday: true,
+      },
+    }),
+    listUserExtensionTokens(user.id),
+  ]);
   const scopes = profile?.googleToken ? profile.googleScopes : [];
   const sidebarProjects = await prisma.project.findMany({
     where: { members: { some: { userId: user.id } } },
@@ -80,6 +85,15 @@ export default async function ProfilePage({
             canSendGmail={canSendGmail(scopes)}
             canManageChat={canManageChatSpaces(scopes)}
             result={params.google ?? null}
+          />
+          <ExtensionTokensCard
+            initialTokens={extensionTokens.map((t) => ({
+              id: t.id,
+              label: t.label,
+              createdAt: t.createdAt.toISOString(),
+              lastUsedAt: t.lastUsedAt?.toISOString() ?? null,
+              revokedAt: t.revokedAt?.toISOString() ?? null,
+            }))}
           />
           <ProfilePasswordForm />
         </div>
