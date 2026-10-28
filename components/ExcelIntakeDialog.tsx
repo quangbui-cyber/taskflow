@@ -96,7 +96,7 @@ export default function ExcelIntakeDialog({ projectId, version, files = [], disa
   const router = useRouter();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const sequence = useRef(0);
-  const visiblePreview = authority.currentProjection ?? authority.staleProjection;
+  const visiblePreview = state.mappingStage ? null : authority.currentProjection ?? authority.staleProjection;
   const blocking = visiblePreview?.errors.length ?? 0;
   const unresolvedDecimals = visiblePreview?.decimalConflicts.filter(conflict => !state.decimalResolutions[conflict.conflictId]).length ?? 0;
   const actionable = state.session?.state === "ACTIONABLE" && state.session.operationKind === "NEW_DRAFT" && authority.actionableSessionId === state.session.previewSessionId;
@@ -224,7 +224,7 @@ export default function ExcelIntakeDialog({ projectId, version, files = [], disa
     <Button ref={triggerRef} variant="secondary" size="sm" disabled={disabled} onClick={() => dispatch({ type: "OPEN" })}>Nhập từ Excel</Button>
     <Dialog open={state.open} onClose={() => dispatch({ type: "CLOSE" })} title="Nhập Báo giá & IC" description="Dán bảng hoặc tải XLSX để xem trước. Chưa có hồ sơ nào được ghi." className="excel-intake-dialog"
       footer={<>
-        <Button variant="secondary" onClick={() => void preview()} loading={state.pending}>Xem trước dữ liệu</Button>
+        <Button variant="secondary" onClick={() => void preview()} loading={state.pending} disabled={!!state.mappingStage}>Xem trước dữ liệu</Button>
         <Button onClick={confirm} loading={confirmPending} disabled={state.pending || confirmPending || blocking > 0 || unresolvedDecimals > 0 || !state.preview || !actionable}>Tạo nháp Báo giá &amp; IC</Button>
       </>}>
       <div className="excel-intake-source-grid">
@@ -250,7 +250,7 @@ export default function ExcelIntakeDialog({ projectId, version, files = [], disa
       {confirmError && <Alert tone="danger" title="Chưa thể tạo nháp">{confirmError} Dữ liệu và các ô đã sửa vẫn được giữ.</Alert>}
       {state.session?.state === "READ_ONLY_CONSUMED" && <Alert tone="success" title="Phiên đã được xác nhận">Bản xem lại chỉ đọc{state.session.result?.draftId ? ` · nháp ${state.session.result.draftId}` : ""}. {state.session.source && <a href={state.session.source.downloadUrl}>Tải nguồn {state.session.source.filename}</a>}</Alert>}
       {state.session?.state.startsWith("NON_ACTIONABLE_") && <Alert tone="warning" title="Phiên không còn hiệu lực">Phiên đã hết hạn, bị thay thế hoặc bị hủy. Dữ liệu xem trước đã được xóa.</Alert>}
-      {authority.staleProjection && !authority.currentProjection && <Alert tone="warning" title="Không còn áp dụng">Bản xem trước cũ chỉ còn để đối chiếu và không thể tạo nháp.</Alert>}
+      {authority.staleProjection && !authority.currentProjection && !state.mappingStage && <Alert tone="warning" title="Không còn áp dụng">Bản xem trước cũ chỉ còn để đối chiếu và không thể tạo nháp.</Alert>}
       {!!visiblePreview?.errors.length && <Alert tone="danger" title="Lỗi cần sửa"><ul>{visiblePreview.errors.map(issue => <li key={`${issue.candidateKey}-${issue.field}-${issue.source.cell}`}><button type="button" className="tf-link" onClick={() => focusIssue(issue)}>{issue.message}</button> — {issue.source.sheet} · dòng {issue.source.row} · ô {issue.source.cell}</li>)}</ul></Alert>}
       {!!visiblePreview?.warnings.length && <Alert tone="warning" title="Cảnh báo"><ul>{visiblePreview.warnings.map(issue => <li key={`${issue.candidateKey}-${issue.field}-${issue.source.cell}`}><button type="button" className="tf-link" onClick={() => focusIssue(issue)}>{issue.message}</button> — {issue.source.sheet} · dòng {issue.source.row} · ô {issue.source.cell}</li>)}</ul></Alert>}
       {!!visiblePreview?.decimalConflicts.length && <Alert tone="warning" title="Chọn giá trị cho từng ô xung đột"><div>{visiblePreview.decimalConflicts.map(conflict => <fieldset id={excelIntakeDiagnosticTargetId({ ...conflict, conflictId: conflict.conflictId })} tabIndex={-1} key={conflict.conflictId} disabled={readOnly}><legend><button type="button" className="tf-link" onClick={() => focusIssue({ ...conflict, conflictId: conflict.conflictId })}>{conflict.field} · ô {conflict.source.cell}</button></legend><p>Hiển thị: {conflict.visible} · chính xác: {conflict.canonical}</p><label><input type="radio" name={conflict.conflictId} checked={state.decimalResolutions[conflict.conflictId] === "VISIBLE"} onChange={() => { dispatch({ type: "RESOLVE_DECIMAL", conflictId: conflict.conflictId, value: "VISIBLE" }); authorityDispatch({ type: "SET_DECIMAL_RESOLUTION", key: conflict.conflictId, value: "VISIBLE" }); }} /> Dùng giá trị hiển thị</label><label><input type="radio" name={conflict.conflictId} checked={state.decimalResolutions[conflict.conflictId] === "CANONICAL"} onChange={() => { dispatch({ type: "RESOLVE_DECIMAL", conflictId: conflict.conflictId, value: "CANONICAL" }); authorityDispatch({ type: "SET_DECIMAL_RESOLUTION", key: conflict.conflictId, value: "CANONICAL" }); }} /> Giữ giá trị chính xác</label></fieldset>)}</div></Alert>}

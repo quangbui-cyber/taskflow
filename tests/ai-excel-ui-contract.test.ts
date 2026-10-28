@@ -45,6 +45,8 @@ test("manual fallback keeps source state, and workbook scope remains opt in", as
   const dialog = await source("components/ExcelIntakeDialog.tsx");
   const route = await source("app/api/projects/[id]/costflow/excel-intake/preview/route.ts");
   assert.match(dialog, /mappingStage: action\.key === "resumeSessionId" \? state\.mappingStage : null/);
+  assert.match(dialog, /const visiblePreview = state\.mappingStage \? null : authority\.currentProjection/);
+  assert.match(dialog, /loading=\{state\.pending\} disabled=\{!!state\.mappingStage\}/);
   assert.match(dialog, /onAnalyze=\{sourceId => void preview\(undefined, sourceId\)\}/);
   assert.match(dialog, /aiMappingIntent/);
   assert.match(route, /try \{ preview = await previewWorkbookIntake/);
