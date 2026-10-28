@@ -164,21 +164,24 @@ export default async function Sidebar({
         </nav>
 
         <div className="mt-auto flex flex-col items-center gap-2 pt-3">
-          <Link
-            href="/notifications"
-            prefetch={false}
-            aria-label={unreadLabel}
-            title="Thông báo"
-            aria-current={activeSection === "notifications" ? "page" : undefined}
-            className={`relative flex h-10 w-10 items-center justify-center rounded-[10px] transition-colors ${
-              activeSection === "notifications"
-                ? "bg-brand-100 text-brand-800"
-                : "text-brand-700 hover:bg-brand-50 hover:text-brand-800"
-            }`}
-          >
-            <Bell size={20} strokeWidth={1.8} aria-hidden="true" />
-            <UnreadDot count={unreadCount} />
-          </Link>
+          {/* Trang chủ đã có chuông riêng ở khung chào nên không lặp lại ở đây. */}
+          {activeSection !== "home" && (
+            <Link
+              href="/notifications"
+              prefetch={false}
+              aria-label={unreadLabel}
+              title="Thông báo"
+              aria-current={activeSection === "notifications" ? "page" : undefined}
+              className={`relative flex h-10 w-10 items-center justify-center rounded-[10px] transition-colors ${
+                activeSection === "notifications"
+                  ? "bg-brand-100 text-brand-800"
+                  : "text-brand-700 hover:bg-brand-50 hover:text-brand-800"
+              }`}
+            >
+              <Bell size={20} strokeWidth={1.8} aria-hidden="true" />
+              <UnreadDot count={unreadCount} />
+            </Link>
+          )}
           {isAdmin && (
             <Link
               href="/admin"

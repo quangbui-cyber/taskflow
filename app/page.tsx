@@ -588,7 +588,7 @@ export default async function HomePage({
               </Card>
 
               <Card
-                title="Góc cảm ơn"
+                title="Kudos Wall"
                 icon={Heart}
                 labelledBy="thanks-heading"
                 delay={280}

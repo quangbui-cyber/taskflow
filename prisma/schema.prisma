@@ -44,6 +44,7 @@ model User {
   uploadedTaskFiles      TaskFile[]               @relation("TaskFileUploader")
   recognitionsSent       Recognition[]            @relation("RecognitionSender")
   recognitionsReceived   Recognition[]            @relation("RecognitionRecipient")
+  recognitionComments    RecognitionComment[]
   organizedMeetings      Meeting[]                @relation("MeetingOrganizer")
   recordedMeetings       Meeting[]                @relation("MeetingRecorder")
   meetingInvites         MeetingAttendee[]
@@ -536,20 +537,34 @@ model Notification {
 
 // Lời cảm ơn độc lập với project — dùng để mọi người ghi nhận nhau trong công việc và cuộc sống.
 model Recognition {
-  id            String         @id @default(cuid())
+  id            String               @id @default(cuid())
   senderId      String
   recipientId   String
   message       String
-  category      String         @default("KINDNESS") // KINDNESS | SUPPORT | INSPIRATION | CARE | BIRTHDAY
-  visibility    String         @default("COMPANY") // COMPANY | PRIVATE
-  sender        User           @relation("RecognitionSender", fields: [senderId], references: [id], onDelete: Cascade)
-  recipient     User           @relation("RecognitionRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
-  notifications Notification[] @relation("RecognitionNotification")
-  createdAt     DateTime       @default(now())
+  category      String               @default("KINDNESS") // KINDNESS | SUPPORT | INSPIRATION | CARE | BIRTHDAY
+  visibility    String               @default("COMPANY") // COMPANY | PRIVATE
+  sender        User                 @relation("RecognitionSender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient     User                 @relation("RecognitionRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  notifications Notification[]       @relation("RecognitionNotification")
+  comments      RecognitionComment[]
+  createdAt     DateTime             @default(now())
 
   @@index([senderId, createdAt])
   @@index([recipientId, createdAt])
   @@index([visibility, createdAt])
+}
+
+// Bình luận dưới một lời cảm ơn trên Kudos Wall.
+model RecognitionComment {
+  id            String      @id @default(cuid())
+  recognitionId String
+  recognition   Recognition @relation(fields: [recognitionId], references: [id], onDelete: Cascade)
+  authorId      String
+  author        User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  body          String
+  createdAt     DateTime    @default(now())
+
+  @@index([recognitionId, createdAt])
 }
 
 // Cấu hình tích hợp dùng chung. Giá trị nhạy cảm được mã hóa trước khi lưu.
@@ -831,7 +846,7 @@ model ExtensionToken {
   userId     String
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   tokenHash  String    @unique // sha256 của token; token gốc chỉ trả về một lần khi kết nối
-  label      String    // Tên thiết bị/trình duyệt, ví dụ: "Chrome trên MacBook của An"
+  label      String // Tên thiết bị/trình duyệt, ví dụ: "Chrome trên MacBook của An"
   lastUsedAt DateTime?
   revokedAt  DateTime?
   createdAt  DateTime  @default(now())

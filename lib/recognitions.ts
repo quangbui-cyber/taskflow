@@ -16,6 +16,7 @@ export const RECOGNITION_VISIBILITIES = [
 ] as const;
 
 export const RECOGNITION_WEEKLY_STAR_LIMIT = 5;
+export const RECOGNITION_COMMENT_MAX_LENGTH = 500;
 
 export function recognitionCategoryLabel(key: string) {
   if (key === BIRTHDAY_RECOGNITION_CATEGORY) return BIRTHDAY_RECOGNITION_LABEL;

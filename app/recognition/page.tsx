@@ -9,6 +9,7 @@ import {
   Star,
 } from "lucide-react";
 import Avatar from "@/components/Avatar";
+import RecognitionComments from "@/components/RecognitionComments";
 import RecognitionComposer from "@/components/RecognitionComposer";
 import RecognitionMonthSelect from "@/components/RecognitionMonthSelect";
 import RecognitionWebhookSettings from "@/components/RecognitionWebhookSettings";
@@ -175,6 +176,15 @@ export default async function RecognitionPage({
       include: {
         sender: { select: { id: true, name: true, avatarUrl: true } },
         recipient: { select: { id: true, name: true, avatarUrl: true } },
+        comments: {
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            body: true,
+            createdAt: true,
+            author: { select: { id: true, name: true, avatarUrl: true } },
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
       take: 100,
@@ -249,7 +259,7 @@ export default async function RecognitionPage({
           <header className="mb-[54px] flex items-start justify-between gap-5">
             <div>
               <h1 className="text-[34px] font-semibold leading-tight tracking-[-0.03em] text-zinc-950">
-                Góc cảm ơn
+                Kudos Wall
               </h1>
             </div>
             {view !== "webhook" && (
@@ -372,6 +382,16 @@ export default async function RecognitionPage({
                               ? "Chỉ người gửi và người nhận"
                               : "Công khai trong công ty"}
                           </span>
+                          <RecognitionComments
+                            recognitionId={recognition.id}
+                            currentUserId={user.id}
+                            isAdmin={user.role === "ADMIN"}
+                            defaultOpen={focused}
+                            comments={recognition.comments.map((comment) => ({
+                              ...comment,
+                              createdAt: comment.createdAt.toISOString(),
+                            }))}
+                          />
                         </div>
                         <div className="hidden items-start gap-1.5 sm:flex">
                           <time className="whitespace-nowrap pt-2.5 text-xs text-zinc-500">

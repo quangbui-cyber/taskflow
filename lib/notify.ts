@@ -15,6 +15,7 @@ export async function notify(
       | "TASK_FOLLOW"
       | "DEADLINE_REMINDER"
       | "RECOGNITION_RECEIVED"
+      | "RECOGNITION_COMMENT"
       | "LEAVE_REQUEST"
       | "LEAVE_DECISION"
       | "MEETING_INVITED"

@@ -135,7 +135,7 @@ export default function BirthdayWishButton({
                 />
               </label>
               <p className="text-xs text-zinc-600">
-                Lời chúc hiện trong Góc cảm ơn cho cả công ty và không trừ sao
+                Lời chúc hiện trong Kudos Wall cho cả công ty và không trừ sao
                 của tuần.
               </p>
               <div className="flex justify-end gap-2.5">
