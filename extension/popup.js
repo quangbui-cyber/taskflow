@@ -2,6 +2,7 @@ import {
   checkAuth,
   lookupMeeting,
   createQuickMeeting,
+  getTodayMeetings,
   getConfig,
 } from "./api.js";
 
@@ -66,6 +67,79 @@ function stopTimer() {
   }
 }
 
+/** Trích xuất mã cuộc họp Google Meet từ chuỗi bất kỳ (URL, Title, DOM text) */
+function parseMeetCodeFromString(text) {
+  if (!text) return null;
+  // Dạng chuẩn: abc-defg-hij
+  const match = text.match(/\b([a-zA-Z]{3}-[a-zA-Z]{4}-[a-zA-Z]{3})\b/);
+  if (match) return match[1].toLowerCase();
+
+  // Dạng 10 ký tự liền nhau
+  const cleanMatch = text.match(/meet\.google\.com\/(?:_meet\/|lookup\/)?([a-zA-Z]{10})\b/);
+  if (cleanMatch) {
+    const c = cleanMatch[1].toLowerCase();
+    return `${c.slice(0, 3)}-${c.slice(3, 7)}-${c.slice(7)}`;
+  }
+  return null;
+}
+
+/** Quét sâu vào tab Meet để lấy mã phòng */
+async function extractMeetCodeFromTab(tab) {
+  if (!tab) return null;
+
+  // 1. Thử từ URL của tab
+  if (tab.url) {
+    const codeFromUrl = parseMeetCodeFromString(tab.url);
+    if (codeFromUrl) return codeFromUrl;
+  }
+
+  // 2. Thử từ tiêu đề của tab (Google Meet thường đặt title là "Meet - xxx-yyyy-zzz")
+  if (tab.title) {
+    const codeFromTitle = parseMeetCodeFromString(tab.title);
+    if (codeFromTitle) return codeFromTitle;
+  }
+
+  // 3. Hỏi content script trong tab
+  try {
+    const response = await chrome.tabs.sendMessage(tab.id, { type: "GET_MEET_CODE" });
+    if (response?.meetCode) return response.meetCode;
+  } catch {
+    // Content script chưa nạp hoặc không phản hồi
+  }
+
+  // 4. Quét DOM trực tiếp bằng chrome.scripting
+  try {
+    const [execResult] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => {
+        // Quét tổng hợp các vị trí Meet lưu mã phòng
+        const textToScan = [
+          window.location.href,
+          window.location.pathname,
+          document.title,
+          document.querySelector("[data-meeting-title]")?.textContent,
+          document.querySelector("[data-unresolved-meeting-id]")?.textContent,
+          document.querySelector("[data-call-id]")?.getAttribute("data-call-id"),
+          document.querySelector('[jsname="r4nke"]')?.textContent,
+          document.body ? document.body.innerText.slice(0, 4000) : "",
+        ]
+          .filter(Boolean)
+          .join(" ");
+
+        const m = textToScan.match(/\b([a-zA-Z]{3}-[a-zA-Z]{4}-[a-zA-Z]{3})\b/);
+        return m ? m[1].toLowerCase() : null;
+      },
+    });
+    if (execResult?.result) {
+      return execResult.result;
+    }
+  } catch (err) {
+    console.warn("Scripting scan error:", err);
+  }
+
+  return null;
+}
+
 async function init() {
   btnOptions.onclick = () => chrome.runtime.openOptionsPage();
   btnConnect.onclick = async () => {
@@ -99,71 +173,113 @@ async function init() {
   }
 
   // 3. Quét tab hiện tại
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  let [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  if (!tab) {
+    const fallbackTabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    tab = fallbackTabs[0];
+  }
+
+  // Nếu tab hiện tại không phải Meet, tìm xem có tab Meet nào đang mở ở cửa sổ khác không
+  const isCurrentTabMeet = tab?.url && (tab.url.includes("meet.google.com") || tab.url.includes("g.co/meet"));
+  if (!isCurrentTabMeet) {
+    const meetTabs = await chrome.tabs.query({ url: "*://meet.google.com/*" });
+    if (meetTabs.length > 0) {
+      tab = meetTabs[0];
+    }
+  }
+
   currentTab = tab;
 
-  if (!tab || !tab.url) {
+  if (!tab) {
     meetingTitle.innerText = "Không tìm thấy tab cuộc họp";
     showView(viewReady);
     return;
   }
 
-  const match = tab.url.match(/meet\.google\.com\/([a-zA-Z]{3}-[a-zA-Z]{4}-[a-zA-Z]{3})/);
-  if (!match) {
-    meetCodeBadge.innerText = "Chưa vào Meet";
+  // Quét mã phòng
+  currentMeetCode = await extractMeetCodeFromTab(tab);
+
+  if (!currentMeetCode) {
+    // Không tìm thấy mã Meet
+    meetCodeBadge.innerText = "Chưa vào phòng Meet";
     meetCodeBadge.style.background = "#f4f4f5";
     meetCodeBadge.style.color = "#71717a";
     meetingTitle.innerText = "Hãy mở tab Google Meet để ghi biên bản 1 click.";
-    meetingTime.innerText = "Hoặc chọn cuộc họp hôm nay trong myCreative.";
+    meetingTime.innerText = "Hoặc lên lịch cuộc họp trong myCreative.";
     btnStart.disabled = true;
     btnStart.style.opacity = "0.5";
+    btnStart.innerHTML = `<span>●</span> Bắt đầu ghi biên bản`;
+    quickMeetingSection.classList.add("hidden");
     showView(viewReady);
     return;
   }
 
-  currentMeetCode = match[1].toLowerCase();
+  // ĐÃ PHÁT HIỆN MÃ PHÒNG MEET
   meetCodeBadge.innerText = `Meet: ${currentMeetCode}`;
+  meetCodeBadge.style.background = "#dcfce7";
+  meetCodeBadge.style.color = "#15803d";
 
   try {
     const meeting = await lookupMeeting(currentMeetCode);
     if (meeting) {
+      // Khớp cuộc họp đã lên lịch
       currentMeeting = meeting;
       meetingTitle.innerText = meeting.title;
       const start = new Date(meeting.startAt);
       const end = new Date(meeting.endAt);
       const timeStr = `${start.getHours().toString().padStart(2, "0")}:${start.getMinutes().toString().padStart(2, "0")} – ${end.getHours().toString().padStart(2, "0")}:${end.getMinutes().toString().padStart(2, "0")}`;
-      meetingTime.innerText = `${timeStr} (Khớp lịch)`;
+      meetingTime.innerText = `${timeStr} (Khớp lịch myCreative)`;
       btnStart.disabled = false;
       btnStart.style.opacity = "1";
+      btnStart.innerHTML = `<span>●</span> Bắt đầu ghi biên bản`;
       quickMeetingSection.classList.add("hidden");
     } else {
+      // Cuộc họp tức thì (Instant Meeting) - Cho phép ghi ngay mà không chặn người dùng!
       currentMeeting = null;
-      meetingTitle.innerText = "Chưa có lịch trong myCreative";
-      meetingTime.innerText = "Không tìm thấy cuộc họp khớp mã phòng này trong hôm nay.";
-      btnStart.disabled = true;
-      btnStart.style.opacity = "0.5";
-      quickMeetingSection.classList.remove("hidden");
+      meetingTitle.innerText = `Họp Google Meet (${currentMeetCode})`;
+      meetingTime.innerText = "Cuộc họp tức thì · Tự động tạo và lưu biên bản vào myCreative khi bấm ghi";
+      btnStart.disabled = false;
+      btnStart.style.opacity = "1";
+      btnStart.innerHTML = `<span>●</span> Bắt đầu ghi biên bản tức thì`;
+      quickMeetingSection.classList.add("hidden");
     }
   } catch (err) {
-    meetingTitle.innerText = "Không thể tải thông tin cuộc họp";
-    meetingTime.innerText = err.message;
+    // Ngay cả khi lookup có lỗi mạng, vẫn cho phép ghi tức thì
+    currentMeeting = null;
+    meetingTitle.innerText = `Họp Google Meet (${currentMeetCode})`;
+    meetingTime.innerText = "Tự động tạo cuộc họp nhanh trên myCreative khi bắt đầu";
+    btnStart.disabled = false;
+    btnStart.style.opacity = "1";
+    btnStart.innerHTML = `<span>●</span> Bắt đầu ghi biên bản tức thì`;
+    quickMeetingSection.classList.add("hidden");
   }
 
   showView(viewReady);
 }
 
-// Bắt đầu ghi âm
+// Bắt đầu ghi âm (hỗ trợ cả cuộc họp có lịch và cuộc họp tức thì)
 btnStart.onclick = async () => {
-  if (!currentMeeting || !currentTab?.id) return;
+  if (!currentTab?.id) return;
   btnStart.disabled = true;
   btnStart.innerHTML = `<span class="spinner"></span> Đang khởi động...`;
 
   try {
-    const bg = await chrome.runtime.getBackgroundPage?.();
-    // Gửi message cho background script bắt đầu ghi
+    // Nếu là cuộc họp tức thì (chưa có trong database), tự động tạo nhanh cuộc họp trước
+    if (!currentMeeting) {
+      btnStart.innerHTML = `<span class="spinner"></span> Đang tạo cuộc họp trên myCreative...`;
+      const created = await createQuickMeeting({
+        title: `Họp Google Meet (${currentMeetCode || "tức thì"})`,
+        meetingUrl: currentTab.url || (currentMeetCode ? `https://meet.google.com/${currentMeetCode}` : undefined),
+      });
+      currentMeeting = created;
+    }
+
+    btnStart.innerHTML = `<span class="spinner"></span> Đang kết nối âm thanh...`;
+
+    // 1. Lấy Stream ID cho tab Google Meet
     const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: currentTab.id });
 
-    // Tạo offscreen document nếu chưa có
+    // 2. Tạo offscreen document nếu chưa có
     const existing = await chrome.runtime.getContexts({
       contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT],
     });
@@ -171,10 +287,11 @@ btnStart.onclick = async () => {
       await chrome.offscreen.createDocument({
         url: "offscreen.html",
         reasons: [chrome.offscreen.Reason.USER_MEDIA],
-        justification: "Ghi âm cuộc họp",
+        justification: "Ghi âm cuộc họp và micro",
       });
     }
 
+    // 3. Gửi lệnh bắt đầu ghi âm sang offscreen
     await new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(
         {
@@ -200,11 +317,13 @@ btnStart.onclick = async () => {
           chrome.action.setBadgeText({ text: "REC" });
           chrome.action.setBadgeBackgroundColor({ color: "#dc2626" });
 
-          // Gửi thông báo vào chat Meet
-          chrome.tabs.sendMessage(currentTab.id, {
-            type: "SEND_CHAT_NOTICE",
-            userName: currentUser?.name || "",
-          }).catch(() => undefined);
+          // Gửi thông báo minh bạch vào chat Google Meet
+          chrome.tabs
+            .sendMessage(currentTab.id, {
+              type: "SEND_CHAT_NOTICE",
+              userName: currentUser?.name || "",
+            })
+            .catch(() => undefined);
 
           showView(viewRecording);
           recMeetingName.innerText = currentMeeting.title;
@@ -220,29 +339,12 @@ btnStart.onclick = async () => {
   }
 };
 
-// Tạo cuộc họp nhanh & Ghi ngay
-btnQuickMeeting.onclick = async () => {
-  if (!currentTab?.id) return;
-  btnQuickMeeting.disabled = true;
-  btnQuickMeeting.innerText = "Đang tạo cuộc họp nhanh...";
-
-  try {
-    const meeting = await createQuickMeeting({
-      title: `Họp Google Meet (${currentMeetCode})`,
-      meetingUrl: currentTab.url,
-    });
-    currentMeeting = meeting;
-    meetingTitle.innerText = meeting.title;
-    btnStart.disabled = false;
-    btnStart.style.opacity = "1";
-    quickMeetingSection.classList.add("hidden");
+// Tạo cuộc họp nhanh thủ công nếu muốn
+if (btnQuickMeeting) {
+  btnQuickMeeting.onclick = async () => {
     btnStart.click();
-  } catch (err) {
-    alert(`Lỗi tạo cuộc họp nhanh: ${err.message}`);
-    btnQuickMeeting.disabled = false;
-    btnQuickMeeting.innerText = "⚡ Tạo cuộc họp nhanh & Ghi ngay";
-  }
-};
+  };
+}
 
 // Dừng ghi âm
 btnStop.onclick = async () => {

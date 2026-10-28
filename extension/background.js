@@ -138,18 +138,30 @@ chrome.commands.onCommand.addListener(async (command) => {
   }
 
   // Nếu chưa ghi, tìm tab đang xem
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab || !tab.id || !tab.url) return;
+  let [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  if (!tab) {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    tab = tabs[0];
+  }
+  if (!tab || !tab.id) return;
 
-  const match = tab.url.match(/meet\.google\.com\/([a-zA-Z]{3}-[a-zA-Z]{4}-[a-zA-Z]{3})/);
+  const textToScan = (tab.url || "") + " " + (tab.title || "");
+  const match = textToScan.match(/\b([a-zA-Z]{3}-[a-zA-Z]{4}-[a-zA-Z]{3})\b/);
   if (!match) {
-    // Không phải tab Meet, mở popup cho người dùng chọn
     return;
   }
 
   const meetCode = match[1].toLowerCase();
   try {
-    const meeting = await lookupMeeting(meetCode);
+    let meeting = await lookupMeeting(meetCode);
+    if (!meeting) {
+      // Tự động tạo cuộc họp nhanh nếu chưa có trên lịch
+      const { createQuickMeeting } = await import("./api.js");
+      meeting = await createQuickMeeting({
+        title: `Họp Google Meet (${meetCode})`,
+        meetingUrl: tab.url || `https://meet.google.com/${meetCode}`,
+      });
+    }
     if (meeting) {
       await startRecordingSession(tab.id, meeting);
     }

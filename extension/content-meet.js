@@ -3,9 +3,40 @@
  */
 
 function getMeetCodeFromUrl() {
-  const path = window.location.pathname;
-  const match = path.match(/\/?([a-zA-Z]{3}-[a-zA-Z]{4}-[a-zA-Z]{3})/);
-  return match ? match[1].toLowerCase() : null;
+  // 1. URL pathname & query
+  const pathAndSearch = (window.location.pathname || "") + " " + (window.location.search || "");
+  const match = pathAndSearch.match(/\b([a-zA-Z]{3}-[a-zA-Z]{4}-[a-zA-Z]{3})\b/);
+  if (match) return match[1].toLowerCase();
+
+  // 1b. Dạng không có dấu gạch ngang (abcdefghij)
+  const noDash = (window.location.pathname || "").match(/meet\.google\.com\/(?:_meet\/|lookup\/)?([a-zA-Z]{10})\b/);
+  if (noDash) {
+    const c = noDash[1].toLowerCase();
+    return `${c.slice(0, 3)}-${c.slice(3, 7)}-${c.slice(7)}`;
+  }
+
+  // 2. Document title (VD: "Meet – vqf-fshs-dhd" hoặc "vqf-fshs-dhd")
+  const titleMatch = (document.title || "").match(/\b([a-zA-Z]{3}-[a-zA-Z]{4}-[a-zA-Z]{3})\b/);
+  if (titleMatch) return titleMatch[1].toLowerCase();
+
+  // 3. Meet DOM elements (các thẻ chứa mã cuộc họp trong Meet)
+  const codeEl =
+    document.querySelector("[data-meeting-title]") ||
+    document.querySelector("[data-unresolved-meeting-id]") ||
+    document.querySelector("[data-call-id]") ||
+    document.querySelector('[jsname="r4nke"]');
+  if (codeEl) {
+    const text = codeEl.textContent || codeEl.getAttribute("data-call-id") || "";
+    const m = text.match(/\b([a-zA-Z]{3}-[a-zA-Z]{4}-[a-zA-Z]{3})\b/);
+    if (m) return m[1].toLowerCase();
+  }
+
+  // 4. Quét chữ hiển thị ở góc giao diện (như trong ảnh chụp: "4:41 PM | vqf-fshs-dhd")
+  const bodyText = document.body ? document.body.innerText.slice(0, 4000) : "";
+  const bodyMatch = bodyText.match(/\b([a-zA-Z]{3}-[a-zA-Z]{4}-[a-zA-Z]{3})\b/);
+  if (bodyMatch) return bodyMatch[1].toLowerCase();
+
+  return null;
 }
 
 // Báo cho background script biết người dùng đang ở phòng họp Meet nào
