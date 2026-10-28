@@ -6,6 +6,9 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 import { parseAvatarDataUrl } from "@/lib/avatarImage";
+import { Prisma } from "@prisma/client";
+import { createSession } from "@/lib/session";
+import { parseLoginEmail } from "@/lib/loginEmail";
 import { passwordLengthError } from "@/lib/password";
 import { OPEN_PROJECT_STATUSES } from "@/lib/types";
 import { canHoldAccountProfile, isUserRole } from "@/lib/roles";
@@ -379,6 +382,61 @@ export async function resetPassword(
 
   revalidatePath("/admin");
   return { success: "Đã đổi mật khẩu." };
+}
+
+/**
+ * Đổi email đăng nhập, giữ nguyên mọi dữ liệu của tài khoản (dự án, task, bình luận, nghỉ phép...
+ * đều gắn theo mã tài khoản chứ không theo email). Liên kết Google và các token Google của email
+ * cũ bị gỡ: nếu không, chủ email cũ vẫn đăng nhập được bằng Google. Phiên đăng nhập hiện có bị huỷ.
+ */
+export async function changeUserEmail(
+  _prev: AdminState,
+  formData: FormData
+): Promise<AdminState> {
+  const admin = await requireAdmin();
+
+  const userId = String(formData.get("userId") ?? "");
+  const parsed = parseLoginEmail(formData.get("email"));
+  if ("error" in parsed) return { error: parsed.error };
+  const { email } = parsed;
+
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, name: true, deletedAt: true },
+  });
+  if (!target || target.deletedAt) return { error: "Tài khoản không tồn tại." };
+  if (target.email === email) return { error: "Email mới trùng với email hiện tại." };
+
+  const taken = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  if (taken) return { error: "Email này đã được dùng bởi tài khoản khác." };
+
+  let updated: { sessionVersion: number };
+  try {
+    updated = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        email,
+        googleSub: null,
+        googleEmail: null,
+        googleToken: null,
+        googleMeetToken: null,
+        googleScopes: [],
+        // Mọi JWT đã cấp chứa version cũ và sẽ bị từ chối ở request kế tiếp.
+        sessionVersion: { increment: 1 },
+      },
+      select: { sessionVersion: true },
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return { error: "Email này đã được dùng bởi tài khoản khác." };
+    }
+    throw error;
+  }
+  // Admin tự đổi email của mình thì giữ phiên hiện tại, không bị đăng xuất.
+  if (admin.id === userId) await createSession(admin.id, updated.sessionVersion);
+
+  revalidatePath("/", "layout");
+  return { success: `Đã đổi email đăng nhập của ${target.name} thành ${email}.` };
 }
 
 function memberIdsFromForm(formData: FormData) {
