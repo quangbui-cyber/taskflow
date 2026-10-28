@@ -11,6 +11,7 @@ const viewReady = document.getElementById("viewReady");
 const viewRecording = document.getElementById("viewRecording");
 const viewUploading = document.getElementById("viewUploading");
 const viewSuccess = document.getElementById("viewSuccess");
+const viewFailed = document.getElementById("viewFailed");
 
 const btnConnect = document.getElementById("btnConnect");
 const btnOptions = document.getElementById("btnOptions");
@@ -18,6 +19,25 @@ const btnStart = document.getElementById("btnStart");
 const btnStop = document.getElementById("btnStop");
 const btnQuickMeeting = document.getElementById("btnQuickMeeting");
 const btnOpenMeeting = document.getElementById("btnOpenMeeting");
+const btnRetry = document.getElementById("btnRetry");
+const btnDiscard = document.getElementById("btnDiscard");
+const uploadingReason = document.getElementById("uploadingReason");
+const failedMeetingName = document.getElementById("failedMeetingName");
+const failedReason = document.getElementById("failedReason");
+
+const SESSION_KEY = "current_recording_session";
+const PENDING_KEY = "mycreative_pending_upload";
+// Kết quả "đã gửi xong" chỉ đáng hiện nếu còn mới
+const DONE_FRESH_MS = 30 * 60 * 1000;
+
+const END_REASON_TEXT = {
+  manual: "Bạn đã bấm dừng.",
+  "tab-closed": "Tab cuộc họp đã đóng.",
+  "tab-capture-ended": "Tab cuộc họp đã đóng hoặc chuyển trang.",
+  navigated: "Tab đã rời khỏi cuộc họp.",
+  "left-meeting": "Bạn đã rời cuộc họp.",
+  "max-duration": "Đã đạt thời lượng ghi tối đa.",
+};
 
 const meetCodeBadge = document.getElementById("meetCodeBadge");
 const userGreeting = document.getElementById("userGreeting");
@@ -32,11 +52,14 @@ let currentMeetCode = null;
 let currentMeeting = null;
 let timerInterval = null;
 let currentUser = null;
+// Giai đoạn của phiên đang hiển thị, để biết thay đổi trong storage nào cần vẽ lại
+let shownPhase = null;
 
 function showView(view) {
-  [viewNotConnected, viewReady, viewRecording, viewUploading, viewSuccess].forEach((v) => {
+  [viewNotConnected, viewReady, viewRecording, viewUploading, viewSuccess, viewFailed].forEach((v) => {
     v.classList.add("hidden");
   });
+  if (view !== viewRecording) stopTimer();
   view.classList.remove("hidden");
 }
 
@@ -140,6 +163,53 @@ async function extractMeetCodeFromTab(tab) {
   return null;
 }
 
+/**
+ * Vẽ màn hình theo phiên ghi đang có (ghi / đang tải / xong / lỗi). Trả về true nếu đã vẽ.
+ * Chỉ đọc storage nên vẫn đúng khi mất mạng.
+ */
+async function renderSessionState() {
+  const [sessionData, pendingData] = await Promise.all([
+    chrome.storage.session.get(SESSION_KEY),
+    chrome.storage.local.get(PENDING_KEY),
+  ]);
+  const session = sessionData[SESSION_KEY];
+  const pending = pendingData[PENDING_KEY];
+  shownPhase = session?.phase ?? null;
+
+  if (session?.phase === "recording" && session.startedAt) {
+    showView(viewRecording);
+    recMeetingName.innerText = session.meeting?.title || "Cuộc họp đang ghi";
+    startTimer(session.startedAt);
+    return true;
+  }
+
+  if (session?.phase === "uploading") {
+    uploadingReason.innerText = END_REASON_TEXT[session.endReason] || "";
+    showView(viewUploading);
+    return true;
+  }
+
+  if (session?.phase === "done" && Date.now() - (session.finishedAt || 0) < DONE_FRESH_MS) {
+    showView(viewSuccess);
+    btnOpenMeeting.onclick = async () => {
+      const { baseUrl } = await getConfig();
+      chrome.tabs.create({ url: `${baseUrl}/meetings/${session.meeting.id}/recap` });
+    };
+    // Đã xem rồi thì lần mở sau về màn hình ban đầu
+    await chrome.storage.session.remove(SESSION_KEY);
+    return true;
+  }
+
+  if (session?.phase === "failed" || (!session && pending)) {
+    failedMeetingName.innerText = session?.meeting?.title || pending?.title || "";
+    failedReason.innerText = session?.error || pending?.error || "Bản ghi trước đó chưa được tải lên (trình duyệt đã tắt giữa chừng).";
+    showView(viewFailed);
+    return true;
+  }
+
+  return false;
+}
+
 async function init() {
   btnOptions.onclick = () => chrome.runtime.openOptionsPage();
   btnConnect.onclick = async () => {
@@ -147,7 +217,10 @@ async function init() {
     chrome.tabs.create({ url: `${baseUrl}/profile/extension` });
   };
 
-  // 1. Kiểm tra xác thực tài khoản
+  // 1. Phiên ghi đang diễn ra / vừa kết thúc
+  if (await renderSessionState()) return;
+
+  // 2. Kiểm tra xác thực tài khoản
   try {
     currentUser = await checkAuth();
   } catch {
@@ -160,17 +233,6 @@ async function init() {
   }
 
   userGreeting.innerText = currentUser.name || currentUser.email;
-
-  // 2. Kiểm tra xem có phiên ghi âm nào đang diễn ra không
-  const sessionData = await chrome.storage.session.get("current_recording_session");
-  const session = sessionData.current_recording_session;
-
-  if (session && session.startedAt) {
-    showView(viewRecording);
-    recMeetingName.innerText = session.meeting?.title || "Cuộc họp đang ghi";
-    startTimer(session.startedAt);
-    return;
-  }
 
   // 3. Quét tab hiện tại
   let [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
@@ -276,66 +338,24 @@ btnStart.onclick = async () => {
 
     btnStart.innerHTML = `<span class="spinner"></span> Đang kết nối âm thanh...`;
 
-    // 1. Lấy Stream ID cho tab Google Meet
+    // Stream ID chỉ có hiệu lực ngắn sau thao tác của người dùng nên lấy ở đây, phần còn lại do service worker lo
     const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: currentTab.id });
 
-    // 2. Tạo offscreen document nếu chưa có
-    const existing = await chrome.runtime.getContexts({
-      contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT],
+    const res = await chrome.runtime.sendMessage({
+      type: "START_SESSION",
+      payload: {
+        tabId: currentTab.id,
+        streamId,
+        meeting: currentMeeting,
+        meetCode: currentMeetCode,
+      },
     });
-    if (existing.length === 0) {
-      await chrome.offscreen.createDocument({
-        url: "offscreen.html",
-        reasons: [chrome.offscreen.Reason.USER_MEDIA],
-        justification: "Ghi âm cuộc họp và micro",
-      });
-    }
+    if (!res?.ok) throw new Error(res?.error || "Không thể khởi động ghi âm");
 
-    const config = await getConfig();
-
-    // 3. Gửi lệnh bắt đầu ghi âm sang offscreen
-    await new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage(
-        {
-          target: "offscreen",
-          type: "START",
-          payload: {
-            streamId,
-            meetingId: currentMeeting.id,
-            fileName: `meet_${currentMeeting.meetCode || currentMeeting.id}_${Date.now()}.webm`,
-            token: config.token,
-            baseUrl: config.baseUrl,
-          },
-        },
-        async (res) => {
-          if (!res || !res.ok) {
-            reject(new Error(res?.error || "Không thể khởi động ghi âm"));
-            return;
-          }
-          const session = {
-            tabId: currentTab.id,
-            meeting: currentMeeting,
-            startedAt: Date.now(),
-          };
-          await chrome.storage.session.set({ current_recording_session: session });
-          chrome.action.setBadgeText({ text: "REC" });
-          chrome.action.setBadgeBackgroundColor({ color: "#dc2626" });
-
-          // Gửi thông báo minh bạch vào chat Google Meet
-          chrome.tabs
-            .sendMessage(currentTab.id, {
-              type: "SEND_CHAT_NOTICE",
-              userName: currentUser?.name || "",
-            })
-            .catch(() => undefined);
-
-          showView(viewRecording);
-          recMeetingName.innerText = currentMeeting.title;
-          startTimer(session.startedAt);
-          resolve();
-        }
-      );
-    });
+    showView(viewRecording);
+    recMeetingName.innerText = currentMeeting.title;
+    startTimer(res.session.startedAt);
+    shownPhase = "recording";
   } catch (err) {
     alert(`Lỗi: ${err.message}`);
     btnStart.disabled = false;
@@ -350,28 +370,43 @@ if (btnQuickMeeting) {
   };
 }
 
-// Dừng ghi âm
+// Dừng ghi âm: service worker chốt file rồi tải lên ở nền, popup chỉ theo dõi trạng thái trong storage
 btnStop.onclick = async () => {
   if (!confirm("Bạn có chắc chắn muốn kết thúc và lưu biên bản cuộc họp này?")) return;
-  stopTimer();
   showView(viewUploading);
+  shownPhase = "uploading";
 
-  chrome.runtime.sendMessage({ target: "offscreen", type: "STOP" }, async (res) => {
-    chrome.action.setBadgeText({ text: "" });
-    await chrome.storage.session.remove("current_recording_session");
-
-    if (res && res.ok) {
-      showView(viewSuccess);
-      btnOpenMeeting.onclick = async () => {
-        const { baseUrl } = await getConfig();
-        const meetingId = currentMeeting?.id || res.recap?.meetingId;
-        chrome.tabs.create({ url: `${baseUrl}/meetings/${meetingId}/recap` });
-      };
-    } else {
-      alert(`Lỗi khi dừng hoặc tải lên: ${res?.error || "Không rõ lỗi"}`);
-      init();
-    }
-  });
+  const res = await chrome.runtime.sendMessage({ type: "STOP_SESSION" });
+  if (!res?.ok) {
+    alert(`Lỗi khi dừng: ${res?.error || "Không rõ lỗi"}`);
+    init();
+  }
 };
+
+btnRetry.onclick = async () => {
+  btnRetry.disabled = true;
+  const res = await chrome.runtime.sendMessage({ type: "RETRY_UPLOAD" });
+  btnRetry.disabled = false;
+  if (!res?.ok) alert(`Không tải lại được: ${res?.error || "Không rõ lỗi"}`);
+};
+
+btnDiscard.onclick = async () => {
+  if (!confirm("Bỏ bản ghi này? Bạn sẽ không lấy lại được nội dung cuộc họp đã ghi.")) return;
+  await chrome.runtime.sendMessage({ type: "DISCARD_PENDING" });
+  init();
+};
+
+// Phiên đổi giai đoạn (dừng tự động, tải xong, lỗi...) khi popup đang mở thì vẽ lại
+chrome.storage.onChanged.addListener((changes, area) => {
+  const change = area === "session" ? changes[SESSION_KEY] : area === "local" ? changes[PENDING_KEY] : null;
+  if (!change) return;
+  const nextPhase = change.newValue?.phase ?? null;
+  if (area === "session") {
+    if (nextPhase === shownPhase) return;
+    // Màn hình "đã gửi xong" tự xoá phiên sau khi hiện, không vẽ lại
+    if (nextPhase === null && shownPhase === "done") return;
+  }
+  init();
+});
 
 init();

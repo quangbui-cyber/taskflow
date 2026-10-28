@@ -100,7 +100,7 @@ async function apiRequest(path, options = {}) {
 
   if (!response.ok) {
     const errorMsg = data?.error || (typeof data === "string" ? data : `Lỗi ${response.status}`);
-    throw new Error(errorMsg);
+    throw Object.assign(new Error(errorMsg), { status: response.status });
   }
 
   return data;
@@ -205,7 +205,9 @@ export async function uploadAndStartRecap({
 
   if (!blobPutResponse.ok) {
     const err = await blobPutResponse.text().catch(() => "");
-    throw new Error(`Tải file lên Vercel Blob thất bại: ${err || blobPutResponse.statusText}`);
+    throw Object.assign(new Error(`Tải file lên Vercel Blob thất bại: ${err || blobPutResponse.statusText}`), {
+      status: blobPutResponse.status,
+    });
   }
 
   const uploadedBlob = await blobPutResponse.json().catch(() => ({}));
