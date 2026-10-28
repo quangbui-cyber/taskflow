@@ -557,6 +557,7 @@ export default async function ProjectPage({
               active={activeTab}
               fileCount={project.files.length}
               showFinance={hasFinanceTab}
+              showAi
             />
           </div>
         </header>

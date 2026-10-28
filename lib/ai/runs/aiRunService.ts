@@ -130,19 +130,23 @@ export async function createAiRun(actorId: string, projectId: string, rawCommand
 
 export async function readAiRun(actorId: string, projectId: string, runId: string) {
   const run = await prisma.aiRun.findFirst({ where: { id: runId, projectId },
-    select: { id: true, actorId: true, runType: true, status: true, createdAt: true,
+    select: { id: true, actorId: true, runType: true, status: true, reviewStatus: true, createdAt: true,
+      parserVersion: true, pipelineVersion: true, configVersion: true, model: true,
       timeoutAt: true, cancelledAt: true, completedAt: true, failureCode: true, scopeHash: true,
       sources: { select: { role: true, sourceRevision: { select: {
-        originKind: true, originId: true, filename: true, sha256: true,
+        originKind: true, originId: true, originVersion: true, filename: true, sha256: true,
       } } } } } });
   if (!run) throw new AiSourceNotFoundError();
   const sourceIds = run.sources.map(({ sourceRevision }) => `${sourceRevision.originKind}:${sourceRevision.originId}`);
   await resolveAiReadScope(actorId, { projectId, sourceIds, purpose: run.runType });
-  return { id: run.id, task: run.runType, status: run.status, createdAt: run.createdAt,
+  return { id: run.id, task: run.runType, status: run.status, reviewStatus: run.reviewStatus,
+    actorId: run.actorId, parserVersion: run.parserVersion, pipelineVersion: run.pipelineVersion,
+    configVersion: run.configVersion, model: run.model, createdAt: run.createdAt,
     timeoutAt: run.timeoutAt, cancelledAt: run.cancelledAt,
     completedAt: run.completedAt, failureCode: run.failureCode,
     sources: run.sources.map(({ role, sourceRevision }) => ({ role,
-      filename: sourceRevision.filename, sha256: sourceRevision.sha256 })) };
+      filename: sourceRevision.filename, version: sourceRevision.originVersion,
+      sha256: sourceRevision.sha256 })) };
 }
 
 export async function listAiRuns(actorId: string, projectId: string) {
