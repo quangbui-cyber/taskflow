@@ -1,6 +1,10 @@
 import { getCurrentUser } from "@/lib/auth";
 import { previewPastedIntake, previewWorkbookIntake } from "@/lib/costflow/excelIntakeParser";
 import { createNewDraftExcelIntakePreview, reserveExcelIntakePreviewGeneration } from "@/lib/costflow/excelIntakeService";
+import { inventoryExcelWorkbook } from "@/lib/ai/excel/workbookInventory";
+import { buildMaskedStructurePayload } from "@/lib/ai/excel/masking";
+import { previewReviewedExcelMapping } from "@/lib/ai/excel/rebuildExcelIntakeInput";
+import type { ReviewedExcelMapping } from "@/lib/ai/excel/mapping";
 
 export const runtime = "nodejs";
 
@@ -17,8 +21,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const sourceRevision = Number(form.get("sourceRevision") ?? "1");
     const sourceBytes = upload instanceof File && upload.size > 0 ? Buffer.from(await upload.arrayBuffer()) : null;
     const generation = await reserveExcelIntakePreviewGeneration(actor, id, "NEW_DRAFT");
-    const preview = sourceBytes
-      ? await previewWorkbookIntake(sourceBytes, { sheet, range }, { filename: upload instanceof File ? upload.name : "", mimeType: upload instanceof File ? upload.type : "" })
+    const aiMappingIntent = form.get("aiMappingIntent") === "true";
+    const mappingJson = form.get("reviewedMapping");
+    const workbookUpload = { filename: upload instanceof File ? upload.name : "", mimeType: upload instanceof File ? upload.type : "" };
+    let preview;
+    if (sourceBytes && aiMappingIntent) {
+      // Keep the known deterministic adapter first; AI-assisted mapping is only for unrecognized workbooks.
+      try { preview = await previewWorkbookIntake(sourceBytes, { sheet, range }, workbookUpload); }
+      catch (knownError) {
+        const inventory = await inventoryExcelWorkbook(sourceBytes, workbookUpload);
+        if (typeof mappingJson !== "string" || mappingJson.length === 0) {
+          return Response.json({ state: "MANUAL_MAPPING", knownError: knownError instanceof Error ? knownError.message.slice(0, 160) : "Không nhận diện được bảng chuẩn.",
+            inventory: buildMaskedStructurePayload(inventory), fingerprint: inventory.fingerprint },
+          { headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
+        }
+        if (mappingJson.length > 40_000) throw new Error("Mapping vượt giới hạn.");
+        const mapping = JSON.parse(mappingJson) as ReviewedExcelMapping;
+        preview = previewReviewedExcelMapping(inventory, mapping);
+      }
+    } else preview = sourceBytes
+      ? await previewWorkbookIntake(sourceBytes, { sheet, range }, workbookUpload)
       : previewPastedIntake({ text: paste, sheet });
     const session = await createNewDraftExcelIntakePreview(actor, {
       projectId: id,

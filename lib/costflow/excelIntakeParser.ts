@@ -4,7 +4,9 @@ import { EXCEL_INTAKE_SCHEMA_VERSION, normalizeExcelIntake, type ExcelIntakeInpu
 import { EXCEL_INTAKE_LIMITS, preflightExcelWorkbook, type ExcelWorkbookUpload } from "./excelIntakeSecurity";
 
 export type ExcelIntakeMapping = { sheet?: string; range?: string; headerRow?: number };
-export type ExcelIntakePreview = NormalizedExcelIntake & { fingerprint: string; adapter: "PASTE" | "STANDARD_V4" | "FAMILIAR_THREE_LEVEL"; confidence: number };
+export type ExcelIntakePreview = NormalizedExcelIntake & { fingerprint: string; adapter: "PASTE" | "STANDARD_V4" | "FAMILIAR_THREE_LEVEL" | "AI_REVIEWED"; confidence: number;
+  mappingProvenance?: { version: string; fingerprint: string; runId: string | null; adapterId: string | null; confirmedCriticalCells: string[]; reviewed: true };
+  mappingObservations?: string[] };
 
 const canonicalHeaders = ["LEVEL", "ROW_TYPE", "PARENT_ROW", "NAME", "DESCRIPTION", "SELL_UNIT", "SELL_QUANTITY", "SELL_DAYS", "SELL_UNIT_PRICE", "SELL_VAT", "SELL_BASIS", "SELL_NOTE", "BUY_UNIT", "BUY_QUANTITY", "BUY_DAYS", "BUY_UNIT_PRICE", "BUY_VAT", "BUY_BASIS", "SUPPLIER", "BUY_NOTE"];
 const aliases: Record<string, string> = {
