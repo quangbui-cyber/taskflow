@@ -118,6 +118,7 @@ model User {
   aiApplicationReceipts              AiApplicationReceipt[]        @relation("AiApplicationReceiptActor")
   aiKnowledgePublications            AiKnowledgePublication[]      @relation("AiKnowledgePublisher")
   aiMappingAdapters                  AiMappingAdapter[]             @relation("AiMappingConfirmer")
+  documentIntakeDraftsCreated        DocumentIntakeDraft[]          @relation("DocumentIntakeDraftCreator")
 
   @@index([isActive])
 }
@@ -225,6 +226,7 @@ model Project {
   aiRuns                         AiRun[]
   aiFindings                     AiFinding[]
   aiMappingAdapters              AiMappingAdapter[]
+  documentIntakeDrafts            DocumentIntakeDraft[]
 
   @@index([status, onProcessAt])
   @@index([status, completedAt])
@@ -2515,6 +2517,25 @@ model AiApplicationReceipt {
   @@unique([scopeKey, idempotencyKey])
   @@index([runId, targetKind, targetId, createdAt])
   @@index([actorId, createdAt])
+}
+
+// Explicit PO/VAT business drafts. Applying reviewed AI fields changes only
+// these drafts; existing PO confirmation and registered VAT invoice flows stay separate.
+model DocumentIntakeDraft {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  kind        String
+  status      String   @default("DRAFT")
+  version     Int      @default(1)
+  fields      Json     @default("{}")
+  createdById String
+  createdBy   User     @relation("DocumentIntakeDraftCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([projectId, kind, status, updatedAt])
+  @@index([createdById, updatedAt])
 }
 
 model AiKnowledgePublication {

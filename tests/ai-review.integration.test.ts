@@ -5,7 +5,8 @@ import { withPhase15TestSchema } from "./phase15/fixture";
 import { resolveAiReadScope } from "../lib/ai/access/resolveAiReadScope";
 import { snapshotSelectedAiSources } from "../lib/ai/sources/sourceRevisions";
 import { extractAndPersistDocumentRun } from "../lib/ai/extraction/documentExtraction";
-import { completeAiReview, recordAiFieldReview } from "../lib/ai/review/reviewService";
+import { applyAiReviewToDraft, completeAiReview, createDocumentIntakeDraft,
+  prepareAiApplyConflicts, recordAiFieldReview } from "../lib/ai/review/reviewService";
 
 test("extraction stores grounded candidates only after explicit run execution", async () => {
   await withPhase15TestSchema("migrate", async ({ client, schemaName, databaseUrl }) => {
@@ -55,6 +56,28 @@ test("extraction stores grounded candidates only after explicit run execution", 
       await assert.rejects(() => recordAiFieldReview(actorId, projectId, run.id, {
         candidateFieldId: candidates[0].id, choice: "ACCEPT_AI",
       }));
+      const draft = await createDocumentIntakeDraft(actorId, projectId, "PO");
+      const before = await client.documentIntakeDraft.findUniqueOrThrow({ where: { id: draft.id } });
+      assert.deepEqual(before.fields, {});
+      const prepared = await prepareAiApplyConflicts(actorId, projectId, run.id, "PO", draft.id);
+      assert.equal(prepared.targetVersion, "1");
+      assert.ok(prepared.fields.every((field) => field.defaultDecision === "KEEP_CURRENT"));
+      assert.deepEqual((await client.documentIntakeDraft.findUniqueOrThrow({ where: { id: draft.id } })).fields, {});
+      const number = candidates.find((candidate) => candidate.fieldKey === "poNumber")!;
+      const command = { expectedVersion: "1", idempotencyKey: `apply-${schemaName}`,
+        decisions: [{ candidateFieldId: number.id, decision: "APPLY_REVIEWED" as const }] };
+      const receipt = await applyAiReviewToDraft(actorId, projectId, run.id, "PO", draft.id, command);
+      assert.equal(receipt.targetVersionAfter, "2");
+      assert.equal((await client.documentIntakeDraft.findUniqueOrThrow({ where: { id: draft.id } })).version, 2);
+      assert.deepEqual((await client.documentIntakeDraft.findUniqueOrThrow({ where: { id: draft.id } })).fields,
+        { poNumber: "C-10003769551" });
+      assert.equal((await applyAiReviewToDraft(actorId, projectId, run.id, "PO", draft.id, command)).id, receipt.id);
+      assert.equal(await client.aiApplicationReceipt.count({ where: { runId: run.id } }), 1);
+      await assert.rejects(() => applyAiReviewToDraft(actorId, projectId, run.id, "PO", draft.id,
+        { ...command, idempotencyKey: `stale-${schemaName}` }));
+      await client.documentIntakeDraft.update({ where: { id: draft.id }, data: { status: "LOCKED" } });
+      await assert.rejects(() => applyAiReviewToDraft(actorId, projectId, run.id, "PO", draft.id,
+        { ...command, expectedVersion: "2", idempotencyKey: `locked-${schemaName}` }));
     } finally {
       const shared = (globalThis as unknown as { prisma?: { $disconnect(): Promise<void> } }).prisma;
       if (shared) { await shared.$disconnect(); delete (globalThis as unknown as { prisma?: unknown }).prisma; }
