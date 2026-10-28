@@ -39,3 +39,15 @@ export function financeEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   const flag = env.FINANCE_ENABLED?.trim().toLowerCase();
   return flag === "true" || flag === "1";
 }
+
+/**
+ * Góc Đọc & Cảm Hứng (Dave Trott daily inspiration drops).
+ * Bật mặc định. Đặt CREATIVE_ENABLED=false (hoặc 0) để tạm ẩn.
+ */
+export function creativeEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const flag = env.CREATIVE_ENABLED?.trim().toLowerCase();
+  return flag !== "false" && flag !== "0";
+}
+
+export const CREATIVE_DISABLED_MESSAGE = "Góc Đọc & Cảm Hứng đang tạm ẩn.";
+

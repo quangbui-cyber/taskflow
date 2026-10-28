@@ -16,6 +16,7 @@ export type ActiveSection =
   | "leave"
   | "notifications"
   | "profile"
+  | "creative"
   | "hr"
   | "admin";
 
@@ -27,6 +28,7 @@ export type NavFlags = {
   showSuppliers: boolean;
   /** Admin hoặc người phụ trách nhân sự. */
   showHr: boolean;
+  showCreative?: boolean;
 };
 
 export type HubSection = {
@@ -95,6 +97,7 @@ export const HUBS: Hub[] = [
     sections: [
       { key: "leave", label: "Nghỉ phép", href: "/leave" },
       { key: "documents", label: "Tài liệu", href: "/documents" },
+      { key: "creative", label: "Góc Đọc", href: "/creative", visible: (flags) => flags.showCreative ?? true },
       { key: "recognition", label: "Kudos Wall", href: "/recognition" },
       { key: "profile", label: "Hồ sơ của tôi", href: "/profile" },
       {

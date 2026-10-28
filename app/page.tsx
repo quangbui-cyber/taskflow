@@ -20,7 +20,8 @@ import {
 import { prisma } from "@/lib/prisma";
 import { canCreateProjects, requireUser } from "@/lib/auth";
 import { daysUntil, isOverdue } from "@/lib/dates";
-import { meetingsEnabled } from "@/lib/features";
+import { creativeEnabled, meetingsEnabled } from "@/lib/features";
+import { isTextLine, type ArticleLine } from "@/lib/creative";
 import { getDailyInspiration } from "@/lib/daily-inspiration";
 import { formatLeaveDays, summarizeLeave, todayInVietnam } from "@/lib/leave";
 import { loadLeaveManagers } from "@/lib/leaveData";
@@ -46,6 +47,7 @@ import Avatar from "@/components/Avatar";
 import TaskListItem from "@/components/TaskListItem";
 import BirthdayWishButton from "@/components/BirthdayWishButton";
 import Confetti from "@/components/Confetti";
+import CreativeTodayCard from "@/components/creative/CreativeTodayCard";
 import { handwriting } from "@/app/fonts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -401,6 +403,30 @@ export default async function HomePage({
   const usedPercent =
     leave.quota > 0 ? Math.min(100, Math.round((leave.used / leave.quota) * 100)) : 0;
 
+  const showCreative = creativeEnabled();
+  const todayCreativeArticle = showCreative
+    ? await prisma.creativeArticle.findFirst({
+        where: {
+          status: "PUBLISHED",
+          titleVi: { not: null },
+        },
+        include: {
+          readers: {
+            where: { userId: user.id },
+            select: { likedAt: true, savedAt: true, readAt: true },
+          },
+        },
+        orderBy: [{ publishedDate: "desc" }, { createdAt: "desc" }],
+      })
+    : null;
+
+  const vnDay = new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    timeZone: "Asia/Ho_Chi_Minh",
+  }).format(now);
+  const isWeekend = vnDay === "Sat" || vnDay === "Sun";
+
+
   return (
     <div className="tf-shell">
       <Sidebar user={user} activeSection="home" />
@@ -558,6 +584,30 @@ export default async function HomePage({
 
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
             <div className="min-w-0 space-y-5">
+              {todayCreativeArticle && (
+                <CreativeTodayCard
+                  article={{
+                    id: todayCreativeArticle.id,
+                    slug: todayCreativeArticle.slug,
+                    originalTitle: todayCreativeArticle.originalTitle,
+                    titleVi: todayCreativeArticle.titleVi,
+                    wordCount: todayCreativeArticle.wordCount,
+                    publishedDate: todayCreativeArticle.publishedDate?.toISOString() ?? null,
+                    excerpt: (() => {
+                      const lines = (todayCreativeArticle.linesVi as unknown as ArticleLine[]) || [];
+                      return lines
+                        .filter(isTextLine)
+                        .map((l) => l.t.replace(/[*_]/g, ""))
+                        .slice(0, 3)
+                        .join(" ");
+                    })(),
+                    isSaved: Boolean(todayCreativeArticle.readers[0]?.savedAt),
+                    isRead: Boolean(todayCreativeArticle.readers[0]?.readAt),
+                  }}
+                  isWeekend={isWeekend}
+                />
+              )}
+
               <Card
                 title="Việc cần chú ý"
                 icon={CheckCircle2}

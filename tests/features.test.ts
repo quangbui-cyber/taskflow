@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { financeEnabled, meetingsEnabled } from "../lib/features";
+import { creativeEnabled, financeEnabled, meetingsEnabled } from "../lib/features";
 
 const env = (values: Record<string, string>) => values as unknown as NodeJS.ProcessEnv;
 
@@ -27,3 +27,13 @@ test("finance and suppliers stay hidden unless FINANCE_ENABLED is turned on", ()
   assert.equal(financeEnabled(env({ FINANCE_ENABLED: " TRUE " })), true);
   assert.equal(financeEnabled(env({ FINANCE_ENABLED: "1" })), true);
 });
+
+test("creative corner is on by default and can be turned off with CREATIVE_ENABLED", () => {
+  assert.equal(creativeEnabled(env({})), true);
+  assert.equal(creativeEnabled(env({ VERCEL_ENV: "production" })), true);
+  assert.equal(creativeEnabled(env({ CREATIVE_ENABLED: "true" })), true);
+  assert.equal(creativeEnabled(env({ CREATIVE_ENABLED: "false" })), false);
+  assert.equal(creativeEnabled(env({ CREATIVE_ENABLED: " FALSE " })), false);
+  assert.equal(creativeEnabled(env({ CREATIVE_ENABLED: "0" })), false);
+});
+

@@ -15,7 +15,7 @@ import Brand from "@/components/Brand";
 import Avatar from "@/components/Avatar";
 import MobileSidebarMenu from "@/components/MobileSidebarMenu";
 import { canViewRevenue } from "@/lib/auth";
-import { financeEnabled, meetingsEnabled } from "@/lib/features";
+import { creativeEnabled, financeEnabled, meetingsEnabled } from "@/lib/features";
 import {
   HUBS,
   hubForSection,
@@ -141,6 +141,7 @@ export default async function Sidebar({
     showRevenue: canViewRevenue(user.role ?? ""),
     showSuppliers: financeEnabled(),
     showHr: canManageHr(user),
+    showCreative: creativeEnabled(),
   };
   const activeHub = activeProjectId ? "projects" : hubForSection(activeSection)?.key;
   const isAdmin = user.role === "ADMIN";
