@@ -57,9 +57,13 @@ export async function extractKnowledgeSpans(bytes: Uint8Array, mimeType: string)
     const spans: ExtractedKnowledgeSpan[] = [];
     for (const sheet of workbook.worksheets.slice(0, 20)) {
       sheet.eachRow((row) => row.eachCell((cell) => {
-        if (spans.length >= 2000) return;
+        // Cached formula output is an observation, never an authoritative source value.
+        if (cell.type === ExcelJS.ValueType.Formula || cell.type === ExcelJS.ValueType.SharedFormula) return;
         const value = cell.text.trim();
-        if (value) spans.push({ text: value, spanKind: "CELL", sheetName: sheet.name, cellRange: cell.address });
+        if (value) {
+          if (spans.length >= 2000) throw new Error("Too many source cells for knowledge ingestion.");
+          spans.push({ text: value, spanKind: "CELL", sheetName: sheet.name, cellRange: cell.address });
+        }
       }));
     }
     return spans;
