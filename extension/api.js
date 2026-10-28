@@ -5,10 +5,30 @@
 export const DEFAULT_BASE_URL = "https://mycreative.vercel.app";
 
 export async function getConfig() {
-  const data = await chrome.storage.local.get(["mycreative_token", "mycreative_base_url"]);
+  // 1. Nếu có chrome.storage (popup, background, options)
+  if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+    const data = await chrome.storage.local.get(["mycreative_token", "mycreative_base_url"]);
+    return {
+      token: data.mycreative_token || "",
+      baseUrl: data.mycreative_base_url || DEFAULT_BASE_URL,
+    };
+  }
+
+  // 2. Nếu ở trong offscreen document (không có chrome.storage) -> hỏi background script
+  if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({ type: "GET_CONFIG" }, (res) => {
+        resolve({
+          token: res?.token || "",
+          baseUrl: res?.baseUrl || DEFAULT_BASE_URL,
+        });
+      });
+    });
+  }
+
   return {
-    token: data.mycreative_token || "",
-    baseUrl: data.mycreative_base_url || DEFAULT_BASE_URL,
+    token: "",
+    baseUrl: DEFAULT_BASE_URL,
   };
 }
 
@@ -98,8 +118,17 @@ export async function checkRecapQuota(meetingId, audioMeta = {}) {
 /**
  * Tải file ghi âm lên Vercel Blob và khởi chạy chép lời + tóm tắt biên bản
  */
-export async function uploadAndStartRecap({ meetingId, fileBlob, fileName, durationSeconds }) {
-  const { token, baseUrl } = await getConfig();
+export async function uploadAndStartRecap({
+  meetingId,
+  fileBlob,
+  fileName,
+  durationSeconds,
+  token: explicitToken,
+  baseUrl: explicitBaseUrl,
+}) {
+  const config = await getConfig();
+  const token = explicitToken || config.token;
+  const baseUrl = explicitBaseUrl || config.baseUrl;
   const safeName = fileName || `rec_${meetingId}_${Date.now()}.webm`;
   const pathname = `meetings/${meetingId}/recaps/${safeName}`;
 
@@ -128,13 +157,14 @@ export async function uploadAndStartRecap({ meetingId, fileBlob, fileName, durat
     throw new Error("Không lấy được token tải file lên kho lưu trữ.");
   }
 
-  // 3. Tải thẳng file lên Vercel Blob (bỏ qua giới hạn dung lượng Vercel serverless)
-  const blobUploadUrl = `https://blob.vercel-storage.com/${pathname}?token=${uploadTokenRes.clientToken}`;
-  const blobPutResponse = await fetch(blobUploadUrl, {
+  // 3. Tải thẳng file lên Vercel Blob API (chuẩn API của Vercel Blob client)
+  const blobApiUrl = `https://vercel.com/api/blob/?pathname=${encodeURIComponent(pathname)}`;
+  const blobPutResponse = await fetch(blobApiUrl, {
     method: "PUT",
     headers: {
-      "Content-Type": fileBlob.type || "audio/webm",
+      Authorization: `Bearer ${uploadTokenRes.clientToken}`,
       "x-api-version": "7",
+      "Content-Type": fileBlob.type || "audio/webm",
     },
     body: fileBlob,
   });
@@ -145,7 +175,7 @@ export async function uploadAndStartRecap({ meetingId, fileBlob, fileName, durat
   }
 
   const uploadedBlob = await blobPutResponse.json().catch(() => ({}));
-  const uploadedPathname = uploadedBlob.url || pathname;
+  const uploadedPathname = uploadedBlob.url || uploadedBlob.pathname || pathname;
 
   // 4. Kích hoạt xử lý chép lời & tóm tắt biên bản
   const recapRes = await apiRequest(`/api/ext/meetings/${meetingId}/recap`, {

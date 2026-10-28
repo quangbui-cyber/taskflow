@@ -7,6 +7,8 @@ let micAudioStream = null;
 let recordingStartTime = 0;
 let currentMeetingId = null;
 let currentFileName = null;
+let currentToken = null;
+let currentBaseUrl = null;
 let currentChunks = [];
 
 // Khởi tạo IndexedDB để lưu tạm các chunk âm thanh (phòng khi trình duyệt bị tắt đột ngột)
@@ -44,13 +46,15 @@ async function clearDbChunks() {
   }
 }
 
-async function startRecording({ streamId, meetingId, fileName }) {
+async function startRecording({ streamId, meetingId, fileName, token, baseUrl }) {
   if (mediaRecorder && mediaRecorder.state !== "inactive") {
     throw new Error("Đang có phiên ghi âm khác đang chạy.");
   }
 
   currentMeetingId = meetingId;
   currentFileName = fileName || `meet_${meetingId}_${Date.now()}.webm`;
+  currentToken = token || null;
+  currentBaseUrl = baseUrl || null;
   currentChunks = [];
   await clearDbChunks();
 
@@ -162,6 +166,8 @@ async function stopRecording() {
           fileBlob: fullBlob,
           fileName: currentFileName,
           durationSeconds,
+          token: currentToken,
+          baseUrl: currentBaseUrl,
         });
 
         await clearDbChunks();

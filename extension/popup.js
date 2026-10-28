@@ -291,6 +291,8 @@ btnStart.onclick = async () => {
       });
     }
 
+    const config = await getConfig();
+
     // 3. Gửi lệnh bắt đầu ghi âm sang offscreen
     await new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(
@@ -301,6 +303,8 @@ btnStart.onclick = async () => {
             streamId,
             meetingId: currentMeeting.id,
             fileName: `meet_${currentMeeting.meetCode || currentMeeting.id}_${Date.now()}.webm`,
+            token: config.token,
+            baseUrl: config.baseUrl,
           },
         },
         async (res) => {

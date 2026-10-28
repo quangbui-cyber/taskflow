@@ -60,6 +60,9 @@ function updateBadge(isRecording, text = "") {
 export async function startRecordingSession(tabId, meeting) {
   const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
   await ensureOffscreenDocument();
+  const data = await chrome.storage.local.get(["mycreative_token", "mycreative_base_url"]);
+  const token = data.mycreative_token || "";
+  const baseUrl = data.mycreative_base_url || "https://mycreative.vercel.app";
 
   return new Promise((resolve, reject) => {
     chrome.runtime.sendMessage(
@@ -70,6 +73,8 @@ export async function startRecordingSession(tabId, meeting) {
           streamId,
           meetingId: meeting.id,
           fileName: `meet_${meeting.meetCode || meeting.id}_${Date.now()}.webm`,
+          token,
+          baseUrl,
         },
       },
       async (response) => {
@@ -198,8 +203,18 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
   }
 });
 
-// Khi người dùng bấm rời khỏi cuộc họp
-chrome.runtime.onMessage.addListener((message, sender) => {
+// Cung cấp cấu hình cho offscreen document (nơi không truy cập được chrome.storage)
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "GET_CONFIG") {
+    chrome.storage.local.get(["mycreative_token", "mycreative_base_url"]).then((data) => {
+      sendResponse({
+        token: data.mycreative_token || "",
+        baseUrl: data.mycreative_base_url || "https://mycreative.vercel.app",
+      });
+    });
+    return true; // Phản hồi bất đồng bộ
+  }
+
   if (message.type === "MEET_LEFT") {
     getSession().then((session) => {
       if (session && sender.tab && session.tabId === sender.tab.id) {
@@ -209,5 +224,6 @@ chrome.runtime.onMessage.addListener((message, sender) => {
         }, 10000);
       }
     });
+    return false;
   }
 });

@@ -22,6 +22,8 @@
     "https://meet.google.com/*",
     "https://mycreative.vercel.app/*",
     "https://*.vercel.app/*",
+    "https://vercel.com/*",
+    "https://*.blob.vercel-storage.com/*",
     "http://localhost:3000/*"
   ],
   "background": {
