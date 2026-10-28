@@ -109,6 +109,15 @@ model User {
   submittedFinanceSheets             FinanceSheet[]                 @relation("FinanceSheetSubmitter")
   approvedFinanceSheets              FinanceSheet[]                 @relation("FinanceSheetApprover")
   financeApprovalEvents              FinanceApprovalEvent[]
+  aiSourceRevisionsCreated           AiSourceRevision[]             @relation("AiSourceRevisionCreator")
+  aiRuns                             AiRun[]                        @relation("AiRunActor")
+  aiCandidateReviews                 AiCandidateField[]             @relation("AiCandidateReviewer")
+  aiFindingAssignments               AiFinding[]                    @relation("AiFindingOwner")
+  aiFindingResolutions               AiFinding[]                    @relation("AiFindingResolver")
+  aiReviewEvents                     AiReviewEvent[]                @relation("AiReviewEventActor")
+  aiApplicationReceipts              AiApplicationReceipt[]        @relation("AiApplicationReceiptActor")
+  aiKnowledgePublications            AiKnowledgePublication[]      @relation("AiKnowledgePublisher")
+  aiMappingAdapters                  AiMappingAdapter[]             @relation("AiMappingConfirmer")
 
   @@index([isActive])
 }
@@ -212,6 +221,10 @@ model Project {
   excelIntakeOperationReceipts  ExcelIntakeOperationReceipt[]
   excelIntakeSourceEvidence     ExcelIntakeSourceEvidence[]
   excelIntakePreviewAuthorities ExcelIntakePreviewAuthority[]
+  aiSourceRevisions              AiSourceRevision[]
+  aiRuns                         AiRun[]
+  aiFindings                     AiFinding[]
+  aiMappingAdapters              AiMappingAdapter[]
 
   @@index([status, onProcessAt])
   @@index([status, completedAt])
@@ -2277,6 +2290,293 @@ model CostFlowHistory {
   createdAt DateTime @default(now())
 
   @@unique([projectId, version])
+}
+
+// Phase 15 AI records are append-only provenance and advisory state. They do
+// not own approval, cash, signing, task completion, or financial-close state.
+model AiSourceRevision {
+  id             String                   @id @default(cuid())
+  projectId      String?
+  project        Project?                 @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  scopeKey       String
+  originKind     String
+  originId       String
+  originVersion  String
+  sha256         String
+  filename       String
+  mimeType       String
+  byteLength     Int
+  authorityStatus String
+  snapshotBytes  Bytes?
+  createdById    String
+  createdBy      User                     @relation("AiSourceRevisionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt      DateTime                 @default(now())
+  spans          AiSourceSpan[]
+  runSources     AiRunSource[]
+  publications   AiKnowledgePublication[]
+
+  @@unique([originKind, originId, originVersion, sha256])
+  @@unique([id, scopeKey])
+  @@index([projectId, authorityStatus, createdAt])
+  @@index([sha256, createdAt])
+  @@index([createdById, createdAt])
+}
+
+model AiSourceSpan {
+  id               String             @id @default(cuid())
+  sourceRevisionId String
+  scopeKey         String
+  sourceRevision   AiSourceRevision   @relation(fields: [sourceRevisionId, scopeKey], references: [id, scopeKey], onDelete: Restrict)
+  spanKind         String
+  pageNumber       Int?
+  sheetName        String?
+  cellRange        String?
+  xmlPath          String?
+  textStart        Int?
+  textEnd          Int?
+  quote            String
+  normalizedText   String
+  contentHash      String
+  createdAt        DateTime           @default(now())
+  candidateFields  AiCandidateField[]
+  findings         AiFinding[]
+  knowledgeChunks  AiKnowledgeChunk[]
+
+  @@unique([sourceRevisionId, contentHash])
+  @@unique([id, scopeKey])
+  @@index([sourceRevisionId, spanKind])
+  @@index([contentHash])
+}
+
+model AiRun {
+  id               String                 @id @default(cuid())
+  projectId        String?
+  project          Project?               @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  actorId          String
+  actor            User                   @relation("AiRunActor", fields: [actorId], references: [id], onDelete: Restrict)
+  scopeKey         String
+  runType          String
+  status           String
+  sourceBundleHash String
+  parserVersion    String
+  pipelineVersion  String
+  promptVersion    String
+  configVersion    String
+  provider         String
+  model            String
+  scopeVersion     String
+  scopeHash        String
+  idempotencyKey   String
+  startedAt        DateTime               @default(now())
+  completedAt      DateTime?
+  failureCode      String?
+  inputTokens      Int?
+  outputTokens     Int?
+  latencyMs        Int?
+  createdAt        DateTime               @default(now())
+  sources          AiRunSource[]
+  candidateFields  AiCandidateField[]
+  findings         AiFinding[]
+  reviewEvents     AiReviewEvent[]
+  applicationReceipts AiApplicationReceipt[]
+  mappingAdapters  AiMappingAdapter[]
+
+  @@unique([scopeKey, runType, idempotencyKey])
+  @@unique([id, scopeKey])
+  @@index([projectId, status, createdAt])
+  @@index([actorId, status, createdAt])
+  @@index([sourceBundleHash, configVersion])
+  @@index([scopeHash, createdAt])
+}
+
+model AiRunSource {
+  id               String           @id @default(cuid())
+  runId            String
+  sourceRevisionId String
+  scopeKey         String
+  role             String
+  createdAt        DateTime         @default(now())
+  run              AiRun            @relation(fields: [runId, scopeKey], references: [id, scopeKey], onDelete: Restrict)
+  sourceRevision   AiSourceRevision @relation(fields: [sourceRevisionId, scopeKey], references: [id, scopeKey], onDelete: Restrict)
+
+  @@unique([runId, sourceRevisionId, role])
+  @@index([sourceRevisionId, role])
+  @@index([scopeKey, createdAt])
+}
+
+model AiCandidateField {
+  id             String        @id @default(cuid())
+  runId          String
+  scopeKey       String
+  run            AiRun         @relation(fields: [runId, scopeKey], references: [id, scopeKey], onDelete: Restrict)
+  rowKey         String
+  fieldKey       String
+  aiValue        String?
+  rawValue       String?
+  correctedValue String?
+  manualValue    String?
+  provenance     String
+  confidence     String?
+  sourceSpanId   String?
+  sourceSpan     AiSourceSpan? @relation(fields: [sourceSpanId, scopeKey], references: [id, scopeKey], onDelete: Restrict)
+  reviewStatus   String        @default("PENDING")
+  reviewedById   String?
+  reviewedBy     User?         @relation("AiCandidateReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+  reviewedAt     DateTime?
+  reason         String?
+  createdAt      DateTime      @default(now())
+  reviewEvents   AiReviewEvent[]
+
+  @@unique([runId, rowKey, fieldKey])
+  @@unique([id, scopeKey])
+  @@index([runId, reviewStatus, createdAt])
+  @@index([reviewedById, reviewedAt])
+  @@index([sourceSpanId])
+}
+
+model AiFinding {
+  id               String          @id @default(cuid())
+  runId            String
+  projectId        String
+  scopeKey         String
+  run              AiRun           @relation(fields: [runId, scopeKey], references: [id, scopeKey], onDelete: Restrict)
+  project          Project         @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  kind             String
+  ruleCode         String?
+  ruleVersion      String?
+  targetKind       String
+  targetId         String
+  sourceSpanId     String?
+  sourceSpan       AiSourceSpan?   @relation(fields: [sourceSpanId, scopeKey], references: [id, scopeKey], onDelete: Restrict)
+  ownerId          String?
+  owner            User?           @relation("AiFindingOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  route            String
+  status           String          @default("OPEN")
+  resolutionReason String?
+  resolvedById     String?
+  resolvedBy       User?           @relation("AiFindingResolver", fields: [resolvedById], references: [id], onDelete: Restrict)
+  resolvedAt       DateTime?
+  createdAt        DateTime        @default(now())
+  reviewEvents     AiReviewEvent[]
+
+  @@unique([id, scopeKey])
+  @@index([projectId, status, createdAt])
+  @@index([ownerId, status, createdAt])
+  @@index([runId, kind, createdAt])
+  @@index([sourceSpanId])
+}
+
+model AiReviewEvent {
+  id               String            @id @default(cuid())
+  runId            String
+  scopeKey         String
+  run              AiRun             @relation(fields: [runId, scopeKey], references: [id, scopeKey], onDelete: Restrict)
+  candidateFieldId String?
+  candidateField   AiCandidateField? @relation(fields: [candidateFieldId, scopeKey], references: [id, scopeKey], onDelete: Restrict)
+  findingId        String?
+  finding          AiFinding?        @relation(fields: [findingId, scopeKey], references: [id, scopeKey], onDelete: Restrict)
+  targetKind       String
+  targetId         String
+  action           String
+  beforeValue      Json?
+  afterValue       Json?
+  actorId          String
+  actor            User              @relation("AiReviewEventActor", fields: [actorId], references: [id], onDelete: Restrict)
+  reason           String
+  createdAt        DateTime          @default(now())
+
+  @@index([runId, targetKind, targetId, createdAt])
+  @@index([candidateFieldId, createdAt])
+  @@index([findingId, createdAt])
+  @@index([actorId, createdAt])
+}
+
+model AiApplicationReceipt {
+  id                  String   @id @default(cuid())
+  runId               String
+  scopeKey            String
+  run                 AiRun    @relation(fields: [runId, scopeKey], references: [id, scopeKey], onDelete: Restrict)
+  targetKind          String
+  targetId            String
+  targetVersionBefore String
+  targetVersionAfter  String
+  beforeHash          String
+  afterHash           String
+  fieldDecisions      Json
+  actorId             String
+  actor               User     @relation("AiApplicationReceiptActor", fields: [actorId], references: [id], onDelete: Restrict)
+  idempotencyKey      String
+  createdAt           DateTime @default(now())
+
+  @@unique([scopeKey, idempotencyKey])
+  @@index([runId, targetKind, targetId, createdAt])
+  @@index([actorId, createdAt])
+}
+
+model AiKnowledgePublication {
+  id                 String                    @id @default(cuid())
+  sourceRevisionId   String
+  scopeKey           String
+  sourceRevision     AiSourceRevision          @relation(fields: [sourceRevisionId, scopeKey], references: [id, scopeKey], onDelete: Restrict)
+  publicationVersion Int
+  status             String
+  effectiveFrom      DateTime?
+  effectiveTo        DateTime?
+  publishedById      String
+  publishedBy        User                      @relation("AiKnowledgePublisher", fields: [publishedById], references: [id], onDelete: Restrict)
+  publishedAt        DateTime?
+  supersedesId       String?                   @unique
+  supersedes         AiKnowledgePublication?   @relation("AiKnowledgePublicationReplacement", fields: [supersedesId], references: [id], onDelete: Restrict)
+  replacedBy         AiKnowledgePublication?   @relation("AiKnowledgePublicationReplacement")
+  createdAt          DateTime                  @default(now())
+  chunks             AiKnowledgeChunk[]
+
+  @@unique([sourceRevisionId, publicationVersion])
+  @@unique([id, scopeKey])
+  @@index([status, effectiveFrom, effectiveTo])
+  @@index([publishedById, publishedAt])
+}
+
+model AiKnowledgeChunk {
+  id             String                 @id @default(cuid())
+  publicationId  String
+  sourceSpanId   String
+  scopeKey       String
+  publication    AiKnowledgePublication @relation(fields: [publicationId, scopeKey], references: [id, scopeKey], onDelete: Restrict)
+  sourceSpan     AiSourceSpan            @relation(fields: [sourceSpanId, scopeKey], references: [id, scopeKey], onDelete: Restrict)
+  chunkIndex     Int
+  normalizedText String
+  contentHash    String
+  createdAt      DateTime               @default(now())
+
+  @@unique([publicationId, chunkIndex])
+  @@index([sourceSpanId])
+  @@index([contentHash])
+}
+
+model AiMappingAdapter {
+  id                   String            @id @default(cuid())
+  projectId            String?
+  project              Project?          @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  scopeKey             String
+  structureFingerprint String
+  adapterVersion       String
+  mapping              Json
+  confirmedRunId       String
+  confirmedRun         AiRun             @relation(fields: [confirmedRunId, scopeKey], references: [id, scopeKey], onDelete: Restrict)
+  confirmedById        String
+  confirmedBy          User              @relation("AiMappingConfirmer", fields: [confirmedById], references: [id], onDelete: Restrict)
+  status               String            @default("ACTIVE")
+  supersedesId         String?           @unique
+  supersedes           AiMappingAdapter? @relation("AiMappingAdapterReplacement", fields: [supersedesId], references: [id], onDelete: Restrict)
+  replacedBy           AiMappingAdapter? @relation("AiMappingAdapterReplacement")
+  createdAt            DateTime          @default(now())
+
+  @@unique([structureFingerprint, adapterVersion])
+  @@unique([id, scopeKey])
+  @@index([projectId, status, createdAt])
+  @@index([confirmedById, createdAt])
+  @@index([confirmedRunId])
 }
 
 // Bộ hồ sơ dùng chung toàn công ty (hồ sơ mẫu, hồ sơ thanh toán...)
