@@ -2372,6 +2372,8 @@ model AiRun {
   cancelledAt      DateTime?
   completedAt      DateTime?
   failureCode      String?
+  outcomeCode      String?
+  reviewStatus     String                 @default("PENDING")
   inputTokens      Int?
   outputTokens     Int?
   latencyMs        Int?

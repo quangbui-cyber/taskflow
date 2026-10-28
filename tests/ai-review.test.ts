@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { buildDeterministicCandidates } from "../lib/ai/extraction/documentExtraction";
+import { validateAiFieldReview } from "../lib/ai/review/reviewService";
 
 test("PO fields come from exact parser spans without invoking a model", async () => {
   let calls = 0;
@@ -17,6 +18,19 @@ test("PO fields come from exact parser spans without invoking a model", async ()
   assert.equal(number?.value, "C-10003769550");
   assert.equal(number?.sourceRevisionId, "revision-po");
   assert.equal(number?.locator.textStart !== undefined, true);
+});
+
+test("critical correction and manual entry require reason and canonical money", () => {
+  assert.throws(() => validateAiFieldReview({ fieldKey: "grossAmount", aiValue: "1080",
+    choice: "CORRECT", value: "1090", reason: "" }));
+  assert.throws(() => validateAiFieldReview({ fieldKey: "grossAmount", aiValue: "1080",
+    choice: "MANUAL", value: "1,090", reason: "Checked original" }));
+  const reviewed = validateAiFieldReview({ fieldKey: "grossAmount", aiValue: "1080",
+    choice: "CORRECT", value: "1090", reason: "Checked original" });
+  assert.equal(reviewed.value, "1090");
+  assert.equal(reviewed.choice, "CORRECT");
+  assert.equal(validateAiFieldReview({ fieldKey: "grossAmount", aiValue: "1080",
+    choice: "ACCEPT_AI" }).value, "1080");
 });
 
 test("VAT XML/PDF pair yields one identity, and unsupported values remain incomplete", async () => {
