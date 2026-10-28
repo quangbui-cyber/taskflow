@@ -212,61 +212,138 @@ const pick = (row: Map<string, unknown> | undefined, column: string) =>
   row?.get(headerKey(column));
 
 /**
- * File "Danh sách nhân viên" xuất từ phần mềm HR: sheet "Tổng quan" (tên, email,
- * giới tính, ngày sinh, ngày bắt đầu, điện thoại), "Legals" (CCCD, địa chỉ) và
- * "Nhân viên" (địa chỉ chi tiết). Ghép các sheet theo Mã nhân sự.
+ * Đọc file Excel hồ sơ nhân sự. Hỗ trợ 2 định dạng:
+ * 1. File mẫu tải từ app (hoặc bảng tổng hợp 1 sheet): có các cột "Họ và tên", "Email", "Số CCCD", "Ngày sinh"...
+ * 2. File "Danh sách nhân viên" xuất từ phần mềm HR: ghép các sheet "Tổng quan", "Legals" và "Nhân viên" theo Mã nhân sự.
  * Không đọc sheet Lương (thông tin ngân hàng, lương).
  */
 export function parseHrWorkbook(workbook: Workbook): HrImportRow[] {
-  const overview = readSheet(findSheet(workbook, "Tổng quan"));
-  if (overview.length === 0 || !overview.some((row) => pick(row, "Tên nhân sự"))) {
-    throw new HrImportError(
-      'Không tìm thấy sheet "Tổng quan" có cột "Tên nhân sự". Hãy dùng file xuất danh sách nhân viên từ phần mềm HR.'
-    );
+  // 1. Kiểm tra định dạng nhiều sheet xuất từ phần mềm HR ("Tổng quan" + "Legals" + "Nhân viên")
+  const overviewSheet = findSheet(workbook, "Tổng quan");
+  const overview = readSheet(overviewSheet);
+  const isMultiSheetHr = overview.length > 0 && overview.some((row) => pick(row, "Tên nhân sự"));
+
+  if (isMultiSheetHr) {
+    const byCode = (rows: Array<Map<string, unknown>>) =>
+      new Map(
+        rows
+          .map((row) => [clean(pick(row, "Mã nhân sự")), row] as const)
+          .filter(([code]) => code)
+      );
+    const legals = byCode(readSheet(findSheet(workbook, "Legals")));
+    const details = byCode(readSheet(findSheet(workbook, "Nhân viên")));
+
+    return overview.flatMap((row) => {
+      const fullName = normalizePersonName(pick(row, "Tên nhân sự"));
+      if (!fullName) return [];
+      const employeeCode = clean(pick(row, "Mã nhân sự"));
+      const legal = legals.get(employeeCode);
+      const detail = details.get(employeeCode);
+      const status = clean(pick(row, "Trạng thái"));
+      const email = clean(pick(row, "Địa chỉ email") ?? pick(detail, "Địa chỉ email")).toLowerCase();
+      const address =
+        joinAddress([
+          pick(detail, "Địa chỉ"),
+          pick(detail, "Địa chỉ xã/phường"),
+          pick(detail, "Địa chỉ tỉnh/tp"),
+        ]) || clean(pick(legal, "Địa chỉ"));
+
+      return [
+        {
+          employeeCode: employeeCode.slice(0, FIELD_LIMITS.employeeCode),
+          fullName: fullName.slice(0, FIELD_LIMITS.fullName),
+          email,
+          status,
+          hasLeft:
+            status.toLocaleLowerCase("vi").includes("nghỉ việc") ||
+            parseHrDate(pick(row, "Ngày nghỉ việc")) !== null,
+          dateOfBirth: parseHrDate(pick(row, "Ngày sinh")),
+          gender: parseGender(pick(row, "Giới tính")),
+          idNumber: normalizeIdNumber(pick(legal, "Số CMT/Căn cước")).slice(0, FIELD_LIMITS.idNumber),
+          address: address.slice(0, FIELD_LIMITS.address),
+          phone: normalizePhone(pick(row, "Điện thoại") ?? pick(detail, "Điện thoại")).slice(
+            0,
+            FIELD_LIMITS.phone
+          ),
+          startDate: parseHrDate(pick(row, "Ngày bắt đầu")),
+        },
+      ];
+    });
   }
-  const byCode = (rows: Array<Map<string, unknown>>) =>
-    new Map(
-      rows
-        .map((row) => [clean(pick(row, "Mã nhân sự")), row] as const)
-        .filter(([code]) => code)
-    );
-  const legals = byCode(readSheet(findSheet(workbook, "Legals")));
-  const details = byCode(readSheet(findSheet(workbook, "Nhân viên")));
 
-  return overview.flatMap((row) => {
-    const fullName = normalizePersonName(pick(row, "Tên nhân sự"));
-    if (!fullName) return [];
-    const employeeCode = clean(pick(row, "Mã nhân sự"));
-    const legal = legals.get(employeeCode);
-    const detail = details.get(employeeCode);
-    const status = clean(pick(row, "Trạng thái"));
-    const email = clean(pick(row, "Địa chỉ email") ?? pick(detail, "Địa chỉ email")).toLowerCase();
-    const address =
-      joinAddress([
-        pick(detail, "Địa chỉ"),
-        pick(detail, "Địa chỉ xã/phường"),
-        pick(detail, "Địa chỉ tỉnh/tp"),
-      ]) || clean(pick(legal, "Địa chỉ"));
+  // 2. Kiểm tra định dạng bảng đơn (1 sheet): sheet "Hồ sơ nhân sự", "Nhân sự", hoặc sheet đầu tiên
+  const singleSheet =
+    findSheet(workbook, "Hồ sơ nhân sự") ??
+    findSheet(workbook, "Nhân sự") ??
+    workbook.worksheets[0];
 
-    return [
-      {
-        employeeCode: employeeCode.slice(0, FIELD_LIMITS.employeeCode),
-        fullName: fullName.slice(0, FIELD_LIMITS.fullName),
-        email,
-        status,
-        hasLeft:
-          status.toLocaleLowerCase("vi").includes("nghỉ việc") ||
-          parseHrDate(pick(row, "Ngày nghỉ việc")) !== null,
-        dateOfBirth: parseHrDate(pick(row, "Ngày sinh")),
-        gender: parseGender(pick(row, "Giới tính")),
-        idNumber: normalizeIdNumber(pick(legal, "Số CMT/Căn cước")).slice(0, FIELD_LIMITS.idNumber),
-        address: address.slice(0, FIELD_LIMITS.address),
-        phone: normalizePhone(pick(row, "Điện thoại") ?? pick(detail, "Điện thoại")).slice(
-          0,
-          FIELD_LIMITS.phone
-        ),
-        startDate: parseHrDate(pick(row, "Ngày bắt đầu")),
-      },
-    ];
-  });
+  const singleRows = readSheet(singleSheet);
+  const hasEmail = singleRows.some(
+    (row) => pick(row, "Email") !== undefined || pick(row, "Địa chỉ email") !== undefined
+  );
+  const hasName = singleRows.some(
+    (row) =>
+      pick(row, "Họ và tên") !== undefined ||
+      pick(row, "Họ tên") !== undefined ||
+      pick(row, "Tên nhân sự") !== undefined ||
+      pick(row, "Tên") !== undefined
+  );
+
+  if (singleRows.length > 0 && hasEmail && hasName) {
+    return singleRows.flatMap((row) => {
+      const fullName = normalizePersonName(
+        pick(row, "Họ và tên") ??
+        pick(row, "Họ tên") ??
+        pick(row, "Tên nhân sự") ??
+        pick(row, "Tên")
+      );
+      const email = clean(pick(row, "Email") ?? pick(row, "Địa chỉ email")).toLowerCase();
+      if (!fullName && !email) return [];
+
+      const status = clean(pick(row, "Trạng thái"));
+      const employeeCode = clean(
+        pick(row, "Mã nhân sự") ??
+        pick(row, "Mã NV") ??
+        pick(row, "Mã")
+      );
+      const idNumberRaw =
+        pick(row, "Số CCCD") ??
+        pick(row, "CCCD") ??
+        pick(row, "Số CMT/Căn cước") ??
+        pick(row, "Số CMND") ??
+        pick(row, "CMND");
+      const phoneRaw =
+        pick(row, "Điện thoại") ??
+        pick(row, "Số điện thoại") ??
+        pick(row, "SĐT") ??
+        pick(row, "SDT");
+      const startDateRaw =
+        pick(row, "Ngày bắt đầu làm việc") ??
+        pick(row, "Ngày bắt đầu") ??
+        pick(row, "Bắt đầu làm") ??
+        pick(row, "Ngày vào làm");
+
+      return [
+        {
+          employeeCode: employeeCode.slice(0, FIELD_LIMITS.employeeCode),
+          fullName: fullName.slice(0, FIELD_LIMITS.fullName),
+          email,
+          status,
+          hasLeft:
+            status.toLocaleLowerCase("vi").includes("nghỉ việc") ||
+            parseHrDate(pick(row, "Ngày nghỉ việc")) !== null,
+          dateOfBirth: parseHrDate(pick(row, "Ngày sinh")),
+          gender: parseGender(pick(row, "Giới tính")),
+          idNumber: normalizeIdNumber(idNumberRaw).slice(0, FIELD_LIMITS.idNumber),
+          address: clean(pick(row, "Địa chỉ")).slice(0, FIELD_LIMITS.address),
+          phone: normalizePhone(phoneRaw).slice(0, FIELD_LIMITS.phone),
+          startDate: parseHrDate(startDateRaw),
+        },
+      ];
+    });
+  }
+
+  throw new HrImportError(
+    'Không nhận diện được định dạng file Excel. File cần có các cột: "Họ và tên", "Email", "Số CCCD", "Ngày sinh"... hoặc là file xuất từ phần mềm HR.'
+  );
 }

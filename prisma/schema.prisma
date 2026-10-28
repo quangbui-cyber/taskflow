@@ -592,17 +592,20 @@ model DocumentSet {
 }
 
 model DocumentFile {
-  id         String      @id @default(cuid())
-  setId      String
-  set        DocumentSet @relation(fields: [setId], references: [id], onDelete: Cascade)
-  title      String // tên hiển thị do người tải đặt
-  fileName   String // tên file gốc, giữ phần mở rộng khi tải về
-  mimeType   String
-  size       Int
-  data       Bytes
-  uploaderId String?
-  uploader   User?       @relation("DocumentFileUploader", fields: [uploaderId], references: [id], onDelete: SetNull)
-  createdAt  DateTime    @default(now())
+  id                 String      @id @default(cuid())
+  setId              String
+  set                DocumentSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  title              String // tên hiển thị do người tải đặt
+  fileName           String // tên file gốc, giữ phần mở rộng khi tải về
+  mimeType           String
+  size               Int
+  data               Bytes?
+  driveFileId        String?
+  driveUrl           String? // Link Google Drive xem nhanh (nếu nhập tay hoặc tuỳ chỉnh)
+  driveSyncStartedAt DateTime?
+  uploaderId         String?
+  uploader           User?       @relation("DocumentFileUploader", fields: [uploaderId], references: [id], onDelete: SetNull)
+  createdAt          DateTime    @default(now())
 
   @@index([setId, createdAt])
   @@index([uploaderId])

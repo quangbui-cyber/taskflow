@@ -28,6 +28,8 @@ import {
   renameDocumentFile,
   renameDocumentLink,
   renameDocumentSet,
+  updateDocumentFile,
+  updateDocumentLink,
   type DocumentState,
 } from "@/app/actions/documents";
 import {
@@ -149,6 +151,79 @@ function InlineRename({
   );
 }
 
+function EditDocumentItem({
+  item,
+  pending,
+  onSaveFile,
+  onSaveLink,
+  onCancel,
+}: {
+  item: DocumentFileDTO;
+  pending: boolean;
+  onSaveFile: (title: string, driveUrl: string) => void;
+  onSaveLink: (title: string, url: string) => void;
+  onCancel: () => void;
+}) {
+  const [title, setTitle] = useState(item.title);
+  const [url, setUrl] = useState(item.url ?? "");
+
+  return (
+    <form
+      className="flex flex-1 flex-col gap-2 rounded-lg border border-zinc-200 bg-zinc-50/90 p-2.5 sm:flex-row sm:items-end"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (item.kind === "link") {
+          onSaveLink(title, url);
+        } else {
+          onSaveFile(title, url);
+        }
+      }}
+    >
+      <label className="block min-w-0 flex-1">
+        <span className="text-[11px] font-medium text-zinc-500">Tên tài liệu</span>
+        <input
+          autoFocus
+          required
+          maxLength={120}
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="tf-field mt-1 !min-h-8 !py-1 text-xs"
+        />
+      </label>
+      <label className="block min-w-0 flex-1">
+        <span className="text-[11px] font-medium text-zinc-500">
+          {item.kind === "link" ? "Link" : "Link Google Drive (để mở xem nhanh)"}
+        </span>
+        <input
+          maxLength={2000}
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder={item.kind === "link" ? "https://..." : "https://drive.google.com/..."}
+          className="tf-field mt-1 !min-h-8 !py-1 text-xs"
+        />
+      </label>
+      <div className="flex gap-1.5 pt-1 sm:pt-0">
+        <button
+          type="submit"
+          disabled={pending}
+          className="tf-button-primary !min-h-8 px-2.5 text-xs"
+        >
+          {pending ? <span className="tf-spinner" aria-hidden="true" /> : <Check size={14} aria-hidden="true" />}
+          Lưu
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={pending}
+          className="tf-button-secondary !min-h-8 px-2.5 text-xs"
+        >
+          Huỷ
+        </button>
+      </div>
+    </form>
+  );
+}
+
 function DocumentSetPanel({
   set,
   canManage,
@@ -164,8 +239,12 @@ function DocumentSetPanel({
   const [open, setOpen] = useState(false);
   const [renamingSet, setRenamingSet] = useState(false);
   const [renamingFileId, setRenamingFileId] = useState<string | null>(null);
-  // File đã chọn nhưng chưa tải lên: chờ người dùng đặt tên.
-  const [draft, setDraft] = useState<{ file: File; title: string } | null>(null);
+  // File đã chọn nhưng chưa tải lên: chờ người dùng đặt tên và link Drive (tuỳ chọn).
+  const [draft, setDraft] = useState<{
+    file: File;
+    title: string;
+    driveUrl: string;
+  } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [linkDraft, setLinkDraft] = useState<{
@@ -195,6 +274,9 @@ function DocumentSetPanel({
     const body = new FormData();
     body.append("file", draft.file);
     body.append("title", draft.title);
+    if (draft.driveUrl.trim()) {
+      body.append("driveUrl", draft.driveUrl.trim());
+    }
     try {
       const response = await fetch(`/api/documents/sets/${set.id}/files`, {
         method: "POST",
@@ -306,7 +388,11 @@ function DocumentSetPanel({
               onChange={(event) => {
                 const file = event.target.files?.[0];
                 if (file) {
-                  setDraft({ file, title: titleFromFileName(file.name) });
+                  setDraft({
+                    file,
+                    title: titleFromFileName(file.name),
+                    driveUrl: "",
+                  });
                   setOpen(true);
                 }
               }}
@@ -364,13 +450,13 @@ function DocumentSetPanel({
 
       {draft && (
         <form
-          className="flex flex-wrap items-end gap-3 border-b border-zinc-100 bg-blue-50/50 px-5 py-3"
+          className="grid items-end gap-3 border-b border-zinc-100 bg-blue-50/50 px-5 py-3 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1.4fr)_auto]"
           onSubmit={(event) => {
             event.preventDefault();
             void uploadDraft();
           }}
         >
-          <label className="block min-w-0 flex-1 basis-64">
+          <label className="block min-w-0">
             <span className="text-xs font-medium text-zinc-500">
               Đặt tên cho tài liệu
             </span>
@@ -380,7 +466,7 @@ function DocumentSetPanel({
               maxLength={120}
               value={draft.title}
               onChange={(event) =>
-                setDraft({ file: draft.file, title: event.target.value })
+                setDraft({ ...draft, title: event.target.value })
               }
               className="tf-field mt-1.5"
             />
@@ -388,7 +474,21 @@ function DocumentSetPanel({
               File: {draft.file.name} · {formatProjectFileSize(draft.file.size)}
             </span>
           </label>
-          <div className="flex gap-2 pb-5">
+          <label className="block min-w-0">
+            <span className="text-xs font-medium text-zinc-500">
+              Link Google Drive (tuỳ chọn - để xem nhanh)
+            </span>
+            <input
+              maxLength={2000}
+              value={draft.driveUrl}
+              onChange={(event) =>
+                setDraft({ ...draft, driveUrl: event.target.value })
+              }
+              placeholder="https://drive.google.com/..."
+              className="tf-field mt-1.5"
+            />
+          </label>
+          <div className="flex gap-2">
             <button
               type="submit"
               className="tf-button-primary"
@@ -495,17 +595,19 @@ function DocumentSetPanel({
                 <FileTypeIcon mimeType={file.mimeType} />
               )}
               {renamingFileId === file.id ? (
-                <InlineRename
-                  initial={file.title}
-                  ariaLabel="Tên tài liệu"
+                <EditDocumentItem
+                  item={file}
                   pending={pending}
                   onCancel={() => setRenamingFileId(null)}
-                  onSave={(title) =>
+                  onSaveFile={(title, driveUrl) =>
                     runAction(
-                      () =>
-                        file.kind === "link"
-                          ? renameDocumentLink(file.id, title)
-                          : renameDocumentFile(file.id, title),
+                      () => updateDocumentFile(file.id, title, driveUrl),
+                      () => setRenamingFileId(null)
+                    )
+                  }
+                  onSaveLink={(title, url) =>
+                    runAction(
+                      () => updateDocumentLink(file.id, title, url),
                       () => setRenamingFileId(null)
                     )
                   }
@@ -536,14 +638,26 @@ function DocumentSetPanel({
                       <ExternalLink size={16} aria-hidden="true" />
                     </a>
                   ) : (
-                    <a
-                      href={`/api/documents/files/${file.id}`}
-                      className="tf-icon-button shrink-0"
-                      title="Tải về"
-                      aria-label={`Tải về ${file.title}`}
-                    >
-                      <Download size={16} aria-hidden="true" />
-                    </a>
+                    <>
+                      <a
+                        href={file.url || `/api/documents/files/${file.id}?open=1`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="tf-icon-button shrink-0 text-emerald-600 hover:text-emerald-700"
+                        title="Xem trên Google Drive"
+                        aria-label={`Xem ${file.title} trên Google Drive`}
+                      >
+                        <ExternalLink size={16} aria-hidden="true" />
+                      </a>
+                      <a
+                        href={`/api/documents/files/${file.id}`}
+                        className="tf-icon-button shrink-0"
+                        title="Tải về"
+                        aria-label={`Tải về ${file.title}`}
+                      >
+                        <Download size={16} aria-hidden="true" />
+                      </a>
+                    </>
                   )}
                   {canManage && (
                     <>
@@ -551,8 +665,8 @@ function DocumentSetPanel({
                         type="button"
                         className="tf-icon-button shrink-0"
                         onClick={() => setRenamingFileId(file.id)}
-                        title="Đổi tên tài liệu"
-                        aria-label={`Đổi tên ${file.title}`}
+                        title="Sửa tên / Link Drive"
+                        aria-label={`Sửa ${file.title}`}
                       >
                         <Pencil size={15} aria-hidden="true" />
                       </button>

@@ -32,6 +32,7 @@ const SYNC_STALE_MS = 10 * 60 * 1000;
 const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
 export const DOCS_FOLDER_NAME = "Tài liệu";
 export const TASKS_FOLDER_NAME = "Công việc";
+export const COMPANY_DOCS_FOLDER_NAME = "Tài liệu công ty";
 
 export const driveFolderKeys = {
   year: (year: number) => `year:${year}`,
@@ -39,6 +40,8 @@ export const driveFolderKeys = {
   docs: (projectId: string) => `project:${projectId}:docs`,
   tasks: (projectId: string) => `project:${projectId}:tasks`,
   task: (taskId: string) => `task:${taskId}`,
+  companyDocs: () => "company:docs",
+  docSet: (setId: string) => `docset:${setId}`,
 };
 
 /** Năm của dự án theo giờ Việt Nam (thư mục năm). */
@@ -90,6 +93,19 @@ export async function taskFolder(taskId: string) {
   const root = await projectFolder(task.projectId);
   const tasksId = await ensureFolder(driveFolderKeys.tasks(task.projectId), TASKS_FOLDER_NAME, root);
   return ensureFolder(driveFolderKeys.task(task.id), task.title, tasksId);
+}
+
+export async function companyDocsFolder() {
+  return ensureFolder(driveFolderKeys.companyDocs(), COMPANY_DOCS_FOLDER_NAME, sharedDriveId());
+}
+
+export async function documentSetFolder(setId: string) {
+  const set = await prisma.documentSet.findUniqueOrThrow({
+    where: { id: setId },
+    select: { id: true, name: true },
+  });
+  const root = await companyDocsFolder();
+  return ensureFolder(driveFolderKeys.docSet(set.id), set.name, root);
 }
 
 // ---------- Đẩy file lên Drive ----------
@@ -177,6 +193,37 @@ async function pushTaskFile(id: string): Promise<boolean> {
   }
 }
 
+export async function pushDocumentFile(id: string): Promise<boolean> {
+  const claimedAt = new Date();
+  const claim = await prisma.documentFile.updateMany({ where: { id, ...pendingWhere() }, data: { driveSyncStartedAt: claimedAt } });
+  if (claim.count === 0) return false;
+  try {
+    const file = await prisma.documentFile.findUniqueOrThrow({
+      where: { id },
+      select: { id: true, setId: true, fileName: true, mimeType: true, data: true, driveFileId: true },
+    });
+    if (!file.data) {
+      await prisma.documentFile.updateMany({ where: { id, driveSyncStartedAt: claimedAt }, data: { driveSyncStartedAt: null } });
+      return false;
+    }
+    const driveFileId = await uploadDriveFile({
+      name: file.fileName,
+      mimeType: file.mimeType,
+      data: file.data,
+      fileId: file.driveFileId ?? undefined,
+      parentId: file.driveFileId ? undefined : await documentSetFolder(file.setId),
+    });
+    const done = await prisma.documentFile.updateMany({
+      where: { id, driveSyncStartedAt: claimedAt },
+      data: { driveFileId, data: null, driveSyncStartedAt: null },
+    });
+    return done.count > 0;
+  } catch (error) {
+    await prisma.documentFile.updateMany({ where: { id, driveSyncStartedAt: claimedAt }, data: { driveSyncStartedAt: null } });
+    throw error;
+  }
+}
+
 /**
  * Đẩy các file còn nằm trong database lên Drive. Gọi sau mỗi lần tải lên (trong `after`),
  * trong cron hằng đêm và từ nút "Chuyển file cũ" của Admin. Không bao giờ ném lỗi ra ngoài.
@@ -199,10 +246,19 @@ export async function pushPendingFiles(options: { projectId?: string; limit?: nu
     orderBy: { createdAt: "asc" },
     take: Math.max(0, limit - projectFiles.length),
   });
+  const docFiles = options.projectId
+    ? []
+    : await prisma.documentFile.findMany({
+        where: pendingWhere(),
+        select: { id: true },
+        orderBy: { createdAt: "asc" },
+        take: Math.max(0, limit - projectFiles.length - taskFiles.length),
+      });
 
   const jobs = [
-    ...projectFiles.map((row) => ({ projectId: row.projectId, run: () => pushProjectFile(row.id) })),
-    ...taskFiles.map((row) => ({ projectId: row.task.projectId, run: () => pushTaskFile(row.id) })),
+    ...projectFiles.map((row) => ({ projectId: row.projectId as string | null, run: () => pushProjectFile(row.id) })),
+    ...taskFiles.map((row) => ({ projectId: row.task.projectId as string | null, run: () => pushTaskFile(row.id) })),
+    ...docFiles.map((row) => ({ projectId: null as string | null, run: () => pushDocumentFile(row.id) })),
   ];
   // Dự án có file vừa lên Drive (thư mục có thể mới tạo) thì share quyền xem ngay.
   const touchedProjects = new Set<string>();
@@ -212,7 +268,7 @@ export async function pushPendingFiles(options: { projectId?: string; limit?: nu
     try {
       if (await job.run()) {
         result.pushed += 1;
-        touchedProjects.add(job.projectId);
+        if (job.projectId) touchedProjects.add(job.projectId);
       }
     } catch (error) {
       if (error instanceof DriveNotConnectedError) return { ...result, notConnected: true };
@@ -227,15 +283,17 @@ export async function pushPendingFiles(options: { projectId?: string; limit?: nu
 }
 
 export async function pendingDriveFileCounts() {
-  const [projectFiles, taskFiles, onDrive] = await Promise.all([
+  const [projectFiles, taskFiles, docFiles, onDrive] = await Promise.all([
     prisma.projectFile.count({ where: { data: { not: null } } }),
     prisma.taskFile.count({ where: { data: { not: null } } }),
+    prisma.documentFile.count({ where: { data: { not: null } } }),
     Promise.all([
       prisma.projectFile.count({ where: { driveFileId: { not: null }, data: null } }),
       prisma.taskFile.count({ where: { driveFileId: { not: null }, data: null } }),
-    ]).then(([a, b]) => a + b),
+      prisma.documentFile.count({ where: { driveFileId: { not: null }, data: null } }),
+    ]).then(([a, b, c]) => a + b + c),
   ]);
-  return { pending: projectFiles + taskFiles, onDrive };
+  return { pending: projectFiles + taskFiles + docFiles, onDrive };
 }
 
 // ---------- Xoá ----------
@@ -283,6 +341,14 @@ export async function trashTaskFolderSafe(taskId: string) {
     await trashFolderKeys([driveFolderKeys.task(taskId)]);
   } catch (error) {
     console.error("Drive task cleanup failed", error);
+  }
+}
+
+export async function trashDocumentSetFolderSafe(setId: string) {
+  try {
+    await trashFolderKeys([driveFolderKeys.docSet(setId)]);
+  } catch (error) {
+    console.error("Drive document set cleanup failed", error);
   }
 }
 

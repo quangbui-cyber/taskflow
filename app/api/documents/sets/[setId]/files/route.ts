@@ -1,11 +1,14 @@
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
   canManageDocuments,
   normalizeDocumentName,
+  normalizeDocumentUrl,
   titleFromFileName,
 } from "@/lib/documents";
+import { pushPendingFiles } from "@/lib/driveStorage";
 import { readProjectUpload } from "@/lib/projectFiles";
 
 export const runtime = "nodejs";
@@ -52,6 +55,7 @@ export async function POST(
     const title =
       normalizeDocumentName(formData.get("title")) ??
       titleFromFileName(upload.name);
+    const driveUrl = normalizeDocumentUrl(formData.get("driveUrl"));
 
     const file = await prisma.documentFile.create({
       data: {
@@ -61,11 +65,13 @@ export async function POST(
         mimeType: upload.mimeType,
         size: upload.size,
         data: upload.data,
+        driveUrl,
         uploaderId: user.id,
       },
       select: { id: true },
     });
 
+    after(() => pushPendingFiles().catch(() => undefined));
     revalidatePath("/documents");
     return Response.json({ file });
   } catch (error) {

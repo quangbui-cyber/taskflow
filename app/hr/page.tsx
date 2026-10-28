@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { IdCard } from "lucide-react";
+import { FileDown, IdCard } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canManageHr, toDateInput } from "@/lib/employeeRecords";
@@ -76,11 +76,21 @@ export default async function HrPage() {
                 <h1 className="tf-page-title">Hồ sơ nhân sự</h1>
               </div>
               <p className="tf-page-subtitle">
-                {withRecord}/{rows.length} nhân sự đã có hồ sơ · Chỉ Admin và người phụ trách
-                nhân sự xem được trang này.
+                {withRecord}/{rows.length} nhân sự đã có hồ sơ
               </p>
             </div>
-            <HrImportButton />
+            <div className="flex flex-wrap items-center gap-2.5">
+              <a
+                href="/api/hr/export"
+                download
+                className="tf-button-secondary !min-h-10 text-sm"
+                title="Tải danh sách hồ sơ nhân sự hiện tại về máy dạng Excel để xem hoặc điền thông tin"
+              >
+                <FileDown size={17} aria-hidden="true" />
+                Tải file Excel hiện tại
+              </a>
+              <HrImportButton />
+            </div>
           </div>
 
           {isAdmin && (

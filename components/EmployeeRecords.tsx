@@ -1,8 +1,9 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { FileUp, Pencil, Plus, Search, TriangleAlert, X } from "lucide-react";
+import { FileDown, FileUp, Pencil, Plus, Search, TriangleAlert, X } from "lucide-react";
 import {
   saveEmployeeRecord,
   setHrManagers,
@@ -56,7 +57,10 @@ function Dialog({
   wide?: boolean;
   children: React.ReactNode;
 }) {
+  const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
+    setMounted(true);
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onKey = (event: KeyboardEvent) => {
@@ -69,9 +73,11 @@ function Dialog({
     };
   }, [busy, onClose]);
 
-  return (
+  if (!mounted || typeof document === "undefined") return null;
+
+  return createPortal(
     <div
-      className="tf-overlay-enter fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-4"
+      className="tf-overlay-enter fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-zinc-950/45 p-4 sm:p-6"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !busy) onClose();
       }}
@@ -80,7 +86,7 @@ function Dialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={labelledBy}
-        className={`tf-modal-enter max-h-[calc(100vh-32px)] w-full overflow-y-auto rounded-[12px] border border-zinc-200 bg-white shadow-2xl ${
+        className={`tf-modal-enter my-auto max-h-[calc(100vh-32px)] w-full overflow-y-auto rounded-[12px] border border-zinc-200 bg-white shadow-2xl ${
           wide ? "max-w-4xl" : "max-w-xl"
         }`}
       >
@@ -100,7 +106,8 @@ function Dialog({
         </header>
         {children}
       </section>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -275,11 +282,6 @@ export function HrImportButton() {
           wide
         >
           <div className="space-y-4 px-5 py-5">
-            <p className="text-sm text-zinc-700">
-              Chọn file danh sách nhân viên xuất từ phần mềm HR (.xlsx). App đọc họ tên, ngày
-              sinh, giới tính, CCCD, địa chỉ, điện thoại và ngày bắt đầu, rồi ghép với tài khoản
-              trùng email. Ô trống trong file không xoá dữ liệu đã có. File không được lưu lại.
-            </p>
             <input
               type="file"
               accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -510,11 +512,8 @@ export function HrManagerPicker({
   return (
     <details className="rounded-[12px] border border-zinc-200 bg-white px-4 py-3">
       <summary className="cursor-pointer text-sm font-semibold text-zinc-800">
-        Người phụ trách nhân sự ({selected.length}) · chỉ Admin thấy mục này
+        Người phụ trách nhân sự ({selected.length})
       </summary>
-      <p className="mt-2 text-xs text-zinc-600">
-        Người được chọn sẽ thấy tab Hồ sơ nhân sự và sửa được hồ sơ của mọi người.
-      </p>
       <div className="mt-3 flex flex-wrap gap-2">
         {users.map((user) => {
           const active = selected.includes(user.id);
