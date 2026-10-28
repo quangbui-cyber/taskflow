@@ -22,6 +22,7 @@ import { canCreateProjects, requireUser } from "@/lib/auth";
 import { daysUntil, isOverdue } from "@/lib/dates";
 import { creativeEnabled, meetingsEnabled } from "@/lib/features";
 import { isTextLine, type ArticleLine } from "@/lib/creative";
+import { ensureInitialCreativeArticles } from "@/lib/creativeSeed";
 import { getDailyInspiration } from "@/lib/daily-inspiration";
 import { formatLeaveDays, summarizeLeave, todayInVietnam } from "@/lib/leave";
 import { loadLeaveManagers } from "@/lib/leaveData";
@@ -404,6 +405,9 @@ export default async function HomePage({
     leave.quota > 0 ? Math.min(100, Math.round((leave.used / leave.quota) * 100)) : 0;
 
   const showCreative = creativeEnabled();
+  if (showCreative) {
+    await ensureInitialCreativeArticles();
+  }
   const todayCreativeArticle = showCreative
     ? await prisma.creativeArticle.findFirst({
         where: {

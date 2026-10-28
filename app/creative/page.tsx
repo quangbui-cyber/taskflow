@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { creativeEnabled } from "@/lib/features";
 import { isTextLine, type ArticleLine } from "@/lib/creative";
+import { ensureInitialCreativeArticles } from "@/lib/creativeSeed";
 import Sidebar from "@/components/Sidebar";
 import HubTabs from "@/components/HubTabs";
 import CreativeArchive, {
@@ -23,6 +24,7 @@ export default async function CreativeArchivePage() {
   }
 
   const user = await requireUser();
+  await ensureInitialCreativeArticles();
 
   const [articles, sidebarProjects] = await Promise.all([
     prisma.creativeArticle.findMany({

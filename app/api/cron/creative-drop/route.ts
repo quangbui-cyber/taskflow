@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { creativeEnabled } from "@/lib/features";
 import { isTextLine, type ArticleLine } from "@/lib/creative";
+import { ensureInitialCreativeArticles } from "@/lib/creativeSeed";
 import { sendCreativeDropToGoogleChat } from "@/lib/creativeGoogleChat";
 
 export const runtime = "nodejs";
@@ -25,6 +26,8 @@ export async function GET(req: Request) {
     timeZone: "Asia/Ho_Chi_Minh",
   }).format(new Date());
   const todayVn = new Date(`${vnDateStr}T00:00:00.000Z`);
+
+  await ensureInitialCreativeArticles();
 
   // Tìm các bài viết SCHEDULED đến hạn hoặc quá hạn chưa mở
   const dueArticles = await prisma.creativeArticle.findMany({
