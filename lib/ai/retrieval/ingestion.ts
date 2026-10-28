@@ -58,7 +58,7 @@ export async function extractKnowledgeSpans(bytes: Uint8Array, mimeType: string)
     for (const sheet of workbook.worksheets.slice(0, 20)) {
       sheet.eachRow((row) => row.eachCell((cell) => {
         // Cached formula output is an observation, never an authoritative source value.
-        if (cell.type === ExcelJS.ValueType.Formula || cell.type === ExcelJS.ValueType.SharedFormula) return;
+        if (cell.type === ExcelJS.ValueType.Formula) return;
         const value = cell.text.trim();
         if (value) {
           if (spans.length >= 2000) throw new Error("Too many source cells for knowledge ingestion.");
