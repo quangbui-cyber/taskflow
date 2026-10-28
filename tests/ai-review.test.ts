@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildDeterministicCandidates } from "../lib/ai/extraction/documentExtraction";
+import { buildDeterministicCandidates, completeUnsupportedFields } from "../lib/ai/extraction/documentExtraction";
 import { prepareAiFieldDecisions, resolveAiApplySelections, validateAiFieldReview } from "../lib/ai/review/reviewService";
 
 test("PO fields come from exact parser spans without invoking a model", async () => {
@@ -61,4 +61,46 @@ test("VAT XML/PDF pair yields one identity, and unsupported values remain incomp
   assert.equal(outcome.candidates.find((candidate) => candidate.fieldKey === "grossAmount")?.value, "1080");
   assert.equal(outcome.candidates.find((candidate) => candidate.fieldKey === "sellerTaxCode")?.value, "0312345678");
   assert.ok(outcome.candidates.every((candidate) => candidate.sourceRevisionId === "xml" && candidate.locator.xmlPath));
+});
+
+test("IC row candidates preserve exact JSON offsets and row identity", async () => {
+  const text = JSON.stringify({ id: "revision", lines: [
+    { id: "line1", itemId: "item1", quantity: "2", unitPrice: "100", vatPercent: "0.08" },
+  ] });
+  const outcome = await buildDeterministicCandidates({ documentKind: "IC", sources: [{
+    sourceRevisionId: "ic-revision", mimeType: "application/json", role: "PRIMARY",
+    bytes: new TextEncoder().encode(text),
+  }] });
+  assert.equal(outcome.status, "READY");
+  const price = outcome.candidates.find((candidate) => candidate.fieldKey === "buy.unitPrice");
+  assert.equal(price?.rowKey, "item1");
+  assert.equal(text.slice(price!.locator.textStart, price!.locator.textEnd), price?.sourceText);
+  assert.equal(price?.value, "100");
+});
+
+test("optional model fills only values present in one authorized PDF span", async () => {
+  const source = { span: { spanId: "s1", sourceRevisionId: "r1", page: 2,
+    cellRange: null, quote: "PO C-10003769550" }, content: "PO C-10003769550" };
+  let calls = 0;
+  const result = await completeUnsupportedFields({ documentKind: "PO",
+    deterministic: { status: "INCOMPLETE", candidates: [], missing: ["poNumber"], warnings: [] },
+    authorizedSources: [source], sourceOffsets: new Map([["s1", 12]]),
+    abort: new AbortController().signal,
+    model: { extract: async () => {
+      calls++;
+      return { providerRequestId: "mock-request", usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        output: { task: "DOCUMENT_EXTRACTION", warnings: [], candidates: [
+          { key: "poNumber", value: "C-10003769550", decimalValue: null, confidence: 0.8,
+            sources: [source.span], needsHumanReview: true },
+          { key: "revenue", value: "999999", decimalValue: "999999", confidence: 0.9,
+            sources: [source.span], needsHumanReview: true },
+        ] } };
+    } },
+  });
+  assert.equal(calls, 1);
+  assert.equal(result.providerRequestId, "mock-request");
+  assert.equal(result.outcome.candidates.length, 1);
+  assert.equal(result.outcome.candidates[0].provenance, "MODEL");
+  assert.equal(result.outcome.candidates[0].locator.pageNumber, 2);
+  assert.equal(result.outcome.candidates[0].locator.textStart, 15);
 });

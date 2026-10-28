@@ -5,6 +5,8 @@ import { Prisma } from "@prisma/client";
 import { parsePurchaseOrder } from "@/lib/purchaseOrder";
 import { normalizeVendorInvoice } from "@/lib/costflow/vendorInvoice";
 import type { GenerationModel } from "@/lib/ai/providers/types";
+import { CandidateBatchSchema, type AuthorizedRetrievalSpan } from "@/lib/ai/contracts";
+import { extractKnowledgeSpans, splitKnowledgeText } from "@/lib/ai/retrieval/ingestion";
 import { AiSourceNotFoundError, resolveAiReadScope } from "@/lib/ai/access/resolveAiReadScope";
 import { readAiRun } from "@/lib/ai/runs/aiRunService";
 import { prismaAiSourceStore } from "@/lib/ai/sources/sourceRevisions";
@@ -30,7 +32,8 @@ export type DocumentCandidate = {
     textStart?: number;
     textEnd?: number;
   };
-  provenance: "DETERMINISTIC";
+  provenance: "DETERMINISTIC" | "MODEL";
+  confidence?: number;
 };
 
 export type DocumentExtractionOutcome = {
@@ -190,16 +193,135 @@ export async function buildDeterministicCandidates(input: BuildInput): Promise<D
     text = new TextDecoder("utf-8", { fatal: true }).decode(source.bytes);
     value = JSON.parse(text) as Record<string, unknown>;
   } catch { return { status: "REFUSED", candidates: [], missing: [], warnings: ["Unreadable IC record."] }; }
-  const candidates = ["id", "number", "requestId"].map((fieldKey) => {
-    const raw = value[fieldKey];
-    if (typeof raw !== "string" && typeof raw !== "number") return null;
-    const exact = JSON.stringify(raw);
-    return plainCandidate(source, fieldKey, text, text.match(new RegExp(`"${fieldKey}"\\s*:\\s*(${exact.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`)));
-  });
-  return result(candidates, ["id", "number", "requestId"]);
+  const lines = Array.isArray(value.lines) ? value.lines : [];
+  if (lines.length > 500) return { status: "REFUSED", candidates: [],
+    missing: [], warnings: ["IC exceeds 500 rows."] };
+  const candidates: DocumentCandidate[] = [];
+  for (const line of lines) {
+    if (!line || typeof line !== "object" || Array.isArray(line)) continue;
+    const record = line as Record<string, unknown>;
+    const itemId = record.itemId;
+    if (typeof itemId !== "string" || !itemId) continue;
+    const serialized = JSON.stringify(line);
+    const lineStart = text.indexOf(serialized);
+    if (lineStart < 0 || text.indexOf(serialized, lineStart + 1) >= 0) continue;
+    for (const field of ["quantity", "days", "unitPrice", "vatPercent", "notes"] as const) {
+      const raw = record[field];
+      if (typeof raw !== "string" && typeof raw !== "number") continue;
+      const encoded = JSON.stringify(raw);
+      const keyStart = serialized.indexOf(`"${field}":${encoded}`);
+      if (keyStart < 0) continue;
+      const valueStart = lineStart + keyStart + field.length + 3;
+      const fieldValue = String(raw);
+      candidates.push({ rowKey: itemId, fieldKey: `buy.${field}`, value: fieldValue,
+        sourceRevisionId: source.sourceRevisionId, sourceText: encoded,
+        locator: { textStart: valueStart, textEnd: valueStart + encoded.length },
+        provenance: "DETERMINISTIC" });
+    }
+  }
+  const coveredRows = new Set(candidates.map((candidate) => candidate.rowKey));
+  const complete = candidates.length > 0 && coveredRows.size === lines.length;
+  return { status: complete ? "READY" : "INCOMPLETE",
+    candidates, missing: complete ? [] : ["IC line values"], warnings: [] };
 }
 
-export async function extractAndPersistDocumentRun(actorId: string, projectId: string, runId: string) {
+const modelFieldKeys: Record<BuildInput["documentKind"], ReadonlySet<string>> = {
+  PO: new Set(["poNumber", "poDate", "currency", "revenue", "clientName", "description"]),
+  VAT: new Set(["invoiceNumber", "symbol", "issuedAt", "sellerTaxCode",
+    "netAmount", "vatAmount", "grossAmount"]),
+  IC: new Set(),
+};
+
+async function authorizedPdfChunks(sources: readonly DocumentSource[]) {
+  const authorized: AuthorizedRetrievalSpan[] = [];
+  const offsets = new Map<string, number>();
+  for (const source of sources.filter((item) => item.mimeType === "application/pdf")) {
+    const pages = await extractKnowledgeSpans(source.bytes, "application/pdf");
+    for (const page of pages.slice(0, 10)) {
+      for (const chunk of splitKnowledgeText(page.text)) {
+        if (authorized.length >= 100) return { authorized, offsets };
+        const spanId = `preview_${createHash("sha256").update(JSON.stringify({
+          revision: source.sourceRevisionId, page: page.pageNumber, start: chunk.start,
+          end: chunk.end, content: chunk.text,
+        })).digest("hex")}`;
+        authorized.push({ span: { spanId, sourceRevisionId: source.sourceRevisionId,
+          page: page.pageNumber ?? null, cellRange: null, quote: chunk.text.slice(0, 240) },
+          content: chunk.text });
+        offsets.set(spanId, chunk.start);
+      }
+    }
+  }
+  return { authorized, offsets };
+}
+
+export async function completeUnsupportedFields(input: {
+  documentKind: BuildInput["documentKind"];
+  deterministic: DocumentExtractionOutcome;
+  authorizedSources: readonly AuthorizedRetrievalSpan[];
+  sourceOffsets?: ReadonlyMap<string, number>;
+  model: GenerationModel;
+  abort: AbortSignal;
+}) {
+  if (input.deterministic.status === "READY" || !input.authorizedSources.length ||
+      input.documentKind === "IC") return { outcome: input.deterministic, providerRequestId: null,
+        inputTokens: 0, outputTokens: 0 };
+  const missing = input.documentKind === "VAT" ? [...modelFieldKeys.VAT] :
+    input.deterministic.missing.filter((key) => modelFieldKeys[input.documentKind].has(key));
+  if (!missing.length) return { outcome: input.deterministic, providerRequestId: null,
+    inputTokens: 0, outputTokens: 0 };
+  try {
+    const result = await input.model.extract({ task: "DOCUMENT_EXTRACTION",
+      instruction: `Extract only these missing ${input.documentKind} fields: ${missing.join(", ")}. ` +
+        "Use only the selected source text. Return null for unreadable values and cite exact source spans.",
+      authorizedSources: input.authorizedSources }, input.abort);
+    const batch = CandidateBatchSchema.parse(result.output);
+    if (batch.task !== "DOCUMENT_EXTRACTION") throw new Error("Wrong model task.");
+    const allowed = new Map(input.authorizedSources.map((item) => [item.span.spanId, item]));
+    const existing = new Set(input.deterministic.candidates.map((candidate) => candidate.fieldKey));
+    const modelCandidates: DocumentCandidate[] = [];
+    for (const candidate of batch.candidates) {
+      if (!modelFieldKeys[input.documentKind].has(candidate.key) || existing.has(candidate.key) ||
+          modelCandidates.some((item) => item.fieldKey === candidate.key) || !candidate.value ||
+          candidate.sources.length !== 1) continue;
+      const cited = allowed.get(candidate.sources[0].spanId);
+      const reference = candidate.sources[0];
+      if (!cited || cited.span.sourceRevisionId !== reference.sourceRevisionId ||
+          cited.span.page !== reference.page || cited.span.cellRange !== reference.cellRange ||
+          cited.span.quote !== reference.quote) continue;
+      const raw = candidate.value.trim();
+      const first = cited.content.indexOf(raw);
+      if (!raw || first < 0 || cited.content.indexOf(raw, first + 1) >= 0) continue;
+      const value = candidate.decimalValue ?? raw;
+      if (/^(?:revenue|netAmount|vatAmount|grossAmount)$/.test(candidate.key) &&
+          !/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)) continue;
+      modelCandidates.push({ rowKey: "document", fieldKey: candidate.key, value,
+        sourceRevisionId: cited.span.sourceRevisionId, sourceText: raw,
+        locator: { pageNumber: cited.span.page ?? undefined,
+          textStart: (input.sourceOffsets?.get(cited.span.spanId) ?? 0) + first,
+          textEnd: (input.sourceOffsets?.get(cited.span.spanId) ?? 0) + first + raw.length },
+        provenance: "MODEL", confidence: candidate.confidence });
+    }
+    const combined = [...input.deterministic.candidates, ...modelCandidates];
+    const absent = [...modelFieldKeys[input.documentKind]].filter((key) => !combined.some((item) => item.fieldKey === key));
+    let status: DocumentExtractionOutcome["status"] = absent.length ? "INCOMPLETE" : "READY";
+    if (status === "READY" && input.documentKind === "VAT") {
+      try {
+        normalizeVendorInvoice(Object.fromEntries(combined.map(({ fieldKey, value }) => [fieldKey, value])) as Parameters<typeof normalizeVendorInvoice>[0]);
+      } catch { status = "REFUSED"; }
+    }
+    return { outcome: { status, candidates: combined, missing: absent,
+      warnings: [...input.deterministic.warnings, ...batch.warnings] },
+      providerRequestId: result.providerRequestId,
+      inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens };
+  } catch {
+    return { outcome: { ...input.deterministic, status: "INCOMPLETE" as const,
+      warnings: [...input.deterministic.warnings, "Model extraction unavailable; complete manually."] },
+      providerRequestId: null, inputTokens: 0, outputTokens: 0 };
+  }
+}
+
+export async function extractAndPersistDocumentRun(actorId: string, projectId: string, runId: string,
+  model?: GenerationModel) {
   await readAiRun(actorId, projectId, runId);
   const run = await prisma.aiRun.findFirst({ where: { id: runId, projectId, actorId },
     include: { sources: { include: { sourceRevision: true } } } });
@@ -221,18 +343,37 @@ export async function extractAndPersistDocumentRun(actorId: string, projectId: s
     sources.push({ sourceRevisionId: revision.id, mimeType: revision.mimeType,
       role: linked.role as DocumentSource["role"], bytes });
   }
+  const claim = await prisma.aiRun.updateMany({ where: {
+    id: runId, status: "READY", scopeHash: scope.scopeHash, cancelledAt: null,
+  }, data: { status: "RUNNING" } });
+  if (claim.count !== 1) throw new Error("Run was already executed or scope changed.");
+  try {
   const kinds = new Set(run.sources.map(({ sourceRevision }) => sourceRevision.originKind));
   const documentKind: BuildInput["documentKind"] = kinds.size === 1 && kinds.has("VENDOR_INVOICE_FILE") ? "VAT" :
     kinds.size === 1 && kinds.has("COSTFLOW_IC") ? "IC" : "PO";
-  const outcome = await buildDeterministicCandidates({ documentKind, sources });
+  const deterministic = await buildDeterministicCandidates({ documentKind, sources });
+  let completed = { outcome: deterministic, providerRequestId: null as string | null,
+    inputTokens: 0, outputTokens: 0 };
+  if (model && deterministic.status !== "READY" && run.timeoutAt && run.timeoutAt.getTime() > Date.now()) {
+    try {
+      const chunks = await authorizedPdfChunks(sources);
+      completed = await completeUnsupportedFields({ documentKind, deterministic,
+        authorizedSources: chunks.authorized, sourceOffsets: chunks.offsets, model,
+        abort: AbortSignal.timeout(run.timeoutAt.getTime() - Date.now()) });
+    } catch {
+      completed = { ...completed, outcome: { ...deterministic, status: "INCOMPLETE",
+        warnings: [...deterministic.warnings, "PDF extraction unavailable; complete manually."] } };
+    }
+  }
+  const outcome = completed.outcome;
   await prisma.$transaction(async (tx) => {
-    const claimed = await tx.aiRun.updateMany({ where: { id: runId, status: "READY", scopeHash: scope.scopeHash },
-      data: { status: "RUNNING" } });
-    if (claimed.count !== 1) throw new Error("Run was already executed or scope changed.");
+    const active = await tx.aiRun.findFirst({ where: { id: runId, status: "RUNNING",
+      scopeHash: scope.scopeHash, cancelledAt: null }, select: { id: true } });
+    if (!active) throw new Error("Run was cancelled or scope changed.");
     for (const candidate of outcome.candidates) {
       const hash = createHash("sha256").update(JSON.stringify({
-        runId, sourceRevisionId: candidate.sourceRevisionId, parserVersion: run.parserVersion,
-        fieldKey: candidate.fieldKey, locator: candidate.locator, value: candidate.value,
+        sourceRevisionId: candidate.sourceRevisionId, parserVersion: run.parserVersion,
+        locator: candidate.locator, sourceText: candidate.sourceText,
       })).digest("hex");
       const span = await tx.aiSourceSpan.upsert({
         where: { sourceRevisionId_contentHash: { sourceRevisionId: candidate.sourceRevisionId, contentHash: hash } },
@@ -243,16 +384,25 @@ export async function extractAndPersistDocumentRun(actorId: string, projectId: s
       });
       await tx.aiCandidateField.create({ data: { runId, scopeKey: run.scopeKey,
         rowKey: candidate.rowKey, fieldKey: candidate.fieldKey,
-        aiValue: candidate.value, rawValue: candidate.value,
-        provenance: "DETERMINISTIC", confidence: "1",
+        aiValue: candidate.value, rawValue: candidate.sourceText,
+        provenance: candidate.provenance,
+        confidence: String(candidate.confidence ?? 1),
         sourceSpanId: span.id } });
     }
     await tx.aiRun.update({ where: { id: runId }, data: {
       status: outcome.status === "REFUSED" ? "FAILED" : "SUCCEEDED",
       outcomeCode: outcome.status, failureCode: outcome.status === "REFUSED" ? "REFUSAL" : null,
+      providerRequestId: completed.providerRequestId,
+      inputTokens: completed.inputTokens, outputTokens: completed.outputTokens,
       completedAt: new Date(),
     } });
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   return { status: outcome.status, reused: false, candidates: outcome.candidates.length,
     missing: outcome.missing, warnings: outcome.warnings };
+  } catch (error) {
+    await prisma.aiRun.updateMany({ where: { id: runId, status: "RUNNING" },
+      data: { status: "FAILED", outcomeCode: "FAILED", failureCode: "INVALID_SCHEMA",
+        completedAt: new Date() } });
+    throw error;
+  }
 }

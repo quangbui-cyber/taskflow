@@ -2378,6 +2378,7 @@ model AiRun {
   reviewStatus     String                 @default("PENDING")
   inputTokens      Int?
   outputTokens     Int?
+  providerRequestId String?
   latencyMs        Int?
   createdAt        DateTime               @default(now())
   sources          AiRunSource[]

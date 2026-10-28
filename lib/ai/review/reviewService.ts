@@ -5,29 +5,38 @@ import { Prisma } from "@prisma/client";
 import { readAiRun } from "@/lib/ai/runs/aiRunService";
 import { AiSourceNotFoundError, requireAiProjectRead } from "@/lib/ai/access/resolveAiReadScope";
 import { prisma } from "@/lib/prisma";
+import { normalizePairedRows } from "@/lib/costflow/pairedDraft";
+import type { FinanceData } from "@/lib/costflow/types";
 
 export type AiReviewChoice = "ACCEPT_AI" | "CORRECT" | "MANUAL" | "REJECT";
 export type AiApplyDecision = "KEEP_CURRENT" | "APPLY_REVIEWED";
 
 export type ReviewedField = {
   id: string;
+  rowKey?: string;
   fieldKey: string;
   reviewStatus: string;
   aiValue: string | null;
   correctedValue: string | null;
   manualValue: string | null;
   sourceSpanId: string | null;
+  rawValue?: string | null;
+  reviewedById?: string | null;
+  reviewedAt?: Date | null;
+  reason?: string | null;
 };
 
 export function prepareAiFieldDecisions(fields: readonly ReviewedField[], current: Record<string, string | null>) {
   return fields.map((field) => {
+    const currentKey = field.rowKey && field.rowKey !== "document" ? `${field.rowKey}:${field.fieldKey}` : field.fieldKey;
     const reviewedValue = field.reviewStatus === "CORRECT" ? field.correctedValue :
       field.reviewStatus === "MANUAL" ? field.manualValue :
       field.reviewStatus === "ACCEPT_AI" ? field.aiValue : null;
     return { candidateFieldId: field.id, fieldKey: field.fieldKey,
-      currentValue: current[field.fieldKey] ?? null, reviewedValue,
+      ...(field.rowKey ? { rowKey: field.rowKey } : {}),
+      currentValue: current[currentKey] ?? null, reviewedValue,
       sourceSpanId: field.sourceSpanId, conflict: reviewedValue !== null &&
-        reviewedValue !== (current[field.fieldKey] ?? null),
+        reviewedValue !== (current[currentKey] ?? null),
       defaultDecision: "KEEP_CURRENT" as const };
   });
 }
@@ -47,6 +56,7 @@ export function resolveAiApplySelections(
       throw new Error("Rejected or unreviewed field cannot be applied.");
     }
     return { candidateFieldId: field.candidateFieldId, fieldKey: field.fieldKey,
+      ...(field.rowKey ? { rowKey: field.rowKey } : {}),
       currentValue: field.currentValue, reviewedValue: field.reviewedValue,
       decision: selection.decision, sourceSpanId: field.sourceSpanId };
   }).filter((item) => item.decision === "APPLY_REVIEWED");
@@ -151,12 +161,41 @@ export async function completeAiReview(actorId: string, projectId: string, runId
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
+export async function getAiReviewSnapshot(actorId: string, projectId: string, runId: string) {
+  await readAiRun(actorId, projectId, runId);
+  return prisma.$transaction(async (tx) => {
+    const run = await assertReviewActor(tx, actorId, projectId, runId);
+    const [fields, receipts] = await Promise.all([
+      tx.aiCandidateField.findMany({ where: { runId, scopeKey: run.scopeKey },
+        orderBy: [{ rowKey: "asc" }, { fieldKey: "asc" }],
+        include: { sourceSpan: { select: { id: true, sourceRevisionId: true,
+          pageNumber: true, sheetName: true, cellRange: true, xmlPath: true,
+          textStart: true, textEnd: true, quote: true } } } }),
+      tx.aiApplicationReceipt.findMany({ where: { runId, scopeKey: run.scopeKey },
+        orderBy: { createdAt: "desc" }, take: 30 }),
+    ]);
+    return { runId, reviewStatus: run.reviewStatus, runStatus: run.status,
+      fields: fields.map((field) => ({ id: field.id, rowKey: field.rowKey,
+        fieldKey: field.fieldKey, aiValue: field.aiValue, rawValue: field.rawValue,
+        correctedValue: field.correctedValue, manualValue: field.manualValue,
+        provenance: field.provenance, confidence: field.confidence,
+        reviewStatus: field.reviewStatus, reviewedById: field.reviewedById,
+        reviewedAt: field.reviewedAt, reason: field.reason, sourceSpan: field.sourceSpan })),
+      receipts: receipts.map((receipt) => ({ id: receipt.id, targetKind: receipt.targetKind,
+        targetId: receipt.targetId, targetVersionBefore: receipt.targetVersionBefore,
+        targetVersionAfter: receipt.targetVersionAfter, fieldDecisions: receipt.fieldDecisions,
+        actorId: receipt.actorId, createdAt: receipt.createdAt })) };
+  });
+}
+
 export type DocumentDraftKind = "PO" | "VAT";
+export type AiDraftKind = DocumentDraftKind | "IC";
 const draftFields: Record<DocumentDraftKind, ReadonlySet<string>> = {
   PO: new Set(["poNumber", "poDate", "currency", "revenue", "clientName", "description"]),
   VAT: new Set(["invoiceNumber", "symbol", "issuedAt", "sellerTaxCode",
     "netAmount", "vatAmount", "grossAmount"]),
 };
+const icDraftFields = new Set(["buy.quantity", "buy.days", "buy.unitPrice", "buy.vatPercent", "buy.notes"]);
 
 function canonicalDraftFields(value: Prisma.JsonValue): Record<string, string | null> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid draft fields.");
@@ -181,11 +220,36 @@ export async function createDocumentIntakeDraft(actorId: string, projectId: stri
     select: { id: true, projectId: true, kind: true, status: true, version: true } });
 }
 
+export async function getDocumentIntakeDraft(actorId: string, projectId: string, draftId: string) {
+  await requireAiProjectRead(actorId, projectId);
+  const draft = await prisma.documentIntakeDraft.findFirst({ where: {
+    id: draftId, projectId, createdById: actorId,
+  }, select: { id: true, kind: true, status: true, version: true, fields: true,
+    createdAt: true, updatedAt: true } });
+  if (!draft) throw new AiSourceNotFoundError();
+  return draft;
+}
+
+export async function listDocumentIntakeDrafts(actorId: string, projectId: string) {
+  await requireAiProjectRead(actorId, projectId);
+  return prisma.documentIntakeDraft.findMany({ where: { projectId, createdById: actorId },
+    orderBy: { updatedAt: "desc" }, take: 30,
+    select: { id: true, kind: true, status: true, version: true,
+      createdAt: true, updatedAt: true } });
+}
+
 async function loadReviewedDraft(tx: Prisma.TransactionClient, actorId: string,
   projectId: string, runId: string, kind: DocumentDraftKind, draftId: string) {
   const run = await assertReviewActor(tx, actorId, projectId, runId);
   if (run.status !== "SUCCEEDED" || run.reviewStatus !== "COMPLETED") {
     throw new Error("Every candidate must be reviewed before application.");
+  }
+  const sourceKinds = await tx.aiRunSource.findMany({ where: { runId },
+    select: { sourceRevision: { select: { originKind: true } } } });
+  if (!sourceKinds.length || sourceKinds.some(({ sourceRevision }) => kind === "VAT" ?
+      sourceRevision.originKind !== "VENDOR_INVOICE_FILE" :
+      !["PROJECT_FILE", "COSTFLOW_PO"].includes(sourceRevision.originKind))) {
+    throw new Error("Run source does not match target draft kind.");
   }
   const draft = await tx.documentIntakeDraft.findFirst({ where: {
     id: draftId, projectId, kind, createdById: actorId,
@@ -201,10 +265,58 @@ async function loadReviewedDraft(tx: Prisma.TransactionClient, actorId: string,
   return { run, draft, candidates, current: canonicalDraftFields(draft.fields) };
 }
 
+async function loadReviewedIcDraft(tx: Prisma.TransactionClient, actorId: string,
+  projectId: string, runId: string, draftId: string) {
+  const run = await assertReviewActor(tx, actorId, projectId, runId);
+  if (run.status !== "SUCCEEDED" || run.reviewStatus !== "COMPLETED") {
+    throw new Error("Every candidate must be reviewed before application.");
+  }
+  const sourceKinds = await tx.aiRunSource.findMany({ where: { runId },
+    select: { sourceRevision: { select: { originKind: true } } } });
+  if (sourceKinds.length !== 1 || sourceKinds[0].sourceRevision.originKind !== "COSTFLOW_IC") {
+    throw new Error("Only an IC revision can propose IC draft fields.");
+  }
+  const workspace = await tx.costFlowWorkspace.findUnique({ where: { projectId } });
+  const data = workspace?.data as FinanceData | undefined;
+  if (!workspace || !data || data.closed) throw new Error("IC workspace is closed.");
+  const draft = data.quotationDrafts?.find((item) => item.id === draftId && item.createdBy === actorId &&
+    (item.workspaceMode === "ic" || item.workspaceMode === "paired"));
+  if (!draft) throw new AiSourceNotFoundError();
+  if (draft.icRevisionId) {
+    const revision = data.revisions.find((item) => item.id === draft.icRevisionId);
+    const request = revision ? await tx.workflowRequest.findUnique({ where: { id: revision.requestId },
+      select: { projectId: true, state: true, creatorId: true } }) : null;
+    if (!revision || revision.effective || !request || request.projectId !== projectId ||
+        request.state !== "DRAFT" || request.creatorId !== actorId) {
+      throw new Error("IC revision is approved or locked.");
+    }
+  }
+  const candidates = await tx.aiCandidateField.findMany({ where: { runId, scopeKey: run.scopeKey },
+    orderBy: [{ rowKey: "asc" }, { fieldKey: "asc" }] });
+  if (!candidates.length || candidates.some((candidate) => candidate.reviewStatus === "PENDING" ||
+      !icDraftFields.has(candidate.fieldKey) || !draft.rows.some((row) => row.itemId === candidate.rowKey))) {
+    throw new Error("Reviewed IC rows do not match this draft.");
+  }
+  const current: Record<string, string | null> = {};
+  for (const candidate of candidates) {
+    const row = draft.rows.find((item) => item.itemId === candidate.rowKey)!;
+    const field = candidate.fieldKey.slice(4) as keyof typeof row.buy;
+    const value = row.buy[field];
+    if (typeof value !== "string") throw new Error("IC draft field is not textual.");
+    current[`${candidate.rowKey}:${candidate.fieldKey}`] = value;
+  }
+  return { run, workspace, data, draft, candidates, current };
+}
+
 export async function prepareAiApplyConflicts(actorId: string, projectId: string,
-  runId: string, kind: DocumentDraftKind, draftId: string) {
+  runId: string, kind: AiDraftKind, draftId: string) {
   await readAiRun(actorId, projectId, runId);
   return prisma.$transaction(async (tx) => {
+    if (kind === "IC") {
+      const { draft, candidates, current } = await loadReviewedIcDraft(tx, actorId, projectId, runId, draftId);
+      return { targetKind: kind, targetId: draft.id, targetVersion: String(draft.version),
+        fields: prepareAiFieldDecisions(candidates, current) };
+    }
     const { draft, candidates, current } = await loadReviewedDraft(tx, actorId, projectId, runId, kind, draftId);
     return { targetKind: kind, targetId: draft.id, targetVersion: String(draft.version),
       fields: prepareAiFieldDecisions(candidates, current) };
@@ -212,7 +324,7 @@ export async function prepareAiApplyConflicts(actorId: string, projectId: string
 }
 
 export async function applyAiReviewToDraft(actorId: string, projectId: string, runId: string,
-  kind: DocumentDraftKind, draftId: string, command: {
+  kind: AiDraftKind, draftId: string, command: {
     expectedVersion: string;
     idempotencyKey: string;
     decisions: readonly { candidateFieldId: string; decision: AiApplyDecision }[];
@@ -236,6 +348,40 @@ export async function applyAiReviewToDraft(actorId: string, projectId: string, r
       }
       return previousReceipt;
     }
+    if (kind === "IC") {
+      const { workspace, data, draft, candidates, current } = await loadReviewedIcDraft(
+        tx, actorId, projectId, runId, draftId,
+      );
+      if (String(draft.version) !== command.expectedVersion) throw new Error("Draft version changed; refresh conflicts.");
+      const prepared = prepareAiFieldDecisions(candidates, current);
+      const selected = resolveAiApplySelections(prepared, command.decisions);
+      const nextData = structuredClone(data);
+      const nextDraft = nextData.quotationDrafts!.find((item) => item.id === draftId)!;
+      const after = { ...current };
+      for (const selection of selected) {
+        if (!selection.rowKey || selection.reviewedValue === null) throw new Error("Invalid IC row decision.");
+        if (moneyField.test(selection.fieldKey) && !/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(selection.reviewedValue)) {
+          throw new Error("Reviewed IC money must be canonical.");
+        }
+        const row = nextDraft.rows.find((item) => item.itemId === selection.rowKey);
+        if (!row) throw new Error("IC row changed.");
+        const field = selection.fieldKey.slice(4) as "quantity" | "days" | "unitPrice" | "vatPercent" | "notes";
+        row.buy[field] = selection.reviewedValue;
+        after[`${selection.rowKey}:${selection.fieldKey}`] = selection.reviewedValue;
+      }
+      normalizePairedRows(nextDraft.rows);
+      nextDraft.version++;
+      const changed = await tx.costFlowWorkspace.updateMany({ where: { projectId, version: workspace.version },
+        data: { data: nextData as unknown as Prisma.InputJsonValue, version: { increment: 1 } } });
+      if (changed.count !== 1) throw new Error("IC workspace changed concurrently.");
+      return tx.aiApplicationReceipt.create({ data: {
+        runId, scopeKey: run.scopeKey, targetKind: "IC", targetId: draftId,
+        targetVersionBefore: String(draft.version), targetVersionAfter: String(nextDraft.version),
+        beforeHash: fieldHash(current), afterHash: fieldHash(after),
+        fieldDecisions: { fields: buildReceiptFields(candidates, prepared, current, after, command.decisions),
+          targetBefore: current, targetAfter: after }, actorId, idempotencyKey: command.idempotencyKey,
+      } });
+    }
     const { draft, candidates, current } = await loadReviewedDraft(tx, actorId, projectId, runId, kind, draftId);
     if (String(draft.version) !== command.expectedVersion) throw new Error("Draft version changed; refresh conflicts.");
     const prepared = prepareAiFieldDecisions(candidates, current);
@@ -248,18 +394,7 @@ export async function applyAiReviewToDraft(actorId: string, projectId: string, r
       }
       next[selection.fieldKey] = selection.reviewedValue;
     }
-    const decisionById = new Map(command.decisions.map((item) => [item.candidateFieldId, item.decision]));
-    const fieldDecisions = candidates.map((candidate) => ({
-      candidateFieldId: candidate.id, rowKey: candidate.rowKey, fieldKey: candidate.fieldKey,
-      aiValue: candidate.aiValue, rawValue: candidate.rawValue,
-      correctedValue: candidate.correctedValue, manualValue: candidate.manualValue,
-      reviewStatus: candidate.reviewStatus, reviewedById: candidate.reviewedById,
-      reviewedAt: candidate.reviewedAt?.toISOString() ?? null, reason: candidate.reason,
-      sourceSpanId: candidate.sourceSpanId, currentValue: current[candidate.fieldKey] ?? null,
-      reviewedValue: prepared.find((item) => item.candidateFieldId === candidate.id)?.reviewedValue ?? null,
-      decision: decisionById.get(candidate.id) ?? "KEEP_CURRENT",
-      finalValue: next[candidate.fieldKey] ?? null,
-    }));
+    const fieldDecisions = buildReceiptFields(candidates, prepared, current, next, command.decisions);
     const changed = await tx.documentIntakeDraft.updateMany({ where: {
       id: draftId, projectId, kind, createdById: actorId, status: "DRAFT", version: draft.version,
     }, data: { fields: next, version: { increment: 1 } } });
@@ -268,7 +403,27 @@ export async function applyAiReviewToDraft(actorId: string, projectId: string, r
       runId, scopeKey: run.scopeKey, targetKind: kind, targetId: draftId,
       targetVersionBefore: String(draft.version), targetVersionAfter: String(draft.version + 1),
       beforeHash: fieldHash(current), afterHash: fieldHash(next),
-      fieldDecisions, actorId, idempotencyKey: command.idempotencyKey,
+      fieldDecisions: { fields: fieldDecisions, targetBefore: current, targetAfter: next },
+      actorId, idempotencyKey: command.idempotencyKey,
     } });
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+function buildReceiptFields(candidates: readonly ReviewedField[],
+  prepared: ReturnType<typeof prepareAiFieldDecisions>, current: Record<string, string | null>,
+  next: Record<string, string | null>, decisions: readonly { candidateFieldId: string; decision: AiApplyDecision }[]) {
+  const decisionById = new Map(decisions.map((item) => [item.candidateFieldId, item.decision]));
+  return candidates.map((candidate) => {
+    const key = candidate.rowKey && candidate.rowKey !== "document" ?
+      `${candidate.rowKey}:${candidate.fieldKey}` : candidate.fieldKey;
+    return { candidateFieldId: candidate.id, rowKey: candidate.rowKey, fieldKey: candidate.fieldKey,
+      aiValue: candidate.aiValue, rawValue: candidate.rawValue ?? null,
+      correctedValue: candidate.correctedValue,
+      manualValue: candidate.manualValue, reviewStatus: candidate.reviewStatus,
+      reviewedById: candidate.reviewedById ?? null,
+      reviewedAt: candidate.reviewedAt?.toISOString() ?? null, reason: candidate.reason ?? null,
+      sourceSpanId: candidate.sourceSpanId, currentValue: current[key] ?? null,
+      reviewedValue: prepared.find((item) => item.candidateFieldId === candidate.id)?.reviewedValue ?? null,
+      decision: decisionById.get(candidate.id) ?? "KEEP_CURRENT", finalValue: next[key] ?? null };
+  });
 }
