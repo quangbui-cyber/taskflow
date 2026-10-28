@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import AiRunLauncher from "./AiRunLauncher";
 import AiRunHistory, { type AiRunView } from "./AiRunHistory";
 import AiReviewWorkspace from "./AiReviewWorkspace";
+import AiFindingQueue from "./AiFindingQueue";
 
 export type AiSourceOption = {
   id: string; name: string; kind: string; mimeType: string; version: string;
@@ -39,7 +40,12 @@ export default function ProjectAiWorkspace({ projectId, projectName, sources, pr
           onHistoryChange={() => setHistoryRevision((value) => value + 1)} />
       : <EmptyState title="Chưa chọn kết quả để rà soát" description="Chọn một run trong Lịch sử hoặc bắt đầu phân tích một nguồn." />)}
     {tab === "history" && <AiRunHistory projectId={projectId} revision={historyRevision} onSelect={openRun} onAccessRevoked={revoke} />}
-    {tab === "findings" && <Panel><h2 className="tf-ui-heading">Cảnh báo</h2><p className="tf-ui-help">Chưa có cảnh báo từ nguồn đã chọn.</p></Panel>}
+    {tab === "findings" && <AiFindingQueue projectId={projectId} onAccessRevoked={revoke}
+      onOpenRun={async (runId) => {
+        const response = await fetch(`/api/projects/${projectId}/ai/runs/${runId}`, { cache: "no-store" });
+        if ([401, 403, 404].includes(response.status)) { revoke(); return; }
+        if (response.ok) openRun(await response.json() as AiRunView);
+      }} />}
     {tab === "assistant" && <Panel><h2 className="tf-ui-heading">Trợ lý tri thức</h2><p className="tf-ui-help">Chưa có câu hỏi trong phiên này.</p></Panel>}
   </section>;
 }

@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { executeAiDocumentRun } from "@/app/actions/ai/review";
+import { evaluateAiRunFindings } from "@/app/actions/ai/findings";
 import { Button } from "@/components/ui/Button";
 import { Alert, EmptyState, Panel } from "@/components/ui/Presentation";
 import type { AiSourceOption } from "./ProjectAiWorkspace";
@@ -41,7 +42,13 @@ export default function AiRunLauncher({ projectId, projectName, sources, provide
       if ([401, 403, 404].includes(response.status)) { onAccessRevoked(); return; }
       if (!response.ok) throw new Error(response.status === 503 ? "AI trực tuyến chưa được bật cho môi trường này." : "Không thể tạo run. Kiểm tra nguồn đã chọn rồi thử lại.");
       const created = await response.json() as { id: string; reused: boolean; status: string };
-      if (created.status === "READY") await executeAiDocumentRun({ projectId, runId: created.id });
+      let extractionError: unknown;
+      if (created.status === "READY") {
+        try { await executeAiDocumentRun({ projectId, runId: created.id }); }
+        catch (cause) { extractionError = cause; }
+      }
+      await evaluateAiRunFindings({ projectId, runId: created.id });
+      if (extractionError) throw extractionError;
       const detail = await fetch(`/api/projects/${projectId}/ai/runs/${created.id}`, { cache: "no-store" });
       if ([401, 403, 404].includes(detail.status)) { onAccessRevoked(); return; }
       if (!detail.ok) throw new Error("Run đã tạo nhưng chưa tải được kết quả. Mở Lịch sử để xem lại.");

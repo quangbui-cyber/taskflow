@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { completeAiReview, createDocumentIntakeDraft, getAiReviewSnapshot,
   listDocumentIntakeDrafts, prepareAiApplyConflicts, recordAiFieldReview } from "@/app/actions/ai/review";
+import { getAiFindings } from "@/app/actions/ai/findings";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Textarea } from "@/components/ui/Field";
 import { Alert, Badge, EmptyState, Panel } from "@/components/ui/Presentation";
 import AiApplyConflictReview, { type ConflictSnapshot } from "./AiApplyConflictReview";
 import AiApplicationReceiptView, { type AiReceiptView } from "./AiApplicationReceiptView";
 import type { AiRunView } from "./AiRunHistory";
+import { AiInlineFindings, type Finding } from "./AiFindingQueue";
 
 type ReviewSnapshot = Awaited<ReturnType<typeof getAiReviewSnapshot>>;
 type ReviewField = ReviewSnapshot["fields"][number];
@@ -25,8 +27,9 @@ function locator(field: ReviewField) {
   return `Đoạn ${span.textStart ?? "—"}–${span.textEnd ?? "—"}`;
 }
 
-function FieldReviewCard({ field, projectId, runId, onSaved, onAccessRevoked }: {
-  field: ReviewField; projectId: string; runId: string; onSaved: () => Promise<void>; onAccessRevoked: () => void;
+function FieldReviewCard({ field, projectId, runId, findings, onSaved, onAccessRevoked }: {
+  field: ReviewField; projectId: string; runId: string; findings: Finding[];
+  onSaved: () => Promise<void>; onAccessRevoked: () => void;
 }) {
   const [choice, setChoice] = useState<Choice>(field.reviewStatus === "PENDING" ? field.aiValue === null ? "MANUAL" : "ACCEPT_AI" : field.reviewStatus as Choice);
   const [value, setValue] = useState(field.correctedValue ?? field.manualValue ?? "");
@@ -63,6 +66,7 @@ function FieldReviewCard({ field, projectId, runId, onSaved, onAccessRevoked }: 
     <p className="tf-ui-help">{confidence >= 90 ? "Tin cậy cao" : confidence >= 60 ? "Cần xác nhận" : "Không ánh xạ"} · {Math.round(confidence)}%</p>
     <p className="break-words text-sm">Nguồn: {locator(field)}{field.sourceSpan?.quote && <> · “{field.sourceSpan.quote}”</>}</p>
     {sourceHref && <a href={sourceHref} target="_blank" rel="noopener noreferrer" className="underline">Mở nguồn · {locator(field)}</a>}
+    <AiInlineFindings projectId={projectId} findings={findings} />
     {field.reviewStatus === "PENDING" && <>
       <Select label="Quyết định rà soát" value={choice} onChange={(event) => { setChoice(event.target.value as Choice); setError(""); }}>
         <option value="ACCEPT_AI" disabled={field.aiValue === null}>Giữ đề xuất</option>
@@ -85,6 +89,7 @@ export default function AiReviewWorkspace({ projectId, run, onAccessRevoked, onH
 }) {
   const [snapshot, setSnapshot] = useState<ReviewSnapshot | null>(null);
   const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [findings, setFindings] = useState<Finding[]>([]);
   const [draftId, setDraftId] = useState("");
   const [kind, setKind] = useState<"PO" | "VAT" | "IC">("PO");
   const [conflicts, setConflicts] = useState<ConflictSnapshot | null>(null);
@@ -95,12 +100,14 @@ export default function AiReviewWorkspace({ projectId, run, onAccessRevoked, onH
   const refresh = useCallback(async () => {
     const current = ++requestId.current;
     try {
-      const [next, available] = await Promise.all([
+      const [next, available, currentFindings] = await Promise.all([
         getAiReviewSnapshot({ projectId, runId: run.id }), listDocumentIntakeDrafts({ projectId }),
+        getAiFindings({ projectId }),
       ]);
-      if (current === requestId.current) { setSnapshot(next); setDrafts(available); setError(""); }
+      if (current === requestId.current) { setSnapshot(next); setDrafts(available); setFindings(currentFindings); setError(""); }
     } catch (cause) {
       if (current !== requestId.current) return;
+      setSnapshot(null); setFindings([]);
       if (cause instanceof Error && /not found|unauthor/i.test(cause.message)) { setSnapshot(null); onAccessRevoked(); return; }
       setError("Không thể tải dữ liệu rà soát. Thử lại từ Lịch sử.");
     }
@@ -141,7 +148,10 @@ export default function AiReviewWorkspace({ projectId, run, onAccessRevoked, onH
       {!reviewable && <Alert tone="warning" title="Chưa có kết quả có thể rà soát">Run {run.status}. Mở Lịch sử để xem trạng thái.</Alert>}
     </Panel>
     <div className="grid min-w-0 gap-3 lg:grid-cols-2">{snapshot.fields.map((field) => <FieldReviewCard key={field.id}
-      field={field} projectId={projectId} runId={run.id} onSaved={refresh} onAccessRevoked={onAccessRevoked} />)}</div>
+      field={field} projectId={projectId} runId={run.id}
+      findings={findings.filter((item) => item.runId === run.id && item.targetKind === "FIELD" && item.targetId === field.id &&
+        item.sourceSpanId === (field.sourceSpan?.id ?? null))}
+      onSaved={refresh} onAccessRevoked={onAccessRevoked} />)}</div>
     {reviewable && <Panel className="space-y-3">
       {snapshot.reviewStatus !== "COMPLETED" ? <><Button variant="primary" disabled={pendingCount > 0 || pending} onClick={finishReview}>Đã rà soát dữ liệu AI</Button>
         {pendingCount > 0 && <p className="tf-ui-help">Còn {pendingCount} trường chưa rà soát; phải xử lý tất cả trước khi hoàn tất.</p>}</> : <>
