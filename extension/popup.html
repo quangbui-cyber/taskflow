@@ -226,6 +226,9 @@
         </div>
         <div id="timerDisplay" class="timer">00:00</div>
         <div id="recMeetingName" style="font-size: 11px; color: var(--zinc-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></div>
+        <div style="font-size: 10px; color: var(--zinc-400); margin-top: 8px;">
+          Tự dừng và tạo biên bản khi bạn rời cuộc họp, host kết thúc họp hoặc đóng tab.
+        </div>
       </div>
 
       <button id="btnStop" class="btn-danger">
@@ -238,7 +241,8 @@
       <div class="card" style="text-align: center; padding: 24px 12px;">
         <div class="spinner" style="border-color: rgba(5,150,105,0.2); border-top-color: var(--brand); width: 28px; height: 28px; margin-bottom: 12px;"></div>
         <p style="font-weight: 600; margin-bottom: 4px;">Đang tải bản ghi lên myCreative...</p>
-        <p style="font-size: 11px; color: var(--zinc-500);">AI sẽ tự động chép lời và viết bản nháp.</p>
+        <p id="uploadingReason" style="font-size: 11px; color: var(--zinc-500); margin-bottom: 4px;"></p>
+        <p style="font-size: 11px; color: var(--zinc-500);">AI sẽ tự động chép lời và viết bản nháp. Bạn có thể đóng cửa sổ này, extension sẽ báo khi xong.</p>
       </div>
     </div>
 
@@ -250,6 +254,19 @@
         <p style="font-size: 11px; color: #047857; margin-bottom: 14px;">Biên bản sẽ sẵn sàng sau ít phút. Bạn sẽ nhận được thông báo khi hoàn tất.</p>
         <button id="btnOpenMeeting" class="btn-primary" style="font-size: 12px; padding: 8px 12px;">Mở trang cuộc họp</button>
       </div>
+    </div>
+
+    <!-- Màn hình 6: Tải lên lỗi / còn bản ghi chưa gửi -->
+    <div id="viewFailed" class="hidden">
+      <div class="card" style="text-align: center; padding: 18px 12px; background: #fef2f2; border-color: #fecaca;">
+        <div style="font-size: 24px; margin-bottom: 8px;">⚠️</div>
+        <p style="font-weight: 600; color: #991b1b; margin-bottom: 4px;">Chưa tải được bản ghi lên</p>
+        <p id="failedMeetingName" style="font-size: 11px; color: #7f1d1d; margin-bottom: 4px;"></p>
+        <p id="failedReason" style="font-size: 11px; color: #b91c1c; margin-bottom: 8px;"></p>
+        <p style="font-size: 11px; color: var(--zinc-500);">Bản ghi vẫn được giữ trên máy bạn, bấm thử lại khi có mạng.</p>
+      </div>
+      <button id="btnRetry" class="btn-primary">Thử tải lại</button>
+      <button id="btnDiscard" class="btn-secondary">Bỏ bản ghi này</button>
     </div>
 
     <script type="module" src="popup.js"></script>

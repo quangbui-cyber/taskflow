@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "myCreative Recorder",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "1 click ghi biên bản cuộc họp Google Meet thông minh cho myCreative",
   "icons": {
     "16": "icons/icon16.png",
@@ -16,7 +16,8 @@
     "activeTab",
     "alarms",
     "tabs",
-    "scripting"
+    "scripting",
+    "notifications"
   ],
   "host_permissions": [
     "https://meet.google.com/*",
@@ -32,8 +33,22 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://meet.google.com/*"],
-      "js": ["content-meet.js"],
+      "matches": [
+        "https://meet.google.com/*"
+      ],
+      "js": [
+        "meet-hook.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://meet.google.com/*"
+      ],
+      "js": [
+        "content-meet.js"
+      ],
       "run_at": "document_idle"
     },
     {
@@ -41,7 +56,9 @@
         "https://mycreative.vercel.app/profile/extension*",
         "http://localhost:3000/profile/extension*"
       ],
-      "js": ["content-connect.js"],
+      "js": [
+        "content-connect.js"
+      ],
       "run_at": "document_start"
     }
   ],

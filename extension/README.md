@@ -10,6 +10,22 @@ Extension "1 click ghi biên bản" cho cuộc họp Google Meet, tích hợp tr
 5. **Lưu đệm an toàn**: Cắt đoạn 5 giây lưu IndexedDB phòng trường hợp mất mạng hoặc sập nguồn.
 6. **Tải lên & tạo biên bản tự động**: Đẩy thẳng lên kho Vercel Blob và kích hoạt AI Groq + Gemini chép lời, tóm tắt biên bản.
 7. **Minh bạch**: Tự động gửi thông báo lịch sự vào khung chat Google Meet.
+8. **Tự kết thúc & tạo biên bản**: Đang ghi mà đóng tab, chuyển sang trang khác, bấm **Rời khỏi cuộc gọi** / **Kết thúc cuộc gọi cho tất cả**, hoặc host kết thúc cuộc họp thì Extension tự dừng ghi, tải lên và tạo biên bản (chi tiết bên dưới).
+9. **Thông báo & tải lại**: Có thông báo khi gửi xong hoặc lỗi. Nếu tải lên lỗi (mất mạng, trình duyệt tắt giữa chừng), bản ghi vẫn nằm trên máy, mở popup bấm **Thử tải lại**.
+
+## Khi nào Extension tự dừng ghi?
+
+| Tình huống | Cách phát hiện | Độ trễ |
+| --- | --- | --- |
+| Đóng tab Meet | `tabs.onRemoved`, và track âm thanh tab kết thúc ngay trong offscreen | Tức thì |
+| Tab chuyển sang trang khác (không còn ở phòng này) | `tabs.onUpdated` | Tức thì |
+| Bấm **Rời khỏi cuộc gọi** / **Kết thúc cuộc gọi cho tất cả** | Bắt cú bấm nút + tất cả kết nối cuộc gọi (RTCPeerConnection) đã đóng | ~2s + 5s chờ |
+| Host kết thúc họp, bị mời ra, hoặc màn hình "Bạn đã rời khỏi cuộc họp" | Kết nối đóng hết (không phụ thuộc ngôn ngữ) hoặc nhận ra màn hình sau cuộc gọi | ~10s + 5s chờ |
+| Đủ 225 phút | Đồng hồ | Tức thì |
+
+5 giây chờ cuối là để bấm nhầm "Rời" rồi "Tham gia lại" thì không bị cắt bản ghi. Mất mạng thoáng qua (Meet tự nối lại) không bị tính là rời họp vì cần mất kết nối liên tục ≥ 10s.
+
+> Sau khi cập nhật Extension, **tải lại (F5) tab Meet đang mở** để bật nhận diện kết nối. Tab chưa tải lại vẫn dùng được đóng tab và nhận diện màn hình "đã rời khỏi cuộc họp".
 
 ---
 
@@ -38,5 +54,5 @@ Extension "1 click ghi biên bản" cho cuộc họp Google Meet, tích hợp tr
    - Bấm icon Extension (hoặc nhấn phím tắt **`Alt + Shift + R`**).
    - Extension sẽ tự động nhận diện cuộc họp khớp với lịch hôm nay.
    - Bấm **Bắt đầu ghi biên bản**.
-   - Khi kết thúc cuộc họp: bấm **Dừng & Lưu biên bản** (hoặc nhấn lại `Alt + Shift + R`).
+   - Khi kết thúc cuộc họp: chỉ cần rời cuộc họp hoặc đóng tab, Extension tự dừng và lưu biên bản. Muốn dừng sớm: bấm **Dừng & Lưu biên bản** (hoặc nhấn lại `Alt + Shift + R`).
    - Bản ghi sẽ tự động được tải lên myCreative và chuyển sang AI để chép lời + tóm tắt biên bản!
