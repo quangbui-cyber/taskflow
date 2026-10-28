@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+import { Pool } from "pg";
+
 import {
   PHASE15_TEST_DATABASE_URL,
   assertPhase15SchemaDatabaseUrl,
@@ -27,6 +29,27 @@ const MIGRATION_URL = new URL(
   "../prisma/migrations/20261028120000_phase15_ai_controlled_layer/migration.sql",
   import.meta.url,
 );
+
+function assertDisposableCommandLog(commandLog: string, schemaName: string) {
+  assert.match(schemaName, /^phase15_[a-f0-9]{32}$/);
+  assert.match(commandLog, new RegExp(schemaName));
+  assert.match(commandLog, /costflow_test/);
+  assert.doesNotMatch(commandLog, /\/taskflow\b|@(?:localhost|[^\s@/]+\.)[^\s:/]+/i);
+  assert.doesNotMatch(commandLog, /(?:db\s+seed|migrate\s+reset|db\s+reset)/i);
+}
+
+async function assertDisposableSchemaRemoved(schemaName: string) {
+  const admin = new Pool({ connectionString: PHASE15_TEST_DATABASE_URL });
+  try {
+    const residue = await admin.query<{ count: string }>(
+      "SELECT COUNT(*)::text AS count FROM information_schema.schemata WHERE schema_name = $1",
+      [schemaName],
+    );
+    assert.equal(residue.rows[0]?.count, "0");
+  } finally {
+    await admin.end();
+  }
+}
 
 test("Phase 15 migration is additive and defines the complete provenance spine", async () => {
   const [schema, migration] = await Promise.all([
@@ -79,11 +102,10 @@ test("Phase 15 database guard rejects every non-disposable target", () => {
 });
 
 test("migrate deploy preserves scoped idempotency, project lineage and published-only retrieval", async () => {
+  let disposedSchema = "";
   await withPhase15TestSchema("migrate", async ({ client, schemaName, commandLog }) => {
-    assert.match(schemaName, /^phase15_[a-f0-9]{32}$/);
-    assert.match(commandLog, new RegExp(schemaName));
-    assert.match(commandLog, /costflow_test/);
-    assert.doesNotMatch(commandLog, /\/taskflow\b|@(?:localhost|[^\s@/]+\.)[^\s:/]+/i);
+    disposedSchema = schemaName;
+    assertDisposableCommandLog(commandLog, schemaName);
 
     const shape = await inspectPhase15Schema(client);
     assert.deepEqual(shape.missingTables, []);
@@ -232,4 +254,19 @@ test("migrate deploy preserves scoped idempotency, project lineage and published
     });
     assert.equal(publishedChunks.length, 0);
   });
+  await assertDisposableSchemaRemoved(disposedSchema);
+});
+
+test("db push creates the same Phase 15 contract without destructive flags and cleans up", async () => {
+  let disposedSchema = "";
+  await withPhase15TestSchema("push", async ({ client, schemaName, commandLog }) => {
+    disposedSchema = schemaName;
+    assertDisposableCommandLog(commandLog, schemaName);
+
+    const shape = await inspectPhase15Schema(client);
+    assert.deepEqual(shape.missingTables, []);
+    assert.deepEqual(shape.missingUniqueIndexes, []);
+    assert.deepEqual(shape.missingForeignKeys, []);
+  });
+  await assertDisposableSchemaRemoved(disposedSchema);
 });
