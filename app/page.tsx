@@ -13,7 +13,6 @@ import {
   Heart,
   Plane,
   Plus,
-  Sparkles,
   Star,
   UserRoundX,
   type LucideIcon,
@@ -41,7 +40,6 @@ import { minuteToTime, vnMinuteOfDay } from "@/lib/meetingCalendar";
 import {
   ARCHIVED_PROJECT_STATUS_KEYS,
   projectStatusColor,
-  projectTypeInfo,
 } from "@/lib/types";
 import Sidebar from "@/components/Sidebar";
 import Avatar from "@/components/Avatar";
@@ -241,9 +239,6 @@ export default async function HomePage({
         id: true,
         name: true,
         status: true,
-        type: true,
-        executionStartAt: true,
-        executionEndAt: true,
         _count: { select: { tasks: true } },
         tasks: { where: { status: "DONE" }, select: { id: true } },
       },
@@ -288,7 +283,7 @@ export default async function HomePage({
         userId: user.id,
         startDate: { gte: new Date(Date.UTC(year, 0, 1)), lt: new Date(Date.UTC(year + 1, 0, 1)) },
       },
-      select: { type: true, status: true, days: true, startDate: true, endDate: true },
+      select: { type: true, status: true, days: true },
     }),
     prisma.recognition.findMany({
       where: {
@@ -395,57 +390,6 @@ export default async function HomePage({
       (PROJECT_STATUS_ORDER[a.status] ?? 9) - (PROJECT_STATUS_ORDER[b.status] ?? 9) ||
       a.name.localeCompare(b.name, "vi", { sensitivity: "base" })
   );
-
-  // Sự kiện & D-Day của các dự án người đó tham gia trong 45 ngày tới
-  const upcomingEvents = projects
-    .filter(
-      (p) =>
-        p.executionStartAt &&
-        new Date(p.executionStartAt).getTime() >= dayStart.getTime() - DAY_MS
-    )
-    .map((p) => {
-      const start = new Date(p.executionStartAt!);
-      const daysLeft = Math.ceil(
-        (start.getTime() - dayStart.getTime()) / DAY_MS
-      );
-      return {
-        id: p.id,
-        name: p.name,
-        type: p.type,
-        status: p.status,
-        startAt: start,
-        endAt: p.executionEndAt ? new Date(p.executionEndAt) : null,
-        daysLeft,
-        totalTasks: p._count.tasks,
-        doneTasks: p.tasks.length,
-      };
-    })
-    .filter((e) => e.daysLeft >= 0 && e.daysLeft <= 45)
-    .sort((a, b) => a.daysLeft - b.daysLeft);
-
-  // Kỳ nghỉ phép sắp tới của người đó (đã duyệt)
-  const upcomingLeaves = myLeaveRequests
-    .filter(
-      (lr) =>
-        lr.status === "APPROVED" &&
-        new Date(lr.startDate).getTime() >= dayStart.getTime()
-    )
-    .map((lr) => {
-      const start = new Date(lr.startDate);
-      const daysLeft = Math.ceil(
-        (start.getTime() - dayStart.getTime()) / DAY_MS
-      );
-      return {
-        id: `leave-${start.toISOString()}`,
-        startDate: start,
-        endDate: new Date(lr.endDate),
-        days: lr.days,
-        type: lr.type,
-        daysLeft,
-      };
-    })
-    .filter((l) => l.daysLeft >= 0 && l.daysLeft <= 45)
-    .sort((a, b) => a.daysLeft - b.daysLeft);
   const quote = getDailyInspiration(user.id, now).quote;
   const dateLabel = new Intl.DateTimeFormat("vi-VN", {
     weekday: "long",
@@ -736,138 +680,6 @@ export default async function HomePage({
             </div>
 
             <aside aria-label="Thông tin của tôi" className="min-w-0 space-y-4">
-              <Card
-                title="Sự kiện & D-Day của bạn"
-                icon={Sparkles}
-                labelledBy="dday-heading"
-                delay={180}
-                action={
-                  upcomingEvents.length > 0 ? (
-                    <span className="text-xs font-semibold text-brand-800">
-                      {upcomingEvents.length} sự kiện
-                    </span>
-                  ) : null
-                }
-              >
-                {upcomingEvents.length > 0 || upcomingLeaves.length > 0 ? (
-                  <ul className="space-y-2.5">
-                    {upcomingEvents.map((event) => {
-                      const typeBadge = projectTypeInfo(event.type);
-                      const isToday = event.daysLeft === 0;
-                      const isTomorrow = event.daysLeft === 1;
-                      const isUrgent = event.daysLeft <= 3;
-                      const taskPercent =
-                        event.totalTasks > 0
-                          ? Math.round((event.doneTasks / event.totalTasks) * 100)
-                          : 0;
-
-                      return (
-                        <li
-                          key={event.id}
-                          className="group rounded-[12px] border border-zinc-100 bg-white p-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-sm"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0 flex-1">
-                              <div className="mb-1 flex flex-wrap items-center gap-1.5">
-                                <span
-                                  className={`rounded-[5px] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${typeBadge.className}`}
-                                >
-                                  {typeBadge.label}
-                                </span>
-                                <span className="text-[11px] text-zinc-500">
-                                  {new Intl.DateTimeFormat("vi-VN", {
-                                    weekday: "short",
-                                    day: "numeric",
-                                    month: "numeric",
-                                    timeZone: "Asia/Ho_Chi_Minh",
-                                  }).format(event.startAt)}
-                                </span>
-                              </div>
-                              <Link
-                                href={`/projects/${event.id}`}
-                                prefetch={false}
-                                className="block truncate text-[13px] font-semibold text-zinc-950 transition-colors group-hover:text-brand-800"
-                              >
-                                {event.name}
-                              </Link>
-                              {event.totalTasks > 0 && (
-                                <div className="mt-2 flex items-center gap-2">
-                                  <div className="h-1.5 w-20 overflow-hidden rounded-full bg-zinc-100">
-                                    <div
-                                      className="h-full rounded-full bg-brand-500 transition-all duration-500"
-                                      style={{ width: `${taskPercent}%` }}
-                                    />
-                                  </div>
-                                  <span className="text-[11px] text-zinc-500 tabular-nums">
-                                    {event.doneTasks}/{event.totalTasks} task ({taskPercent}%)
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                            <span
-                              className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold transition-transform group-hover:scale-105 ${
-                                isToday
-                                  ? "bg-red-500 text-white animate-pulse"
-                                  : isTomorrow
-                                  ? "bg-orange-500 text-white"
-                                  : isUrgent
-                                  ? "border border-amber-300 bg-amber-100 text-amber-900"
-                                  : event.daysLeft <= 7
-                                  ? "bg-brand-100 text-brand-900"
-                                  : "bg-zinc-100 text-zinc-700"
-                              }`}
-                            >
-                              {isToday
-                                ? "D-Day!"
-                                : isTomorrow
-                                ? "Ngày mai"
-                                : `D-${event.daysLeft}`}
-                            </span>
-                          </div>
-                        </li>
-                      );
-                    })}
-
-                    {upcomingLeaves.map((leaveEvent) => (
-                      <li
-                        key={leaveEvent.id}
-                        className="rounded-[12px] border border-emerald-200 bg-emerald-50/60 p-3"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0 flex-1">
-                            <div className="mb-1 flex items-center gap-1.5">
-                              <span className="rounded-[5px] bg-emerald-200 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-900">
-                                Kỳ nghỉ phép
-                              </span>
-                              <span className="text-[11px] text-emerald-800">
-                                {new Intl.DateTimeFormat("vi-VN", {
-                                  weekday: "short",
-                                  day: "numeric",
-                                  month: "numeric",
-                                  timeZone: "Asia/Ho_Chi_Minh",
-                                }).format(leaveEvent.startDate)}
-                              </span>
-                            </div>
-                            <p className="text-[13px] font-medium text-emerald-950">
-                              Nghỉ {formatLeaveDays(leaveEvent.days)} ngày đã duyệt
-                            </p>
-                          </div>
-                          <span className="shrink-0 rounded-full bg-emerald-200 px-2.5 py-1 text-xs font-bold text-emerald-900">
-                            {leaveEvent.daysLeft === 0
-                              ? "Hôm nay bắt đầu"
-                              : `Còn ${leaveEvent.daysLeft} ngày`}
-                          </span>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-[13px] text-zinc-600">
-                    Trong 30 ngày tới bạn không có sự kiện hoặc D-Day nào cần chạy.
-                  </p>
-                )}
-              </Card>
-
               <Card title="Sinh nhật sắp tới" icon={Cake} labelledBy="birthdays-heading" delay={220}>
                 {birthdays.length > 0 ? (
                   <ul>
