@@ -75,28 +75,33 @@ export default function ProjectStatusSelect({
   }
 
   if (!canEdit) {
-    return <span className={`tf-badge ${info.className}`}>{info.label}</span>;
+    return (
+      <span className="inline-flex h-7 items-center gap-1.5 rounded-full border border-zinc-200/80 bg-zinc-50 px-2.5 text-xs font-medium text-zinc-700">
+        <span
+          className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT_CLASSES[selectedStatus] ?? "bg-zinc-400"}`}
+        />
+        {info.label}
+      </span>
+    );
   }
 
   return (
-    <div ref={rootRef} className="relative flex flex-col items-end gap-1">
+    <div ref={rootRef} className="relative inline-flex items-center">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
         disabled={pending}
-        className="inline-flex min-h-9 min-w-36 items-center justify-between gap-2 rounded-[8px] border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-brand-400/30 disabled:cursor-wait disabled:opacity-60"
+        className="inline-flex h-7 items-center gap-1.5 rounded-full border border-zinc-200/90 bg-zinc-50/90 px-2.5 text-xs font-medium text-zinc-700 shadow-xs transition-colors hover:border-zinc-300 hover:bg-zinc-100 focus:outline-none focus:ring-1 focus:ring-brand-400 disabled:cursor-wait disabled:opacity-60"
         aria-label="Trạng thái dự án"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <span className="inline-flex items-center gap-2">
-          <span
-            className={`h-2 w-2 rounded-full ${STATUS_DOT_CLASSES[selectedStatus] ?? "bg-zinc-400"}`}
-          />
-          {info.label}
-        </span>
+        <span
+          className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT_CLASSES[selectedStatus] ?? "bg-zinc-400"}`}
+        />
+        <span>{info.label}</span>
         <ChevronDown
-          size={15}
+          size={12}
           className={`shrink-0 text-zinc-400 transition-transform ${open ? "rotate-180" : ""}`}
           aria-hidden="true"
         />
@@ -106,7 +111,7 @@ export default function ProjectStatusSelect({
         <div
           role="listbox"
           aria-label="Chọn trạng thái dự án"
-          className="tf-popover-enter absolute right-0 top-11 z-50 w-48 overflow-hidden rounded-[8px] border border-zinc-200 bg-white p-1.5 shadow-xl"
+          className="tf-popover-enter absolute left-0 top-8 z-50 w-44 overflow-hidden rounded-[8px] border border-zinc-200 bg-white p-1.5 shadow-xl sm:left-auto sm:right-0"
         >
           {PROJECT_STATUSES.map((projectStatus) => {
             const selected = projectStatus.key === selectedStatus;
@@ -117,13 +122,16 @@ export default function ProjectStatusSelect({
                 role="option"
                 aria-selected={selected}
                 onClick={() => changeStatus(projectStatus.key)}
-                className={`flex w-full items-center justify-between gap-3 rounded-[6px] px-2.5 py-2 text-left transition-colors hover:bg-zinc-50 ${selected ? "bg-zinc-50" : ""}`}
+                className={`flex w-full items-center justify-between gap-3 rounded-[6px] px-2 py-1.5 text-left text-xs transition-colors hover:bg-zinc-50 ${selected ? "bg-zinc-50 font-semibold" : ""}`}
               >
-                <span className={`tf-badge ${projectStatus.className}`}>
-                  {projectStatus.label}
+                <span className="flex items-center gap-2">
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT_CLASSES[projectStatus.key] ?? "bg-zinc-400"}`}
+                  />
+                  <span>{projectStatus.label}</span>
                 </span>
                 {selected && (
-                  <Check size={15} className="text-zinc-500" aria-hidden="true" />
+                  <Check size={13} className="text-zinc-500" aria-hidden="true" />
                 )}
               </button>
             );
@@ -131,7 +139,7 @@ export default function ProjectStatusSelect({
         </div>
       )}
 
-      {error && <p className="max-w-52 text-right text-xs text-red-600">{error}</p>}
+      {error && <p className="absolute -bottom-5 right-0 whitespace-nowrap text-xs text-red-600">{error}</p>}
     </div>
   );
 }
