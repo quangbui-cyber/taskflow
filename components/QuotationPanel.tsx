@@ -145,7 +145,7 @@ export default function QuotationPanel({
                 <Download size={15} className="mr-1" aria-hidden="true" />
                 Tải mẫu Excel v4
               </a>
-              <ExcelIntakeDialog projectId={finance.project.id} version={finance.version} />
+              <ExcelIntakeDialog projectId={finance.project.id} version={finance.version} files={files} />
               <Link className="tf-button-primary tf-button-size-sm" href={pairedWorkspaceHref}>
                 <Plus size={15} className="mr-1" aria-hidden="true" />
                 Tạo Báo giá &amp; IC mới

@@ -49,7 +49,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           })();
           return Response.json({ state: "MANUAL_MAPPING", knownError: knownError instanceof Error ? knownError.message.slice(0, 160) : "Không nhận diện được bảng chuẩn.",
             inventory: buildMaskedStructurePayload(inventory),
-            manualSheets: inventory.sheets.map((item, index) => ({ token: `SHEET_${index + 1}`, name: item.name, range: item.range, observations: item.observations })),
+            manualSheets: inventory.sheets.map((item, index) => ({ token: `SHEET_${index + 1}`, name: item.name, range: item.range,
+              firstRow: item.firstRow, lastRow: item.lastRow, firstColumn: item.firstColumn, lastColumn: item.lastColumn,
+              hiddenRows: item.hiddenRows, hiddenColumns: item.hiddenColumns, observations: item.observations,
+              cells: [...item.cells.values()].map(cell => ({ row: cell.row, column: cell.column, address: cell.address,
+                value: cell.formula !== undefined ? null : cell.value instanceof Date ? cell.value.toISOString().slice(0, 10) :
+                  ["string", "number", "boolean"].includes(typeof cell.value) ? String(cell.value).slice(0, 160) : null,
+                formula: cell.formula !== undefined })) })),
             fingerprint: inventory.fingerprint, suggestion, priorMappings },
           { headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
         }

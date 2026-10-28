@@ -1475,6 +1475,18 @@ dialog.tf-ui-dialog.tf-approval-inspection-modal::backdrop {
 
 .excel-intake-table-scroll .tf-field { min-width: 108px; min-height: 44px; }
 
+@media (max-width: 600px) {
+  .ai-excel-mapping-table thead { display: none; }
+  .ai-excel-mapping-table tbody,
+  .ai-excel-mapping-table tr,
+  .ai-excel-mapping-table th,
+  .ai-excel-mapping-table td { display: block; width: 100%; }
+  .ai-excel-mapping-table tr { border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin: 8px 0; }
+  .ai-excel-mapping-table td { padding: 6px 0; overflow-wrap: anywhere; }
+  .ai-excel-mapping-table td::before { content: attr(data-label); display: block; font-size: var(--text-caption); color: var(--text-secondary); }
+  .ai-excel-mapping-table .tf-field { width: 100%; min-height: 44px; }
+}
+
 @media (max-width: 390px) {
   .excel-intake-dialog { width: calc(100vw - 16px); }
   .excel-intake-source-grid { grid-template-columns: 1fr; }

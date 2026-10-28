@@ -10,6 +10,8 @@ import { Alert, Table } from "@/components/ui/Presentation";
 import type { ExcelIntakePreview } from "@/lib/costflow/excelIntakeParser";
 import { excelIntakeDiagnosticTargetId, type ExcelIntakeDiagnosticIdentity } from "@/lib/costflow/excelIntake";
 import { createExcelPreviewState, reduceExcelPreviewState } from "@/lib/costflow/excelPreviewState";
+import AiExcelMappingReview, { type MappingStage } from "@/components/ai/AiExcelMappingReview";
+import type { ReviewedExcelMapping } from "@/lib/ai/excel/mapping";
 
 const editableFields = [
   "sell.quantity", "sell.days", "sell.unitPrice", "sell.vatPercent", "sell.basis", "sell.note",
@@ -49,6 +51,7 @@ type IntakeState = {
   requestId: number;
   pending: boolean;
   error: string;
+  mappingStage: MappingStage | null;
 };
 type IntakeAction =
   | { type: "OPEN" }
@@ -60,25 +63,27 @@ type IntakeAction =
   | { type: "RESOLVE_DECIMAL"; conflictId: string; value: "VISIBLE" | "CANONICAL" }
   | { type: "REQUEST_STARTED"; requestId: number }
   | { type: "PREVIEW_OK"; requestId: number; session: SessionView | null }
+  | { type: "MAPPING_READY"; requestId: number; stage: MappingStage }
   | { type: "REQUEST_FAILED"; requestId: number; message: string };
 
-export const initialExcelIntakeState: IntakeState = { open: false, mode: "PASTE", paste: "", file: null, sheet: "", range: "", corrections: {}, decimalResolutions: {}, preview: null, session: null, resumeSessionId: "", sourceRevision: 1, requestId: 0, pending: false, error: "" };
+export const initialExcelIntakeState: IntakeState = { open: false, mode: "PASTE", paste: "", file: null, sheet: "", range: "", corrections: {}, decimalResolutions: {}, preview: null, session: null, resumeSessionId: "", sourceRevision: 1, requestId: 0, pending: false, error: "", mappingStage: null };
 
 export function excelIntakeReducer(state: IntakeState, action: IntakeAction): IntakeState {
   if (action.type === "OPEN") return { ...state, open: true };
   if (action.type === "CLOSE") return { ...state, open: false };
-  if (action.type === "SET_MODE") return { ...state, mode: action.mode, error: "" };
-  if (action.type === "SET_SOURCE") return { ...state, [action.key]: action.value, error: "" };
-  if (action.type === "SET_FILE") return { ...state, file: action.file, error: "" };
+  if (action.type === "SET_MODE") return { ...state, mode: action.mode, mappingStage: null, error: "" };
+  if (action.type === "SET_SOURCE") return { ...state, [action.key]: action.value, mappingStage: action.key === "resumeSessionId" ? state.mappingStage : null, error: "" };
+  if (action.type === "SET_FILE") return { ...state, file: action.file, mappingStage: null, error: "" };
   if (action.type === "CORRECT") return { ...state, corrections: { ...state.corrections, [action.key]: action.value } };
   if (action.type === "RESOLVE_DECIMAL") return { ...state, decimalResolutions: { ...state.decimalResolutions, [action.conflictId]: action.value } };
   if (action.type === "REQUEST_STARTED") return { ...state, requestId: action.requestId, pending: true, error: "" };
   if (action.requestId !== state.requestId) return state;
-  if (action.type === "PREVIEW_OK") return { ...state, pending: false, session: action.session, preview: action.session?.display ?? null, resumeSessionId: action.session?.previewSessionId ?? state.resumeSessionId, corrections: {}, decimalResolutions: {}, error: "" };
+  if (action.type === "MAPPING_READY") return { ...state, pending: false, session: null, preview: null, mappingStage: action.stage, error: "" };
+  if (action.type === "PREVIEW_OK") return { ...state, pending: false, session: action.session, preview: action.session?.display ?? null, mappingStage: null, resumeSessionId: action.session?.previewSessionId ?? state.resumeSessionId, corrections: {}, decimalResolutions: {}, error: "" };
   return { ...state, pending: false, error: action.message };
 }
 
-export default function ExcelIntakeDialog({ projectId, version, disabled = false }: { projectId: string; version: number; disabled?: boolean }) {
+export default function ExcelIntakeDialog({ projectId, version, files = [], disabled = false }: { projectId: string; version: number; files?: { id: string; name: string }[]; disabled?: boolean }) {
   const [state, dispatch] = useReducer(excelIntakeReducer, initialExcelIntakeState);
   const [authority, authorityDispatch] = useReducer(reduceExcelPreviewState<
     { mode: IntakeState["mode"]; paste: string; file: File | null; sheet: string; range: string },
@@ -112,7 +117,13 @@ export default function ExcelIntakeDialog({ projectId, version, disabled = false
   async function requestSession(request: Promise<Response>, requestId: number, sourceRevision: number) {
     try {
       const response = await request;
-      const body = await response.json() as SessionView & { error?: string };
+      const body = await response.json() as (SessionView & { error?: string }) | MappingStage;
+      if (requestId !== sequence.current) return;
+      if (body.state === "MANUAL_MAPPING") {
+        dispatch({ type: "MAPPING_READY", requestId, stage: body });
+        authorityDispatch({ type: "MAPPING_READY", sourceRevision });
+        return;
+      }
       if (!response.ok || body.error) throw new Error(body.error || "Không đọc được phiên xem trước.");
       if (body.operationKind !== "NEW_DRAFT") throw new Error("Phiên xem trước không thuộc luồng tạo nháp mới.");
       dispatch({ type: "PREVIEW_OK", requestId, session: body });
@@ -125,7 +136,7 @@ export default function ExcelIntakeDialog({ projectId, version, disabled = false
     }
   }
 
-  async function preview() {
+  async function preview(mapping?: ReviewedExcelMapping, aiSourceId?: string) {
     const requestId = ++sequence.current;
     dispatch({ type: "REQUEST_STARTED", requestId });
     authorityDispatch({ type: "REQUEST_STARTED", sourceRevision: authority.sourceRevision });
@@ -135,6 +146,9 @@ export default function ExcelIntakeDialog({ projectId, version, disabled = false
     form.set("range", state.range);
     form.set("sourceRevision", String(authority.sourceRevision));
     if (state.mode === "XLSX" && state.file) form.set("file", state.file);
+    if (state.mode === "XLSX") form.set("aiMappingIntent", "true");
+    if (mapping) form.set("reviewedMapping", JSON.stringify(mapping));
+    if (aiSourceId) form.set("aiSourceId", aiSourceId);
     await requestSession(fetch(`/api/projects/${projectId}/costflow/excel-intake/preview`, { method: "POST", body: form }), requestId, authority.sourceRevision);
   }
 
@@ -210,7 +224,7 @@ export default function ExcelIntakeDialog({ projectId, version, disabled = false
     <Button ref={triggerRef} variant="secondary" size="sm" disabled={disabled} onClick={() => dispatch({ type: "OPEN" })}>Nhập từ Excel</Button>
     <Dialog open={state.open} onClose={() => dispatch({ type: "CLOSE" })} title="Nhập Báo giá & IC" description="Dán bảng hoặc tải XLSX để xem trước. Chưa có hồ sơ nào được ghi." className="excel-intake-dialog"
       footer={<>
-        <Button variant="secondary" onClick={preview} loading={state.pending}>Xem trước dữ liệu</Button>
+        <Button variant="secondary" onClick={() => void preview()} loading={state.pending}>Xem trước dữ liệu</Button>
         <Button onClick={confirm} loading={confirmPending} disabled={state.pending || confirmPending || blocking > 0 || unresolvedDecimals > 0 || !state.preview || !actionable}>Tạo nháp Báo giá &amp; IC</Button>
       </>}>
       <div className="excel-intake-source-grid">
@@ -225,9 +239,14 @@ export default function ExcelIntakeDialog({ projectId, version, disabled = false
         <Field label="Mở lại phiên xem trước" hint="Dán mã phiên đã lưu để tiếp tục sửa hoặc xem lại dữ liệu trước đó." value={state.resumeSessionId} onChange={event => dispatch({ type: "SET_SOURCE", key: "resumeSessionId", value: event.target.value })} placeholder="Dán mã phiên" />
         <Button variant="secondary" onClick={resume} disabled={!state.resumeSessionId.trim()} loading={state.pending}>Mở phiên đã lưu</Button>
       </div>
-      <p className="tf-ui-help" aria-live="polite">{authority.notice || (state.pending ? "Đang kiểm tra dữ liệu…" : state.error || (visiblePreview ? `Đã nhận diện ${visiblePreview.adapter} · ${visiblePreview.rows.length} dòng.` : "Chọn nguồn rồi xem trước dữ liệu."))}</p>
+      <p className="tf-ui-help" aria-live="polite">{authority.notice || (state.pending ? "Đang kiểm tra dữ liệu…" : state.error || (visiblePreview ? visiblePreview.adapter === "AI_REVIEWED" ? `Đã rà soát ánh xạ · ${visiblePreview.rows.length} dòng.` : `Đã nhận diện bằng bộ đọc chuẩn — không gọi AI · ${visiblePreview.rows.length} dòng.` : "Chọn nguồn rồi xem trước dữ liệu."))}</p>
       {state.session && <p className="tf-ui-help">Phiên {state.session.previewSessionId} · hết hạn {new Date(state.session.expiresAt).toLocaleString("vi-VN")}</p>}
       {state.error && <Alert tone="danger" title="Chưa thể xem trước">{state.error} Dữ liệu và các ô đã sửa vẫn được giữ.</Alert>}
+      {state.mappingStage && <>
+        <p className="tf-ui-help">Để dùng AI hoặc mapping đã lưu, <a className="tf-link" href={`/projects/${projectId}?tab=files`}>lưu XLSX vào Tài liệu dự án</a> rồi chọn đúng tệp bên dưới. Ánh xạ thủ công dùng tệp đang tải trong hộp thoại.</p>
+        <AiExcelMappingReview key={state.mappingStage.fingerprint} stage={state.mappingStage} files={files} pending={state.pending}
+          onAnalyze={sourceId => void preview(undefined, sourceId)} onApply={(mapping, sourceId) => void preview(mapping, sourceId)} />
+      </>}
       {confirmError && <Alert tone="danger" title="Chưa thể tạo nháp">{confirmError} Dữ liệu và các ô đã sửa vẫn được giữ.</Alert>}
       {state.session?.state === "READ_ONLY_CONSUMED" && <Alert tone="success" title="Phiên đã được xác nhận">Bản xem lại chỉ đọc{state.session.result?.draftId ? ` · nháp ${state.session.result.draftId}` : ""}. {state.session.source && <a href={state.session.source.downloadUrl}>Tải nguồn {state.session.source.filename}</a>}</Alert>}
       {state.session?.state.startsWith("NON_ACTIONABLE_") && <Alert tone="warning" title="Phiên không còn hiệu lực">Phiên đã hết hạn, bị thay thế hoặc bị hủy. Dữ liệu xem trước đã được xóa.</Alert>}

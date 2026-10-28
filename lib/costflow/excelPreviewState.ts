@@ -45,6 +45,7 @@ export type ExcelPreviewAction<S, P> =
   | { type: "REQUEST_STARTED"; sourceRevision: number }
   | { type: "RESPONSE_SUCCEEDED"; sourceRevision: number; sessionId: string; projection: P }
   | { type: "RESPONSE_FAILED"; sourceRevision: number; message: string }
+  | { type: "MAPPING_READY"; sourceRevision: number }
   | { type: "SESSION_LOADED"; serverState: ExcelPreviewServerState; sessionId: string; projection: P | null }
   | { type: "SERVER_STATUS"; serverState: ExcelPreviewServerState }
   | { type: "SET_CORRECTION"; key: string; value: string }
@@ -188,6 +189,11 @@ export function reduceExcelPreviewState<S, P>(state: ExcelPreviewState<S, P>, ac
   if (action.type === "RESPONSE_FAILED") {
     if (action.sourceRevision !== state.sourceRevision) return staleResponse(state);
     return { ...state, requestRevision: null, pending: false, error: `${action.message} Dữ liệu và các ô đã sửa vẫn được giữ.` };
+  }
+  if (action.type === "MAPPING_READY") {
+    if (action.sourceRevision !== state.sourceRevision) return staleResponse(state);
+    return { ...state, requestRevision: null, actionableSessionId: null, currentProjection: null,
+      pending: false, notice: "Rà soát ánh xạ nguồn trước khi xem trước dữ liệu.", error: "" };
   }
   if (action.type === "SESSION_LOADED") {
     return {
