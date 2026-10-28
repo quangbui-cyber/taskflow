@@ -29,7 +29,7 @@ export async function startMeetingRecapWorkflow({
   durationSeconds,
 }: {
   meetingId: string;
-  user: User;
+  user: Pick<User, "id" | "role">;
   pathname: string;
   fileName?: string | null;
   durationSeconds?: unknown;
@@ -109,7 +109,7 @@ export async function startMeetingRecapWorkflow({
 
   after(async () => {
     try {
-      await runMeetingRecap(meetingId);
+      await runMeetingRecap(recap.id, startedAt);
     } catch (error) {
       console.error("Meeting recap background task failed", error);
     }
