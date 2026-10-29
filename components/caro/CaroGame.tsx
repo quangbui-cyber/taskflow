@@ -72,7 +72,6 @@ export default function CaroGame({ initialRoomCode = null, currentUserName = "T�
 
   // Lưu người thắng ván trước để người thua được đi trước ở ván kế tiếp
   const [lastWinner, setLastWinner] = useState<Player | "DRAW" | null>(null);
-  const [turnReason, setTurnReason] = useState<string>("");
 
   // Tỉ số local
   const [scoreX, setScoreX] = useState(0);
@@ -112,25 +111,8 @@ export default function CaroGame({ initialRoomCode = null, currentUserName = "T�
 
     // Quy tắc: Nếu ván trước có người thua -> Người thua được đi trước.
     // Nếu ván đầu hoặc hòa: Bốc thăm ngẫu nhiên 50/50.
-    let aiGoesFirst = false;
-    let reason = "";
-
-    if (lastWinner === "X") {
-      // Bạn (X) thắng ván trước -> Máy (O) thua -> Máy được đi trước
-      aiGoesFirst = true;
-      reason = "🔄 Máy thua ván trước ➔ Máy được quyền đi trước ván này!";
-    } else if (lastWinner === "O") {
-      // Máy (O) thắng ván trước -> Bạn (X) thua -> Bạn được đi trước
-      aiGoesFirst = false;
-      reason = "🔄 Bạn thua ván trước ➔ Bạn được quyền đi trước ván này!";
-    } else {
-      aiGoesFirst = Math.random() < 0.5;
-      reason = aiGoesFirst
-        ? "🎲 Bốc thăm ván đầu: Máy được đi trước!"
-        : "🎲 Bốc thăm ván đầu: Bạn được đi trước!";
-    }
-
-    setTurnReason(reason);
+    const aiGoesFirst =
+      lastWinner === "X" ? true : lastWinner === "O" ? false : Math.random() < 0.5;
 
     if (aiGoesFirst) {
       setCurrentTurn("O");
@@ -473,9 +455,6 @@ export default function CaroGame({ initialRoomCode = null, currentUserName = "T�
         <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-zinc-950">
           Cờ Caro 15x15
         </h1>
-        <p className="mt-1 text-xs sm:text-sm text-zinc-500">
-          5 quân liên tiếp · Đếm giờ 15s mỗi lượt · Người thua ván trước được đi trước
-        </p>
 
         {/* Thanh chọn 2 chế độ duy nhất */}
         <div className="mt-4 inline-flex rounded-full border border-zinc-200 bg-zinc-100/80 p-1 shadow-xs">
@@ -516,10 +495,7 @@ export default function CaroGame({ initialRoomCode = null, currentUserName = "T�
       {/* KHU VỰC TẠO PHÒNG / VÀO PHÒNG ONLINE */}
       {mode === "online" && !onlineRoomCode && (
         <div className="mb-6 mx-auto max-w-md rounded-[16px] border border-zinc-200 bg-white p-5 shadow-xs text-center">
-          <h2 className="text-sm font-bold text-zinc-900 mb-1">Thách đấu đồng nghiệp qua mạng</h2>
-          <p className="text-xs text-zinc-500 mb-4">
-            Tạo phòng và gửi link cho bạn bè, hoặc nhập mã phòng để vào đối đầu.
-          </p>
+          <h2 className="text-sm font-bold text-zinc-900 mb-4">Phòng thi đấu</h2>
 
           {onlineError && (
             <div className="mb-3 rounded-lg bg-red-50 p-2 text-xs font-medium text-red-600 border border-red-200">
@@ -663,12 +639,12 @@ export default function CaroGame({ initialRoomCode = null, currentUserName = "T�
               <div>
                 <div className="text-xs font-semibold text-zinc-700">
                   {mode === "ai" && !isAiStarted ? (
-                    <span className="text-brand-800 font-bold">Hãy bấm "Bắt đầu" để vào ván đấu!</span>
+                    <span className="text-zinc-500">Sẵn sàng</span>
                   ) : isOnlineActive ? (
                     onlineGame.status === "WAITING" ? (
                       <span className="text-amber-600 italic">Đang chờ đối thủ vào phòng...</span>
                     ) : onlineGame.status === "READY" ? (
-                      <span className="text-brand-800 font-bold">Đã đủ 2 người! Bấm Bắt đầu để đấu</span>
+                      <span className="text-brand-800 font-bold">Đã đủ 2 người</span>
                     ) : activeTurn === myRole ? (
                       <span className="text-brand-800 font-bold">Lượt của bạn! Hãy đặt cờ</span>
                     ) : (
@@ -736,13 +712,6 @@ export default function CaroGame({ initialRoomCode = null, currentUserName = "T�
             </div>
           </div>
         </div>
-
-        {/* Ghi chú quy tắc lượt đi đầu / người thua đi trước */}
-        {mode === "ai" && isAiStarted && turnReason && (
-          <div className="mt-2.5 pt-2 border-t border-zinc-100 text-center text-[11px] text-zinc-500 font-medium">
-            {turnReason}
-          </div>
-        )}
       </div>
 
       {/* CÁC NÚT THAO TÁC (ĐỘ KHÓ, ĐI LẠI, NÚT BẮT ĐẦU / VÁN MỚI) */}
@@ -854,10 +823,7 @@ export default function CaroGame({ initialRoomCode = null, currentUserName = "T�
               <div className="mx-auto mb-2.5 flex h-12 w-12 items-center justify-center rounded-full bg-brand-100 text-brand-700 shadow-xs">
                 <Play size={22} className="ml-1 fill-brand-700" />
               </div>
-              <h3 className="text-base font-extrabold text-zinc-950">Sẵn sàng thi đấu?</h3>
-              <p className="mt-1 text-xs text-zinc-500 mb-4">
-                Mỗi lượt có 15s để suy nghĩ · Bốc thăm ngẫu nhiên ai đi trước
-              </p>
+              <h3 className="mb-4 text-base font-extrabold text-zinc-950">Sẵn sàng thi đấu?</h3>
               <button
                 type="button"
                 onClick={handleStartAi}
@@ -892,14 +858,6 @@ export default function CaroGame({ initialRoomCode = null, currentUserName = "T�
             </div>
           </div>
         )}
-      </div>
-
-      {/* Tóm tắt luật chơi chân trang */}
-      <div className="mt-8 text-center text-xs text-zinc-400 space-y-1">
-        <p>Luật chơi: 5 quân liên tiếp (ngang, dọc, chéo) để chiến thắng.</p>
-        <p className="text-[11px] text-zinc-400">
-          ⏱️ Mỗi lượt có 15s để suy nghĩ · 🎲 Ván đầu bốc thăm ngẫu nhiên, ván sau người thua được quyền đi trước.
-        </p>
       </div>
     </div>
   );
