@@ -159,3 +159,120 @@ export function getWeekdaySchedule(startDate: Date, count: number): Date[] {
   return result;
 }
 
+
+// ---------------------------------------------------------------------------
+// Hiển thị trên trang Góc Đọc
+// ---------------------------------------------------------------------------
+
+const EN_KEEP_WORDS: Record<string, string> = {
+  i: "I",
+  "i’m": "I’m",
+  "i’d": "I’d",
+  "i’ll": "I’ll",
+  "i’ve": "I’ve",
+  "i'm": "I'm",
+  ai: "AI",
+  christmas: "Christmas",
+};
+
+/**
+ * Đổi tựa IN HOA sang kiểu câu ("Tôi có được gì từ đó?") để dễ đọc.
+ * Tiếng Việt chỉ giữ "AI" (trí tuệ nhân tạo) khi tựa tiếng Anh gốc cũng có "AI",
+ * vì "ai" trong tiếng Việt còn nghĩa là "người nào".
+ */
+export function toDisplayTitle(title: string, lang: "en" | "vi", englishTitle = ""): string {
+  const locale = lang === "vi" ? "vi-VN" : "en-GB";
+  const keepAiVi = lang === "vi" && /(^|[^\p{L}])AI([^\p{L}]|$)/u.test(englishTitle);
+
+  let out = title.normalize("NFC").toLocaleLowerCase(locale);
+  out = out.replace(/[\p{L}\p{M}’']+/gu, (word) => {
+    if (lang === "en" && EN_KEEP_WORDS[word]) return EN_KEEP_WORDS[word];
+    if (keepAiVi && word === "ai") return "AI";
+    return word;
+  });
+  if (lang === "vi") out = out.replace(/giáng sinh/g, "Giáng sinh");
+
+  // Viết hoa chữ cái đầu tiên và chữ cái đầu mỗi câu sau . ! ?
+  out = out.replace(
+    /(^|[.!?]\s+)([^\p{L}]*)(\p{L})/gu,
+    (_m, before: string, punct: string, letter: string) => before + punct + letter.toLocaleUpperCase(locale)
+  );
+  return out.replace(/\s{2,}/g, " ").trim();
+}
+
+/** Ngày "YYYY-MM-DD" theo giờ Việt Nam. */
+export function vnDateKey(date: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(date);
+}
+
+function dayNumber(key: string): number {
+  const [y, m, d] = key.split("-").map(Number);
+  return Date.UTC(y, m - 1, d) / 86_400_000;
+}
+
+export interface CreativeDayInfo {
+  /** "Hôm nay", "Hôm qua", "3 ngày trước" hoặc "25/10" */
+  label: string;
+  /** Khóa nhóm: "week", "lastWeek" hoặc "m-YYYY-MM" */
+  groupKey: string;
+  /** "Tuần này", "Tuần trước" hoặc "Tháng 9" */
+  groupLabel: string;
+}
+
+/** Nhãn ngày ngắn gọn và nhóm thời gian của một bài so với hôm nay (giờ VN). */
+export function describeCreativeDay(published: Date, today: Date): CreativeDayInfo {
+  const pubKey = vnDateKey(published);
+  const todayKey = vnDateKey(today);
+  const pubDay = dayNumber(pubKey);
+  const todayDay = dayNumber(todayKey);
+  const diff = todayDay - pubDay;
+  const [py, pm, pd] = pubKey.split("-");
+  const ty = todayKey.slice(0, 4);
+
+  let label: string;
+  if (diff === 0) label = "Hôm nay";
+  else if (diff === 1) label = "Hôm qua";
+  else if (diff > 1 && diff < 7) label = `${diff} ngày trước`;
+  else label = py === ty ? `${pd}/${pm}` : `${pd}/${pm}/${py}`;
+
+  // Tuần bắt đầu từ Thứ Hai
+  const todayDow = (new Date(todayDay * 86_400_000).getUTCDay() + 6) % 7;
+  const weekStart = todayDay - todayDow;
+  if (pubDay >= weekStart) return { label, groupKey: "week", groupLabel: "Tuần này" };
+  if (pubDay >= weekStart - 7) return { label, groupKey: "lastWeek", groupLabel: "Tuần trước" };
+  const month = String(Number(pm));
+  return {
+    label,
+    groupKey: `m-${py}-${pm}`,
+    groupLabel: py === ty ? `Tháng ${month}` : `Tháng ${month}/${py}`,
+  };
+}
+
+/**
+ * Câu trích nổi bật: đoạn in đậm đầu tiên là cả một dòng hoặc mở đầu bằng dấu ngoặc kép.
+ */
+export function extractPullQuote(lines: ArticleLine[]): string | null {
+  for (const line of lines) {
+    if (!isTextLine(line)) continue;
+    const text = line.t.trim();
+    const match = text.match(/\*\*(.+?)\*\*/);
+    if (!match) continue;
+    const inner = match[1].trim();
+    const wholeLine = text.replace(/[*_]/g, "").trim() === inner.replace(/[*_]/g, "").trim();
+    const quoted = /^[“"]/.test(inner);
+    if (!wholeLine && !quoted) continue;
+    // Bỏ qua câu bị cắt giữa chừng (ngoặc kép lệch cặp) hoặc viết hoa toàn bộ
+    const opens = (inner.match(/[“]/g) || []).length;
+    const closes = (inner.match(/[”]/g) || []).length;
+    if (opens !== closes) continue;
+    const clean = inner
+      .replace(/[*_]/g, "")
+      .trim()
+      .replace(/^[“"‘']+/, "")
+      .replace(/[”"’']+([.!?…]?)$/, "$1")
+      .trim();
+    if (!/^\p{Lu}/u.test(clean) || clean === clean.toLocaleUpperCase("vi-VN")) continue;
+    if (clean.length >= 30 && clean.length <= 160) return clean;
+  }
+  return null;
+}
