@@ -11,7 +11,7 @@ import {
   type Point,
 } from "@/lib/caro";
 import { caroSound } from "@/lib/caroSound";
-import CaroBoard from "./CaroBoard";
+import CaroBoard, { CaroPiece } from "./CaroBoard";
 import {
   createOnlineGame,
   joinOnlineGame,
@@ -31,13 +31,11 @@ import {
   Volume2,
   VolumeX,
   Globe,
-  Sparkles,
+  Plus,
   Trophy,
-  ArrowLeft,
   Timer as TimerIcon,
   AlertCircle,
 } from "lucide-react";
-import Link from "next/link";
 
 type GameMode = "ai" | "online";
 type AiDifficulty = "easy" | "hard";
@@ -72,7 +70,6 @@ export default function CaroGame({ initialRoomCode = null, currentUserName = "T�
 
   // Lưu người thắng ván trước để người thua được đi trước ở ván kế tiếp
   const [lastWinner, setLastWinner] = useState<Player | "DRAW" | null>(null);
-  const [turnReason, setTurnReason] = useState<string>("");
 
   // Tỉ số local
   const [scoreX, setScoreX] = useState(0);
@@ -112,25 +109,14 @@ export default function CaroGame({ initialRoomCode = null, currentUserName = "T�
 
     // Quy tắc: Nếu ván trước có người thua -> Người thua được đi trước.
     // Nếu ván đầu hoặc hòa: Bốc thăm ngẫu nhiên 50/50.
-    let aiGoesFirst = false;
-    let reason = "";
-
+    let aiGoesFirst: boolean;
     if (lastWinner === "X") {
-      // Bạn (X) thắng ván trước -> Máy (O) thua -> Máy được đi trước
       aiGoesFirst = true;
-      reason = "🔄 Máy thua ván trước ➔ Máy được quyền đi trước ván này!";
     } else if (lastWinner === "O") {
-      // Máy (O) thắng ván trước -> Bạn (X) thua -> Bạn được đi trước
       aiGoesFirst = false;
-      reason = "🔄 Bạn thua ván trước ➔ Bạn được quyền đi trước ván này!";
     } else {
       aiGoesFirst = Math.random() < 0.5;
-      reason = aiGoesFirst
-        ? "🎲 Bốc thăm ván đầu: Máy được đi trước!"
-        : "🎲 Bốc thăm ván đầu: Bạn được đi trước!";
     }
-
-    setTurnReason(reason);
 
     if (aiGoesFirst) {
       setCurrentTurn("O");
@@ -400,12 +386,12 @@ export default function CaroGame({ initialRoomCode = null, currentUserName = "T�
         setWinner("O");
         setLastWinner("O");
         setScoreO((s) => s + 1);
-        setTimeoutMessage("⏳ Hết 15 giây! Bạn bị xử thua do quá thời gian lượt đi.");
+        setTimeoutMessage("Hết 15 giây! Bạn bị xử thua vì quá thời gian.");
       } else {
         setWinner("X");
         setLastWinner("X");
         setScoreX((s) => s + 1);
-        setTimeoutMessage("⏳ Máy hết thời gian suy nghĩ! Bạn giành chiến thắng.");
+        setTimeoutMessage("Máy hết thời gian suy nghĩ, bạn thắng!");
       }
     } else if (mode === "online" && onlineRoomCode && onlineGame?.status === "PLAYING") {
       const timedOutPlayer = onlineGame.turn;
@@ -413,494 +399,498 @@ export default function CaroGame({ initialRoomCode = null, currentUserName = "T�
         if (res.success && res.game) {
           setOnlineGame(res.game);
           const loser = timedOutPlayer === "X" ? res.game.playerXName : res.game.playerOName;
-          setTimeoutMessage(`⏳ Hết 15 giây! ${loser} bị xử thua do quá thời gian.`);
+          setTimeoutMessage(`Hết 15 giây! ${loser} bị xử thua vì quá thời gian.`);
         }
       });
     }
   }, [timeLeft, timerEnabled, activeWinner, mode, currentTurn, onlineGame, onlineRoomCode, isAiStarted]);
 
-  return (
-    <div className="mx-auto max-w-4xl px-3 sm:px-6 py-6 sm:py-8 font-sans">
-      {/* Thanh Header điều hướng & Tiện ích */}
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <Link
-          href="/"
-          className="group inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-600 transition-colors hover:text-zinc-950"
-        >
-          <ArrowLeft size={16} className="transition-transform duration-150 group-hover:-translate-x-0.5" />
-          <span>Trang chủ myCreative</span>
-        </Link>
 
-        <div className="flex items-center gap-2">
-          {/* Nút Bật/Tắt chế độ đếm giờ 15s */}
-          <button
-            type="button"
-            onClick={() => {
-              setTimerEnabled((t) => !t);
-              setTimeLeft(15);
-              setTimeoutMessage(null);
-            }}
-            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-xs transition-colors ${
-              timerEnabled
-                ? "border-amber-300 bg-amber-50/80 text-amber-900"
-                : "border-zinc-200 bg-white text-zinc-500 hover:text-zinc-800"
-            }`}
-            title="Bật/Tắt đếm giờ 15s mỗi lượt"
-          >
-            <TimerIcon size={14} className={timerEnabled ? "text-amber-600" : "text-zinc-400"} />
-            <span>{timerEnabled ? "Đếm giờ: 15s/lượt" : "Đếm giờ: Tắt"}</span>
-          </button>
+  // --- Dữ liệu hiển thị ---
+  const isPlaying = mode === "ai" ? isAiStarted : onlineGame?.status === "PLAYING";
+  const xActive = activeTurn === "X" && !activeWinner && isPlaying;
+  const oActive = activeTurn === "O" && !activeWinner && isPlaying;
+  const showTimer =
+    timerEnabled &&
+    !activeWinner &&
+    ((mode === "ai" && isAiStarted) || (isOnlineActive && onlineGame.status === "PLAYING"));
+  const timeLow = timeLeft <= 5;
 
-          {/* Nút bật/tắt âm thanh */}
-          <button
-            type="button"
-            onClick={handleToggleSound}
-            className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 shadow-xs transition-colors hover:border-zinc-300 hover:text-zinc-950"
-            title={soundOn ? "Tắt âm thanh cờ" : "Bật âm thanh cờ"}
-          >
-            {soundOn ? <Volume2 size={15} className="text-lime-600" /> : <VolumeX size={15} className="text-zinc-400" />}
-            <span>{soundOn ? "Âm thanh: Bật" : "Âm thanh: Tắt"}</span>
-          </button>
+  const xName = mode === "ai" ? "Bạn" : isOnlineActive ? onlineGame.playerXName : "Kỳ thủ X";
+  const oName =
+    mode === "ai"
+      ? "Máy"
+      : isOnlineActive
+      ? onlineGame.playerOName || "Chờ đối thủ…"
+      : "Kỳ thủ O";
+  const xSub = isOnlineActive && myRole === "X" ? "Bạn · Quân X" : "Quân X";
+  const oSub =
+    mode === "ai"
+      ? difficulty === "hard"
+        ? "Cao thủ"
+        : "Dễ"
+      : isOnlineActive && myRole === "O"
+      ? "Bạn · Quân O"
+      : "Quân O";
+  const shownScoreX = isOnlineActive ? onlineGame.scoreX : scoreX;
+  const shownScoreO = isOnlineActive ? onlineGame.scoreO : scoreO;
+
+  let statusText = "";
+  let statusMuted = false;
+  if (activeWinner === "DRAW") {
+    statusText = "Hòa cờ!";
+  } else if (activeWinner) {
+    if (mode === "ai") {
+      statusText = activeWinner === "X" ? "Bạn thắng ván này!" : "Máy thắng ván này";
+    } else if (isOnlineActive) {
+      statusText =
+        activeWinner === myRole
+          ? "Bạn thắng ván này!"
+          : `${activeWinner === "X" ? onlineGame.playerXName : onlineGame.playerOName} thắng ván này`;
+    }
+  } else if (mode === "ai") {
+    if (!isAiStarted) {
+      statusText = "Chưa bắt đầu";
+      statusMuted = true;
+    } else if (isAiThinking) {
+      statusText = "Máy đang tính nước…";
+      statusMuted = true;
+    } else {
+      statusText = "Lượt của bạn";
+    }
+  } else if (!isOnlineActive) {
+    statusText = "Chưa vào phòng";
+    statusMuted = true;
+  } else if (onlineGame.status === "WAITING") {
+    statusText = "Đang chờ đối thủ vào phòng…";
+    statusMuted = true;
+  } else if (onlineGame.status === "READY") {
+    statusText = "Đã đủ 2 người, sẵn sàng!";
+  } else if (activeTurn === myRole) {
+    statusText = "Lượt của bạn";
+  } else {
+    statusText = "Đối thủ đang suy nghĩ…";
+    statusMuted = true;
+  }
+  const iWon =
+    (mode === "ai" && activeWinner === "X") || (isOnlineActive && !!myRole && activeWinner === myRole);
+
+  const resetLocalBoard = () => {
+    setIsAiStarted(false);
+    setBoard(createEmptyBoard());
+    setLastMove(null);
+    setWinner(null);
+    setWinningLine([]);
+    setTimeLeft(15);
+    setTimeoutMessage(null);
+  };
+
+  // --- Lớp phủ trên bàn cờ ---
+  let boardOverlay: React.ReactNode = null;
+  if (mode === "ai" && !isAiStarted) {
+    boardOverlay = (
+      <OverlayCard titleId="caro-start-title">
+        <div className="flex items-center justify-center gap-2.5">
+          <PieceTile symbol="X" />
+          <span className="text-xs font-semibold text-zinc-500">vs</span>
+          <PieceTile symbol="O" />
         </div>
-      </div>
-
-      {/* Tiêu đề & Chọn 2 chế độ chơi */}
-      <div className="mb-6 text-center">
-        <div className="inline-flex items-center gap-1.5 rounded-full bg-brand-100/70 px-3 py-0.5 text-xs font-semibold text-brand-900 mb-2">
-          <Sparkles size={13} className="text-brand-700" />
-          <span>Góc Giải Trí Creative</span>
-        </div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-zinc-950">
-          Cờ Caro 15x15
-        </h1>
-        <p className="mt-1 text-xs sm:text-sm text-zinc-500">
-          5 quân liên tiếp · Đếm giờ 15s mỗi lượt · Người thua ván trước được đi trước
+        <h2 id="caro-start-title" className="mt-4 text-lg font-semibold text-zinc-950">
+          Sẵn sàng chưa?
+        </h2>
+        <button type="button" onClick={handleStartAi} className={`mt-5 w-full ${primaryBtn}`}>
+          <Play size={14} className="fill-zinc-950" />
+          Bắt đầu ván đấu
+        </button>
+      </OverlayCard>
+    );
+  } else if (mode === "online" && !onlineRoomCode) {
+    boardOverlay = (
+      <OverlayCard titleId="caro-online-title">
+        <h2 id="caro-online-title" className="text-lg font-semibold text-zinc-950">
+          Thách đấu đồng nghiệp
+        </h2>
+        <p className="mt-1.5 text-[13px] leading-relaxed text-zinc-500">
+          Tạo phòng rồi gửi link mời, hoặc nhập mã phòng để vào chơi.
         </p>
 
-        {/* Thanh chọn 2 chế độ duy nhất */}
-        <div className="mt-4 inline-flex rounded-full border border-zinc-200 bg-zinc-100/80 p-1 shadow-xs">
+        {onlineError && (
+          <p role="alert" className="mt-4 rounded-[10px] bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+            {onlineError}
+          </p>
+        )}
+
+        <button type="button" disabled={isJoining} onClick={handleCreateRoom} className={`mt-5 w-full ${primaryBtn}`}>
+          <Plus size={16} />
+          {isJoining ? "Đang tạo phòng…" : "Tạo phòng mới"}
+        </button>
+
+        <div className="my-4 flex items-center gap-3 text-[11px] font-medium text-zinc-500">
+          <span className="h-px flex-1 bg-zinc-200" />
+          hoặc
+          <span className="h-px flex-1 bg-zinc-200" />
+        </div>
+
+        <div className="flex gap-2">
+          <label htmlFor="caro-room-code" className="sr-only">
+            Mã phòng
+          </label>
+          <input
+            id="caro-room-code"
+            type="text"
+            placeholder="Nhập mã phòng"
+            value={roomInput}
+            onChange={(e) => setRoomInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleJoinRoom()}
+            className="h-11 min-w-0 flex-1 rounded-[10px] border border-zinc-200 bg-white px-3 text-[13px] font-semibold uppercase tracking-wider text-zinc-900 placeholder:font-normal placeholder:normal-case placeholder:tracking-normal placeholder:text-zinc-400 focus:border-brand-500 focus:outline-none"
+          />
           <button
             type="button"
+            disabled={isJoining || !roomInput.trim()}
+            onClick={() => handleJoinRoom()}
+            className={`h-11 rounded-[10px] bg-zinc-900 px-4 text-[13px] font-semibold text-white hover:bg-zinc-800 ${liftBtn}`}
+          >
+            Vào chơi
+          </button>
+        </div>
+      </OverlayCard>
+    );
+  } else if (isOnlineActive && onlineGame.status === "READY") {
+    boardOverlay = (
+      <OverlayCard titleId="caro-ready-title">
+        <div className="flex items-center justify-center gap-2.5">
+          <PieceTile symbol="X" />
+          <span className="text-xs font-semibold text-zinc-500">vs</span>
+          <PieceTile symbol="O" />
+        </div>
+        <h2 id="caro-ready-title" className="mt-4 text-lg font-semibold text-zinc-950">
+          Đã đủ 2 kỳ thủ!
+        </h2>
+        <p className="mt-1.5 text-[13px] leading-relaxed text-zinc-500">
+          {onlineGame.playerXName} (X) vs {onlineGame.playerOName} (O)
+        </p>
+        <button type="button" onClick={handleOnlineStart} className={`mt-5 w-full ${primaryBtn}`}>
+          <Play size={14} className="fill-zinc-950" />
+          Bắt đầu ván đấu
+        </button>
+      </OverlayCard>
+    );
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-[1120px] space-y-7">
+      {/* Tiêu đề & chọn chế độ chơi */}
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div className="space-y-1.5">
+          <p className="text-xs font-semibold tracking-wide text-brand-700">Góc giải trí</p>
+          <h1 className="text-[28px] font-semibold leading-tight text-zinc-950 sm:text-[30px]">Cờ Caro</h1>
+          <p className="text-sm text-zinc-500">
+            5 quân liên tiếp để thắng · 15 giây mỗi lượt · Người thua ván trước đi trước
+          </p>
+        </div>
+
+        <div role="tablist" aria-label="Chế độ chơi" className="inline-flex gap-0.5 rounded-[12px] bg-zinc-200/60 p-1">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "ai"}
             onClick={() => {
               setMode("ai");
-              setIsAiStarted(false);
-              setBoard(createEmptyBoard());
-              setLastMove(null);
-              setWinner(null);
-              setWinningLine([]);
-              setTimeLeft(15);
-              setTimeoutMessage(null);
+              resetLocalBoard();
             }}
-            className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold transition-all duration-150 ${
-              mode === "ai" ? "bg-white text-zinc-950 shadow-xs" : "text-zinc-600 hover:text-zinc-900"
-            }`}
+            className={`${segBase} ${mode === "ai" ? segOn : segOff}`}
           >
-            <Bot size={14} className={mode === "ai" ? "text-brand-600" : ""} />
-            <span>Chơi với Máy</span>
+            <Bot size={16} className={mode === "ai" ? "text-brand-600" : ""} />
+            Chơi với máy
           </button>
           <button
             type="button"
-            onClick={() => {
-              setMode("online");
-            }}
-            className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold transition-all duration-150 ${
-              mode === "online" ? "bg-white text-zinc-950 shadow-xs" : "text-zinc-600 hover:text-zinc-900"
-            }`}
+            role="tab"
+            aria-selected={mode === "online"}
+            onClick={() => setMode("online")}
+            className={`${segBase} ${mode === "online" ? segOn : segOff}`}
           >
-            <Globe size={14} className={mode === "online" ? "text-brand-600" : ""} />
-            <span>Chơi Online</span>
+            <Globe size={16} className={mode === "online" ? "text-brand-600" : ""} />
+            Chơi online
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* KHU VỰC TẠO PHÒNG / VÀO PHÒNG ONLINE */}
-      {mode === "online" && !onlineRoomCode && (
-        <div className="mb-6 mx-auto max-w-md rounded-[16px] border border-zinc-200 bg-white p-5 shadow-xs text-center">
-          <h2 className="text-sm font-bold text-zinc-900 mb-1">Thách đấu đồng nghiệp qua mạng</h2>
-          <p className="text-xs text-zinc-500 mb-4">
-            Tạo phòng và gửi link cho bạn bè, hoặc nhập mã phòng để vào đối đầu.
-          </p>
-
-          {onlineError && (
-            <div className="mb-3 rounded-lg bg-red-50 p-2 text-xs font-medium text-red-600 border border-red-200">
-              {onlineError}
-            </div>
+      {/* Điện thoại: tỉ số → bàn cờ → điều khiển. Desktop: bàn cờ bên trái, cột thông tin bên phải. */}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:grid-rows-[auto_1fr] lg:gap-x-8">
+        {/* Phòng online + tỉ số */}
+        <div className="space-y-4 lg:col-start-2 lg:row-start-1">
+          {mode === "online" && onlineRoomCode && (
+            <section
+              aria-label="Phòng online"
+              className="flex items-center justify-between gap-3 rounded-[14px] border border-brand-200 bg-brand-50 px-4 py-3"
+            >
+              <div className="min-w-0">
+                <p className="text-xs text-zinc-500">Mã phòng</p>
+                <p className="truncate text-base font-semibold tracking-wide text-zinc-950">{onlineRoomCode}</p>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  className={`h-10 rounded-[10px] border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-800 hover:border-zinc-300 ${liftBtn}`}
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    {copiedLink ? <Check size={14} className="text-brand-700" /> : <Copy size={14} />}
+                    {copiedLink ? "Đã chép link" : "Mời bạn"}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOnlineRoomCode(null);
+                    setOnlineGame(null);
+                    setMyRole(null);
+                  }}
+                  className={`h-10 rounded-[10px] px-3 text-xs font-medium text-zinc-600 hover:bg-white hover:text-zinc-900 ${liftBtn}`}
+                >
+                  Rời phòng
+                </button>
+              </div>
+            </section>
           )}
 
-          <div className="space-y-3">
-            <button
-              type="button"
-              disabled={isJoining}
-              onClick={handleCreateRoom}
-              className="w-full rounded-[10px] bg-brand-400 py-2.5 text-xs font-semibold text-zinc-950 shadow-xs transition-all hover:-translate-y-0.5 hover:bg-brand-500 disabled:opacity-50"
-            >
-              {isJoining ? "Đang tạo phòng..." : "⚡ Tạo phòng cờ mới"}
-            </button>
-
-            <div className="relative flex items-center justify-center py-1">
-              <span className="w-full border-t border-zinc-200" />
-              <span className="absolute bg-white px-2 text-[11px] font-medium text-zinc-400">HOẶC</span>
-            </div>
-
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Nhập mã phòng (VD: CR8X9)"
-                value={roomInput}
-                onChange={(e) => setRoomInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleJoinRoom()}
-                className="flex-1 rounded-[10px] border border-zinc-200 px-3 py-2 text-xs uppercase tracking-wider font-semibold text-zinc-900 focus:border-brand-500 focus:outline-none"
-              />
-              <button
-                type="button"
-                disabled={isJoining || !roomInput.trim()}
-                onClick={() => handleJoinRoom()}
-                className="rounded-[10px] bg-zinc-900 px-4 py-2 text-xs font-semibold text-white transition-all hover:bg-zinc-800 disabled:opacity-40"
+          <section
+            aria-label="Tỉ số"
+            className="space-y-4 rounded-[18px] border border-zinc-200 bg-white p-4 shadow-sm sm:p-5"
+          >
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+              <PlayerBlock symbol="X" name={xName} sub={xSub} active={xActive} />
+              <div
+                aria-label={`Tỉ số ${shownScoreX} - ${shownScoreO}`}
+                className="flex items-center gap-2.5 text-[28px] font-semibold tabular-nums text-zinc-950 sm:text-[32px]"
               >
-                Vào chơi
-              </button>
+                <span>{shownScoreX}</span>
+                <span className="text-lg text-zinc-400">–</span>
+                <span>{shownScoreO}</span>
+              </div>
+              <PlayerBlock symbol="O" name={oName} sub={oSub} active={oActive} />
             </div>
-          </div>
-        </div>
-      )}
 
-      {/* THÔNG TIN PHÒNG ONLINE ĐANG CHƠI */}
-      {mode === "online" && onlineRoomCode && (
-        <div className="mb-4 mx-auto max-w-md rounded-[14px] border border-brand-200 bg-brand-50/60 p-3 text-xs flex items-center justify-between shadow-xs">
-          <div>
-            <span className="text-zinc-500">Mã phòng: </span>
-            <strong className="font-bold text-zinc-950 text-sm tracking-wide">{onlineRoomCode}</strong>
-            <span className="ml-2 text-zinc-500">
-              (Bạn là:{" "}
-              <strong className={myRole === "X" ? "text-zinc-950 font-bold" : "text-lime-600 font-bold"}>
-                Quân {myRole === "X" ? "✕ (Đen)" : "◯ (Xanh)"}
-              </strong>
-              )
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={handleCopyLink}
-              className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-700 shadow-xs hover:border-zinc-300"
-            >
-              {copiedLink ? <Check size={12} className="text-green-600" /> : <Copy size={12} />}
-              <span>{copiedLink ? "Đã chép link" : "Mời bạn"}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setOnlineRoomCode(null);
-                setOnlineGame(null);
-                setMyRole(null);
-              }}
-              className="rounded-full border border-zinc-200 bg-white px-2 py-1 text-[11px] font-medium text-zinc-500 hover:text-zinc-800"
-            >
-              Rời phòng
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* THÔNG BÁO XỬ THUA DO HẾT THỜI GIAN */}
-      {timeoutMessage && (
-        <div className="mb-3 mx-auto max-w-md flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-2 text-xs font-semibold text-amber-900 shadow-xs animate-shake">
-          <AlertCircle size={15} className="text-amber-600 shrink-0" />
-          <span>{timeoutMessage}</span>
-        </div>
-      )}
-
-      {/* BẢNG ĐIỀU KHIỂN, TỈ SỐ & BỘ ĐẾM GIỜ */}
-      <div className="mb-4 rounded-[16px] border border-zinc-200 bg-white p-3.5 shadow-xs">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* Người chơi X */}
-          <div className="flex items-center gap-2">
-            <div
-              className={`flex h-8 w-8 items-center justify-center rounded-[8px] font-extrabold text-sm border-2 ${
-                activeTurn === "X" && !activeWinner && (mode === "ai" ? isAiStarted : onlineGame?.status === "PLAYING")
-                  ? "border-zinc-950 bg-zinc-900 text-white shadow-xs"
-                  : "border-zinc-300 bg-zinc-100 text-zinc-800"
-              }`}
-            >
-              ✕
-            </div>
-            <div>
-              <div className="text-xs font-bold text-zinc-900">
-                {mode === "ai"
-                  ? "Bạn (X)"
-                  : isOnlineActive
-                  ? onlineGame.playerXName
-                  : "Kỳ thủ X"}
-              </div>
-              <div className="text-[11px] font-semibold text-zinc-400">
-                {isOnlineActive ? `${onlineGame.scoreX} ván thắng` : `${scoreX} ván thắng`}
-              </div>
-            </div>
-          </div>
-
-          {/* Trạng thái lượt đi, bộ đếm giờ và kết quả */}
-          <div className="text-center px-2 flex-1 min-w-[160px]">
-            {activeWinner === "X" && (
-              <div className="inline-flex items-center gap-1 rounded-full bg-zinc-900 px-3 py-1 text-xs font-bold text-white animate-bounce">
-                <Trophy size={13} className="text-brand-400" />
-                <span>Quân ✕ Chiến thắng!</span>
-              </div>
-            )}
-            {activeWinner === "O" && (
-              <div className="inline-flex items-center gap-1 rounded-full bg-lime-600 px-3 py-1 text-xs font-bold text-white animate-bounce">
-                <Trophy size={13} className="text-yellow-300" />
-                <span>Quân ◯ Chiến thắng!</span>
-              </div>
-            )}
-            {activeWinner === "DRAW" && (
-              <span className="rounded-full bg-zinc-200 px-3 py-1 text-xs font-bold text-zinc-700">
-                Hòa cờ!
-              </span>
-            )}
-            {!activeWinner && (
-              <div>
-                <div className="text-xs font-semibold text-zinc-700">
-                  {mode === "ai" && !isAiStarted ? (
-                    <span className="text-brand-800 font-bold">Hãy bấm "Bắt đầu" để vào ván đấu!</span>
-                  ) : isOnlineActive ? (
-                    onlineGame.status === "WAITING" ? (
-                      <span className="text-amber-600 italic">Đang chờ đối thủ vào phòng...</span>
-                    ) : onlineGame.status === "READY" ? (
-                      <span className="text-brand-800 font-bold">Đã đủ 2 người! Bấm Bắt đầu để đấu</span>
-                    ) : activeTurn === myRole ? (
-                      <span className="text-brand-800 font-bold">Lượt của bạn! Hãy đặt cờ</span>
-                    ) : (
-                      <span className="text-zinc-500">Đang chờ đối thủ đi...</span>
-                    )
-                  ) : isAiThinking ? (
-                    <span className="text-brand-700 italic">Máy đang tính nước...</span>
-                  ) : (
-                    <span>
-                      Lượt đi:{" "}
-                      <strong className={activeTurn === "X" ? "text-zinc-950 font-bold" : "text-lime-600 font-bold"}>
-                        {activeTurn === "X" ? "✕ Quân Đen" : "◯ Quân Xanh"}
-                      </strong>
+            <div className="space-y-2.5 border-t border-zinc-100 pt-4" aria-live="polite">
+              {activeWinner && activeWinner !== "DRAW" ? (
+                <div
+                  className={`flex items-center gap-2 rounded-[12px] px-3 py-2.5 text-sm font-semibold ${
+                    iWon ? "bg-brand-50 text-brand-900" : "bg-zinc-100 text-zinc-800"
+                  }`}
+                >
+                  <Trophy size={16} className={iWon ? "text-brand-700" : "text-zinc-500"} />
+                  {statusText}
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-3">
+                  <span className={`text-[15px] font-semibold ${statusMuted ? "text-zinc-500" : "text-zinc-950"}`}>
+                    {statusText}
+                  </span>
+                  {showTimer && (
+                    <span
+                      aria-hidden="true"
+                      className={`font-mono text-[13px] font-semibold tabular-nums ${
+                        timeLow ? "text-amber-700" : "text-zinc-600"
+                      }`}
+                    >
+                      {timeLeft}s
                     </span>
                   )}
                 </div>
+              )}
 
-                {/* Đồng hồ đếm ngược 15s (chỉ chạy khi ván đang diễn ra) */}
-                {timerEnabled &&
-                  ((mode === "ai" && isAiStarted) || (isOnlineActive && onlineGame.status === "PLAYING")) && (
-                    <div className="mt-1.5 flex items-center justify-center gap-2">
-                      <span
-                        className={`font-mono text-xs font-extrabold transition-colors ${
-                          timeLeft <= 5 ? "text-red-600 animate-pulse text-sm" : "text-zinc-700"
-                        }`}
-                      >
-                        ⏱️ {timeLeft}s
-                      </span>
-                      <div className="h-1.5 w-24 overflow-hidden rounded-full bg-zinc-100 border border-zinc-200">
-                        <div
-                          className={`h-full transition-all duration-1000 ease-linear ${
-                            timeLeft <= 5 ? "bg-red-500" : "bg-brand-500"
-                          }`}
-                          style={{ width: `${(timeLeft / 15) * 100}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
-              </div>
-            )}
-          </div>
+              {showTimer && (
+                <div className="h-1.5 overflow-hidden rounded-full bg-zinc-100" aria-hidden="true">
+                  <div
+                    className={`h-full w-full origin-left rounded-full transition-transform duration-1000 ease-linear motion-reduce:transition-none ${
+                      timeLow ? "bg-amber-500" : "bg-brand-500"
+                    }`}
+                    style={{ transform: `scaleX(${timeLeft / 15})` }}
+                  />
+                </div>
+              )}
 
-          {/* Người chơi O */}
-          <div className="flex items-center gap-2 text-right">
-            <div>
-              <div className="text-xs font-bold text-zinc-900">
-                {mode === "ai"
-                  ? `Máy AI (${difficulty === "hard" ? "Cao thủ" : "Dễ"})`
-                  : isOnlineActive
-                  ? onlineGame.playerOName || "Chờ đối thủ..."
-                  : "Kỳ thủ O"}
-              </div>
-              <div className="text-[11px] font-semibold text-zinc-400">
-                {isOnlineActive ? `${onlineGame.scoreO} ván thắng` : `${scoreO} ván thắng`}
-              </div>
+              {timeoutMessage && (
+                <p className="flex items-start gap-1.5 text-xs font-medium text-amber-800">
+                  <AlertCircle size={14} className="mt-px shrink-0 text-amber-600" />
+                  {timeoutMessage}
+                </p>
+              )}
             </div>
-            <div
-              className={`flex h-8 w-8 items-center justify-center rounded-[8px] font-extrabold text-sm border-2 ${
-                activeTurn === "O" && !activeWinner && (mode === "ai" ? isAiStarted : onlineGame?.status === "PLAYING")
-                  ? "border-lime-600 bg-lime-500 text-white shadow-xs"
-                  : "border-lime-200 bg-lime-50 text-lime-700"
-              }`}
-            >
-              ◯
-            </div>
-          </div>
+          </section>
         </div>
 
-        {/* Ghi chú quy tắc lượt đi đầu / người thua đi trước */}
-        {mode === "ai" && isAiStarted && turnReason && (
-          <div className="mt-2.5 pt-2 border-t border-zinc-100 text-center text-[11px] text-zinc-500 font-medium">
-            {turnReason}
+        {/* Bàn cờ */}
+        <section aria-label="Bàn cờ" className="lg:col-start-1 lg:row-span-2 lg:row-start-1">
+          <div className="mx-auto w-full max-w-[640px] lg:mx-0 lg:max-w-[clamp(440px,calc(100dvh_-_220px),640px)]">
+            <CaroBoard
+              board={currentBoard}
+              lastMove={currentLastMove}
+              winningLine={currentWinningLine}
+              currentTurn={activeTurn}
+              hoverSymbol={effectiveHoverSymbol}
+              disabled={
+                (mode === "ai" && (!isAiStarted || Boolean(winner) || isAiThinking)) ||
+                (mode === "online" && !isOnlineActive) ||
+                (isOnlineActive &&
+                  (onlineGame?.status !== "PLAYING" || activeTurn !== myRole || Boolean(activeWinner)))
+              }
+              onCellClick={isOnlineActive ? handleOnlineCellClick : handleLocalCellClick}
+              overlay={boardOverlay}
+            />
           </div>
-        )}
-      </div>
+        </section>
 
-      {/* CÁC NÚT THAO TÁC (ĐỘ KHÓ, ĐI LẠI, NÚT BẮT ĐẦU / VÁN MỚI) */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 px-1">
-        <div className="flex items-center gap-2">
+        {/* Điều khiển */}
+        <section aria-label="Điều khiển" className="space-y-4 lg:col-start-2 lg:row-start-2">
           {mode === "ai" && (
-            <>
-              {/* Chọn độ khó AI */}
-              <div className="inline-flex rounded-lg border border-zinc-200 bg-white p-0.5 text-xs shadow-xs">
+            <div className="space-y-2">
+              <p id="caro-difficulty" className="text-xs font-semibold text-zinc-600">
+                Độ khó
+              </p>
+              <div
+                role="radiogroup"
+                aria-labelledby="caro-difficulty"
+                className="grid grid-cols-2 gap-0.5 rounded-[12px] bg-zinc-200/60 p-1"
+              >
                 <button
                   type="button"
+                  role="radio"
+                  aria-checked={difficulty === "easy"}
                   onClick={() => setDifficulty("easy")}
-                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                    difficulty === "easy" ? "bg-zinc-100 font-bold text-zinc-900" : "text-zinc-500 hover:text-zinc-800"
-                  }`}
+                  className={`${segBase} ${difficulty === "easy" ? segOn : segOff}`}
                 >
                   Dễ
                 </button>
                 <button
                   type="button"
+                  role="radio"
+                  aria-checked={difficulty === "hard"}
                   onClick={() => setDifficulty("hard")}
-                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                    difficulty === "hard" ? "bg-zinc-900 font-bold text-white shadow-xs" : "text-zinc-500 hover:text-zinc-800"
-                  }`}
+                  className={`${segBase} ${difficulty === "hard" ? segOn : segOff}`}
                 >
                   Cao thủ
                 </button>
               </div>
-
-              {/* Nút Đi lại (Undo) */}
-              <button
-                type="button"
-                disabled={!isAiStarted || moveHistory.length < 2 || isAiThinking || !!winner}
-                onClick={handleUndo}
-                className="inline-flex items-center gap-1 rounded-[8px] border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-600 shadow-xs hover:border-zinc-300 hover:text-zinc-900 disabled:opacity-40"
-              >
-                <RotateCcw size={13} />
-                <span>Đi lại</span>
-              </button>
-            </>
+            </div>
           )}
-        </div>
 
-        {/* NÚT BẮT ĐẦU / VÁN MỚI */}
-        {mode === "ai" ? (
-          !isAiStarted ? (
-            <button
-              type="button"
-              onClick={handleStartAi}
-              className="inline-flex items-center gap-1.5 rounded-[10px] bg-brand-400 px-4 py-2 text-xs font-bold text-zinc-950 shadow-md transition-all hover:-translate-y-0.5 hover:bg-brand-500 hover:shadow-lg animate-pulse"
-            >
-              <Play size={14} className="fill-zinc-950 text-zinc-950" />
-              <span>Bắt đầu</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleStartAi}
-              className="inline-flex items-center gap-1.5 rounded-[10px] bg-brand-400 px-3.5 py-1.5 text-xs font-semibold text-zinc-950 shadow-xs transition-all hover:-translate-y-0.5 hover:bg-brand-500"
-            >
-              <RotateCcw size={14} />
-              <span>Ván mới</span>
-            </button>
-          )
-        ) : (
-          isOnlineActive && (
-            onlineGame.status === "READY" ? (
+          {mode === "ai" && isAiStarted && (
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={handleOnlineStart}
-                className="inline-flex items-center gap-1.5 rounded-[10px] bg-brand-400 px-4 py-2 text-xs font-bold text-zinc-950 shadow-md transition-all hover:-translate-y-0.5 hover:bg-brand-500 hover:shadow-lg animate-pulse"
+                disabled={moveHistory.length < 2 || isAiThinking || !!winner}
+                onClick={handleUndo}
+                className={`w-full ${secondaryBtn}`}
               >
-                <Play size={14} className="fill-zinc-950 text-zinc-950" />
-                <span>Bắt đầu ván đấu</span>
+                <RotateCcw size={16} />
+                Đi lại
               </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleOnlineStart}
-                className="inline-flex items-center gap-1.5 rounded-[10px] bg-brand-400 px-3.5 py-1.5 text-xs font-semibold text-zinc-950 shadow-xs transition-all hover:-translate-y-0.5 hover:bg-brand-500"
-              >
-                <RotateCcw size={14} />
-                <span>Ván mới</span>
-              </button>
-            )
-          )
-        )}
-      </div>
-
-      {/* BÀN CỜ CARO VÀ KHUNG OVERLAY KHI CHƯA BẮT ĐẦU */}
-      <div className="relative">
-        <CaroBoard
-          board={currentBoard}
-          lastMove={currentLastMove}
-          winningLine={currentWinningLine}
-          currentTurn={activeTurn}
-          hoverSymbol={effectiveHoverSymbol}
-          disabled={
-            (mode === "ai" && (!isAiStarted || Boolean(winner) || isAiThinking)) ||
-            (isOnlineActive && (onlineGame?.status !== "PLAYING" || activeTurn !== myRole || Boolean(activeWinner)))
-          }
-          onCellClick={isOnlineActive ? handleOnlineCellClick : handleLocalCellClick}
-        />
-
-        {/* Lớp phủ mời Bắt đầu khi ở chế độ AI và chưa bấm Bắt đầu */}
-        {mode === "ai" && !isAiStarted && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-[18px] bg-stone-900/10 backdrop-blur-[1.5px] p-4 text-center">
-            <div className="rounded-[18px] bg-white p-5 sm:p-6 shadow-xl max-w-xs border border-zinc-200">
-              <div className="mx-auto mb-2.5 flex h-12 w-12 items-center justify-center rounded-full bg-brand-100 text-brand-700 shadow-xs">
-                <Play size={22} className="ml-1 fill-brand-700" />
-              </div>
-              <h3 className="text-base font-extrabold text-zinc-950">Sẵn sàng thi đấu?</h3>
-              <p className="mt-1 text-xs text-zinc-500 mb-4">
-                Mỗi lượt có 15s để suy nghĩ · Bốc thăm ngẫu nhiên ai đi trước
-              </p>
-              <button
-                type="button"
-                onClick={handleStartAi}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-[12px] bg-brand-400 py-2.5 text-xs font-bold text-zinc-950 shadow-xs hover:bg-brand-500 hover:-translate-y-0.5 transition-all"
-              >
-                <Play size={14} className="fill-zinc-950" />
-                <span>Bắt đầu</span>
+              <button type="button" onClick={handleStartAi} className={`w-full ${primaryBtn}`}>
+                <Plus size={16} />
+                Ván mới
               </button>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Lớp phủ mời Bắt đầu khi ở chế độ Online và 2 người đã sẵn sàng */}
-        {isOnlineActive && onlineGame.status === "READY" && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-[18px] bg-stone-900/10 backdrop-blur-[1.5px] p-4 text-center">
-            <div className="rounded-[18px] bg-white p-5 sm:p-6 shadow-xl max-w-xs border border-zinc-200">
-              <div className="mx-auto mb-2.5 flex h-12 w-12 items-center justify-center rounded-full bg-brand-100 text-brand-700 shadow-xs">
-                <Play size={22} className="ml-1 fill-brand-700" />
-              </div>
-              <h3 className="text-base font-extrabold text-zinc-950">Đã đủ 2 kỳ thủ!</h3>
-              <p className="mt-1 text-xs text-zinc-500 mb-4">
-                {onlineGame.playerXName} (✕) vs {onlineGame.playerOName} (◯)
-              </p>
-              <button
-                type="button"
-                onClick={handleOnlineStart}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-[12px] bg-brand-400 py-2.5 text-xs font-bold text-zinc-950 shadow-xs hover:bg-brand-500 hover:-translate-y-0.5 transition-all"
-              >
-                <Play size={14} className="fill-zinc-950" />
-                <span>Bắt đầu ván đấu</span>
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+          {isOnlineActive && onlineGame.status !== "WAITING" && onlineGame.status !== "READY" && (
+            <button type="button" onClick={handleOnlineStart} className={`w-full ${primaryBtn}`}>
+              <Plus size={16} />
+              Ván mới
+            </button>
+          )}
 
-      {/* Tóm tắt luật chơi chân trang */}
-      <div className="mt-8 text-center text-xs text-zinc-400 space-y-1">
-        <p>Luật chơi: 5 quân liên tiếp (ngang, dọc, chéo) để chiến thắng.</p>
-        <p className="text-[11px] text-zinc-400">
-          ⏱️ Mỗi lượt có 15s để suy nghĩ · 🎲 Ván đầu bốc thăm ngẫu nhiên, ván sau người thua được quyền đi trước.
-        </p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              aria-pressed={timerEnabled}
+              onClick={() => {
+                setTimerEnabled((t) => !t);
+                setTimeLeft(15);
+                setTimeoutMessage(null);
+              }}
+              className={`w-full ${toggleBtn} ${timerEnabled ? toggleOn : toggleOff}`}
+            >
+              <TimerIcon size={16} />
+              {timerEnabled ? "Đếm giờ 15s" : "Đếm giờ tắt"}
+            </button>
+            <button
+              type="button"
+              aria-pressed={soundOn}
+              onClick={handleToggleSound}
+              className={`w-full ${toggleBtn} ${soundOn ? toggleOn : toggleOff}`}
+            >
+              {soundOn ? <Volume2 size={16} /> : <VolumeX size={16} />}
+              {soundOn ? "Âm thanh bật" : "Âm thanh tắt"}
+            </button>
+          </div>
+        </section>
       </div>
+    </div>
+  );
+}
+
+// --- Kiểu nút dùng chung ---
+const liftBtn =
+  "transition-[transform,background-color,border-color] duration-150 ease-out hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0 disabled:pointer-events-none disabled:opacity-45";
+const primaryBtn = `inline-flex h-11 items-center justify-center gap-2 rounded-[10px] bg-brand-400 px-4 text-[13px] font-semibold text-zinc-950 shadow-sm hover:bg-brand-500 ${liftBtn}`;
+const secondaryBtn = `inline-flex h-11 items-center justify-center gap-2 rounded-[10px] border border-zinc-200 bg-white px-4 text-[13px] font-semibold text-zinc-800 hover:border-zinc-300 ${liftBtn}`;
+const toggleBtn = `inline-flex h-11 items-center justify-center gap-2 rounded-[10px] border px-3 text-[13px] ${liftBtn}`;
+const toggleOn = "border-brand-200 bg-brand-50 font-semibold text-brand-900";
+const toggleOff = "border-zinc-200 bg-white font-medium text-zinc-600 hover:border-zinc-300";
+const segBase =
+  "inline-flex h-10 items-center justify-center gap-2 rounded-[10px] px-4 text-[13px] transition-colors duration-150 ease-out motion-reduce:transition-none";
+const segOn = "bg-white font-semibold text-zinc-950 shadow-sm";
+const segOff = "font-medium text-zinc-600 hover:text-zinc-950";
+
+function PieceTile({ symbol, active = false }: { symbol: Player; active?: boolean }) {
+  const ring = active
+    ? symbol === "X"
+      ? "shadow-[inset_0_0_0_2px_#18181b]"
+      : "shadow-[inset_0_0_0_2px_#93bb24]"
+    : "";
+  return (
+    <span
+      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] ${
+        symbol === "X" ? "bg-zinc-100" : "bg-brand-50"
+      } ${ring}`}
+    >
+      <CaroPiece symbol={symbol} className="h-[22px] w-[22px]" />
+    </span>
+  );
+}
+
+function PlayerBlock({
+  symbol,
+  name,
+  sub,
+  active,
+}: {
+  symbol: Player;
+  name: string;
+  sub: string;
+  active: boolean;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col items-center gap-2 text-center">
+      <PieceTile symbol={symbol} active={active} />
+      <div className="min-w-0 max-w-full">
+        <p className="truncate text-sm font-semibold text-zinc-950">{name}</p>
+        <p className="truncate text-xs text-zinc-500">{active ? "Đang đi" : sub}</p>
+      </div>
+    </div>
+  );
+}
+
+function OverlayCard({ titleId, children }: { titleId: string; children: React.ReactNode }) {
+  return (
+    <div
+      role="group"
+      aria-labelledby={titleId}
+      className="w-full max-w-[320px] rounded-[18px] border border-zinc-200 bg-white px-6 pb-6 pt-7 text-center shadow-md"
+    >
+      {children}
     </div>
   );
 }

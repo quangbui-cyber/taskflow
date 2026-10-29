@@ -6,7 +6,7 @@ import HubTabs from "@/components/HubTabs";
 import CaroGame from "@/components/caro/CaroGame";
 
 export const metadata: Metadata = {
-  title: "Cờ Caro 15x15 · myCreative",
+  title: "Cờ Caro · myCreative",
   description: "Góc giải trí cờ Caro 15x15 xả stress, giao lưu và gắn kết đồng nghiệp",
 };
 
