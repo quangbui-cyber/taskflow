@@ -21,14 +21,19 @@ interface SeedArticle {
  * Tự động chạy trên mọi môi trường (local dev, staging, Vercel production).
  */
 export async function ensureInitialCreativeArticles() {
-  const publishedCount = await prisma.creativeArticle.count({
-    where: { status: "PUBLISHED" },
-  });
-
-  // Nếu đã đủ 50 bài PUBLISHED thì không cần chạy lại
-  if (publishedCount >= (seedArticles as SeedArticle[]).length) return;
-
   const typedSeed = seedArticles as SeedArticle[];
+
+  // Kiểm tra số lượng bài viết đã có bản dịch tiếng Việt
+  const existing = await prisma.creativeArticle.findMany({
+    where: { status: "PUBLISHED" },
+    select: { linesVi: true },
+  });
+  const withViCount = existing.filter(
+    (a) => Array.isArray(a.linesVi) && a.linesVi.length > 0
+  ).length;
+
+  // Nếu đã đủ 50 bài PUBLISHED và có đầy đủ linesVi thì không cần chạy lại
+  if (withViCount >= typedSeed.length) return;
 
   for (let i = 0; i < typedSeed.length; i++) {
     const item = typedSeed[i];
@@ -41,6 +46,7 @@ export async function ensureInitialCreativeArticles() {
       update: {
         status: "PUBLISHED",
         titleVi: item.titleVi,
+        linesVi: item.linesVi ? (item.linesVi as unknown as object[]) : undefined,
         tags: item.tags,
         publishedDate: pubDate,
       },
