@@ -14,7 +14,7 @@ export default function DetectedLinks({ text }: { text: string }) {
           target="_blank"
           rel="noopener noreferrer"
           title={link.label}
-          className="inline-flex max-w-full items-center gap-1.5 rounded-[7px] border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-800 transition-colors hover:border-emerald-300 hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-400/30"
+          className="inline-flex max-w-full items-center gap-1.5 rounded-[10px] border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition-[transform,background-color,border-color,color] duration-150 ease-out hover:-translate-y-0.5 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-800 focus:outline-none focus:ring-2 focus:ring-brand-400/30 motion-reduce:transform-none"
         >
           <ExternalLink size={13} className="shrink-0" aria-hidden="true" />
           <span className="truncate">{link.label}</span>
