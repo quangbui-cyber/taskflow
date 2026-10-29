@@ -408,11 +408,17 @@ export default async function HomePage({
   if (showCreative) {
     await ensureInitialCreativeArticles();
   }
-  const todayCreativeArticle = showCreative
+  // Hiển thị lần lượt các bài viết PUBLISHED mà user chưa đọc
+  let todayCreativeArticle = showCreative
     ? await prisma.creativeArticle.findFirst({
         where: {
           status: "PUBLISHED",
-          titleVi: { not: null },
+          readers: {
+            none: {
+              userId: user.id,
+              readAt: { not: null },
+            },
+          },
         },
         include: {
           readers: {
@@ -420,9 +426,25 @@ export default async function HomePage({
             select: { likedAt: true, savedAt: true, readAt: true },
           },
         },
-        orderBy: [{ publishedDate: "desc" }, { createdAt: "desc" }],
+        orderBy: [{ publishedDate: "asc" }, { createdAt: "asc" }],
       })
     : null;
+
+  // Nếu user đã đọc hết bài viết, hiển thị bài mới nhất
+  if (showCreative && !todayCreativeArticle) {
+    todayCreativeArticle = await prisma.creativeArticle.findFirst({
+      where: {
+        status: "PUBLISHED",
+      },
+      include: {
+        readers: {
+          where: { userId: user.id },
+          select: { likedAt: true, savedAt: true, readAt: true },
+        },
+      },
+      orderBy: [{ publishedDate: "desc" }, { createdAt: "desc" }],
+    });
+  }
 
   const vnDay = new Intl.DateTimeFormat("en-US", {
     weekday: "short",
@@ -598,7 +620,9 @@ export default async function HomePage({
                     wordCount: todayCreativeArticle.wordCount,
                     publishedDate: todayCreativeArticle.publishedDate?.toISOString() ?? null,
                     excerpt: (() => {
-                      const lines = (todayCreativeArticle.linesVi as unknown as ArticleLine[]) || [];
+                      const linesVi = (todayCreativeArticle.linesVi as unknown as ArticleLine[]) || [];
+                      const origLines = (todayCreativeArticle.originalLines as unknown as ArticleLine[]) || [];
+                      const lines = linesVi.length > 0 ? linesVi : origLines;
                       return lines
                         .filter(isTextLine)
                         .map((l) => l.t.replace(/[*_]/g, ""))

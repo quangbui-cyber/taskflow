@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { requireUser } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { creativeEnabled } from "@/lib/features";
 import { type ArticleLine } from "@/lib/creative";
@@ -30,7 +30,7 @@ export default async function CreativeArticlePage({ params }: PageProps) {
     notFound();
   }
 
-  const user = await requireUser();
+  const user = await getCurrentUser();
   const { slug } = await params;
 
   const article = await prisma.creativeArticle.findUnique({
@@ -41,15 +41,17 @@ export default async function CreativeArticlePage({ params }: PageProps) {
     notFound();
   }
 
-  // Lấy trạng thái tương tác của người dùng hiện tại
-  const readerRecord = await prisma.articleReader.findUnique({
-    where: {
-      userId_articleId: {
-        userId: user.id,
-        articleId: article.id,
-      },
-    },
-  });
+  // Lấy trạng thái tương tác của người dùng hiện tại nếu đã đăng nhập
+  const readerRecord = user
+    ? await prisma.articleReader.findUnique({
+        where: {
+          userId_articleId: {
+            userId: user.id,
+            articleId: article.id,
+          },
+        },
+      })
+    : null;
 
   // Tổng số lượt thích của bài
   const likeCount = await prisma.articleReader.count({
@@ -64,7 +66,7 @@ export default async function CreativeArticlePage({ params }: PageProps) {
     prisma.creativeArticle.findFirst({
       where: {
         createdAt: { lt: article.createdAt },
-        titleVi: { not: null },
+        status: "PUBLISHED",
       },
       orderBy: { createdAt: "desc" },
       select: { slug: true, originalTitle: true, titleVi: true },
@@ -72,7 +74,7 @@ export default async function CreativeArticlePage({ params }: PageProps) {
     prisma.creativeArticle.findFirst({
       where: {
         createdAt: { gt: article.createdAt },
-        titleVi: { not: null },
+        status: "PUBLISHED",
       },
       orderBy: { createdAt: "asc" },
       select: { slug: true, originalTitle: true, titleVi: true },

@@ -1,205 +1,66 @@
 import { prisma } from "@/lib/prisma";
-import { getWeekdaySchedule } from "@/lib/creative";
+import seedArticles from "./creativeSeedData.json";
 
-const INITIAL_ARTICLES = [
-  {
-    slug: "the-first-lesson-is-no-ones-even-looking",
-    guid: "https://davetrott.co.uk/?p=4053",
-    originalUrl: "https://davetrott.co.uk/2026/10/the-first-lesson-is-no-ones-even-looking/",
-    originalTitle: "THE FIRST LESSON IS: NO ONE’S EVEN LOOKING",
-    wordCount: 562,
-    titleVi: "BÀI HỌC ĐẦU TIÊN: CHẲNG AI THÈM NHÌN CẢ",
-    tags: ["sangtao", "tuduy", "quangcao"],
-    originalLines: [
-      { t: "Many years ago, when my dad was very young, he joined the police." },
-      { t: "On the first day of training they gathered all the new recruits in a classroom for a test." },
-      { t: "They sat them at desks with a sheet of paper and a pencil, the sergeant stood at the front of the room." },
-      { t: "Before the test started a man came in and handed something to the sergeant." },
-      { t: "As soon as he’d left the sergeant said, **“Right, the test will be starting now.**" },
-      { t: "**Write a description of the man who just came in: how tall he was, how old, whether he had a facial hair, what colour his clothes were, was he wearing a tie, what colour  his hair was, what sort of shoes, every detail.** **Off you go.”**" },
-      { t: "Dad said everyone shifted nervously but no one started writing." },
-      { t: "They hadn’t noticed anything about the man because they hadn’t been told to pay attention." },
-      { t: "So they hadn’t noticed a single thing." },
-      { t: "They hadn’t paid attention because no one told them to." },
-      { t: "Eventually the sergeant said, **“Right, you all failed because you’re all thinking like civilians. Ordinary people go about their lives not paying attention to anything that doesn’t concern them. You can’t do that. From now on you are policemen and that means you pay attention to absolutely *everything*.” **" },
-      { t: "I think that’s a great lesson for people in advertising." },
-      { t: "I wish they’d teach it to beginners, but the other way round." },
-      { t: "I wish they’d teach people just starting out in our business that ordinary people don’t pay attention to anything." },
-      { t: "They certainly don’t pay attention to advertising." },
-      { t: "I think most people in our business believe ordinary people will notice every ad and  study each ad carefully." },
-      { t: "But years back, the numbers I was given were as follows:" },
-      { t: "**Roughly £20 BILLION is spent on all forms of advertising in the UK each year.**" },
-      { t: "**That means we are each exposed to roughly 1,000 ads per day.**" },
-      { t: "**Of that, 4% are remembered favourably and 7% are remembered unfavourably. **" },
-      { t: "**But the important number is – 89% of advertising isn’t noticed or remembered.**" },
-      { t: "So roughly 9 out of every10 ads are invisible, they’re just wallpaper." },
-      { t: "That’s exactly the same lesson my dad learned in that first police training class." },
-      { t: "Nobody is even looking." },
-      { t: "All those trainee coppers thought they’d start to pay attention when they were told to." },
-      { t: "The point was to demonstrate that no one is* ever* paying attention." },
-      { t: "But a policeman has to be constantly paying attention. They can’t behave like civilians." },
-      { t: "For us the lesson is the other way round: ordinary people aren’t paying attention like we think they are." },
-      { t: "We take it for granted that people will notice our advertising, and we spend all our time fussing about the details." },
-      { t: "Because no one ever taught us the truth: that people DON’T notice advertising." },
-      { t: "Unless we *make* them take notice." },
-      { t: "And we make them take notice by making sure that our advertising isn’t like anything else, it isn’t part of the wallpaper." },
-      { t: "Because unless they notice it, then all that clever strategic thinking is never going to get seen." },
-      { t: "All that clever strategic thinking is just a waste of time." },
-      { t: "*Unless* the ads stand out from the rest." },
-      { t: "We still haven’t learned what Bill Bernbach tried to teach us many years ago:" },
-      { t: "**“If no one notices your advertising, then everything else is academic.”**" },
-    ],
-    linesVi: [
-      { t: "Nhiều năm trước, hồi bố tôi còn rất trẻ, ông đi làm cảnh sát." },
-      { t: "Ngay ngày tập huấn đầu tiên, họ tập trung tất cả tân binh vào một phòng học để làm bài kiểm tra." },
-      { t: "Họ xếp mỗi người một bàn với một tờ giấy và một cây bút chì, viên trung sĩ đứng nghiêm trên bục giảng." },
-      { t: "Trước khi bài thi bắt đầu, có một người đàn ông bước vào đưa món đồ gì đó cho viên trung sĩ." },
-      { t: "Ngay khi người kia vừa bước ra, trung sĩ liền nói, **“Được rồi, bài kiểm tra bắt đầu.**" },
-      { t: "**Hãy viết lại mô tả về người đàn ông vừa bước vào: cao bao nhiêu, tầm mấy tuổi, có để râu không, quần áo màu gì, có đeo cà vạt không, tóc màu gì, đi giày loại gì, từng chi tiết một.** **Bắt đầu đi.”**" },
-      { t: "Bố tôi kể mọi người đều bồn chồn cựa quậy nhưng chẳng một ai đặt bút viết." },
-      { t: "Họ chẳng nhận ra bất cứ điều gì về người đàn ông đó vì trước đó đâu có ai bảo họ phải chú ý." },
-      { t: "Thế nên họ chẳng để ý thấy một thứ gì cả." },
-      { t: "Họ không chú ý đơn giản vì chẳng ai dặn họ phải làm thế." },
-      { t: "Cuối cùng viên trung sĩ cất giọng, **“Được rồi, các anh trượt hết vì các anh đang tư duy như dân thường. Người bình thường ra đường chẳng bao giờ để ý thứ gì không liên quan đến họ. Các anh không được phép làm như thế. Kể từ giờ các anh là cảnh sát, và điều đó có nghĩa là các anh phải để ý tuyệt đối *mọi thứ*.”**" },
-      { t: "Tôi nghĩ đó là một bài học đắt giá cho những người làm quảng cáo." },
-      { t: "Ước gì người ta dạy bài học này cho người mới vào nghề, nhưng theo chiều ngược lại." },
-      { t: "Ước gì họ dạy cho những ai vừa chập chững bước chân vào ngành rằng: người bình thường chẳng bao giờ để ý thứ gì cả." },
-      { t: "Và chắc chắn họ chẳng thèm để tâm đến quảng cáo." },
-      { t: "Tôi thấy đa phần dân trong ngành cứ tin rằng người thường sẽ thấy mọi mẫu quảng cáo và nghiên cứu từng mẫu một cách cẩn thận." },
-      { t: "Nhưng nhiều năm trước, những con số thực tế tôi nhận được là thế này:" },
-      { t: "**Khoảng 20 TỶ BẢNG được chi cho mọi loại hình quảng cáo tại Anh mỗi năm.**" },
-      { t: "**Nghĩa là trung bình mỗi người chúng ta va phải chừng 1.000 mẩu quảng cáo mỗi ngày.**" },
-      { t: "**Trong số đó, 4% được nhớ theo hướng tích cực và 7% bị nhớ theo hướng tiêu cực.**" },
-      { t: "**Nhưng con số cốt tử là – 89% quảng cáo không hề được chú ý hay nhớ tới.**" },
-      { t: "Tức là cứ khoảng 9 trên 10 quảng cáo hoàn toàn vô hình, chúng chỉ là mớ giấy dán tường." },
-      { t: "Đó chính xác là bài học bố tôi đã nhận ra trong buổi huấn luyện cảnh sát đầu tiên." },
-      { t: "Chẳng có ai thèm nhìn cả." },
-      { t: "Mấy cậu cảnh sát tập sự cứ đinh ninh khi nào được nhắc thì họ mới bắt đầu quan sát." },
-      { t: "Điểm mấu chốt ở đây là chứng minh rằng vốn dĩ chẳng có ai *bao giờ* tự nhiên để ý cả." },
-      { t: "Nhưng cảnh sát thì bắt buộc phải liên tục quan sát. Họ không thể hành xử như người thường." },
-      { t: "Còn đối với chúng ta, bài học lại đi theo chiều ngược lại: người thường chẳng hề để ý như chúng ta ảo tưởng đâu." },
-      { t: "Chúng ta cứ mặc định người ta sẽ nhìn thấy quảng cáo của mình, rồi dồn hết thời gian cãi nhau về ba cái chi tiết vụn vặt." },
-      { t: "Bởi vì chẳng có ai dạy cho ta sự thật: người đời KHÔNG để ý quảng cáo." },
-      { t: "Trừ khi chúng ta *bắt* họ phải chú ý." },
-      { t: "Và ta bắt họ phải nhìn bằng cách đảm bảo quảng cáo của mình không giống bất cứ thứ gì khác, không lẫn vào đống giấy dán tường." },
-      { t: "Bởi vì nếu họ không nhìn thấy, thì mọi tư duy chiến lược tài tình sẽ chẳng bao giờ được ai biết tới." },
-      { t: "Mọi tư duy chiến lược đỉnh cao chỉ là thứ phí phạm thời gian." },
-      { t: "*Trừ khi* mẩu quảng cáo đó thực sự bật hẳn lên khỏi phần còn lại." },
-      { t: "Chúng ta vẫn chưa chịu học điều mà Bill Bernbach đã cố dạy từ nhiều năm trước:" },
-      { t: "**“Nếu không ai để ý đến quảng cáo của bạn, thì mọi thứ khác chỉ là mớ lý thuyết suông.”**" },
-    ],
-  },
-  {
-    slug: "turning-the-tables",
-    guid: "https://davetrott.co.uk/?p=4052",
-    originalUrl: "https://davetrott.co.uk/2026/10/turning-the-tables/",
-    originalTitle: "TURNING THE TABLES",
-    wordCount: 470,
-    titleVi: "LẬT NGƯỢC THẾ CỜ",
-    tags: ["sangtao", "tuduy", "thaimo"],
-    originalLines: [
-      { t: "When Nick Wray was our creative director he got an all-girl student team in on placement for two weeks." },
-      { t: "I don’t normally do that, I never expect much from student teams." },
-      { t: "But Nick was right, Anna and Elaine were different. They were there to work." },
-      { t: "During those two weeks they grabbed every brief that was going and they actually got some ads bought." },
-      { t: "We’d never had that before, so we offered them another two weeks placement." },
-      { t: "During this period they actually got some ads *running*, good ads too." },
-      { t: "They were churning out so much work we did something we never do, we asked if they wanted to stay on for *another* two weeks placement." },
-      { t: "This time they even got a commercial bought and made. They were like a whirlwind." },
-      { t: "So we offered them *another* two weeks placement." },
-      { t: "This is when they turned the tables on us." },
-      { t: "Anna said, **“We’d like to, but you don’t seem to have a permanent job for us here, so we’re going to get a placement somewhere else.  And we’ll keep doing that until we find an agency that offers us a permanent job.”**" },
-      { t: "Wait a minute, this changes everything." },
-      { t: "Instead of just giving them another two weeks placement, we’ve now got to look at the fact that we can’t afford to lose them." },
-      { t: "They’re getting out more work than some of the full-time teams we’ve got working here." },
-      { t: "By working their socks off they’ve given us a problem." },
-      { t: "We can’t afford to let Anna and Elaine go." },
-      { t: "I talked it over with Gordon and we agreed, they forced us into giving them a permanent job by turning the tables." },
-      { t: "That’s what we loved best, Anna and Elaine’s attitude." },
-      { t: "They didn’t see themselves as naïve little students asking for a favour, they saw themselves as professionals and they weren’t asking for anything." },
-      { t: "They’d show us what they could do and then just let us make our minds up." },
-      { t: "They turned the tables from them asking for a placement to us asking them to stay." },
-      { t: "The very best advertising should be like that." },
-      { t: "Turning the tables is what Bill Bernbach taught us, it’s where the fun is." },
-      { t: "It’s what the best people in our business have always done." },
-      { t: "For the little guy to take on the big guy." },
-      { t: "For the challenger brand to take on the market leader." },
-      { t: "That’s the fun, not just maintaining the status quo, just kicking the can a bit further down the road. There’s no fun in that for anyone." },
-      { t: "The attitude of the best advertising should be like Anna and Elaine." },
-      { t: "Because the most attractive feature anyone can have is confidence. And confidence gives you attitude." },
-      { t: "As Beyonce sang:" },
-      { t: "“IF YOU LIKE IT THEN YOU SHOULD HAVE PUT A RING ON IT.”" },
-      { gap: true },
-      { t: "(btw: a few years later we made Anna creative director)" },
-    ],
-    linesVi: [
-      { t: "Hồi Nick Wray làm giám đốc sáng tạo, cậu ấy nhận một cặp sinh viên nữ vào thực tập hai tuần." },
-      { t: "Bình thường tôi không hay làm vậy, tôi chẳng bao giờ kỳ vọng nhiều vào mấy nhóm sinh viên." },
-      { t: "Nhưng Nick nói đúng, Anna và Elaine rất khác biệt. Họ đến đây là để làm việc thực sự." },
-      { t: "Trong suốt hai tuần đó, họ vồ lấy mọi đề bài có sẵn và họ thực sự đã bán được vài mẩu quảng cáo." },
-      { t: "Chúng tôi chưa từng thấy chuyện đó bao giờ, nên chúng tôi đề nghị cho họ thực tập thêm hai tuần nữa." },
-      { t: "Trong đợt tiếp theo này, họ thậm chí đã có những mẩu quảng cáo được *lên sóng* thực tế, mà lại là quảng cáo rất chất lượng." },
-      { t: "Họ cho ra lò nhiều sản phẩm đến mức chúng tôi đã làm một việc chưa từng có tiền lệ: hỏi xem họ có muốn ở lại thêm *hai tuần nữa* không." },
-      { t: "Lần này họ thậm chí còn bán được và sản xuất luôn cả một phim quảng cáo truyền hình. Họ làm việc như một cơn lốc." },
-      { t: "Thế là chúng tôi lại đề nghị họ ở lại thực tập thêm *hai tuần nữa*." },
-      { t: "Và chính lúc này, họ đã lật ngược thế cờ với chúng tôi." },
-      { t: "Anna nói thẳng, **“Bọn em cũng muốn lắm, nhưng có vẻ công ty không có vị trí chính thức nào cho bọn em, nên bọn em sẽ sang thực tập ở chỗ khác. Và bọn em sẽ tiếp tục làm thế cho đến khi tìm được một agency trao cho bọn em hợp đồng chính thức.”**" },
-      { t: "Khoan đã, câu nói đó thay đổi hoàn toàn cục diện." },
-      { t: "Thay vì chỉ ban phát cho họ thêm hai tuần thực tập, giờ đây chúng tôi phải đối mặt với một thực tế: chúng tôi không thể để mất họ." },
-      { t: "Họ tạo ra nhiều việc hiệu quả hơn cả mấy nhóm nhân viên toàn thời gian đang ngồi ở đây." },
-      { t: "Bằng cách làm việc hết mình đến cháy máy, họ đã ném ngược một bài toán khó về phía chúng tôi." },
-      { t: "Chúng tôi không thể để Anna và Elaine rời đi." },
-      { t: "Tôi bàn lại với Gordon và cả hai đều đồng thuận: chính họ đã ép chúng tôi phải ký hợp đồng chính thức bằng cách lật ngược thế cờ." },
-      { t: "Đó chính là điều chúng tôi trân trọng nhất: thái độ của Anna và Elaine." },
-      { t: "Họ không coi mình là mấy cô sinh viên ngây thơ đi xin xỏ ân huệ, họ định vị mình là dân chuyên nghiệp và họ chẳng xin xỏ bất cứ điều gì." },
-      { t: "Họ chứng minh cho chúng tôi thấy năng lực của họ rồi cứ thế để chúng tôi tự quyết định." },
-      { t: "Họ lật ngược tình thế từ chỗ họ phải xin thực tập thành việc chúng tôi phải nài nỉ họ ở lại." },
-      { t: "Quảng cáo đỉnh cao nhất cũng phải như vậy." },
-      { t: "Lật ngược thế cờ chính là điều Bill Bernbach đã dạy chúng ta, đó là nơi niềm vui bắt đầu." },
-      { t: "Đó là điều những người giỏi nhất trong ngành này luôn luôn làm." },
-      { t: "Kẻ tí hon thách thức gã khổng lồ." },
-      { t: "Thương hiệu thách thức đối đầu trực diện với kẻ dẫn đầu thị trường." },
-      { t: "Đó mới là cái thú, chứ không phải chuyện giữ khư khư hiện trạng an toàn hay chỉ biết đá quả bóng trách nhiệm đi xa thêm một chút. Làm thế thì chẳng có gì thú vị cho bất kỳ ai." },
-      { t: "Thái độ của những mẩu quảng cáo xuất sắc nhất phải giống hệt như Anna và Elaine." },
-      { t: "Bởi vì điểm quyến rũ nhất ở một con người chính là sự tự tin. Và sự tự tin tạo nên khí chất." },
-      { t: "Như Beyoncé từng cất giọng hát:" },
-      { t: "“IF YOU LIKE IT THEN YOU SHOULD HAVE PUT A RING ON IT.”" },
-      { gap: true },
-      { t: "(nhân tiện: vài năm sau đó, chúng tôi đã cất nhắc Anna lên làm giám đốc sáng tạo)" },
-    ],
-  },
-];
+interface SeedArticle {
+  slug: string;
+  guid: string;
+  originalUrl: string;
+  originalTitle: string;
+  originalPublishedAt?: string | null;
+  originalLines: unknown[];
+  wordCount: number;
+  titleVi: string | null;
+  linesVi: unknown[] | null;
+  tags: string[];
+  status: string;
+  publishedDate?: string | null;
+}
 
 /**
- * Đảm bảo database luôn có sẵn các bài viết mẫu đầu tiên để đọc ngay
+ * Đảm bảo database luôn có sẵn đủ 50 bài viết Dave Trott ở trạng thái PUBLISHED
+ * Tự động chạy trên mọi môi trường (local dev, staging, Vercel production).
  */
 export async function ensureInitialCreativeArticles() {
-  const count = await prisma.creativeArticle.count();
-  if (count > 0) return;
+  const publishedCount = await prisma.creativeArticle.count({
+    where: { status: "PUBLISHED" },
+  });
 
-  const scheduleDates = getWeekdaySchedule(new Date(), INITIAL_ARTICLES.length);
+  // Nếu đã đủ 50 bài PUBLISHED thì không cần chạy lại
+  if (publishedCount >= (seedArticles as SeedArticle[]).length) return;
 
-  for (let i = 0; i < INITIAL_ARTICLES.length; i++) {
-    const item = INITIAL_ARTICLES[i];
-    const pubDate = scheduleDates[i];
-    const status = i === 0 ? "PUBLISHED" : "SCHEDULED";
+  const typedSeed = seedArticles as SeedArticle[];
+
+  for (let i = 0; i < typedSeed.length; i++) {
+    const item = typedSeed[i];
+    const pubDate = item.publishedDate
+      ? new Date(item.publishedDate)
+      : new Date(Date.now() - (typedSeed.length - i) * 86400000);
 
     await prisma.creativeArticle.upsert({
       where: { slug: item.slug },
-      update: {},
+      update: {
+        status: "PUBLISHED",
+        titleVi: item.titleVi,
+        tags: item.tags,
+        publishedDate: pubDate,
+      },
       create: {
         slug: item.slug,
         guid: item.guid,
         originalUrl: item.originalUrl,
         originalTitle: item.originalTitle,
+        originalPublishedAt: item.originalPublishedAt
+          ? new Date(item.originalPublishedAt)
+          : null,
         originalLines: item.originalLines as unknown as object[],
         wordCount: item.wordCount,
         titleVi: item.titleVi,
-        linesVi: item.linesVi as unknown as object[],
+        linesVi: item.linesVi ? (item.linesVi as unknown as object[]) : undefined,
         tags: item.tags,
-        status,
+        status: "PUBLISHED",
         publishedDate: pubDate,
       },
     });
   }
 }
+

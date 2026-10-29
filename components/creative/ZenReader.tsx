@@ -25,8 +25,6 @@ import {
   toggleSaveArticle,
 } from "@/app/actions/creative";
 
-type Mode = "vi" | "en";
-
 interface ZenReaderProps {
   article: {
     id: string;
@@ -54,7 +52,6 @@ interface ZenReaderProps {
  */
 function FormattedLine({ text, className = "" }: { text: string; className?: string }) {
   const parts: (string | { type: "bold" | "italic"; content: string })[] = [];
-  // Regex khớp **in đậm** hoặc *in nghiêng*
   const regex = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -105,7 +102,6 @@ export default function ZenReader({
   prevArticle,
   nextArticle,
 }: ZenReaderProps) {
-  const [mode, setMode] = useState<Mode>("vi");
   const [scrollProgress, setScrollProgress] = useState(0);
   const [liked, setLiked] = useState(initialLiked);
   const [likeCount, setLikeCount] = useState(initialLikeCount);
@@ -115,6 +111,13 @@ export default function ZenReader({
 
   const footerRef = useRef<HTMLDivElement>(null);
   const hasMarkedRead = useRef(initialRead);
+
+  // Tự động đánh dấu đã xem/đã đọc khi mở bài
+  useEffect(() => {
+    if (hasMarkedRead.current) return;
+    hasMarkedRead.current = true;
+    markArticleAsRead(article.id).catch(() => {});
+  }, [article.id]);
 
   // Thanh cuộn trang
   useEffect(() => {
@@ -130,25 +133,6 @@ export default function ZenReader({
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Tự động đánh dấu đã đọc khi cuộn tới chân trang
-  useEffect(() => {
-    if (hasMarkedRead.current) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting && !hasMarkedRead.current) {
-          hasMarkedRead.current = true;
-          markArticleAsRead(article.id).catch(() => {});
-        }
-      },
-      { threshold: 0.2 }
-    );
-
-    if (footerRef.current) {
-      observer.observe(footerRef.current);
-    }
-    return () => observer.disconnect();
-  }, [article.id]);
-
   const handleToggleLike = () => {
     const nextState = !liked;
     setLiked(nextState);
@@ -156,6 +140,11 @@ export default function ZenReader({
     startTransition(async () => {
       try {
         const res = await toggleLikeArticle(article.id);
+        if (res.requireLogin) {
+          setLiked(!nextState);
+          setLikeCount((prev) => (nextState ? Math.max(0, prev - 1) : prev + 1));
+          return;
+        }
         setLiked(res.liked);
         setLikeCount(res.likeCount);
       } catch {
@@ -171,6 +160,10 @@ export default function ZenReader({
     startTransition(async () => {
       try {
         const res = await toggleSaveArticle(article.id);
+        if (res.requireLogin) {
+          setSaved(!nextState);
+          return;
+        }
         setSaved(res.saved);
       } catch {
         setSaved(!nextState);
@@ -188,7 +181,8 @@ export default function ZenReader({
 
   const readingMinutes = estimateReadingMinutes(article.wordCount);
   const origLines = article.originalLines || [];
-  const linesVi = article.linesVi || [];
+  const linesVi = article.linesVi && article.linesVi.length > 0 ? article.linesVi : null;
+  const activeLines = linesVi || origLines;
   const displayTitleVi = article.titleVi || article.originalTitle;
   const dateFormatted = article.publishedDate
     ? formatCreativeDate(new Date(article.publishedDate))
@@ -218,31 +212,23 @@ export default function ZenReader({
             <span>Góc Đọc & Cảm Hứng</span>
           </Link>
 
-          {/* Công tắc chọn ngôn ngữ đọc */}
-          <div className="inline-flex rounded-full border border-zinc-200 bg-white p-0.5 shadow-xs">
-            <button
-              type="button"
-              onClick={() => setMode("vi")}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-all duration-150 ${
-                mode === "vi"
-                  ? "bg-zinc-900 text-white shadow-xs"
-                  : "text-zinc-600 hover:text-zinc-900"
-              }`}
-            >
-              Tiếng Việt
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("en")}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-all duration-150 ${
-                mode === "en"
-                  ? "bg-zinc-900 text-white shadow-xs"
-                  : "text-zinc-600 hover:text-zinc-900"
-              }`}
-            >
-              English
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleCopyLink}
+            className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs font-semibold text-zinc-600 shadow-xs transition-colors hover:border-zinc-300 hover:text-zinc-950"
+          >
+            {hasCopied ? (
+              <>
+                <Check size={13} className="text-brand-700" />
+                <span className="text-brand-800">Đã chép link</span>
+              </>
+            ) : (
+              <>
+                <Share2 size={13} />
+                <span>Chia sẻ</span>
+              </>
+            )}
+          </button>
         </div>
       </header>
 
@@ -266,7 +252,7 @@ export default function ZenReader({
           </h1>
 
           {/* Phụ đề tiếng Việt IN HOA */}
-          {article.titleVi && mode !== "en" && (
+          {article.titleVi && (
             <p className="mt-3 text-sm font-semibold uppercase tracking-wider text-brand-800 sm:text-base">
               {displayTitleVi}
             </p>
@@ -275,45 +261,22 @@ export default function ZenReader({
           <div className="mt-8 mx-auto h-[1px] w-20 bg-zinc-300" />
         </div>
 
-        {/* Nội dung dòng theo chế độ */}
+        {/* Nội dung dòng chữ */}
         <article
           className={`${serifBody.className} text-[19px] sm:text-[20px] leading-[1.75] text-zinc-800`}
         >
-          {/* Chế độ 1: TIẾNG VIỆT */}
-          {mode === "vi" && (
-            <div className="space-y-4">
-              {linesVi.length > 0 ? (
-                linesVi.map((line, idx) => {
-                  if (isGapLine(line)) {
-                    return <div key={idx} className="h-6" aria-hidden="true" />;
-                  }
-                  return (
-                    <div key={idx} className="transition-colors hover:text-zinc-950">
-                      <FormattedLine text={line.t} />
-                    </div>
-                  );
-                })
-              ) : (
-                <p className="text-zinc-500 italic">Bản dịch đang được cập nhật...</p>
-              )}
-            </div>
-          )}
-
-          {/* Chế độ 2: ENGLISH NGUYÊN BẢN */}
-          {mode === "en" && (
-            <div className="space-y-4">
-              {origLines.map((line, idx) => {
-                if (isGapLine(line)) {
-                  return <div key={idx} className="h-6" aria-hidden="true" />;
-                }
-                return (
-                  <div key={idx} className="transition-colors hover:text-zinc-950">
-                    <FormattedLine text={line.t} />
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <div className="space-y-4">
+            {activeLines.map((line, idx) => {
+              if (isGapLine(line)) {
+                return <div key={idx} className="h-6" aria-hidden="true" />;
+              }
+              return (
+                <div key={idx} className="transition-colors hover:text-zinc-950">
+                  <FormattedLine text={line.t} />
+                </div>
+              );
+            })}
+          </div>
         </article>
 
         {/* Chân trang tương tác & Bản quyền */}

@@ -1,11 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireUser } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function toggleLikeArticle(articleId: string) {
-  const user = await requireUser();
+  const user = await getCurrentUser();
+  if (!user) {
+    return { liked: false, likeCount: 0, requireLogin: true };
+  }
 
   const existing = await prisma.articleReader.findUnique({
     where: {
@@ -48,7 +51,10 @@ export async function toggleLikeArticle(articleId: string) {
 }
 
 export async function toggleSaveArticle(articleId: string) {
-  const user = await requireUser();
+  const user = await getCurrentUser();
+  if (!user) {
+    return { saved: false, requireLogin: true };
+  }
 
   const existing = await prisma.articleReader.findUnique({
     where: {
@@ -84,7 +90,10 @@ export async function toggleSaveArticle(articleId: string) {
 }
 
 export async function markArticleAsRead(articleId: string) {
-  const user = await requireUser();
+  const user = await getCurrentUser();
+  if (!user) {
+    return { success: false, requireLogin: true };
+  }
 
   await prisma.articleReader.upsert({
     where: {

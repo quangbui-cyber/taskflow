@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BookOpen, Sparkles } from "lucide-react";
-import { requireUser } from "@/lib/auth";
+import { BookOpen } from "lucide-react";
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { creativeEnabled } from "@/lib/features";
 import { isTextLine, type ArticleLine } from "@/lib/creative";
@@ -23,14 +24,13 @@ export default async function CreativeArchivePage() {
     notFound();
   }
 
-  const user = await requireUser();
+  const user = await getCurrentUser();
   await ensureInitialCreativeArticles();
 
   const [articles, sidebarProjects] = await Promise.all([
     prisma.creativeArticle.findMany({
       where: {
-        status: { in: ["PUBLISHED", "SCHEDULED"] },
-        titleVi: { not: null },
+        status: "PUBLISHED",
       },
       include: {
         readers: {
@@ -44,28 +44,32 @@ export default async function CreativeArchivePage() {
       },
       orderBy: [{ publishedDate: "desc" }, { createdAt: "desc" }],
     }),
-    prisma.project.findMany({
-      where: { members: { some: { userId: user.id } } },
-      select: {
-        id: true,
-        name: true,
-        color: true,
-        status: true,
-        category: true,
-        responsibleTeam: { select: { id: true, name: true } },
-        responsibleGroup: { select: { id: true, name: true } },
-        account: { select: { team: { select: { id: true, name: true } } } },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
+    user
+      ? prisma.project.findMany({
+          where: { members: { some: { userId: user.id } } },
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            status: true,
+            category: true,
+            responsibleTeam: { select: { id: true, name: true } },
+            responsibleGroup: { select: { id: true, name: true } },
+            account: { select: { team: { select: { id: true, name: true } } } },
+          },
+          orderBy: { createdAt: "desc" },
+        })
+      : Promise.resolve([]),
   ]);
 
   const cardsData: CreativeCardData[] = articles.map((article) => {
-    const lines = (article.linesVi as unknown as ArticleLine[]) || [];
+    const linesVi = (article.linesVi as unknown as ArticleLine[]) || [];
+    const origLines = (article.originalLines as unknown as ArticleLine[]) || [];
+    const lines = linesVi.length > 0 ? linesVi : origLines;
     const textLines = lines.filter(isTextLine).map((l) => l.t.replace(/[*_]/g, ""));
     const excerpt = textLines.slice(0, 3).join(" ");
 
-    const userReader = article.readers.find((r) => r.userId === user.id);
+    const userReader = user ? article.readers.find((r) => r.userId === user.id) : null;
     const likeCount = article.readers.filter((r) => r.likedAt !== null).length;
 
     return {
@@ -85,6 +89,43 @@ export default async function CreativeArchivePage() {
     };
   });
 
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-zinc-50/50">
+        <header className="sticky top-0 z-30 border-b border-zinc-200/80 bg-white/90 backdrop-blur-md">
+          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
+            <Link href="/" className="flex items-center gap-2">
+              <span className="text-base font-extrabold tracking-tight text-zinc-950">myCreative</span>
+              <span className="text-zinc-300">/</span>
+              <span className="rounded-full bg-brand-100 px-2.5 py-0.5 text-xs font-semibold text-brand-800">
+                Góc Đọc
+              </span>
+            </Link>
+            <Link
+              href="/login"
+              className="rounded-[10px] bg-zinc-900 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-zinc-800"
+            >
+              Đăng nhập
+            </Link>
+          </div>
+        </header>
+
+        <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 space-y-6">
+          <header className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-brand-50 text-brand-700">
+              <BookOpen size={20} aria-hidden="true" />
+            </span>
+            <h1 className="text-xl font-bold tracking-tight text-zinc-950 sm:text-2xl">
+              Góc Đọc & Cảm Hứng
+            </h1>
+          </header>
+
+          <CreativeArchive articles={cardsData} />
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="tf-shell">
       <Sidebar user={user} projects={sidebarProjects} activeSection="creative" />
@@ -93,23 +134,11 @@ export default async function CreativeArchivePage() {
         <HubTabs section="creative" role={user.role} />
 
         <div className="tf-page space-y-6">
-          <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-brand-50 text-brand-700">
-                <BookOpen size={20} aria-hidden="true" />
-              </span>
-              <div>
-                <h1 className="tf-page-title">Góc Đọc & Cảm Hứng</h1>
-                <p className="text-xs text-zinc-500">
-                  Những câu chuyện ngắn gãy gọn, thấm thía từ huyền thoại Dave Trott.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 self-start rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs text-zinc-600 shadow-xs">
-              <Sparkles size={13} className="text-brand-600" />
-              <span>Phát hành mỗi sáng Thứ 2 - Thứ 6</span>
-            </div>
+          <header className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-brand-50 text-brand-700">
+              <BookOpen size={20} aria-hidden="true" />
+            </span>
+            <h1 className="tf-page-title">Góc Đọc & Cảm Hứng</h1>
           </header>
 
           <CreativeArchive articles={cardsData} />

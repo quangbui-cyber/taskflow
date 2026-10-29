@@ -74,8 +74,8 @@ export default function CreativeArchive({ articles }: CreativeArchiveProps) {
             onClick={() => setFilterTab("all")}
             className={`rounded-[7px] px-3.5 py-1.5 text-xs font-semibold transition-colors ${
               filterTab === "all"
-                ? "bg-zinc-950 text-white shadow-xs"
-                : "text-zinc-600 hover:text-zinc-950"
+                ? "bg-brand-100 text-brand-800 shadow-xs"
+                : "text-zinc-600 hover:bg-brand-50 hover:text-zinc-950"
             }`}
           >
             Tất cả bài viết ({articles.length})
@@ -85,8 +85,8 @@ export default function CreativeArchive({ articles }: CreativeArchiveProps) {
             onClick={() => setFilterTab("saved")}
             className={`inline-flex items-center gap-1.5 rounded-[7px] px-3.5 py-1.5 text-xs font-semibold transition-colors ${
               filterTab === "saved"
-                ? "bg-zinc-950 text-white shadow-xs"
-                : "text-zinc-600 hover:text-zinc-950"
+                ? "bg-brand-100 text-brand-800 shadow-xs"
+                : "text-zinc-600 hover:bg-brand-50 hover:text-zinc-950"
             }`}
           >
             <Bookmark size={13} />
@@ -97,8 +97,8 @@ export default function CreativeArchive({ articles }: CreativeArchiveProps) {
             onClick={() => setFilterTab("read")}
             className={`inline-flex items-center gap-1.5 rounded-[7px] px-3.5 py-1.5 text-xs font-semibold transition-colors ${
               filterTab === "read"
-                ? "bg-zinc-950 text-white shadow-xs"
-                : "text-zinc-600 hover:text-zinc-950"
+                ? "bg-brand-100 text-brand-800 shadow-xs"
+                : "text-zinc-600 hover:bg-brand-50 hover:text-zinc-950"
             }`}
           >
             <CheckCircle2 size={13} />

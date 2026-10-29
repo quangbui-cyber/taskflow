@@ -22,7 +22,10 @@ interface CreativeTodayCardProps {
   isWeekend?: boolean;
 }
 
-export default function CreativeTodayCard({ article, isWeekend = false }: CreativeTodayCardProps) {
+export default function CreativeTodayCard({
+  article,
+  isWeekend = false,
+}: CreativeTodayCardProps) {
   const [saved, setSaved] = useState(article.isSaved);
   const [, startTransition] = useTransition();
 
@@ -30,6 +33,12 @@ export default function CreativeTodayCard({ article, isWeekend = false }: Creati
   const dateFormatted = article.publishedDate
     ? formatCreativeDate(new Date(article.publishedDate))
     : null;
+
+  const badgeLabel = article.isRead
+    ? "Góc đọc & Cảm hứng"
+    : isWeekend
+      ? "Bài đọc cuối tuần"
+      : "Bài đọc tiếp theo";
 
   const handleToggleSave = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -60,14 +69,17 @@ export default function CreativeTodayCard({ article, isWeekend = false }: Creati
 
       {/* Header của thẻ */}
       <div className="relative flex items-center justify-between gap-2 border-b border-zinc-100 pb-3">
-        <div className="flex items-center gap-2">
+        <Link
+          href="/creative"
+          className="group flex items-center gap-2 transition-opacity hover:opacity-80"
+        >
           <span className="flex h-7 w-7 items-center justify-center rounded-[8px] bg-brand-100 text-brand-800">
             <BookOpen size={14} aria-hidden="true" />
           </span>
-          <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-700">
-            {isWeekend ? "Bài viết gần nhất" : "Bài viết hôm nay"}
+          <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-700 group-hover:text-brand-800">
+            {badgeLabel}
           </span>
-        </div>
+        </Link>
 
         <div className="flex items-center gap-2 text-[11px] text-zinc-600">
           {dateFormatted && <span className="font-medium text-zinc-700">{dateFormatted}</span>}
