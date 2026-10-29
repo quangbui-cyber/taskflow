@@ -4,6 +4,10 @@
 .next
 .next.nosync
 node_modules
+node_modules.*
+.codegraph
+.claude
+markitdown
 .codex-tmp
 .codex
 outputs

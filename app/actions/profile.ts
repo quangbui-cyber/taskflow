@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { parseAvatarDataUrl } from "@/lib/avatarImage";
+import { parseBirthdayInput } from "@/lib/birthdays";
 import {
   clearLoginRateLimit,
   loginRateLimitStatus,
@@ -26,11 +27,16 @@ export async function updateOwnProfile(
   if (!name) return { error: "Tên không được để trống." };
   const avatar = parseAvatarDataUrl(String(formData.get("avatarUrl") ?? ""));
   if (avatar.error) return { error: avatar.error };
+  const birthdayInput = parseBirthdayInput(
+    formData.get("birthdayDay"),
+    formData.get("birthdayMonth")
+  );
+  if ("error" in birthdayInput) return { error: birthdayInput.error };
 
   await prisma.$transaction([
     prisma.user.update({
       where: { id: user.id },
-      data: { name, avatarUrl: avatar.avatarUrl },
+      data: { name, avatarUrl: avatar.avatarUrl, birthday: birthdayInput.birthday },
     }),
     // Hồ sơ Account (nếu có) hiển thị cùng tên với người dùng.
     prisma.account.updateMany({ where: { userId: user.id }, data: { name } }),

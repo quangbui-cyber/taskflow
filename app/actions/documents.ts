@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 import { normalizeDocumentName, normalizeDocumentUrl } from "@/lib/documents";
+import { trashDocumentSetFolderSafe } from "@/lib/driveStorage";
 
 export type DocumentState = { error?: string; success?: string };
 
@@ -58,25 +59,42 @@ export async function deleteDocumentSet(setId: string): Promise<DocumentState> {
   // onDelete: Cascade → xoá luôn các tài liệu trong bộ hồ sơ
   const deleted = await prisma.documentSet.deleteMany({ where: { id: setId } });
   if (deleted.count === 0) return { error: "Bộ hồ sơ không tồn tại." };
+  await trashDocumentSetFolderSafe(setId).catch(() => undefined);
   revalidatePath("/documents");
   return { success: "Đã xoá bộ hồ sơ." };
+}
+
+export async function updateDocumentFile(
+  fileId: string,
+  rawTitle: string,
+  rawDriveUrl?: string | null
+): Promise<DocumentState> {
+  await requireAdmin();
+  const title = normalizeDocumentName(rawTitle);
+  if (!title) return { error: "Tên tài liệu không được để trống." };
+
+  const driveUrl = rawDriveUrl ? normalizeDocumentUrl(rawDriveUrl) : null;
+  if (rawDriveUrl && rawDriveUrl.trim() && !driveUrl) {
+    return { error: "Link Google Drive không hợp lệ." };
+  }
+
+  const updated = await prisma.documentFile.updateMany({
+    where: { id: fileId },
+    data: {
+      title,
+      driveUrl,
+    },
+  });
+  if (updated.count === 0) return { error: "Tài liệu không tồn tại." };
+  revalidatePath("/documents");
+  return { success: `Đã cập nhật "${title}".` };
 }
 
 export async function renameDocumentFile(
   fileId: string,
   rawTitle: string
 ): Promise<DocumentState> {
-  await requireAdmin();
-  const title = normalizeDocumentName(rawTitle);
-  if (!title) return { error: "Tên tài liệu không được để trống." };
-
-  const updated = await prisma.documentFile.updateMany({
-    where: { id: fileId },
-    data: { title },
-  });
-  if (updated.count === 0) return { error: "Tài liệu không tồn tại." };
-  revalidatePath("/documents");
-  return { success: `Đã đổi tên thành "${title}".` };
+  return updateDocumentFile(fileId, rawTitle);
 }
 
 export async function addDocumentLink(
@@ -103,6 +121,28 @@ export async function addDocumentLink(
   });
   revalidatePath("/documents");
   return { success: `Đã thêm link "${title}".` };
+}
+
+export async function updateDocumentLink(
+  linkId: string,
+  rawTitle: string,
+  rawUrl: string
+): Promise<DocumentState> {
+  await requireAdmin();
+  const url = normalizeDocumentUrl(rawUrl);
+  if (!url) {
+    return { error: "Link không hợp lệ. Hãy dán địa chỉ bắt đầu bằng http:// hoặc https://." };
+  }
+  const title = normalizeDocumentName(rawTitle);
+  if (!title) return { error: "Tên tài liệu không được để trống." };
+
+  const updated = await prisma.documentLink.updateMany({
+    where: { id: linkId },
+    data: { title, url },
+  });
+  if (updated.count === 0) return { error: "Link không tồn tại." };
+  revalidatePath("/documents");
+  return { success: `Đã cập nhật link "${title}".` };
 }
 
 export async function renameDocumentLink(

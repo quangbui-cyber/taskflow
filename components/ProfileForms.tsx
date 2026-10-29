@@ -41,10 +41,14 @@ export function ProfileInfoForm({
   userId,
   name,
   avatarUrl,
+  birthdayDay,
+  birthdayMonth,
 }: {
   userId: string;
   name: string;
   avatarUrl: string | null;
+  birthdayDay: number | null;
+  birthdayMonth: number | null;
 }) {
   const [state, formAction, pending] = useActionState<ProfileState, FormData>(
     updateOwnProfile,
@@ -70,6 +74,46 @@ export function ProfileInfoForm({
             className="tf-field mt-1.5"
           />
         </label>
+        <fieldset>
+          <legend className="text-xs font-medium text-zinc-500">
+            Sinh nhật
+          </legend>
+          <div className="mt-1.5 grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="sr-only">Ngày sinh</span>
+              <select
+                name="birthdayDay"
+                defaultValue={birthdayDay ?? ""}
+                className="tf-field"
+              >
+                <option value="">Ngày</option>
+                {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => (
+                  <option key={day} value={day}>
+                    {day}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="sr-only">Tháng sinh</span>
+              <select
+                name="birthdayMonth"
+                defaultValue={birthdayMonth ?? ""}
+                className="tf-field"
+              >
+                <option value="">Tháng</option>
+                {Array.from({ length: 12 }, (_, index) => index + 1).map((month) => (
+                  <option key={month} value={month}>
+                    Tháng {month}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <p className="mt-1.5 text-xs text-zinc-500">
+            Chỉ lưu ngày và tháng để cả nhà cùng chúc mừng bạn trên trang chủ.
+          </p>
+        </fieldset>
         {state.error && <p className="text-xs text-red-600">{state.error}</p>}
         <div className="flex justify-end">
           <SubmitButton pending={pending} label="Lưu thông tin" icon={Save} />

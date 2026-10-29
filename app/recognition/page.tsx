@@ -9,14 +9,17 @@ import {
   Star,
 } from "lucide-react";
 import Avatar from "@/components/Avatar";
+import RecognitionComments from "@/components/RecognitionComments";
 import RecognitionComposer from "@/components/RecognitionComposer";
 import RecognitionMonthSelect from "@/components/RecognitionMonthSelect";
 import RecognitionWebhookSettings from "@/components/RecognitionWebhookSettings";
 import Sidebar from "@/components/Sidebar";
+import HubTabs from "@/components/HubTabs";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getRecognitionWebhookStatus } from "@/lib/recognitionGoogleChat";
 import {
+  BIRTHDAY_RECOGNITION_CATEGORY,
   RECOGNITION_WEEKLY_STAR_LIMIT,
   recognitionCategoryLabel,
   recognitionMonthOptions,
@@ -173,12 +176,21 @@ export default async function RecognitionPage({
       include: {
         sender: { select: { id: true, name: true, avatarUrl: true } },
         recipient: { select: { id: true, name: true, avatarUrl: true } },
+        comments: {
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            body: true,
+            createdAt: true,
+            author: { select: { id: true, name: true, avatarUrl: true } },
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
       take: 100,
     }),
     prisma.recognition.findMany({
-      where: { createdAt: dateWhere },
+      where: { createdAt: dateWhere, category: { not: BIRTHDAY_RECOGNITION_CATEGORY } },
       select: { senderId: true, recipientId: true },
     }),
     prisma.project.findMany({
@@ -198,6 +210,7 @@ export default async function RecognitionPage({
     prisma.recognition.count({
       where: {
         senderId: user.id,
+        category: { not: BIRTHDAY_RECOGNITION_CATEGORY },
         createdAt: { gte: currentWeek.start, lt: currentWeek.end },
       },
     }),
@@ -241,11 +254,12 @@ export default async function RecognitionPage({
       <Sidebar user={user} projects={sidebarProjects} activeSection="recognition" />
 
       <main className="tf-main">
+        <HubTabs section="recognition" role={user.role} isHrManager={user.isHrManager} />
         <div className="tf-page !max-w-[1220px] !pt-12">
           <header className="mb-[54px] flex items-start justify-between gap-5">
             <div>
               <h1 className="text-[34px] font-semibold leading-tight tracking-[-0.03em] text-zinc-950">
-                Góc cảm ơn
+                Kudos Wall
               </h1>
             </div>
             {view !== "webhook" && (
@@ -368,6 +382,16 @@ export default async function RecognitionPage({
                               ? "Chỉ người gửi và người nhận"
                               : "Công khai trong công ty"}
                           </span>
+                          <RecognitionComments
+                            recognitionId={recognition.id}
+                            currentUserId={user.id}
+                            isAdmin={user.role === "ADMIN"}
+                            defaultOpen={focused}
+                            comments={recognition.comments.map((comment) => ({
+                              ...comment,
+                              createdAt: comment.createdAt.toISOString(),
+                            }))}
+                          />
                         </div>
                         <div className="hidden items-start gap-1.5 sm:flex">
                           <time className="whitespace-nowrap pt-2.5 text-xs text-zinc-500">

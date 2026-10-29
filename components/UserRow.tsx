@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import {
+  changeUserEmail,
   deleteUser,
   resetPassword,
   setManager,
@@ -23,6 +24,7 @@ import {
   ChevronDown,
   CirclePause,
   KeyRound,
+  Mail,
   MoreHorizontal,
   Pencil,
   RotateCcw,
@@ -97,6 +99,16 @@ export default function UserRow({
     {}
   );
   useActionFeedback(state);
+  const [changingEmail, setChangingEmail] = useState(false);
+  const [emailState, emailAction, emailPending] = useActionState<AdminState, FormData>(
+    async (prev, formData) => {
+      const result = await changeUserEmail(prev, formData);
+      if (result.success) setChangingEmail(false);
+      return result;
+    },
+    {}
+  );
+  useActionFeedback(emailState);
 
   useEffect(() => {
     function closeMenu(event: PointerEvent) {
@@ -131,6 +143,7 @@ export default function UserRow({
     setProfileAvatarUrl(user.avatarUrl ?? "");
     setProfileMessage("");
     setResetting(false);
+    setChangingEmail(false);
     setMenuOpen(false);
     setDrawerOpen(true);
   }
@@ -524,6 +537,71 @@ export default function UserRow({
                     </p>
                   )}
                 </div>
+              </section>
+
+              <section className="border-t border-zinc-100 pt-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <h4 className="text-sm font-semibold">Email đăng nhập</h4>
+                    <p className="mt-0.5 truncate text-xs text-zinc-500" title={user.email}>
+                      {user.email}
+                    </p>
+                  </div>
+                  {!changingEmail && (
+                    <button
+                      type="button"
+                      onClick={() => setChangingEmail(true)}
+                      className="tf-button-secondary !min-h-9 shrink-0 !px-3 !py-1.5 text-xs"
+                    >
+                      <Mail size={14} aria-hidden="true" />
+                      Thay đổi
+                    </button>
+                  )}
+                </div>
+                {changingEmail && (
+                  <form action={emailAction} className="mt-3 space-y-2">
+                    <input type="hidden" name="userId" value={user.id} />
+                    <input
+                      name="email"
+                      type="email"
+                      required
+                      maxLength={254}
+                      placeholder="Email đăng nhập mới"
+                      className="tf-field"
+                      autoComplete="off"
+                      autoFocus
+                    />
+                    <p className="rounded-[8px] bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+                      Dự án, task, bình luận, nghỉ phép và mọi dữ liệu khác của tài khoản được giữ nguyên.{" "}
+                      {isSelf
+                        ? "Liên kết Google của tài khoản này sẽ được gỡ; bạn vẫn ở lại phiên hiện tại."
+                        : `${user.name} sẽ bị đăng xuất, liên kết Google cũ được gỡ và cần đăng nhập lại bằng email mới.`}
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        disabled={emailPending}
+                        className="tf-button-primary"
+                        aria-busy={emailPending}
+                      >
+                        {emailPending ? (
+                          <span className="tf-spinner" aria-hidden="true" />
+                        ) : (
+                          <Save size={15} aria-hidden="true" />
+                        )}
+                        Lưu
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setChangingEmail(false)}
+                        className="tf-button-secondary"
+                      >
+                        Hủy
+                      </button>
+                    </div>
+                  </form>
+                )}
+                {emailState.error && <p className="mt-2 text-xs text-red-600">{emailState.error}</p>}
               </section>
 
               <section className="border-t border-zinc-100 pt-5">

@@ -16,6 +16,7 @@ import {
 } from "@/lib/meetings";
 import { notify } from "@/lib/notify";
 import { prisma } from "@/lib/prisma";
+import { parseMeetCode } from "@/lib/meetLink";
 
 export type MeetingActionState = {
   error?: string;
@@ -282,6 +283,7 @@ export async function createMeeting(
           endAt: input.endAt,
           roomId: input.roomId,
           meetingUrl: input.meetingUrl,
+          meetCode: parseMeetCode(input.meetingUrl),
           organizerId: user.id,
           recorderId: input.recorderId,
           projectId,
@@ -410,6 +412,7 @@ export async function updateMeeting(
           endAt: input.endAt,
           roomId: input.roomId,
           meetingUrl: input.meetingUrl,
+          meetCode: parseMeetCode(input.meetingUrl),
           recorderId: input.recorderId,
           sequence: { increment: 1 },
           attendees: {

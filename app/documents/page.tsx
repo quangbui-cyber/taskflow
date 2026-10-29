@@ -2,11 +2,11 @@ import { FolderOpen } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
+import HubTabs from "@/components/HubTabs";
 import DocumentSets from "@/components/DocumentSets";
 import { canManageDocuments } from "@/lib/documents";
+import { storedFileDriveUrl } from "@/lib/storedFileResponse";
 
-const DOC_BLUE_DARK = "#1d4ed8";
-const DOC_BLUE_SOFT = "#eff6ff";
 
 function formatDate(date: Date) {
   return new Intl.DateTimeFormat("vi-VN", {
@@ -34,6 +34,8 @@ export default async function DocumentsPage() {
             title: true,
             mimeType: true,
             size: true,
+            driveFileId: true,
+            driveUrl: true,
             createdAt: true,
             uploader: { select: { name: true } },
           },
@@ -72,16 +74,16 @@ export default async function DocumentsPage() {
       <Sidebar user={user} projects={sidebarProjects} activeSection="documents" />
 
       <main className="tf-main">
+        <HubTabs section="documents" role={user.role} />
         <div className="tf-page space-y-6">
           <div>
             <div className="flex items-center gap-3">
               <span
-                className="flex h-10 w-10 items-center justify-center rounded-[8px]"
-                style={{ backgroundColor: DOC_BLUE_SOFT, color: DOC_BLUE_DARK }}
+                className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-brand-50 text-brand-700"
               >
                 <FolderOpen size={20} aria-hidden="true" />
               </span>
-              <h1 className="tf-page-title" style={{ color: DOC_BLUE_DARK }}>
+              <h1 className="tf-page-title">
                 Tài liệu
               </h1>
             </div>
@@ -101,7 +103,14 @@ export default async function DocumentsPage() {
                   title: file.title,
                   mimeType: file.mimeType,
                   size: file.size,
-                  url: null,
+                  url:
+                    file.driveUrl ||
+                    (file.driveFileId
+                      ? storedFileDriveUrl({
+                          driveFileId: file.driveFileId,
+                          mimeType: file.mimeType,
+                        })
+                      : null),
                   addedAt: file.createdAt,
                   uploaderName: file.uploader?.name ?? null,
                 })),

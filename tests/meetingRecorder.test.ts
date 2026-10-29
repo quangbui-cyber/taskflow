@@ -57,8 +57,9 @@ test("recordings get a file type and name that the upload pipeline accepts", () 
 });
 
 test("an hour of recording stays far below the 100 MB upload limit", () => {
+  // 48 kbps ≈ 22 MB mỗi giờ; bản ghi dài nhất được kiểm ở test giới hạn biên bản.
   const bytesPerHour = (RECORDING_BITS_PER_SECOND / 8) * 3600;
-  assert.ok(bytesPerHour < 15 * 1024 * 1024);
+  assert.ok(bytesPerHour < 25 * 1024 * 1024);
 });
 
 test("microphone problems are explained in plain Vietnamese", () => {

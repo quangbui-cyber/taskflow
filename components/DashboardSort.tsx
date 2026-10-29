@@ -20,7 +20,7 @@ export default function DashboardSort({ value }: { value: "due" | "project" }) {
           onChange={(event) => {
             const next = new URLSearchParams(searchParams.toString());
             next.set("sort", event.target.value);
-            router.replace(`/?${next.toString()}`);
+            router.replace(`/tasks?${next.toString()}`);
           }}
           className="appearance-none rounded-[7px] border border-zinc-200 bg-white py-2 pl-3 pr-10 text-sm text-zinc-600 outline-none hover:bg-zinc-50 focus:border-brand-500"
         >

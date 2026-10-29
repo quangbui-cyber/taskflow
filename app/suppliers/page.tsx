@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { financeEnabled } from "@/lib/features";
 import Sidebar from "@/components/Sidebar";
+import HubTabs from "@/components/HubTabs";
 import SupplierDirectory from "@/components/SupplierDirectory";
 import {
   canDeleteSuppliers,
@@ -48,10 +49,11 @@ export default async function SuppliersPage() {
       <Sidebar user={user} projects={sidebarProjects} activeSection="suppliers" />
 
       <main className="tf-main">
+        <HubTabs section="suppliers" role={user.role} />
         <div className="tf-page space-y-6">
           <div>
             <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-brand-50 text-brand-800">
+              <span className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-brand-50 text-brand-700">
                 <Truck size={20} aria-hidden="true" />
               </span>
               <h1 className="tf-page-title">Nhà cung cấp</h1>
