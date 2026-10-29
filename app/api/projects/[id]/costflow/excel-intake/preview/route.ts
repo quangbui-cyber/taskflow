@@ -6,7 +6,7 @@ import { buildMaskedStructurePayload } from "@/lib/ai/excel/masking";
 import { previewReviewedExcelMapping } from "@/lib/ai/excel/rebuildExcelIntakeInput";
 import type { ReviewedExcelMapping } from "@/lib/ai/excel/mapping";
 import { loadAiConfig } from "@/lib/ai/config";
-import { OpenAiGenerationModel } from "@/lib/ai/providers/openai";
+import { createGenerationModel } from "@/lib/ai/providers";
 import { createAiRun } from "@/lib/ai/runs/aiRunService";
 import { executeExcelMappingRun, listPriorExcelMappings, recordPriorExcelMappingRun, recordReviewedExcelMapping, verifyReviewedExcelMappingRun } from "@/lib/ai/excel/mappingRun";
 import type { WorkbookInventory } from "@/lib/ai/excel/workbookInventory";
@@ -44,7 +44,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
               const config = loadAiConfig();
               if (!config.enabled || !config.tasks.includes("EXCEL_STRUCTURE") || !aiSourceId) throw new Error("AI mapping unavailable.");
               const run = await createAiRun(actor.id, id, { intent: "ANALYZE", task: "EXCEL_STRUCTURE", sourceIds: [`PROJECT_FILE:${aiSourceId}`] });
-              return executeExcelMappingRun(actor.id, id, run.id, sourceBytes, inventory, new OpenAiGenerationModel(config));
+              return executeExcelMappingRun(actor.id, id, run.id, sourceBytes, inventory, createGenerationModel(config));
             } catch { return { status: "MANUAL_MAPPING" as const, proposal: null, tier: "UNMAPPED" as const, providerRequestId: null, runId: null }; }
           })();
           return Response.json({ state: "MANUAL_MAPPING", knownError: knownError instanceof Error ? knownError.message.slice(0, 160) : "Không nhận diện được bảng chuẩn.",

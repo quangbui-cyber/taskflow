@@ -1,4 +1,4 @@
-# Opt-in provider smoke only. Run with an approved OPENAI_API_KEY and approved data handling.
+# Opt-in provider smoke only. Run with GEMINI_API_KEY and approved data handling.
 # Inputs are synthetic fixture IDs; this file contains no company record or secret.
 description: Phase 15 sanitized provider contract smoke
 prompts:
@@ -8,11 +8,12 @@ prompts:
     Copy the identifier exactly and set requiresHumanReview to true.
     Do not claim that any real document was checked or authorize a business action.
 providers:
-  - id: openai:gpt-6-luna
+  - id: google:gemini-3.8-flash
     config:
-      reasoning:
-        effort: low
-      max_output_tokens: 128
+      maxOutputTokens: 128
+      generationConfig:
+        thinkingConfig:
+          thinkingLevel: LOW
 tests:
   - vars:
       fixtureId: synthetic-po-clean

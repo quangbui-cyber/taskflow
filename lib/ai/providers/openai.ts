@@ -3,15 +3,18 @@ import "server-only";
 import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 
-import type { AiConfig, AiEnabledConfig } from "@/lib/ai/config";
+import type { AiConfig, OpenAiEnabledConfig } from "@/lib/ai/config";
 import {
-  AiFailureCodeSchema,
-  AuthorizedRetrievalSpanSchema,
   CandidateBatchSchema,
-  type AiFailureCode,
-  type CandidateBatch,
   type Usage,
 } from "@/lib/ai/contracts";
+import {
+  abortScope,
+  AiProviderFailure,
+  assertAuthorizedOutput,
+  mapProviderFailure,
+  normalizeGenerationRequest,
+} from "@/lib/ai/providers/safety";
 import type {
   GenerationModel,
   GenerationRequest,
@@ -36,39 +39,7 @@ export type StructuredOutputInvoker = (
   request: Invocation,
 ) => Promise<InvocationResult>;
 
-export class AiProviderFailure extends Error {
-  readonly code: AiFailureCode;
-
-  constructor(code: AiFailureCode, message: string, options?: ErrorOptions) {
-    AiFailureCodeSchema.parse(code);
-    super(message, options);
-    this.name = "AiProviderFailure";
-    this.code = code;
-  }
-}
-
-function abortScope(parent: AbortSignal, timeoutMs: number) {
-  const controller = new AbortController();
-  let timedOut = false;
-  const onParentAbort = () => controller.abort(parent.reason);
-  const timer = setTimeout(() => {
-    timedOut = true;
-    controller.abort(new Error("AI provider timeout"));
-  }, timeoutMs);
-  timer.unref?.();
-
-  if (parent.aborted) onParentAbort();
-  else parent.addEventListener("abort", onParentAbort, { once: true });
-
-  return {
-    abort: Reflect.get(controller, ["sig", "nal"].join("")) as AbortSignal,
-    timedOut: () => timedOut,
-    cleanup: () => {
-      clearTimeout(timer);
-      parent.removeEventListener("abort", onParentAbort);
-    },
-  };
-}
+export { AiProviderFailure } from "@/lib/ai/providers/safety";
 
 function usageOf(response: {
   usage?: {
@@ -84,7 +55,7 @@ function usageOf(response: {
   };
 }
 
-function createInvoker(config: AiEnabledConfig): StructuredOutputInvoker {
+function createInvoker(config: OpenAiEnabledConfig): StructuredOutputInvoker {
   let client: OpenAI | null = null;
   return async (request) => {
     client ??= new OpenAI({ apiKey: config.apiKey, maxRetries: 0 });
@@ -128,97 +99,28 @@ function createInvoker(config: AiEnabledConfig): StructuredOutputInvoker {
   };
 }
 
-function assertAuthorizedOutput(
-  output: CandidateBatch,
-  request: GenerationRequest,
-) {
-  if (output.task !== request.task) {
-    throw new Error("Output task does not match the requested task.");
-  }
-  const allowed = new Map(
-    request.authorizedSources.map((item) => [item.span.spanId, item.span]),
-  );
-  for (const candidate of output.candidates) {
-    for (const source of candidate.sources) {
-      const expected = allowed.get(source.spanId);
-      if (
-        !expected ||
-        expected.sourceRevisionId !== source.sourceRevisionId ||
-        expected.page !== source.page ||
-        expected.cellRange !== source.cellRange ||
-        expected.quote !== source.quote
-      ) {
-        throw new Error("Output source is outside the authorized source set.");
-      }
-    }
-  }
-}
-
-function mapFailure(
-  error: unknown,
-  timedOut: boolean,
-  cancelled: boolean,
-): AiProviderFailure {
-  if (error instanceof AiProviderFailure) return error;
-  if (timedOut || cancelled) {
-    return new AiProviderFailure("TIMEOUT", "AI provider timed out or was cancelled.", {
-      cause: error,
-    });
-  }
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "status" in error &&
-    error.status === 429
-  ) {
-    return new AiProviderFailure("QUOTA", "AI provider quota was exceeded.", {
-      cause: error,
-    });
-  }
-  return new AiProviderFailure("INVALID_SCHEMA", "AI provider response was invalid.", {
-    cause: error,
-  });
-}
-
 export class OpenAiGenerationModel implements GenerationModel {
   private readonly config: AiConfig;
   private readonly invoke: StructuredOutputInvoker | null;
 
   constructor(config: AiConfig, invoke?: StructuredOutputInvoker) {
     this.config = config;
-    this.invoke = config.enabled ? (invoke ?? createInvoker(config)) : null;
+    this.invoke = config.enabled && config.provider === "openai"
+      ? (invoke ?? createInvoker(config))
+      : null;
   }
 
   async extract(
     request: GenerationRequest,
     abort: AbortSignal,
   ): Promise<GenerationResult> {
-    if (!this.config.enabled || !this.invoke) {
+    if (!this.config.enabled || this.config.provider !== "openai" || !this.invoke) {
       throw new AiProviderFailure("DISABLED", "AI provider is disabled.");
     }
     if (!this.config.tasks.includes(request.task)) {
       throw new AiProviderFailure("DISABLED", "AI task is disabled.");
     }
-    if (!request.instruction.trim() || request.instruction.length > 5_000) {
-      throw new AiProviderFailure(
-        "INVALID_SCHEMA",
-        "AI instruction is invalid.",
-      );
-    }
-    const sourceResult = AuthorizedRetrievalSpanSchema.array().min(1).max(100).safeParse(
-      request.authorizedSources,
-    );
-    if (!sourceResult.success) {
-      throw new AiProviderFailure("INVALID_SCHEMA", "Authorized sources are invalid.");
-    }
-    if (new Set(sourceResult.data.map((item) => item.span.spanId)).size !== sourceResult.data.length) {
-      throw new AiProviderFailure("INVALID_SCHEMA", "Authorized source IDs must be unique.");
-    }
-    const normalizedRequest: GenerationRequest = {
-      ...request,
-      instruction: request.instruction.trim(),
-      authorizedSources: sourceResult.data,
-    };
+    const normalizedRequest = normalizeGenerationRequest(request);
 
     let lastError: unknown;
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -243,7 +145,7 @@ export class OpenAiGenerationModel implements GenerationModel {
           usage: response.usage,
         };
       } catch (error) {
-        lastError = mapFailure(error, scope.timedOut(), abort.aborted);
+        lastError = mapProviderFailure(error, scope.timedOut(), abort.aborted);
         if (
           attempt === 1 ||
           (lastError instanceof AiProviderFailure &&
@@ -255,6 +157,6 @@ export class OpenAiGenerationModel implements GenerationModel {
         scope.cleanup();
       }
     }
-    throw mapFailure(lastError, false, abort.aborted);
+    throw mapProviderFailure(lastError, false, abort.aborted);
   }
 }

@@ -10,7 +10,7 @@ Updated: 2026-10-29. This record separates technical verification from company, 
 | `schema_isolation` | PASS, scoped | Phase 15 integration tests create disposable `phase15_*` schemas in the dedicated `costflow_test` database. Its public test schema was backed up to `.codex-tmp/costflow-test-before-phase15-12-20261029.dump` and synchronized to the current Prisma model after the first full integration run found missing columns. The SQL diff had no table/column/data drops. No seed/reset of the long-lived `taskflow` UI database. |
 | `human_desktop_390` | ACCEPTED WITH LIMITS | Plans 15-06, 15-08, 15-09 and 15-11 checkpoints were accepted with their recorded local UI limits. Acceptance covers technical UI review only. |
 | `physical_ime` | PENDING | Vietnamese IME behavior needs a physical input check; keyboard/composition handling is implemented and simulated keyboard checks passed. |
-| `provider_governance` | NOT_READY | Approved provider, model/config, data categories, retention and security terms have not been recorded. A Gemini key passed a synthetic connectivity prompt only. The app's configured provider remains OpenAI. |
+| `provider_governance` | PARTIAL, NOT_READY FOR COMPANY DATA | Gemini is the user-selected Phase 15 provider and the app has an explicit `gemini-3.8-flash` adapter/config path. The key may be used only for synthetic/redacted verification until data categories, retention, security terms and real-record processing are approved. |
 | `phoenix_hosting` | NOT_READY | Hosting/location, access and retention for redacted telemetry need company approval. Phoenix operational traces are not a business audit trail. |
 | `global_publishing_owner` | NOT_READY | Named owner and publication authority for company SOP/policy remain unresolved; publishing is disabled without configuration. |
 | `named_pilot_group` | NOT_READY | Named users, pilot scope and business sign-off are pending. |
@@ -18,6 +18,8 @@ Updated: 2026-10-29. This record separates technical verification from company, 
 | `phase14_company_acceptance` | NOT_READY | Phase 14 technical work and company acceptance are separate; no accepted company evidence is recorded here. |
 | `production` | NOT_READY | No production deployment or authenticated production workflow verification was performed in this phase. |
 | `legal_compliance_freshness` | PENDING | Current privacy, tax and retention requirements need review by the responsible company roles before provider-backed pilot/release. |
+
+Latest Gemini connectivity check (2026-10-29): the three-ID sanitized Promptfoo smoke reached the Google Gemini endpoint, but all three requests returned `API key not valid`. No company content was sent. Provider connectivity and model quality therefore remain unverified until the configured key is replaced or re-enabled and this same synthetic smoke passes.
 
 ## Offline evaluation
 
@@ -35,7 +37,7 @@ Latest focused result: 40/40 manifest integrity; 45/45 critical authority/permis
 
 ## Provider regression and secret handling
 
-`scripts/ai-evals/promptfooconfig.yaml` is an opt-in provider contract smoke using only synthetic fixture IDs. It is excluded from default unit/integration commands. After provider and data-governance approval, run it separately with a secret supplied through the process environment, for example `npx promptfoo eval -c scripts/ai-evals/promptfooconfig.yaml`. Never put keys, internal document bytes, bank/tax/personal values or unmasked workbook data in config, fixtures, command output or telemetry. A successful provider smoke is not an extraction/QA quality score.
+`scripts/ai-evals/promptfooconfig.yaml` is an opt-in Gemini contract smoke using only synthetic fixture IDs. It is excluded from default unit/integration commands. For the approved synthetic/redacted check, supply `GEMINI_API_KEY` through the process environment and run `npx promptfoo eval -c scripts/ai-evals/promptfooconfig.yaml`. Never put keys, internal document bytes, bank/tax/personal values or unmasked workbook data in config, fixtures, command output or telemetry. A successful provider smoke is not an extraction/QA quality score and does not authorize company records.
 
 For an approved 40-case model-flag run, normalize results to `{ "manifestHash": "...", "flags": [{ "id": "...", "flagged": true }] }` with one row per manifest ID, then set `AI_EVAL_PROVIDER_RESULTS_FILE` for `npm run test:ai-evals`. The evaluator binds results to the exact manifest hash and fails below precision 0.80 or recall 0.90. No provider score is inferred when that file is absent.
 

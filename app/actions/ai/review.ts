@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { AiSourceNotFoundError } from "@/lib/ai/access/resolveAiReadScope";
 import { extractAndPersistDocumentRun } from "@/lib/ai/extraction/documentExtraction";
 import { loadAiConfig } from "@/lib/ai/config";
-import { OpenAiGenerationModel } from "@/lib/ai/providers/openai";
+import { createGenerationModel } from "@/lib/ai/providers";
 import {
   applyAiReviewToDraft as applyReviewToDraft,
   completeAiReview as completeReview,
@@ -26,7 +26,7 @@ export async function executeAiDocumentRun(input: { projectId: string; runId: st
   const config = loadAiConfig();
   if (!config.enabled) throw new Error("AI analysis is unavailable.");
   return extractAndPersistDocumentRun(actor.id, input.projectId, input.runId,
-    new OpenAiGenerationModel(config));
+    createGenerationModel(config));
 }
 
 export async function getAiReviewSnapshot(input: { projectId: string; runId: string }) {

@@ -5,8 +5,10 @@ import {
   type GenerationTask,
 } from "@/lib/ai/contracts";
 
-const GENERATION_MODELS = ["gpt-6-luna", "gpt-6.1-sol"] as const;
-const EMBEDDING_MODELS = ["text-embedding-3-small"] as const;
+const OPENAI_GENERATION_MODELS = ["gpt-6-luna", "gpt-6.1-sol"] as const;
+const OPENAI_EMBEDDING_MODELS = ["text-embedding-3-small"] as const;
+const GEMINI_GENERATION_MODELS = ["gemini-3.8-flash"] as const;
+const GEMINI_EMBEDDING_MODELS = ["gemini-embedding-2"] as const;
 
 type Environment = Record<string, string | undefined>;
 
@@ -16,19 +18,30 @@ export type AiDisabledConfig = {
   tracingEnabled: false;
 };
 
-export type AiEnabledConfig = {
+type AiEnabledBase = {
   enabled: true;
-  provider: "openai";
   tracingEnabled: boolean;
   tracingEndpoint: string | null;
   apiKey: string;
-  generationModel: (typeof GENERATION_MODELS)[number];
-  embeddingModel: (typeof EMBEDDING_MODELS)[number];
   tasks: readonly GenerationTask[];
   timeoutMs: number;
   maxOutputTokens: number;
   maxConcurrency: number;
 };
+
+export type OpenAiEnabledConfig = AiEnabledBase & {
+  provider: "openai";
+  generationModel: (typeof OPENAI_GENERATION_MODELS)[number];
+  embeddingModel: (typeof OPENAI_EMBEDDING_MODELS)[number];
+};
+
+export type GeminiEnabledConfig = AiEnabledBase & {
+  provider: "gemini";
+  generationModel: (typeof GEMINI_GENERATION_MODELS)[number];
+  embeddingModel: (typeof GEMINI_EMBEDDING_MODELS)[number];
+};
+
+export type AiEnabledConfig = OpenAiEnabledConfig | GeminiEnabledConfig;
 
 export type AiConfig = AiDisabledConfig | AiEnabledConfig;
 
@@ -84,29 +97,19 @@ export function loadAiConfig(env: Environment = process.env): AiConfig {
   }
 
   const provider = required(env.AI_PROVIDER, "AI provider");
-  if (provider !== "openai") throw new Error("AI provider is not approved.");
+  if (provider !== "openai" && provider !== "gemini") {
+    throw new Error("AI provider is not approved.");
+  }
 
   const tracingEnabled = env.AI_TRACING_ENABLED === "true";
   const tracingEndpoint = tracingEnabled
     ? required(env.PHOENIX_COLLECTOR_ENDPOINT, "Tracing endpoint")
     : null;
 
-  return {
-    enabled: true,
-    provider,
+  const common = {
+    enabled: true as const,
     tracingEnabled,
     tracingEndpoint,
-    apiKey: required(env.OPENAI_API_KEY, "OpenAI API key"),
-    generationModel: allowlisted(
-      env.AI_GENERATION_MODEL,
-      "AI generation model",
-      GENERATION_MODELS,
-    ),
-    embeddingModel: allowlisted(
-      env.AI_EMBEDDING_MODEL,
-      "AI embedding model",
-      EMBEDDING_MODELS,
-    ),
     tasks: configuredTasks(env.AI_TASKS),
     timeoutMs: boundedInteger(env.AI_TIMEOUT_MS, "AI timeout", 1_000, 120_000),
     maxOutputTokens: boundedInteger(
@@ -120,6 +123,40 @@ export function loadAiConfig(env: Environment = process.env): AiConfig {
       "AI concurrency",
       1,
       8,
+    ),
+  };
+
+  if (provider === "gemini") {
+    return {
+      ...common,
+      provider,
+      apiKey: required(env.GEMINI_API_KEY, "Gemini API key"),
+      generationModel: allowlisted(
+        env.AI_GENERATION_MODEL,
+        "AI generation model",
+        GEMINI_GENERATION_MODELS,
+      ),
+      embeddingModel: allowlisted(
+        env.AI_EMBEDDING_MODEL,
+        "AI embedding model",
+        GEMINI_EMBEDDING_MODELS,
+      ),
+    };
+  }
+
+  return {
+    ...common,
+    provider,
+    apiKey: required(env.OPENAI_API_KEY, "OpenAI API key"),
+    generationModel: allowlisted(
+      env.AI_GENERATION_MODEL,
+      "AI generation model",
+      OPENAI_GENERATION_MODELS,
+    ),
+    embeddingModel: allowlisted(
+      env.AI_EMBEDDING_MODEL,
+      "AI embedding model",
+      OPENAI_EMBEDDING_MODELS,
     ),
   };
 }
