@@ -220,24 +220,26 @@ export default function ZenReader({
             <button
               type="button"
               onClick={() => setMode("vi")}
+              aria-label="Tiếng Việt"
               className={`rounded-full px-3 py-1 text-xs font-semibold transition-all duration-150 ${
                 mode === "vi"
                   ? "bg-zinc-900 text-white shadow-xs"
                   : "text-zinc-600 hover:text-zinc-900"
               }`}
             >
-              Tiếng Việt
+              VN
             </button>
             <button
               type="button"
               onClick={() => setMode("en")}
+              aria-label="English"
               className={`rounded-full px-3 py-1 text-xs font-semibold transition-all duration-150 ${
                 mode === "en"
                   ? "bg-zinc-900 text-white shadow-xs"
                   : "text-zinc-600 hover:text-zinc-900"
               }`}
             >
-              English
+              EN
             </button>
           </div>
 
