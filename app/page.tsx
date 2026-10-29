@@ -9,15 +9,21 @@ import {
   CalendarClock,
   CheckCheck,
   CheckCircle2,
+  ChevronRight,
   FolderOpen,
+  Gamepad2,
+  Grid2x2X,
+  Grid3x3,
   Heart,
   Plane,
   Plus,
   Star,
+  Trophy,
   UserRoundX,
   type LucideIcon,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { buildLeaderboard, monthKeyOf, monthRange } from "@/lib/sudokuLeaderboard";
 import { canCreateProjects, requireUser } from "@/lib/auth";
 import { daysUntil, isOverdue } from "@/lib/dates";
 import { creativeEnabled, meetingsEnabled } from "@/lib/features";
@@ -135,6 +141,22 @@ function QuickAction({
   );
 }
 
+function GameLink({ href, label, icon: Icon }: { href: string; label: string; icon: LucideIcon }) {
+  return (
+    <Link
+      href={href}
+      prefetch={false}
+      className="group flex items-center gap-3 rounded-[12px] bg-zinc-50 px-3 py-2.5 text-sm font-semibold text-zinc-800 transition-all duration-150 hover:-translate-y-0.5 hover:bg-brand-50 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+    >
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-brand-100 text-brand-700">
+        <Icon size={17} aria-hidden="true" />
+      </span>
+      <span className="flex-1">{label}</span>
+      <ChevronRight size={16} className="text-zinc-400 transition-transform duration-150 group-hover:translate-x-0.5" aria-hidden="true" />
+    </Link>
+  );
+}
+
 function Card({
   title,
   icon: Icon,
@@ -224,6 +246,7 @@ export default async function HomePage({
     leaveManagers,
     birthdayPeople,
     unreadNotifications,
+    sudokuMatches,
   ] = await Promise.all([
     prisma.user.findUniqueOrThrow({
       where: { id: user.id },
@@ -316,7 +339,27 @@ export default async function HomePage({
       select: { id: true, name: true, avatarUrl: true, birthday: true },
     }),
     prisma.notification.count({ where: { userId: user.id, read: false } }),
+    (() => {
+      const { start, end } = monthRange(monthKeyOf(now));
+      return prisma.sudokuMatch.findMany({
+        where: { finishedAt: { gte: start, lt: end } },
+        select: { hostUserId: true, guestUserId: true, winnerUserId: true },
+      });
+    })(),
   ]);
+
+  // Người dẫn đầu bảng xếp hạng Sudoku tháng này (chỉ hiện khi đã có người thắng).
+  const sudokuTop = buildLeaderboard(sudokuMatches)[0];
+  const sudokuLeader =
+    sudokuTop && sudokuTop.wins > 0
+      ? {
+          wins: sudokuTop.wins,
+          user: await prisma.user.findUnique({
+            where: { id: sudokuTop.userId },
+            select: { id: true, name: true, avatarUrl: true },
+          }),
+        }
+      : null;
 
   // Sinh nhật: ai có sinh nhật hôm nay và trong 30 ngày tới (chỉ ngày/tháng).
   const birthdays = upcomingBirthdays(birthdayPeople, now);
@@ -827,6 +870,33 @@ export default async function HomePage({
                   >
                     <Cake size={14} aria-hidden="true" />
                     Thêm ngày sinh của bạn để cả nhà cùng chúc mừng
+                  </Link>
+                )}
+              </Card>
+
+              <Card title="Góc giải trí" icon={Gamepad2} labelledBy="games-heading" delay={250}>
+                <div className="space-y-1.5">
+                  <GameLink href="/caro" label="Cờ Caro" icon={Grid2x2X} />
+                  <GameLink href="/sudoku" label="Sudoku" icon={Grid3x3} />
+                </div>
+                {sudokuLeader?.user && (
+                  <Link
+                    href="/sudoku"
+                    prefetch={false}
+                    aria-label={`Dẫn đầu Sudoku tháng này: ${sudokuLeader.user.name}, ${sudokuLeader.wins} trận thắng`}
+                    className="mt-3 flex items-center gap-2.5 border-t border-zinc-100 pt-3 text-sm"
+                  >
+                    <Trophy size={16} className="shrink-0 text-brand-600" aria-hidden="true" />
+                    <Avatar
+                      id={sudokuLeader.user.id}
+                      name={sudokuLeader.user.name}
+                      avatarUrl={sudokuLeader.user.avatarUrl}
+                      className="h-6 w-6 text-[10px]"
+                    />
+                    <span className="min-w-0 flex-1 truncate font-medium text-zinc-800">{sudokuLeader.user.name}</span>
+                    <span className="shrink-0 text-xs font-semibold tabular-nums text-zinc-500">
+                      {sudokuLeader.wins} thắng
+                    </span>
                   </Link>
                 )}
               </Card>
