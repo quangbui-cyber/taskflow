@@ -926,3 +926,46 @@ model CaroGame {
   @@index([code])
 }
 
+
+// Sudoku 9x9 mini game nội bộ: phòng đua giải online, 2 người cùng giải một đề
+model SudokuGame {
+  id            String    @id @default(cuid())
+  code          String    @unique
+  hostUserId    String
+  hostName      String
+  guestUserId   String?
+  guestName     String?
+  difficulty    String    @default("medium") // easy | medium | hard | expert
+  timerEnabled  Boolean   @default(true)
+  timeLimitSec  Int       @default(900)
+  puzzle        Json?     // number[81], 0 = ô trống
+  solution      Json?     // number[81], không bao giờ gửi về trình duyệt
+  hostValues    Json?     // number[81] các ô chủ phòng đã điền đúng
+  guestValues   Json?
+  hostMistakes  Int       @default(0)
+  guestMistakes Int       @default(0)
+  status        String    @default("WAITING") // WAITING | READY | PLAYING | FINISHED
+  winner        String?   // HOST | GUEST | DRAW
+  finishReason  String?   // SOLVED | MISTAKES | TIMEOUT | FORFEIT
+  scoreHost     Int       @default(0)
+  scoreGuest    Int       @default(0)
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// Kết quả từng trận Sudoku online, dùng cho bảng xếp hạng theo tháng
+model SudokuMatch {
+  id           String   @id @default(cuid())
+  roomCode     String
+  hostUserId   String
+  guestUserId  String
+  winnerUserId String?  // null = hoà
+  difficulty   String
+  finishReason String   // SOLVED | MISTAKES | TIMEOUT | FORFEIT
+  durationSec  Int
+  finishedAt   DateTime @default(now())
+
+  @@index([finishedAt])
+}

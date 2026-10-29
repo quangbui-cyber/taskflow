@@ -18,6 +18,7 @@ export type ActiveSection =
   | "profile"
   | "creative"
   | "caro"
+  | "sudoku"
   | "hr"
   | "admin";
 
@@ -101,6 +102,7 @@ export const HUBS: Hub[] = [
       { key: "creative", label: "Góc Đọc", href: "/creative", visible: (flags) => flags.showCreative ?? true },
       { key: "recognition", label: "Kudos Wall", href: "/recognition" },
       { key: "caro", label: "Cờ Caro", href: "/caro" },
+      { key: "sudoku", label: "Sudoku", href: "/sudoku" },
       { key: "profile", label: "Hồ sơ của tôi", href: "/profile" },
       {
         key: "hr",
