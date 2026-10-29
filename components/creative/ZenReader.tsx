@@ -93,6 +93,8 @@ function FormattedLine({ text, className = "" }: { text: string; className?: str
   );
 }
 
+type Mode = "vi" | "en";
+
 export default function ZenReader({
   article,
   initialLiked,
@@ -102,6 +104,7 @@ export default function ZenReader({
   prevArticle,
   nextArticle,
 }: ZenReaderProps) {
+  const [mode, setMode] = useState<Mode>("vi");
   const [scrollProgress, setScrollProgress] = useState(0);
   const [liked, setLiked] = useState(initialLiked);
   const [likeCount, setLikeCount] = useState(initialLikeCount);
@@ -182,7 +185,7 @@ export default function ZenReader({
   const readingMinutes = estimateReadingMinutes(article.wordCount);
   const origLines = article.originalLines || [];
   const linesVi = article.linesVi && article.linesVi.length > 0 ? article.linesVi : null;
-  const activeLines = linesVi || origLines;
+  const activeLines = mode === "en" ? origLines : (linesVi || origLines);
   const displayTitleVi = article.titleVi || article.originalTitle;
   const dateFormatted = article.publishedDate
     ? formatCreativeDate(new Date(article.publishedDate))
@@ -211,6 +214,32 @@ export default function ZenReader({
             />
             <span>Góc Đọc & Cảm Hứng</span>
           </Link>
+
+          {/* Công tắc chọn ngôn ngữ đọc Tiếng Việt / English */}
+          <div className="inline-flex rounded-full border border-zinc-200 bg-white p-0.5 shadow-xs">
+            <button
+              type="button"
+              onClick={() => setMode("vi")}
+              className={`rounded-full px-3 py-1 text-xs font-semibold transition-all duration-150 ${
+                mode === "vi"
+                  ? "bg-zinc-900 text-white shadow-xs"
+                  : "text-zinc-600 hover:text-zinc-900"
+              }`}
+            >
+              Tiếng Việt
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("en")}
+              className={`rounded-full px-3 py-1 text-xs font-semibold transition-all duration-150 ${
+                mode === "en"
+                  ? "bg-zinc-900 text-white shadow-xs"
+                  : "text-zinc-600 hover:text-zinc-900"
+              }`}
+            >
+              English
+            </button>
+          </div>
 
           <button
             type="button"
@@ -252,7 +281,7 @@ export default function ZenReader({
           </h1>
 
           {/* Phụ đề tiếng Việt IN HOA */}
-          {article.titleVi && (
+          {article.titleVi && mode !== "en" && (
             <p className="mt-3 text-sm font-semibold uppercase tracking-wider text-brand-800 sm:text-base">
               {displayTitleVi}
             </p>

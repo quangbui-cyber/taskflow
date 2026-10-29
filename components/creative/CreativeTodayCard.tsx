@@ -146,7 +146,7 @@ export default function CreativeTodayCard({
           prefetch={false}
           className="inline-flex items-center gap-1 rounded-[10px] bg-brand-400 px-3.5 py-1.5 text-xs font-semibold text-zinc-950 shadow-xs transition-all duration-150 hover:-translate-y-0.5 hover:bg-brand-500"
         >
-          <span>Khám phá trang sách</span>
+          <span>Khám phá</span>
           <ChevronRight size={14} />
         </Link>
       </div>
