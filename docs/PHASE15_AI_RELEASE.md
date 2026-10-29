@@ -19,7 +19,7 @@ Updated: 2026-10-29. This record separates technical verification from company, 
 | `production` | NOT_READY | No production deployment or authenticated production workflow verification was performed in this phase. |
 | `legal_compliance_freshness` | PENDING | Current privacy, tax and retention requirements need review by the responsible company roles before provider-backed pilot/release. |
 
-Latest Gemini connectivity check (2026-10-29): the three-ID sanitized Promptfoo smoke reached the Google Gemini endpoint, but all three requests returned `API key not valid`. No company content was sent. Provider connectivity and model quality therefore remain unverified until the configured key is replaced or re-enabled and this same synthetic smoke passes.
+Latest Gemini connectivity check (2026-10-29): the three-ID sanitized Promptfoo smoke passed 3/3 against `gemini-3.8-flash` with schema-constrained JSON and 239 total tokens. No company content was sent. This verifies key/model connectivity and the synthetic response contract only; extraction/Q&A quality, the hash-bound 40-case provider score and company-data governance remain unverified.
 
 ## Offline evaluation
 

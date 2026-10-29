@@ -14,6 +14,17 @@ providers:
       generationConfig:
         thinkingConfig:
           thinkingLevel: LOW
+        responseMimeType: application/json
+        responseSchema:
+          type: OBJECT
+          properties:
+            fixtureId:
+              type: STRING
+            requiresHumanReview:
+              type: BOOLEAN
+          required:
+            - fixtureId
+            - requiresHumanReview
 tests:
   - vars:
       fixtureId: synthetic-po-clean
