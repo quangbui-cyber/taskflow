@@ -1,11 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BookOpen } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { creativeEnabled } from "@/lib/features";
-import { isTextLine, type ArticleLine } from "@/lib/creative";
+import {
+  describeCreativeDay,
+  extractPullQuote,
+  isTextLine,
+  toDisplayTitle,
+  type ArticleLine,
+} from "@/lib/creative";
 import { ensureInitialCreativeArticles } from "@/lib/creativeSeed";
 import Sidebar from "@/components/Sidebar";
 import HubTabs from "@/components/HubTabs";
@@ -62,12 +68,14 @@ export default async function CreativeArchivePage() {
       : Promise.resolve([]),
   ]);
 
+  const now = new Date();
   const cardsData: CreativeCardData[] = articles.map((article) => {
     const linesVi = (article.linesVi as unknown as ArticleLine[]) || [];
     const origLines = (article.originalLines as unknown as ArticleLine[]) || [];
     const lines = linesVi.length > 0 ? linesVi : origLines;
     const textLines = lines.filter(isTextLine).map((l) => l.t.replace(/[*_]/g, ""));
-    const excerpt = textLines.slice(0, 3).join(" ");
+    const excerpt = textLines.slice(0, 4).join(" ");
+    const day = article.publishedDate ? describeCreativeDay(article.publishedDate, now) : null;
 
     const userReader = user ? article.readers.find((r) => r.userId === user.id) : null;
     const likeCount = article.readers.filter((r) => r.likedAt !== null).length;
@@ -77,6 +85,12 @@ export default async function CreativeArchivePage() {
       slug: article.slug,
       originalTitle: article.originalTitle,
       titleVi: article.titleVi,
+      displayTitle: toDisplayTitle(article.titleVi || article.originalTitle, article.titleVi ? "vi" : "en", article.originalTitle),
+      displaySubtitle: article.titleVi ? toDisplayTitle(article.originalTitle, "en") : null,
+      dateLabel: day?.label ?? "Sắp phát hành",
+      groupKey: day?.groupKey ?? "upcoming",
+      groupLabel: day?.groupLabel ?? "Sắp phát hành",
+      pullQuote: extractPullQuote(lines),
       wordCount: article.wordCount,
       publishedDate: article.publishedDate?.toISOString() ?? null,
       tags: article.tags,
@@ -110,17 +124,10 @@ export default async function CreativeArchivePage() {
           </div>
         </header>
 
-        <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 space-y-6">
-          <header className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-brand-50 text-brand-700">
-              <BookOpen size={20} aria-hidden="true" />
-            </span>
-            <h1 className="text-xl font-bold tracking-tight text-zinc-950 sm:text-2xl">
-              Góc Đọc & Cảm Hứng
-            </h1>
-          </header>
+        <main className="mx-auto max-w-[1120px] space-y-8 px-4 py-8 sm:px-6">
+          <ArchiveHeader />
 
-          <CreativeArchive articles={cardsData} />
+          <CreativeArchive articles={cardsData} personal={false} />
         </main>
       </div>
     );
@@ -133,17 +140,40 @@ export default async function CreativeArchivePage() {
       <main className="tf-main">
         <HubTabs section="creative" role={user.role} />
 
-        <div className="tf-page space-y-6">
-          <header className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-brand-50 text-brand-700">
-              <BookOpen size={20} aria-hidden="true" />
-            </span>
-            <h1 className="tf-page-title">Góc Đọc & Cảm Hứng</h1>
-          </header>
+        <div className="tf-page">
+          <div className="mx-auto max-w-[1120px] space-y-8">
+            <ArchiveHeader
+              readCount={cardsData.filter((a) => a.isRead).length}
+              total={cardsData.length}
+            />
 
-          <CreativeArchive articles={cardsData} />
+            <CreativeArchive articles={cardsData} personal />
+          </div>
         </div>
       </main>
     </div>
+  );
+}
+
+function ArchiveHeader({ readCount, total }: { readCount?: number; total?: number }) {
+  return (
+    <header className="flex flex-wrap items-end justify-between gap-4">
+      <div className="max-w-2xl space-y-2">
+        <h1 className="tf-page-title text-zinc-950">Góc Đọc & Cảm Hứng</h1>
+        <p className="text-[15px] leading-relaxed text-zinc-500">
+          Mỗi sáng một câu chuyện về quảng cáo và tư duy sáng tạo của Dave Trott, dịch sang tiếng Việt.
+        </p>
+      </div>
+      {typeof readCount === "number" && total ? (
+        <p className="inline-flex items-center gap-2 text-[13px] text-zinc-600">
+          <CheckCircle2 size={16} className="text-brand-600" aria-hidden="true" />
+          Bạn đã đọc{" "}
+          <strong className="font-semibold text-zinc-950">
+            {readCount}/{total}
+          </strong>{" "}
+          bài
+        </p>
+      ) : null}
+    </header>
   );
 }
