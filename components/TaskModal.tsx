@@ -15,6 +15,7 @@ import CommentBody from "@/components/CommentBody";
 import CommentComposer from "@/components/CommentComposer";
 import UserPicker from "@/components/UserPicker";
 import TaskFileSection from "@/components/TaskFileSection";
+import DetectedLinks from "@/components/DetectedLinks";
 import { useInteraction } from "@/components/InteractionProvider";
 
 const PRIORITY_DOT: Record<string, string> = {
@@ -440,6 +441,7 @@ export default function TaskModal({
                 className="tf-field mt-1 resize-y border-emerald-200 bg-emerald-50/30 focus:bg-white"
               />
             </label>
+            <DetectedLinks text={result} />
             <TaskFileSection
               taskId={task.id}
               kind="RESULT"
