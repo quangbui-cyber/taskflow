@@ -26,6 +26,7 @@ export type OnlineGameState = {
   status: "WAITING" | "PLAYING" | "FINISHED";
   scoreX: number;
   scoreO: number;
+  updatedAt: string;
 };
 
 function formatGameState(game: {
@@ -41,6 +42,7 @@ function formatGameState(game: {
   status: string;
   scoreX: number;
   scoreO: number;
+  updatedAt?: Date;
 }): OnlineGameState {
   return {
     id: game.id,
@@ -55,6 +57,7 @@ function formatGameState(game: {
     status: (game.status as "WAITING" | "PLAYING" | "FINISHED") || "WAITING",
     scoreX: game.scoreX,
     scoreO: game.scoreO,
+    updatedAt: game.updatedAt ? game.updatedAt.toISOString() : new Date().toISOString(),
   };
 }
 
@@ -110,11 +113,14 @@ export async function joinOnlineGame(code: string, playerName: string): Promise<
 
     // Nếu phòng chưa có người chơi thứ 2
     if (!game.playerOName) {
+      // Ván đầu tiên: Bốc thăm ngẫu nhiên người đi đầu (50/50 X hoặc O)
+      const randomFirstTurn: Player = Math.random() < 0.5 ? "X" : "O";
       const updated = await prisma.caroGame.update({
         where: { id: game.id },
         data: {
           playerOName: cleanName,
           status: "PLAYING",
+          turn: randomFirstTurn,
         },
       });
       return { success: true, game: formatGameState(updated), role: "O" };
@@ -219,7 +225,7 @@ export async function makeOnlineMove(
   }
 }
 
-/** Bắt đầu ván mới (tái đấu) */
+/** Bắt đầu ván mới (tái đấu: người thua ván trước được quyền đi trước) */
 export async function resetOnlineGame(code: string): Promise<{ success: boolean; game?: OnlineGameState; error?: string }> {
   try {
     const cleanCode = (code || "").trim().toUpperCase();
@@ -229,13 +235,24 @@ export async function resetOnlineGame(code: string): Promise<{ success: boolean;
       return { success: false, error: "Phòng không tồn tại." };
     }
 
+    // Quy tắc: Nếu ván trước có người thua -> Người thua được đi trước ván này.
+    // Nếu hòa hoặc ván đầu: Bốc thăm ngẫu nhiên 50/50.
+    let nextFirstTurn: Player;
+    if (game.winner === "X") {
+      nextFirstTurn = "O"; // X thắng thì O (thua) được đi trước
+    } else if (game.winner === "O") {
+      nextFirstTurn = "X"; // O thắng thì X (thua) được đi trước
+    } else {
+      nextFirstTurn = Math.random() < 0.5 ? "X" : "O";
+    }
+
     const emptyBoard = createEmptyBoard();
     const updated = await prisma.caroGame.update({
       where: { id: game.id },
       data: {
         boardState: emptyBoard,
         lastMove: Prisma.JsonNull,
-        turn: "X",
+        turn: nextFirstTurn,
         status: game.playerOName ? "PLAYING" : "WAITING",
         winner: null,
         winningLine: Prisma.JsonNull,
@@ -245,5 +262,40 @@ export async function resetOnlineGame(code: string): Promise<{ success: boolean;
     return { success: true, game: formatGameState(updated) };
   } catch {
     return { success: false, error: "Không thể làm mới bàn cờ." };
+  }
+}
+
+/** Xử lý khi người chơi hết 15s đếm giờ (xử thua người hết giờ, người kia thắng) */
+export async function handleOnlineTimeout(
+  code: string,
+  timedOutPlayer: Player
+): Promise<{ success: boolean; game?: OnlineGameState; error?: string }> {
+  try {
+    const cleanCode = (code || "").trim().toUpperCase();
+    const game = await prisma.caroGame.findUnique({ where: { code: cleanCode } });
+
+    if (!game || game.status !== "PLAYING" || game.turn !== timedOutPlayer) {
+      return { success: false, error: "Trạng thái không hợp lệ." };
+    }
+
+    const winner: Player = timedOutPlayer === "X" ? "O" : "X";
+    const newScoreX = winner === "X" ? game.scoreX + 1 : game.scoreX;
+    const newScoreO = winner === "O" ? game.scoreO + 1 : game.scoreO;
+
+    const updated = await prisma.caroGame.update({
+      where: { id: game.id },
+      data: {
+        status: "FINISHED",
+        winner,
+        winningLine: Prisma.JsonNull,
+        scoreX: newScoreX,
+        scoreO: newScoreO,
+      },
+    });
+
+    return { success: true, game: formatGameState(updated) };
+  } catch (error) {
+    console.error("Lỗi xử lý timeout Caro:", error);
+    return { success: false, error: "Không thể xử lý hết giờ." };
   }
 }

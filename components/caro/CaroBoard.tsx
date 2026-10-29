@@ -8,6 +8,7 @@ interface CaroBoardProps {
   lastMove: Point | null;
   winningLine: Point[];
   currentTurn: "X" | "O";
+  hoverSymbol?: "X" | "O";
   disabled?: boolean;
   onCellClick: (r: number, c: number) => void;
 }
@@ -20,9 +21,11 @@ export default function CaroBoard({
   lastMove,
   winningLine,
   currentTurn,
+  hoverSymbol,
   disabled = false,
   onCellClick,
 }: CaroBoardProps) {
+  const effectiveHover = hoverSymbol || currentTurn;
   const winningSet = useMemo(() => {
     const s = new Set<string>();
     winningLine.forEach((p) => s.add(`${p.r},${p.c}`));
@@ -103,15 +106,32 @@ export default function CaroBoard({
                   <span className="pointer-events-none absolute h-1.5 w-1.5 rounded-full bg-red-500 shadow-xs" />
                 )}
 
-                {/* Hiệu ứng xem trước khi hover vào ô trống */}
+                {/* Hiệu ứng xem trước khi hover vào ô trống (ai nắm X thấy X, ai nắm O thấy O) */}
                 {cell === null && !disabled && (
-                  <span
-                    className={`pointer-events-none absolute h-[60%] w-[60%] rounded-full opacity-0 transition-opacity group-hover:opacity-30 ${
-                      currentTurn === "X"
-                        ? "border-2 border-zinc-900"
-                        : "border-2 border-lime-600"
-                    }`}
-                  />
+                  <>
+                    {effectiveHover === "X" ? (
+                      <svg
+                        className="pointer-events-none absolute h-[68%] w-[68%] stroke-[3.2] stroke-zinc-900/40 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    ) : (
+                      <svg
+                        className="pointer-events-none absolute h-[68%] w-[68%] stroke-[3.2] stroke-lime-600/45 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <circle cx="12" cy="12" r="8" />
+                      </svg>
+                    )}
+                  </>
                 )}
               </button>
             );
