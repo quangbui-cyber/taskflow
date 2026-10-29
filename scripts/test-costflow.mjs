@@ -40,7 +40,7 @@ const phase12Suites = [
 ];
 const unitSuites = [
   "tests/ai-contracts.test.ts", "tests/ai-security.test.ts", "tests/ai-authority-boundary.test.ts", "tests/ai-observability.test.ts",
-  "tests/ai-provider-smoke.test.ts", "tests/ai-run.test.ts", "tests/ai-review.test.ts",
+  "tests/ai-provider-smoke.test.ts", "tests/ai-provider-eval.test.ts", "tests/ai-run.test.ts", "tests/ai-review.test.ts",
   "tests/ai-review-ui-contract.test.ts", "tests/ai-retrieval.test.ts", "tests/ai-findings.test.ts",
   "tests/ai-findings-ui-contract.test.ts", "tests/ai-excel-adapter.test.ts",
   "tests/ai-excel-ui-contract.test.ts", "tests/ai-assistant-ui-contract.test.ts",

@@ -17,6 +17,7 @@
     "test:costflow": "node scripts/test-costflow.mjs",
     "test:ai-smoke": "node --conditions=react-server --import tsx --test tests/ai-provider-smoke.test.ts",
     "test:ai-evals": "node --conditions=react-server --import tsx scripts/ai-evals/run.ts",
+    "test:ai-evals:provider": "node --conditions=react-server --import tsx scripts/ai-evals/provider.ts",
     "test": "TZ=Asia/Ho_Chi_Minh node --import tsx --test tests/*.test.ts",
     "postinstall": "prisma generate",
     "seed": "prisma db seed",
@@ -29,9 +30,7 @@
     "@arizeai/openinference-instrumentation-openai": "4.4.2",
     "@arizeai/phoenix-otel": "2.3.0",
     "@hello-pangea/dnd": "^18.0.1",
-    "@llamaindex/openai": "0.4.23",
     "@neondatabase/serverless": "1.2.0",
-    "@opennextjs/cloudflare": "^1.19.1",
     "@prisma/adapter-neon": "^6.19.3",
     "@prisma/adapter-pg": "^6.19.3",
     "@prisma/client": "^6.19.3",
@@ -43,7 +42,6 @@
     "jose": "^6.2.3",
     "jsqr": "^1.4.0",
     "jszip": "^3.10.2",
-    "llamaindex": "0.12.1",
     "lucide-react": "^1.24.0",
     "next": "16.4.2",
     "nodemailer": "^10.2.1",
@@ -64,6 +62,8 @@
   "devDependencies": {
     "@arizeai/phoenix-client": "7.16.2",
     "@arizeai/phoenix-evals": "2.7.0",
+    "@llamaindex/openai": "^0.4.23",
+    "@opennextjs/cloudflare": "^1.20.14",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/nodemailer": "^8.0.2",
@@ -74,11 +74,12 @@
     "cross-env": "^10.1.0",
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
+    "llamaindex": "^0.12.1",
     "promptfoo": "0.125.1",
     "tailwindcss": "^4",
     "tsx": "^4.23.0",
     "typescript": "^5",
-    "wrangler": "^4.149.0"
+    "wrangler": "^4.155.0"
   },
   "overrides": {
     "deepmerge-ts": "^8.0.2"
