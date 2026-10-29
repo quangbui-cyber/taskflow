@@ -17,6 +17,7 @@ export type ActiveSection =
   | "notifications"
   | "profile"
   | "creative"
+  | "caro"
   | "hr"
   | "admin";
 
@@ -99,6 +100,7 @@ export const HUBS: Hub[] = [
       { key: "documents", label: "Tài liệu", href: "/documents" },
       { key: "creative", label: "Góc Đọc", href: "/creative", visible: (flags) => flags.showCreative ?? true },
       { key: "recognition", label: "Kudos Wall", href: "/recognition" },
+      { key: "caro", label: "Cờ Caro", href: "/caro" },
       { key: "profile", label: "Hồ sơ của tôi", href: "/profile" },
       {
         key: "hr",

@@ -906,3 +906,23 @@ model ArticleReader {
   @@index([userId, savedAt])
 }
 
+// Bàn cờ Caro 15x15 mini game nội bộ
+model CaroGame {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  playerXName String   @default("Người chơi 1")
+  playerOName String?
+  boardState  Json     // Mảng 15x15
+  lastMove    Json?    // { r, c }
+  turn        String   @default("X") // "X" | "O"
+  winner      String?  // "X" | "O" | "DRAW"
+  winningLine Json?    // [{ r, c }]
+  status      String   @default("WAITING") // WAITING | PLAYING | FINISHED
+  scoreX      Int      @default(0)
+  scoreO      Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([code])
+}
+
