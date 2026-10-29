@@ -21,6 +21,8 @@ Updated: 2026-10-29. This record separates technical verification from company, 
 
 Latest Gemini connectivity check (2026-10-29): the three-ID sanitized Promptfoo smoke passed 3/3 against `gemini-3.8-flash` with schema-constrained JSON and 239 total tokens. No company content was sent. This verifies key/model connectivity and the synthetic response contract only; extraction/Q&A quality, the hash-bound 40-case provider score and company-data governance remain unverified.
 
+Latest application-adapter check (2026-10-29): after aligning the REST payload with Gemini's OpenAPI-style `responseSchema`, the real `GeminiGenerationModel` extracted the synthetic `vendor` and `amount` candidates, returned a provider request ID, preserved exact authorized provenance, marked both candidates for human review, and reported 329 total tokens. The focused provider suite passed 7/7 and the registered unit suite passed 264/264. This remains synthetic technical evidence only.
+
 ## Offline evaluation
 
 The `15-12-v1` manifest has exactly 40 cases: 10 clean, 8 numeric, 8 version/lineage, 6 retrieval/question-answer, 5 permission/adversarial and 3 operational. Each case includes a content hash, exact span, actor scope, expected result and prohibited authority mutations. The offline evaluator uses the actual deterministic finance rule function for 16 numeric/version cases and checks a synthetic lexical top-six retrieval benchmark. These scores demonstrate the fixture contract; they do not measure production retrieval or provider accuracy.

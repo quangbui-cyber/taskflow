@@ -243,10 +243,36 @@ test("Gemini transport sends an allowlisted structured request and parses usage"
     const bodyText = String(init?.body);
     assert.equal(bodyText.includes("synthetic-secret"), false);
     const body = JSON.parse(bodyText) as {
-      generationConfig?: { responseMimeType?: string; responseJsonSchema?: unknown };
+      generationConfig?: {
+        responseMimeType?: string;
+        responseJsonSchema?: unknown;
+        responseSchema?: {
+          type?: string;
+          properties?: {
+            candidates?: {
+              items?: {
+                properties?: {
+                  value?: { type?: string; nullable?: boolean };
+                };
+              };
+            };
+          };
+        };
+      };
     };
     assert.equal(body.generationConfig?.responseMimeType, "application/json");
-    assert.ok(body.generationConfig?.responseJsonSchema);
+    assert.equal(body.generationConfig?.responseJsonSchema, undefined);
+    assert.equal(body.generationConfig?.responseSchema?.type, "OBJECT");
+    assert.equal(
+      body.generationConfig?.responseSchema?.properties?.candidates?.items
+        ?.properties?.value?.type,
+      "STRING",
+    );
+    assert.equal(
+      body.generationConfig?.responseSchema?.properties?.candidates?.items
+        ?.properties?.value?.nullable,
+      true,
+    );
     return Response.json({
       responseId: "gemini-transport-1",
       candidates: [{

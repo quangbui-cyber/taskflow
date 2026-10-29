@@ -1,7 +1,5 @@
 import "server-only";
 
-import { z } from "zod/v4";
-
 import type { AiConfig, GeminiEnabledConfig } from "@/lib/ai/config";
 import {
   CandidateBatchSchema,
@@ -64,10 +62,49 @@ class GeminiHttpError extends Error {
   }
 }
 
-function candidateJsonSchema() {
-  const schema = z.toJSONSchema(CandidateBatchSchema) as Record<string, unknown>;
-  delete schema.$schema;
-  return schema;
+function candidateResponseSchema() {
+  const sourceSpan = {
+    type: "OBJECT",
+    properties: {
+      spanId: { type: "STRING" },
+      sourceRevisionId: { type: "STRING" },
+      page: { type: "INTEGER", nullable: true },
+      cellRange: { type: "STRING", nullable: true },
+      quote: { type: "STRING" },
+    },
+    required: ["spanId", "sourceRevisionId", "page", "cellRange", "quote"],
+  };
+  const candidate = {
+    type: "OBJECT",
+    properties: {
+      key: { type: "STRING" },
+      value: { type: "STRING", nullable: true },
+      decimalValue: { type: "STRING", nullable: true },
+      confidence: { type: "NUMBER" },
+      sources: { type: "ARRAY", items: sourceSpan },
+      needsHumanReview: { type: "BOOLEAN" },
+    },
+    required: [
+      "key",
+      "value",
+      "decimalValue",
+      "confidence",
+      "sources",
+      "needsHumanReview",
+    ],
+  };
+  return {
+    type: "OBJECT",
+    properties: {
+      task: {
+        type: "STRING",
+        enum: ["DOCUMENT_EXTRACTION", "EXCEL_STRUCTURE", "RISK_SUSPICION"],
+      },
+      candidates: { type: "ARRAY", items: candidate },
+      warnings: { type: "ARRAY", items: { type: "STRING" } },
+    },
+    required: ["task", "candidates", "warnings"],
+  };
 }
 
 function usageOf(response: GeminiResponse): Usage {
@@ -83,7 +120,10 @@ function usageOf(response: GeminiResponse): Usage {
 }
 
 function createInvoker(config: GeminiEnabledConfig): GeminiStructuredOutputInvoker {
-  const schema = candidateJsonSchema();
+  // Gemini's REST responseSchema accepts its OpenAPI-style schema dialect.
+  // CandidateBatchSchema remains the authoritative validator for all stricter
+  // bounds, patterns and provenance checks after generation.
+  const schema = candidateResponseSchema();
   return async (request) => {
     const response = await fetch(
       `${GEMINI_BASE_URL}/${encodeURIComponent(config.generationModel)}:generateContent`,
@@ -114,7 +154,7 @@ function createInvoker(config: GeminiEnabledConfig): GeminiStructuredOutputInvok
           }],
           generationConfig: {
             responseMimeType: "application/json",
-            responseJsonSchema: schema,
+            responseSchema: schema,
             maxOutputTokens: config.maxOutputTokens,
             thinkingConfig: { thinkingLevel: "low" },
           },
