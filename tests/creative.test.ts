@@ -3,12 +3,15 @@ import { test } from "node:test";
 import {
   countWords,
   decodeHtmlEntities,
+  describeCreativeDay,
   estimateReadingMinutes,
+  extractPullQuote,
   getWeekdaySchedule,
   isGapLine,
   isTextLine,
   parseHtmlToLines,
   slugifyTitle,
+  toDisplayTitle,
 } from "../lib/creative";
 
 test("slugifyTitle formats English titles properly", () => {
@@ -77,3 +80,71 @@ test("getWeekdaySchedule returns only weekdays (Monday - Friday)", () => {
   }
 });
 
+
+test("toDisplayTitle turns uppercase titles into sentence case", () => {
+  assert.equal(toDisplayTitle("TÔI CÓ ĐƯỢC GÌ TỪ ĐÓ?", "vi"), "Tôi có được gì từ đó?");
+  assert.equal(toDisplayTitle("WHAT’S IN IT FOR ME?", "en"), "What’s in it for me?");
+  assert.equal(
+    toDisplayTitle("SHOULD I JUST REPEAT THE SAME BLOG-POST EVERY WEEK?", "en"),
+    "Should I just repeat the same blog-post every week?"
+  );
+  assert.equal(
+    toDisplayTitle("ĐỪNG CHỈ CHEN VÀO THỊ TRƯỜNG. HÃY TẠO RA MỘT THỊ TRƯỜNG MỚI.", "vi"),
+    "Đừng chỉ chen vào thị trường. Hãy tạo ra một thị trường mới."
+  );
+  assert.equal(toDisplayTitle("“LÀM ƠN ĐỪNG NÉM TÔI VÀO BỤI GAI”", "vi"), "“Làm ơn đừng ném tôi vào bụi gai”");
+  assert.equal(toDisplayTitle("IT’S EASY TO  BE NEGATIVE, ANYONE CAN DO IT.", "en"), "It’s easy to be negative, anyone can do it.");
+  assert.equal(toDisplayTitle("SÁNG TẠO MÙA GIÁNG SINH", "vi"), "Sáng tạo mùa Giáng sinh");
+});
+
+test("toDisplayTitle keeps AI only when the English title means artificial intelligence", () => {
+  assert.equal(toDisplayTitle("WHAT AI CAN’T THINK OF", "en"), "What AI can’t think of");
+  assert.equal(
+    toDisplayTitle("THỨ MÀ AI KHÔNG THỂ NGHĨ RA", "vi", "WHAT AI CAN’T THINK OF"),
+    "Thứ mà AI không thể nghĩ ra"
+  );
+  assert.equal(
+    toDisplayTitle("RỐT CUỘC AI MỚI LÀ KẺ NGHỊCH NGỢM?", "vi", "WHO’S A NAUGHTY BOY THEN?"),
+    "Rốt cuộc ai mới là kẻ nghịch ngợm?"
+  );
+});
+
+test("describeCreativeDay gives short labels and week groups in Vietnam time", () => {
+  // Thứ Năm 29/10/2026, 9h sáng giờ VN
+  const today = new Date("2026-10-29T02:00:00.000Z");
+  const day = (iso: string) => describeCreativeDay(new Date(`${iso}T00:00:00.000Z`), today);
+
+  assert.deepEqual(day("2026-10-29"), { label: "Hôm nay", groupKey: "week", groupLabel: "Tuần này" });
+  assert.deepEqual(day("2026-10-28"), { label: "Hôm qua", groupKey: "week", groupLabel: "Tuần này" });
+  assert.deepEqual(day("2026-10-26"), { label: "3 ngày trước", groupKey: "week", groupLabel: "Tuần này" });
+  assert.deepEqual(day("2026-10-25"), { label: "4 ngày trước", groupKey: "lastWeek", groupLabel: "Tuần trước" });
+  assert.deepEqual(day("2026-10-19"), { label: "19/10", groupKey: "lastWeek", groupLabel: "Tuần trước" });
+  assert.deepEqual(day("2026-10-18"), { label: "18/10", groupKey: "m-2026-10", groupLabel: "Tháng 10" });
+  assert.deepEqual(day("2025-12-31"), { label: "31/12/2025", groupKey: "m-2025-12", groupLabel: "Tháng 12/2025" });
+});
+
+test("extractPullQuote picks a quoted or whole-line bold sentence", () => {
+  assert.equal(
+    extractPullQuote([
+      { t: "Gordon bảo họ: **“Cậu nên làm theo cách thằng bạn Dave của tôi ấy.”**" },
+    ]),
+    "Cậu nên làm theo cách thằng bạn Dave của tôi ấy."
+  );
+  assert.equal(
+    extractPullQuote([
+      { t: "Món** ‘Bữa trưa của Thợ cày’ (Ploughman’s Lunch)**, món ăn truyền thống." },
+      { gap: true },
+      { t: "**Chiến lược nghĩa là chọn thứ mình sẽ không làm.**" },
+    ]),
+    "Chiến lược nghĩa là chọn thứ mình sẽ không làm."
+  );
+  assert.equal(
+    extractPullQuote([{ t: "Giọng họ ngập ngừng: **“Tốt nhất anh nên ghé qua văn phòng, có chút rắc rối rồi”.**" }]),
+    "Tốt nhất anh nên ghé qua văn phòng, có chút rắc rối rồi."
+  );
+  assert.equal(extractPullQuote([{ t: "Không có đoạn in đậm nào." }]), null);
+  assert.equal(extractPullQuote([{ t: "**“Quá ngắn”**" }]), null);
+  assert.equal(extractPullQuote([{ t: "**Cứ để đó cho chúng tôi, chúng tôi lo hết mọi thứ”.**" }]), null);
+  assert.equal(extractPullQuote([{ t: "**ĐĂNG KIỂM CHÍNH BẠN, ĐỪNG ĐỢI NGƯỜI KHÁC LÀM.**" }]), null);
+  assert.equal(extractPullQuote([{ t: "**nghe như chiêu trò của mấy gã thợ dệt tartan**" }]), null);
+});
