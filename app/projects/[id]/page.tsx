@@ -269,16 +269,16 @@ export default async function ProjectPage({
   // Tab Tài chính chỉ có ở dự án Khách hàng (dự án Nội bộ không có báo giá/IC).
   const hasFinanceTab = showFinance && project.category === "CLIENT";
   const activeTab =
-    tab === "webhook"
-      ? "webhook"
+    tab === "chat" || tab === "webhook"
+      ? "chat"
       : tab === "files"
         ? "files"
         : tab === "finance" && hasFinanceTab
           ? "finance"
           : "tasks";
-  const canManageWebhook = isMember || user.role === "ADMIN";
+  const canManageChat = isMember || user.role === "ADMIN";
   const viewerGoogle =
-    activeTab === "webhook"
+    activeTab === "chat"
       ? await prisma.user.findUnique({
           where: { id: user.id },
           select: { googleToken: true, googleScopes: true },
@@ -303,7 +303,7 @@ export default async function ProjectPage({
     const tabLinks = [
       { href: `/projects/${project.id}`, label: "Task" },
       { href: `/projects/${project.id}?tab=files`, label: "Tài liệu" },
-      { href: `/projects/${project.id}?tab=webhook`, label: "Google Chat" },
+      { href: `/projects/${project.id}?tab=chat`, label: "Nhóm Chat" },
     ];
     return (
       <div className="flex min-h-screen flex-col bg-[#f7f8fa] md:h-screen md:max-h-screen md:overflow-hidden">
@@ -439,17 +439,13 @@ export default async function ProjectPage({
                     triggerClassName="tf-button-secondary !min-h-9 !px-3 !py-1.5 text-sm"
                   />
                 )}
-                {project.googleChatSpaceUri && (
-                  <a
-                    href={project.googleChatSpaceUri}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="tf-button-secondary !min-h-9 !px-3 !py-1.5 text-sm"
-                  >
-                    <MessagesSquare size={15} strokeWidth={1.8} aria-hidden="true" />
-                    Nhóm Chat
-                  </a>
-                )}
+                <Link
+                  href={`/projects/${project.id}?tab=chat`}
+                  className="tf-button-secondary !min-h-9 !px-3 !py-1.5 text-sm"
+                >
+                  <MessagesSquare size={15} strokeWidth={1.8} aria-hidden="true" />
+                  Nhóm Chat
+                </Link>
                 {isOwner && <ProjectActionsMenu projectId={project.id} />}
               </div>
             </div>
@@ -588,19 +584,19 @@ export default async function ProjectPage({
               )}
             </Link>
             <Link
-              href={`/projects/${project.id}?tab=webhook`}
+              href={`/projects/${project.id}?tab=chat`}
               className={`rounded-[7px] px-3 py-1.5 text-sm font-medium transition-colors ${
-                activeTab === "webhook"
+                activeTab === "chat"
                   ? "bg-brand-50 text-brand-800"
                   : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
               }`}
             >
-              Google Chat
+              Nhóm Chat
             </Link>
           </nav>
         </header>
 
-        {activeTab === "webhook" ? (
+        {activeTab === "chat" ? (
           <div className="flex-1 space-y-4 overflow-auto bg-[#f7f8fa] p-4 sm:p-6">
             <ProjectChatSpacePanel
               projectId={project.id}
@@ -610,7 +606,7 @@ export default async function ProjectPage({
                   : null
               }
               memberCount={project.members.length}
-              canManage={canManageWebhook}
+              canManage={canManageChat}
               canUnlink={isOwner || user.role === "ADMIN" || project.googleChatSpaceById === user.id}
               viewerConnected={Boolean(
                 viewerGoogle?.googleToken &&
@@ -621,7 +617,6 @@ export default async function ProjectPage({
               googleResult={googleResult ?? null}
               chatAppReady={chatAppConfigured()}
               chatAppProblem={chatAppProblem()}
-              legacyWebhook={Boolean(project.googleChatWebhookUrl)}
             />
           </div>
         ) : activeTab === "files" ? (

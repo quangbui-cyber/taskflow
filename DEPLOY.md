@@ -137,7 +137,7 @@ npx prisma migrate dev --name ten_thay_doi
 ## Báo lên Google Chat (tuỳ chọn)
 
 Khi có job mới, đổi người được giao hoặc đổi trạng thái, app gửi tin vào **nhóm Google Chat của dự án**
-dưới tên Chat app **myCreative**, kèm người được giao và link mở đúng job. Không cần dán webhook nữa.
+dưới tên Chat app **myCreative**, kèm người được giao và link mở đúng job.
 
 **Cài một lần trên máy chủ**
 
@@ -152,14 +152,14 @@ dưới tên Chat app **myCreative**, kèm người được giao và link mở 
 
 **Trong mỗi dự án**
 
-1. Mở dự án → tab **Google Chat** → **Tạo nhóm Google Chat**. App tạo nhóm trùng tên dự án, thêm mọi thành viên
+1. Mở dự án → tab **Nhóm Chat** → **Tạo nhóm Chat**. App tạo nhóm trùng tên dự án, thêm mọi thành viên
    và thêm myCreative vào nhóm.
 2. Bấm **Gửi tin thử** để kiểm tra.
 3. Nhóm tạo trước khi có Chat app: bấm **Thêm người còn thiếu** để thêm myCreative.
 
 Người bấm tạo nhóm cần **Kết nối Google** một lần (cho phép tạo nhóm Chat và thêm myCreative). Ai đã kết nối
-trước đây cần kết nối lại để cho thêm quyền này. Dự án cũ còn webhook vẫn nhận tin qua webhook cho tới khi tạo
-nhóm; tạo nhóm xong app tự bỏ webhook. Lỗi gửi tin không làm hỏng thao tác chính trong app.
+trước đây cần kết nối lại để cho thêm quyền này. Dự án chưa tạo nhóm thì không nhận tin Chat. Lỗi gửi tin không
+làm hỏng thao tác chính trong app.
 
 ---
 

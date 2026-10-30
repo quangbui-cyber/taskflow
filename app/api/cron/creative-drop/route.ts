@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { creativeEnabled } from "@/lib/features";
-import { isTextLine, type ArticleLine } from "@/lib/creative";
 import { ensureInitialCreativeArticles } from "@/lib/creativeSeed";
-import { sendCreativeDropToGoogleChat } from "@/lib/creativeGoogleChat";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,24 +52,6 @@ export async function GET(req: Request) {
       where: { id: article.id },
       data: { status: "PUBLISHED" },
     });
-
-    // Trích dẫn 3 dòng đầu
-    const lines = (article.linesVi as unknown as ArticleLine[]) || [];
-    const textLines = lines.filter(isTextLine).map((l) => l.t.replace(/[*_]/g, ""));
-    const excerpt = textLines.slice(0, 3).join(" ");
-
-    // Gửi thông báo đến Google Chat nếu có webhook
-    try {
-      await sendCreativeDropToGoogleChat({
-        slug: article.slug,
-        originalTitle: article.originalTitle,
-        titleVi: article.titleVi,
-        wordCount: article.wordCount,
-        excerpt,
-      });
-    } catch (chatError) {
-      console.warn("Lỗi gửi thông báo Google Chat cho bài đọc:", chatError);
-    }
 
     publishedArticles.push({
       slug: article.slug,

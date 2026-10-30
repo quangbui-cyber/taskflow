@@ -18,7 +18,7 @@ import { validTaskTimeRange } from "@/lib/taskTimeRange";
 async function projectChat(projectId: string) {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    select: { name: true, googleChatWebhookUrl: true, googleChatSpaceName: true },
+    select: { name: true, googleChatSpaceName: true },
   });
   return project;
 }

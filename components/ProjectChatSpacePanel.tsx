@@ -23,7 +23,6 @@ export default function ProjectChatSpacePanel({
   googleResult,
   chatAppReady,
   chatAppProblem = null,
-  legacyWebhook,
 }: {
   projectId: string;
   space: { uri: string; creatorName: string | null } | null;
@@ -38,14 +37,12 @@ export default function ProjectChatSpacePanel({
   chatAppReady: boolean;
   /** Lý do Chat app chưa dùng được (vd khoá dán sai), hiện cho người cài đặt. */
   chatAppProblem?: string | null;
-  /** Dự án cũ còn gửi thông báo qua webhook (chưa tạo nhóm từ app). */
-  legacyWebhook: boolean;
 }) {
   const router = useRouter();
   const { notify } = useInteraction();
   const [pending, startTransition] = useTransition();
   const banner = googleResult ? GOOGLE_RESULT[googleResult] : null;
-  const connectHref = `/api/google/gmail/connect?returnTo=${encodeURIComponent(`/projects/${projectId}?tab=webhook`)}`;
+  const connectHref = `/api/google/gmail/connect?returnTo=${encodeURIComponent(`/projects/${projectId}?tab=chat`)}`;
 
   function run(action: () => Promise<ProjectChatState>) {
     startTransition(async () => {
@@ -62,14 +59,7 @@ export default function ProjectChatSpacePanel({
           <span className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-brand-50 text-brand-700">
             <MessagesSquare size={20} aria-hidden="true" />
           </span>
-          <div>
-            <h2 className="font-semibold text-zinc-950">Nhóm Google Chat của dự án</h2>
-            {space && (
-              <p className="text-sm text-zinc-500">
-                {`Đã có nhóm${space.creatorName ? `, do ${space.creatorName} tạo` : ""}.`}
-              </p>
-            )}
-          </div>
+          <h2 className="font-semibold text-zinc-950">Nhóm Chat</h2>
         </div>
         {space && (
           <a href={space.uri} target="_blank" rel="noopener noreferrer" className="tf-button-primary">
@@ -79,11 +69,6 @@ export default function ProjectChatSpacePanel({
         )}
       </div>
 
-      {legacyWebhook && !space && (
-        <p className="mt-4 rounded-[8px] bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          Dự án đang nhận thông báo qua webhook cũ. Tạo nhóm Google Chat để chuyển sang cách mới; webhook cũ sẽ tự bỏ.
-        </p>
-      )}
       {space && !chatAppReady && (
         <p className="mt-4 rounded-[8px] bg-amber-50 px-3 py-2 text-sm text-amber-900">
           Nhóm chưa nhận được thông báo task: {chatAppProblem ?? "máy chủ chưa cài Chat app."} Nhờ quản trị viên xem mục
@@ -109,7 +94,7 @@ export default function ProjectChatSpacePanel({
                 className="tf-button-primary"
               >
                 {pending ? <span className="tf-spinner" aria-hidden="true" /> : <MessagesSquare size={16} aria-hidden="true" />}
-                Tạo nhóm Google Chat
+                Tạo nhóm Chat
               </button>
             ) : configured ? (
               <div className="space-y-2">

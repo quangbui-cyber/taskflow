@@ -1,13 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin, requireUser } from "@/lib/auth";
-import {
-  removeSavedRecognitionWebhook,
-  saveAndTestRecognitionWebhook,
-  sendRecognitionToGoogleChat,
-  testSavedRecognitionWebhook,
-} from "@/lib/recognitionGoogleChat";
+import { requireUser } from "@/lib/auth";
 import { notify } from "@/lib/notify";
 import { prisma } from "@/lib/prisma";
 import {
@@ -21,7 +15,6 @@ import {
   RECOGNITION_COMMENT_MAX_LENGTH,
   RECOGNITION_WEEKLY_STAR_LIMIT,
   RECOGNITION_VISIBILITIES,
-  recognitionCategoryLabel,
   recognitionWeekRange,
 } from "@/lib/recognitions";
 
@@ -37,38 +30,6 @@ const categoryKeys = new Set<string>(
 const visibilityKeys = new Set<string>(
   RECOGNITION_VISIBILITIES.map((visibility) => visibility.key)
 );
-
-export type RecognitionWebhookState = {
-  error?: string;
-  success?: string;
-};
-
-export async function updateRecognitionWebhook(
-  _previousState: RecognitionWebhookState,
-  formData: FormData
-): Promise<RecognitionWebhookState> {
-  await requireAdmin();
-  const intent = String(formData.get("intent") ?? "save");
-
-  if (intent === "test") {
-    const result = await testSavedRecognitionWebhook();
-    return result.ok ? { success: result.message } : { error: result.message };
-  }
-
-  if (intent === "remove") {
-    await removeSavedRecognitionWebhook();
-    revalidatePath("/recognition");
-    return { success: "Đã ngắt kết nối webhook Google Chat." };
-  }
-
-  const webhookUrl = String(formData.get("webhookUrl") ?? "").trim();
-  if (!webhookUrl) return { error: "Hãy dán URL webhook Google Chat." };
-
-  const result = await saveAndTestRecognitionWebhook(webhookUrl);
-  if (!result.ok) return { error: result.message };
-  revalidatePath("/recognition");
-  return { success: result.message };
-}
 
 export async function createRecognition(
   _previousState: RecognitionActionState,
@@ -157,16 +118,6 @@ export async function createRecognition(
       : `${user.name} đã gửi cho bạn một ngôi sao trong Kudos Wall`,
     recognitionId: recognition.id,
   });
-
-  if (visibility === "COMPANY") {
-    await sendRecognitionToGoogleChat({
-      recognitionId: recognition.id,
-      senderName: user.name,
-      recipientName: recipient.name,
-      message,
-      categoryLabel: recognitionCategoryLabel(category),
-    });
-  }
 
   revalidatePath("/");
   revalidatePath("/recognition");

@@ -114,7 +114,6 @@ model Project {
   executionStartAt     DateTime? // ngày bắt đầu thực hiện (chạy event)
   executionEndAt       DateTime? // ngày kết thúc — null nếu chỉ 1 ngày
   revenue              Float           @default(0) // doanh thu dự kiến/thực tế (VND)
-  googleChatWebhookUrl String?
   googleChatSpaceName  String? // "spaces/AAAA…" — nhóm Google Chat của dự án do app tạo
   googleChatSpaceUri   String? // link mở nhóm (https://chat.google.com/room/…)
   googleChatSpaceById  String?
@@ -567,13 +566,6 @@ model RecognitionComment {
   createdAt     DateTime    @default(now())
 
   @@index([recognitionId, createdAt])
-}
-
-// Cấu hình tích hợp dùng chung. Giá trị nhạy cảm được mã hóa trước khi lưu.
-model IntegrationSetting {
-  key            String   @id
-  encryptedValue String
-  updatedAt      DateTime @updatedAt
 }
 
 model Comment {

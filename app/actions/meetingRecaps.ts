@@ -320,7 +320,7 @@ export async function createTaskFromRecapActionItem(
 
   const project = await prisma.project.findUnique({
     where: { id: String(projectId ?? "") },
-    select: { id: true, name: true, googleChatWebhookUrl: true, googleChatSpaceName: true },
+    select: { id: true, name: true, googleChatSpaceName: true },
   });
   if (!project) return { error: "Hãy chọn dự án để tạo task." };
   if (user.role !== "ADMIN" && !(await getMembership(project.id, user.id))) {

@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { sendGoogleChat } from "../lib/googleChat";
 import {
   chatDeadline,
   deadlineDigestChatMessage,
@@ -120,18 +119,6 @@ test("long digests stop at 15 tasks per group and say how many are left", () => 
   const widgets = message.cardsV2![0].card.sections[0].widgets;
   assert.equal(widgets.length, 16);
   assert.match(JSON.stringify(widgets.at(-1)), /và 3 việc khác/);
-});
-
-test("webhook transport sends cards intact and still supports existing plain text callers", async (t) => {
-  const sent: unknown[] = [];
-  t.mock.method(globalThis, "fetch", async (_url: string, init: RequestInit) => {
-    sent.push(JSON.parse(String(init.body)));
-    return new Response("{}", { status: 200 });
-  });
-  const message = taskGoogleChatMessage(task);
-  assert.deepEqual(await sendGoogleChat("https://chat.googleapis.com/example", message), { ok: true });
-  assert.deepEqual(await sendGoogleChat("https://chat.googleapis.com/example", "Connected"), { ok: true });
-  assert.deepEqual(sent, [message, { text: "Connected" }]);
 });
 
 test("every card carries a friendly line above it while the card itself stays formal", () => {

@@ -3,7 +3,7 @@ import type { GoogleChatMessage, GoogleChatResult } from "@/lib/googleChat";
 
 /**
  * Gửi tin vào nhóm Google Chat dưới tên Chat app "myCreative" (Google Chat API, xác thực bằng
- * tài khoản dịch vụ của dự án Google Cloud). Thay cho webhook: app phải là thành viên của nhóm,
+ * tài khoản dịch vụ của dự án Google Cloud). App phải là thành viên của nhóm,
  * việc này làm tự động khi tạo nhóm từ app.
  */
 
