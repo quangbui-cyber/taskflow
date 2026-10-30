@@ -91,12 +91,10 @@ export async function createProjectChatSpace(projectId: string): Promise<Project
     // Hai người bấm cùng lúc: chỉ lưu nhóm tạo trước.
     const saved = await prisma.project.updateMany({
       where: { id: project.id, googleChatSpaceName: null },
-      // Có nhóm rồi thì thông báo đi qua Chat app, bỏ webhook cũ (nếu có).
       data: {
         googleChatSpaceName: space.name,
         googleChatSpaceUri: space.uri,
         googleChatSpaceById: user.id,
-        googleChatWebhookUrl: null,
       },
     });
     if (saved.count === 0) {

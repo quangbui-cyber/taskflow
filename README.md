@@ -182,7 +182,7 @@ Trang `/recognition` là không gian ghi nhận độc lập với project, dàn
 
 Người nhận sẽ nhận được thông báo và có thể mở thẳng lời cảm ơn tương ứng.
 
-**Báo lên Google Chat (tuỳ chọn):** trong từng dự án, mở tab **Webhook** và dán URL webhook của Space tương ứng. App gửi tin khi có job mới, đổi người được giao hoặc đổi trạng thái; mỗi tin có người được giao và link mở đúng job. Hướng dẫn lấy URL xem trong [DEPLOY.md](DEPLOY.md).
+**Báo lên Google Chat (tuỳ chọn):** trong từng dự án, mở tab **Nhóm Chat** và bấm **Tạo nhóm Chat**. App gửi tin vào nhóm khi có job mới, đổi người được giao hoặc đổi trạng thái; mỗi tin có người được giao và link mở đúng job. Cài đặt máy chủ xem trong [DEPLOY.md](DEPLOY.md).
 
 ## Chạy app trên máy cá nhân
 

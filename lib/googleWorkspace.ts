@@ -15,7 +15,7 @@ export const CHAT_SPACE_SCOPES = [
   "https://www.googleapis.com/auth/chat.spaces.create",
   "https://www.googleapis.com/auth/chat.memberships",
 ] as const;
-/** Thêm Chat app "myCreative" vào nhóm để app gửi thông báo thay cho webhook. */
+/** Thêm Chat app "myCreative" vào nhóm để app gửi thông báo vào nhóm. */
 export const CHAT_APP_MEMBERSHIP_SCOPE = "https://www.googleapis.com/auth/chat.memberships.app";
 const REQUESTED_SCOPES = ["openid", "email", GMAIL_SEND_SCOPE, ...CHAT_SPACE_SCOPES, CHAT_APP_MEMBERSHIP_SCOPE];
 

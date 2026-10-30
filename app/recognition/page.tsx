@@ -9,14 +9,13 @@ import {
   Star,
 } from "lucide-react";
 import Avatar from "@/components/Avatar";
+import RecognitionComments from "@/components/RecognitionComments";
 import RecognitionComposer from "@/components/RecognitionComposer";
 import RecognitionMonthSelect from "@/components/RecognitionMonthSelect";
-import RecognitionWebhookSettings from "@/components/RecognitionWebhookSettings";
 import Sidebar from "@/components/Sidebar";
 import HubTabs from "@/components/HubTabs";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getRecognitionWebhookStatus } from "@/lib/recognitionGoogleChat";
 import {
   BIRTHDAY_RECOGNITION_CATEGORY,
   RECOGNITION_WEEKLY_STAR_LIMIT,
@@ -26,7 +25,7 @@ import {
   recognitionWeekRange,
 } from "@/lib/recognitions";
 
-type RecognitionView = "all" | "received" | "sent" | "webhook";
+type RecognitionView = "all" | "received" | "sent";
 
 type Person = {
   id: string;
@@ -139,12 +138,8 @@ export default async function RecognitionPage({
 }) {
   const user = await requireUser();
   const params = await searchParams;
-  const requestedView: RecognitionView =
-    params.view === "received" || params.view === "sent" || params.view === "webhook"
-      ? params.view
-      : "all";
   const view: RecognitionView =
-    requestedView === "webhook" && user.role !== "ADMIN" ? "all" : requestedView;
+    params.view === "received" || params.view === "sent" ? params.view : "all";
   const month = recognitionMonthRange(params.month);
   const currentWeek = recognitionWeekRange();
   const dateWhere = { gte: month.start, lt: month.end };
@@ -175,6 +170,15 @@ export default async function RecognitionPage({
       include: {
         sender: { select: { id: true, name: true, avatarUrl: true } },
         recipient: { select: { id: true, name: true, avatarUrl: true } },
+        comments: {
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            body: true,
+            createdAt: true,
+            author: { select: { id: true, name: true, avatarUrl: true } },
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
       take: 100,
@@ -214,8 +218,6 @@ export default async function RecognitionPage({
   const peopleById = new Map(people.map((person) => [person.id, person]));
   const shining = buildRanking(rankingSource, peopleById, "received");
   const giving = buildRanking(rankingSource, peopleById, "sent");
-  const webhookStatus =
-    view === "webhook" ? await getRecognitionWebhookStatus() : null;
   const monthOptions = recognitionMonthOptions();
   if (!monthOptions.some((option) => option.key === month.key)) {
     const [year, monthNumber] = month.key.split("-").map(Number);
@@ -234,9 +236,6 @@ export default async function RecognitionPage({
     { key: "all", label: "Mọi người" },
     { key: "received", label: "Dành cho tôi" },
     { key: "sent", label: "Tôi đã gửi" },
-    ...(user.role === "ADMIN"
-      ? ([{ key: "webhook", label: "Webhook" }] as const)
-      : []),
   ];
 
   return (
@@ -249,27 +248,19 @@ export default async function RecognitionPage({
           <header className="mb-[54px] flex items-start justify-between gap-5">
             <div>
               <h1 className="text-[34px] font-semibold leading-tight tracking-[-0.03em] text-zinc-950">
-                Góc cảm ơn
+                Kudos Wall
               </h1>
             </div>
-            {view !== "webhook" && (
-              <RecognitionComposer
-                recipients={people
-                  .filter((person) => person.id !== user.id)
-                  .map(({ id, name }) => ({ id, name }))}
-                remainingStars={remainingStars}
-                weeklyLimit={RECOGNITION_WEEKLY_STAR_LIMIT}
-              />
-            )}
+            <RecognitionComposer
+              recipients={people
+                .filter((person) => person.id !== user.id)
+                .map(({ id, name }) => ({ id, name }))}
+              remainingStars={remainingStars}
+              weeklyLimit={RECOGNITION_WEEKLY_STAR_LIMIT}
+            />
           </header>
 
-          <div
-            className={
-              view === "webhook"
-                ? "max-w-4xl"
-                : "grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_322px]"
-            }
-          >
+          <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_322px]">
             <section className="tf-panel overflow-hidden">
               <div className="flex min-h-20 items-stretch justify-between gap-4 border-b border-zinc-200 px-5">
                 <nav className="flex min-w-0 gap-2 sm:gap-5" aria-label="Lọc lời cảm ơn">
@@ -288,30 +279,12 @@ export default async function RecognitionPage({
                     </Link>
                   ))}
                 </nav>
-                {view !== "webhook" && (
-                  <div className="hidden items-center sm:flex">
-                    <RecognitionMonthSelect value={month.key} options={monthOptions} />
-                  </div>
-                )}
+                <div className="hidden items-center sm:flex">
+                  <RecognitionMonthSelect value={month.key} options={monthOptions} />
+                </div>
               </div>
 
-              {view === "webhook" && webhookStatus ? (
-                <RecognitionWebhookSettings
-                  configured={webhookStatus.configured}
-                  source={webhookStatus.source}
-                  updatedAt={
-                    webhookStatus.updatedAt
-                      ? new Intl.DateTimeFormat("vi-VN", {
-                          day: "2-digit",
-                          month: "2-digit",
-                          year: "numeric",
-                          timeZone: "Asia/Ho_Chi_Minh",
-                        }).format(webhookStatus.updatedAt)
-                      : null
-                  }
-                />
-              ) : (
-                <>
+              <>
                   <div className="border-b border-zinc-200 px-5 sm:hidden">
                     <RecognitionMonthSelect value={month.key} options={monthOptions} compact />
                   </div>
@@ -372,6 +345,16 @@ export default async function RecognitionPage({
                               ? "Chỉ người gửi và người nhận"
                               : "Công khai trong công ty"}
                           </span>
+                          <RecognitionComments
+                            recognitionId={recognition.id}
+                            currentUserId={user.id}
+                            isAdmin={user.role === "ADMIN"}
+                            defaultOpen={focused}
+                            comments={recognition.comments.map((comment) => ({
+                              ...comment,
+                              createdAt: comment.createdAt.toISOString(),
+                            }))}
+                          />
                         </div>
                         <div className="hidden items-start gap-1.5 sm:flex">
                           <time className="whitespace-nowrap pt-2.5 text-xs text-zinc-500">
@@ -405,12 +388,10 @@ export default async function RecognitionPage({
                   })}
                 </div>
                   )}
-                </>
-              )}
+              </>
             </section>
 
-            {view !== "webhook" && (
-              <aside className="tf-panel flex min-h-[680px] flex-col px-5 py-6 xl:min-h-[854px]">
+            <aside className="tf-panel flex min-h-[680px] flex-col px-5 py-6 xl:min-h-[854px]">
               <header>
                 <h2 className="text-xl font-semibold tracking-[-0.02em] text-zinc-950">
                   Dải ngân hà nhà mình
@@ -435,8 +416,7 @@ export default async function RecognitionPage({
               <p className="pt-4 text-center text-[10px] leading-4 text-zinc-400">
                 Làm mới mỗi tháng · Không dùng để đánh giá hiệu suất
               </p>
-              </aside>
-            )}
+            </aside>
           </div>
         </div>
       </main>

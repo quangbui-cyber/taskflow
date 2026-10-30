@@ -1,13 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin, requireUser } from "@/lib/auth";
-import {
-  removeSavedRecognitionWebhook,
-  saveAndTestRecognitionWebhook,
-  sendRecognitionToGoogleChat,
-  testSavedRecognitionWebhook,
-} from "@/lib/recognitionGoogleChat";
+import { requireUser } from "@/lib/auth";
 import { notify } from "@/lib/notify";
 import { prisma } from "@/lib/prisma";
 import {
@@ -18,9 +12,9 @@ import {
 import {
   BIRTHDAY_RECOGNITION_CATEGORY,
   RECOGNITION_CATEGORIES,
+  RECOGNITION_COMMENT_MAX_LENGTH,
   RECOGNITION_WEEKLY_STAR_LIMIT,
   RECOGNITION_VISIBILITIES,
-  recognitionCategoryLabel,
   recognitionWeekRange,
 } from "@/lib/recognitions";
 
@@ -36,38 +30,6 @@ const categoryKeys = new Set<string>(
 const visibilityKeys = new Set<string>(
   RECOGNITION_VISIBILITIES.map((visibility) => visibility.key)
 );
-
-export type RecognitionWebhookState = {
-  error?: string;
-  success?: string;
-};
-
-export async function updateRecognitionWebhook(
-  _previousState: RecognitionWebhookState,
-  formData: FormData
-): Promise<RecognitionWebhookState> {
-  await requireAdmin();
-  const intent = String(formData.get("intent") ?? "save");
-
-  if (intent === "test") {
-    const result = await testSavedRecognitionWebhook();
-    return result.ok ? { success: result.message } : { error: result.message };
-  }
-
-  if (intent === "remove") {
-    await removeSavedRecognitionWebhook();
-    revalidatePath("/recognition");
-    return { success: "Đã ngắt kết nối webhook Google Chat." };
-  }
-
-  const webhookUrl = String(formData.get("webhookUrl") ?? "").trim();
-  if (!webhookUrl) return { error: "Hãy dán URL webhook Google Chat." };
-
-  const result = await saveAndTestRecognitionWebhook(webhookUrl);
-  if (!result.ok) return { error: result.message };
-  revalidatePath("/recognition");
-  return { success: result.message };
-}
 
 export async function createRecognition(
   _previousState: RecognitionActionState,
@@ -153,19 +115,9 @@ export async function createRecognition(
     type: "RECOGNITION_RECEIVED",
     message: isBirthdayWish
       ? `${user.name} đã gửi lời chúc mừng sinh nhật đến bạn`
-      : `${user.name} đã gửi cho bạn một ngôi sao trong Góc cảm ơn`,
+      : `${user.name} đã gửi cho bạn một ngôi sao trong Kudos Wall`,
     recognitionId: recognition.id,
   });
-
-  if (visibility === "COMPANY") {
-    await sendRecognitionToGoogleChat({
-      recognitionId: recognition.id,
-      senderName: user.name,
-      recipientName: recipient.name,
-      message,
-      categoryLabel: recognitionCategoryLabel(category),
-    });
-  }
 
   revalidatePath("/");
   revalidatePath("/recognition");
@@ -177,4 +129,75 @@ export async function createRecognition(
       : `Đã gửi một ngôi sao đến ${recipient.name}.`,
     recognitionId: recognition.id,
   };
+}
+
+export type RecognitionCommentState = {
+  error?: string;
+  success?: string;
+};
+
+/** Người xem được lời cảm ơn công khai, hoặc lời cảm ơn riêng mà mình là người gửi/nhận. */
+async function findVisibleRecognition(recognitionId: string, userId: string) {
+  return prisma.recognition.findFirst({
+    where: {
+      id: recognitionId,
+      OR: [{ visibility: "COMPANY" }, { senderId: userId }, { recipientId: userId }],
+    },
+    select: { id: true, senderId: true, recipientId: true },
+  });
+}
+
+export async function addRecognitionComment(
+  _previousState: RecognitionCommentState,
+  formData: FormData
+): Promise<RecognitionCommentState> {
+  const user = await requireUser();
+  const recognitionId = String(formData.get("recognitionId") ?? "").trim();
+  const body = String(formData.get("body") ?? "").trim();
+
+  if (!body) return { error: "Hãy nhập nội dung bình luận." };
+  if (body.length > RECOGNITION_COMMENT_MAX_LENGTH) {
+    return { error: `Bình luận không được dài quá ${RECOGNITION_COMMENT_MAX_LENGTH} ký tự.` };
+  }
+
+  const recognition = await findVisibleRecognition(recognitionId, user.id);
+  if (!recognition) return { error: "Không tìm thấy lời cảm ơn này." };
+
+  await prisma.recognitionComment.create({
+    data: { recognitionId: recognition.id, authorId: user.id, body },
+  });
+
+  // Báo cho người gửi, người nhận và những người đã bình luận trước đó (trừ chính mình).
+  const earlier = await prisma.recognitionComment.findMany({
+    where: { recognitionId: recognition.id },
+    select: { authorId: true },
+    distinct: ["authorId"],
+  });
+  await notify(
+    [recognition.senderId, recognition.recipientId, ...earlier.map((comment) => comment.authorId)].filter(
+      (id) => id !== user.id
+    ),
+    {
+      type: "RECOGNITION_COMMENT",
+      message: `${user.name} đã bình luận trong một lời cảm ơn ở Kudos Wall`,
+      recognitionId: recognition.id,
+    }
+  );
+
+  revalidatePath("/recognition");
+  revalidatePath("/notifications");
+  return { success: "Đã gửi bình luận." };
+}
+
+export async function deleteRecognitionComment(commentId: string) {
+  const user = await requireUser();
+  const comment = await prisma.recognitionComment.findUnique({
+    where: { id: commentId },
+    select: { id: true, authorId: true },
+  });
+  if (!comment) return;
+  if (comment.authorId !== user.id && user.role !== "ADMIN") return;
+
+  await prisma.recognitionComment.delete({ where: { id: comment.id } });
+  revalidatePath("/recognition");
 }

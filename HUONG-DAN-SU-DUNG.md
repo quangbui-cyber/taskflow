@@ -268,16 +268,15 @@ Bạn có thể nhận thông báo khi:
 
 ## 11. Google Chat
 
-Chủ dự án hoặc Admin có thể kết nối mỗi dự án với một Google Chat Space riêng.
+Mỗi dự án có một nhóm Chat riêng trong Google Chat. Thành viên dự án và Admin tạo được nhóm.
 
-1. Mở dự án và chọn tab **Webhook**.
-2. Dán URL webhook của Google Chat Space.
-3. Bấm **Lưu webhook**.
-4. Bấm **Gửi thử** để kiểm tra.
+1. Mở dự án và chọn tab **Nhóm Chat** (hoặc bấm nút **Nhóm Chat** ở đầu trang).
+2. Bấm **Kết nối Google** nếu được hỏi, rồi bấm **Tạo nhóm Chat**. App tạo nhóm trùng tên dự án và thêm mọi thành viên.
+3. Bấm **Gửi tin thử** để kiểm tra.
 
-Sau khi kết nối, Google Chat có thể nhận thông tin về task mới, thay đổi trạng thái, thay đổi người phụ trách, bình luận và bản nhắc việc hằng ngày. Mỗi tin có liên kết mở đúng task.
+Sau khi có nhóm, myCreative gửi vào nhóm thông tin về task mới, thay đổi trạng thái, thay đổi người phụ trách, bình luận và bản nhắc việc hằng ngày. Mỗi tin có liên kết mở đúng task. Người mới vào dự án được thêm vào nhóm tự động.
 
-Để đổi Space, dán URL mới và lưu lại. Bấm **Ngắt kết nối** nếu không muốn gửi thông báo nữa. Không chia sẻ URL webhook vì URL này có quyền gửi tin vào Space.
+Bấm **Bỏ liên kết** nếu không muốn gửi thông báo nữa. Nhóm trong Google Chat vẫn còn, bạn có thể xoá trong Google Chat.
 
 ## 12. Doanh số
 
@@ -491,6 +490,6 @@ Cuộc họp tạo bằng nút **Tạo cuộc họp** trong trang dự án đư�
 | PO không được nhận diện | Chỉ dùng PDF hợp lệ dưới 4 MB; nhập các trường thủ công nếu tài liệu không đúng mẫu hỗ trợ. |
 | Không thấy trang Doanh số | Trang này chỉ dành cho `ACCOUNT` và `ADMIN`. |
 | Không xóa được tài khoản | Vô hiệu hóa trước, sau đó chuyển hoặc xóa hết dữ liệu và liên kết Account liên quan. |
-| Google Chat không nhận tin | Kiểm tra đúng URL webhook, bấm **Gửi thử**, và xác nhận webhook chưa bị xóa trong Google Chat Space. |
+| Nhóm Chat không nhận tin | Mở tab **Nhóm Chat** của dự án, bấm **Gửi tin thử** và xem thông báo lỗi. Nếu báo Chat app chưa sẵn sàng, nhờ Admin xem mục Google Chat trong DEPLOY.md. |
 
-Nếu vẫn không xử lý được, gửi cho Admin: tên tài khoản, tên dự án/task, thao tác đã thực hiện và nội dung lỗi hiển thị trên màn hình. Không gửi mật khẩu hoặc URL webhook qua kênh công khai.
+Nếu vẫn không xử lý được, gửi cho Admin: tên tài khoản, tên dự án/task, thao tác đã thực hiện và nội dung lỗi hiển thị trên màn hình. Không gửi mật khẩu qua kênh công khai.

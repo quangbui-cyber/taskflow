@@ -1,27 +1,20 @@
-import { sendGoogleChat, type GoogleChatMessage, type GoogleChatResult } from "@/lib/googleChat";
+import { type GoogleChatMessage, type GoogleChatResult } from "@/lib/googleChat";
 import { chatAppConfigured, sendChatAppMessage } from "@/lib/googleChatApp";
 
 export type ProjectChatTarget = {
   googleChatSpaceName: string | null;
-  googleChatWebhookUrl: string | null;
 };
 
-/** Dự án có chỗ nhận thông báo Chat không (nhóm Chat của app, hoặc webhook cũ còn sót). */
+/** Dự án có nhóm Chat nhận được thông báo không (có nhóm và máy chủ đã cài Chat app). */
 export function hasProjectChat(project: ProjectChatTarget) {
-  return Boolean((project.googleChatSpaceName && chatAppConfigured()) || project.googleChatWebhookUrl);
+  return Boolean(project.googleChatSpaceName && chatAppConfigured());
 }
 
-/**
- * Gửi thông báo vào Google Chat của dự án: qua Chat app "myCreative" nếu dự án có nhóm Chat.
- * Dự án cũ chỉ có webhook (chưa tạo nhóm) thì vẫn gửi qua webhook cho tới khi tạo nhóm.
- */
+/** Gửi thông báo vào nhóm Google Chat của dự án, dưới tên Chat app "myCreative". */
 export async function sendProjectChat(
   project: ProjectChatTarget,
   message: string | GoogleChatMessage
 ): Promise<GoogleChatResult | null> {
-  if (project.googleChatSpaceName && chatAppConfigured()) {
-    return sendChatAppMessage(project.googleChatSpaceName, message);
-  }
-  if (project.googleChatWebhookUrl) return sendGoogleChat(project.googleChatWebhookUrl, message);
-  return null;
+  if (!hasProjectChat(project) || !project.googleChatSpaceName) return null;
+  return sendChatAppMessage(project.googleChatSpaceName, message);
 }

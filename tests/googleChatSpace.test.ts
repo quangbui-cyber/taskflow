@@ -34,7 +34,7 @@ test("permissions are read from the scopes the person allowed", () => {
 });
 
 test("the return page after connecting stays inside the app", () => {
-  assert.equal(safeReturnPath("/projects/abc?tab=webhook"), "/projects/abc?tab=webhook");
+  assert.equal(safeReturnPath("/projects/abc?tab=chat"), "/projects/abc?tab=chat");
   assert.equal(safeReturnPath("https://evil.example"), "/profile");
   assert.equal(safeReturnPath("//evil.example"), "/profile");
   assert.equal(safeReturnPath("/\\evil.example"), "/profile");

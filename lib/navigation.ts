@@ -18,6 +18,9 @@ export type ActiveSection =
   | "leave"
   | "notifications"
   | "profile"
+  | "creative"
+  | "caro"
+  | "sudoku"
   | "hr"
   | "admin";
 
@@ -29,6 +32,7 @@ export type NavFlags = {
   showSuppliers: boolean;
   /** Admin hoặc người phụ trách nhân sự. */
   showHr: boolean;
+  showCreative?: boolean;
 };
 
 export type HubSection = {
@@ -59,7 +63,6 @@ export const HUBS: Hub[] = [
         href: "/meetings",
         visible: (flags) => flags.showMeetings,
       },
-      { key: "documents", label: "Tài liệu", href: "/documents" },
     ],
   },
   {
@@ -96,10 +99,14 @@ export const HUBS: Hub[] = [
   {
     key: "people",
     label: "Đội ngũ",
-    href: "/recognition",
+    href: "/leave",
     sections: [
-      { key: "recognition", label: "Góc cảm ơn", href: "/recognition" },
       { key: "leave", label: "Nghỉ phép", href: "/leave" },
+      { key: "documents", label: "Tài liệu", href: "/documents" },
+      { key: "creative", label: "Góc Đọc", href: "/creative", visible: (flags) => flags.showCreative ?? true },
+      { key: "recognition", label: "Kudos Wall", href: "/recognition" },
+      { key: "caro", label: "Cờ Caro", href: "/caro" },
+      { key: "sudoku", label: "Sudoku", href: "/sudoku" },
       { key: "profile", label: "Hồ sơ của tôi", href: "/profile" },
       {
         key: "hr",

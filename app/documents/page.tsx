@@ -5,6 +5,7 @@ import Sidebar from "@/components/Sidebar";
 import HubTabs from "@/components/HubTabs";
 import DocumentSets from "@/components/DocumentSets";
 import { canManageDocuments } from "@/lib/documents";
+import { storedFileDriveUrl } from "@/lib/storedFileResponse";
 
 
 function formatDate(date: Date) {
@@ -33,6 +34,8 @@ export default async function DocumentsPage() {
             title: true,
             mimeType: true,
             size: true,
+            driveFileId: true,
+            driveUrl: true,
             createdAt: true,
             uploader: { select: { name: true } },
           },
@@ -100,7 +103,14 @@ export default async function DocumentsPage() {
                   title: file.title,
                   mimeType: file.mimeType,
                   size: file.size,
-                  url: null,
+                  url:
+                    file.driveUrl ||
+                    (file.driveFileId
+                      ? storedFileDriveUrl({
+                          driveFileId: file.driveFileId,
+                          mimeType: file.mimeType,
+                        })
+                      : null),
                   addedAt: file.createdAt,
                   uploaderName: file.uploader?.name ?? null,
                 })),

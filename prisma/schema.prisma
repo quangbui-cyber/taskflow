@@ -43,6 +43,7 @@ model User {
   uploadedTaskFiles                  TaskFile[]                     @relation("TaskFileUploader")
   recognitionsSent                   Recognition[]                  @relation("RecognitionSender")
   recognitionsReceived               Recognition[]                  @relation("RecognitionRecipient")
+  recognitionComments                RecognitionComment[]
   workflowRoleGrants                 WorkflowRoleGrant[]            @relation("WorkflowRoleGrantUser")
   grantedWorkflowRoles               WorkflowRoleGrant[]            @relation("WorkflowRoleGrantAdmin")
   workflowReaders                    WorkflowRequestReader[]
@@ -119,6 +120,9 @@ model User {
   aiKnowledgePublications            AiKnowledgePublication[]      @relation("AiKnowledgePublisher")
   aiMappingAdapters                  AiMappingAdapter[]             @relation("AiMappingConfirmer")
   documentIntakeDraftsCreated        DocumentIntakeDraft[]          @relation("DocumentIntakeDraftCreator")
+  extensionTokens                    ExtensionToken[]
+  creativeArticlesReviewed           CreativeArticle[]               @relation("CreativeArticleReviewer")
+  articleReads                       ArticleReader[]
 
   @@index([isActive])
 }
@@ -156,7 +160,6 @@ model Project {
   executionStartAt              DateTime? // ngày bắt đầu thực hiện (chạy event)
   executionEndAt                DateTime? // ngày kết thúc — null nếu chỉ 1 ngày
   revenue                       Float                                @default(0) // doanh thu dự kiến/thực tế (VND)
-  googleChatWebhookUrl          String?
   googleChatSpaceName           String?
   googleChatSpaceUri            String?
   googleChatSpaceById           String?
@@ -627,27 +630,34 @@ model Notification {
 
 // Lời cảm ơn độc lập với project — dùng để mọi người ghi nhận nhau trong công việc và cuộc sống.
 model Recognition {
-  id            String         @id @default(cuid())
+  id            String               @id @default(cuid())
   senderId      String
   recipientId   String
   message       String
-  category      String         @default("KINDNESS") // KINDNESS | SUPPORT | INSPIRATION | CARE | BIRTHDAY
-  visibility    String         @default("COMPANY") // COMPANY | PRIVATE
-  sender        User           @relation("RecognitionSender", fields: [senderId], references: [id], onDelete: Cascade)
-  recipient     User           @relation("RecognitionRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
-  notifications Notification[] @relation("RecognitionNotification")
-  createdAt     DateTime       @default(now())
+  category      String               @default("KINDNESS") // KINDNESS | SUPPORT | INSPIRATION | CARE | BIRTHDAY
+  visibility    String               @default("COMPANY") // COMPANY | PRIVATE
+  sender        User                 @relation("RecognitionSender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient     User                 @relation("RecognitionRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  notifications Notification[]       @relation("RecognitionNotification")
+  comments      RecognitionComment[]
+  createdAt     DateTime             @default(now())
 
   @@index([senderId, createdAt])
   @@index([recipientId, createdAt])
   @@index([visibility, createdAt])
 }
 
-// Cấu hình tích hợp dùng chung. Giá trị nhạy cảm được mã hóa trước khi lưu.
-model IntegrationSetting {
-  key            String   @id
-  encryptedValue String
-  updatedAt      DateTime @updatedAt
+// Bình luận dưới một lời cảm ơn trên Kudos Wall.
+model RecognitionComment {
+  id            String      @id @default(cuid())
+  recognitionId String
+  recognition   Recognition @relation(fields: [recognitionId], references: [id], onDelete: Cascade)
+  authorId      String
+  author        User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  body          String
+  createdAt     DateTime    @default(now())
+
+  @@index([recognitionId, createdAt])
 }
 
 model Comment {
@@ -2616,17 +2626,20 @@ model DocumentSet {
 }
 
 model DocumentFile {
-  id         String      @id @default(cuid())
-  setId      String
-  set        DocumentSet @relation(fields: [setId], references: [id], onDelete: Cascade)
-  title      String // tên hiển thị do người tải đặt
-  fileName   String // tên file gốc, giữ phần mở rộng khi tải về
-  mimeType   String
-  size       Int
-  data       Bytes
-  uploaderId String?
-  uploader   User?       @relation("DocumentFileUploader", fields: [uploaderId], references: [id], onDelete: SetNull)
-  createdAt  DateTime    @default(now())
+  id                 String      @id @default(cuid())
+  setId              String
+  set                DocumentSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  title              String // tên hiển thị do người tải đặt
+  fileName           String // tên file gốc, giữ phần mở rộng khi tải về
+  mimeType           String
+  size               Int
+  data               Bytes?
+  driveFileId        String?
+  driveUrl           String? // Link Google Drive xem nhanh (nếu nhập tay hoặc tuỳ chỉnh)
+  driveSyncStartedAt DateTime?
+  uploaderId         String?
+  uploader           User?       @relation("DocumentFileUploader", fields: [uploaderId], references: [id], onDelete: SetNull)
+  createdAt          DateTime    @default(now())
 
   @@index([setId, createdAt])
   @@index([uploaderId])
@@ -2701,6 +2714,7 @@ model Meeting {
   status        String            @default("SCHEDULED") // "SCHEDULED" | "CANCELLED"
   sequence      Int               @default(0) // tăng mỗi lần sửa/huỷ để lịch trong email cập nhật đúng bản mới nhất
   meetingUrl    String? // link họp online (Meet, Zoom...) do người đặt tự dán
+  meetCode      String? // mã phòng Meet "abc-defg-hij" tách từ meetingUrl, dùng cho Chrome extension
   roomId        String?
   room          MeetingRoom?      @relation(fields: [roomId], references: [id], onDelete: SetNull)
   organizerId   String
@@ -2722,6 +2736,7 @@ model Meeting {
   @@index([organizerId, startAt])
   @@index([recorderId])
   @@index([projectId])
+  @@index([meetCode])
 }
 
 model MeetingAttendee {
@@ -2841,4 +2856,132 @@ model EmployeeRecord {
   updatedBy    User?     @relation("EmployeeRecordUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+}
+
+// Token xác thực cho Chrome Extension "1 click ghi biên bản"
+model ExtensionToken {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique // sha256 của token; token gốc chỉ trả về một lần khi kết nối
+  label      String // Tên thiết bị/trình duyệt, ví dụ: "Chrome trên MacBook của An"
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// ==========================================
+// GÓC ĐỌC & CẢM HỨNG (CREATIVE CORNER)
+// ==========================================
+
+model CreativeArticle {
+  id                  String           @id @default(cuid())
+  slug                String           @unique
+  guid                String           @unique // Mã RSS tránh trùng lặp khi cào lại
+  originalUrl         String           // Link gốc bài viết trên davetrott.co.uk
+  originalTitle       String           // Tiêu đề tiếng Anh gốc (IN HOA)
+  originalPublishedAt DateTime?        // Ngày Dave Trott viết bài
+
+  // Mảng dòng gốc: [{ "t": "Many years ago..." }, { "gap": true }, { "t": "**Off you go.**" }]
+  originalLines       Json
+  wordCount           Int
+
+  titleVi             String?          // Tiêu đề tiếng Việt (IN HOA)
+  // Mảng dòng dịch: Khớp chính xác 1:1 số dòng và vị trí gap với originalLines
+  linesVi             Json?
+  tags                String[]         @default([]) // Thẻ chủ đề: "sangtao", "tuduy", "copywriting"...
+
+  status              String           @default("DRAFT") // DRAFT | REVIEW | SCHEDULED | PUBLISHED | HIDDEN
+  publishedDate       DateTime?        @db.Date          // Ngày phát hành trong app (Thứ 2 - Thứ 6)
+
+  reviewedById        String?
+  reviewedBy          User?            @relation("CreativeArticleReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  readers             ArticleReader[]  // Lịch sử tương tác của nhân viên
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  @@index([status, publishedDate])
+}
+
+// Theo dõi từng thành viên: đã đọc, thả tim, lưu bài
+model ArticleReader {
+  userId     String
+  articleId  String
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  article    CreativeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  readAt     DateTime?
+  likedAt    DateTime?
+  savedAt    DateTime?
+  updatedAt  DateTime        @updatedAt
+
+  @@id([userId, articleId])
+  @@index([articleId])
+  @@index([userId, savedAt])
+}
+
+// Bàn cờ Caro 15x15 mini game nội bộ
+model CaroGame {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  playerXName String   @default("Người chơi 1")
+  playerOName String?
+  boardState  Json     // Mảng 15x15
+  lastMove    Json?    // { r, c }
+  turn        String   @default("X") // "X" | "O"
+  winner      String?  // "X" | "O" | "DRAW"
+  winningLine Json?    // [{ r, c }]
+  status      String   @default("WAITING") // WAITING | PLAYING | FINISHED
+  scoreX      Int      @default(0)
+  scoreO      Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([code])
+}
+
+
+// Sudoku 9x9 mini game nội bộ: phòng đua giải online, 2 người cùng giải một đề
+model SudokuGame {
+  id            String    @id @default(cuid())
+  code          String    @unique
+  hostUserId    String
+  hostName      String
+  guestUserId   String?
+  guestName     String?
+  difficulty    String    @default("medium") // easy | medium | hard | expert
+  timerEnabled  Boolean   @default(true)
+  timeLimitSec  Int       @default(900)
+  puzzle        Json?     // number[81], 0 = ô trống
+  solution      Json?     // number[81], không bao giờ gửi về trình duyệt
+  hostValues    Json?     // number[81] các ô chủ phòng đã điền đúng
+  guestValues   Json?
+  hostMistakes  Int       @default(0)
+  guestMistakes Int       @default(0)
+  status        String    @default("WAITING") // WAITING | READY | PLAYING | FINISHED
+  winner        String?   // HOST | GUEST | DRAW
+  finishReason  String?   // SOLVED | MISTAKES | TIMEOUT | FORFEIT
+  scoreHost     Int       @default(0)
+  scoreGuest    Int       @default(0)
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// Kết quả từng trận Sudoku online, dùng cho bảng xếp hạng theo tháng
+model SudokuMatch {
+  id           String   @id @default(cuid())
+  roomCode     String
+  hostUserId   String
+  guestUserId  String
+  winnerUserId String?  // null = hoà
+  difficulty   String
+  finishReason String   // SOLVED | MISTAKES | TIMEOUT | FORFEIT
+  durationSec  Int
+  finishedAt   DateTime @default(now())
+
+  @@index([finishedAt])
 }

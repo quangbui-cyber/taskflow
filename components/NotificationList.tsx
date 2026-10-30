@@ -51,6 +51,7 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   TASK_FOLLOW: Eye,
   DEADLINE_REMINDER: AlarmClock,
   RECOGNITION_RECEIVED: Star,
+  RECOGNITION_COMMENT: MessageSquare,
   MEETING_INVITED: CalendarClock,
   MEETING_UPDATED: CalendarClock,
   MEETING_CANCELLED: CalendarX2,

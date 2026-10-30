@@ -29,17 +29,15 @@ test("the service account key is read from JSON or base64, escaped newlines incl
   assert.equal(parseServiceAccount(JSON.stringify({ client_email: "x" })), null);
 });
 
-test("projects with a Chat space post as the Chat app; old projects keep their webhook until then", async (t) => {
+test("projects with a Chat space post as the Chat app; projects without one send nothing", async (t) => {
   const previous = process.env.GOOGLE_CHAT_SERVICE_ACCOUNT;
   t.after(() => {
     if (previous === undefined) delete process.env.GOOGLE_CHAT_SERVICE_ACCOUNT;
     else process.env.GOOGLE_CHAT_SERVICE_ACCOUNT = previous;
   });
-  const webhook = "https://chat.googleapis.com/v1/spaces/OLD/messages?key=k&token=t";
-
   delete process.env.GOOGLE_CHAT_SERVICE_ACCOUNT;
-  assert.equal(hasProjectChat({ googleChatSpaceName: "spaces/AAA", googleChatWebhookUrl: null }), false);
-  assert.equal(await sendProjectChat({ googleChatSpaceName: "spaces/AAA", googleChatWebhookUrl: null }, "x"), null);
+  assert.equal(hasProjectChat({ googleChatSpaceName: "spaces/AAA" }), false);
+  assert.equal(await sendProjectChat({ googleChatSpaceName: "spaces/AAA" }, "x"), null);
 
   process.env.GOOGLE_CHAT_SERVICE_ACCOUNT = account;
   const fake = withFetch((url) =>
@@ -49,17 +47,18 @@ test("projects with a Chat space post as the Chat app; old projects keep their w
   );
   t.after(fake.restore);
 
-  assert.equal(hasProjectChat({ googleChatSpaceName: "spaces/AAA", googleChatWebhookUrl: webhook }), true);
-  const sent = await sendProjectChat({ googleChatSpaceName: "spaces/AAA", googleChatWebhookUrl: webhook }, "Xin chào");
+  assert.equal(hasProjectChat({ googleChatSpaceName: "spaces/AAA" }), true);
+  assert.equal(hasProjectChat({ googleChatSpaceName: null }), false);
+  const sent = await sendProjectChat({ googleChatSpaceName: "spaces/AAA" }, "Xin chào");
   assert.deepEqual(sent, { ok: true });
   const message = fake.calls.find((call) => call.url === "https://chat.googleapis.com/v1/spaces/AAA/messages");
-  assert.ok(message, "posts to the space through the Chat API, not the webhook");
+  assert.ok(message, "posts to the space through the Chat API");
   assert.equal(new Headers(message.init?.headers).get("authorization"), "Bearer app-token");
   assert.deepEqual(JSON.parse(String(message.init?.body)), { text: "Xin chào" });
 
   fake.calls.length = 0;
-  await sendProjectChat({ googleChatSpaceName: null, googleChatWebhookUrl: webhook }, "Cũ");
-  assert.equal(fake.calls[0]?.url, webhook);
+  assert.equal(await sendProjectChat({ googleChatSpaceName: null }, "Không có nhóm"), null);
+  assert.equal(fake.calls.length, 0, "a project without a Chat space makes no request");
 });
 
 test("a Chat app that is not in the space gets a clear message", async (t) => {

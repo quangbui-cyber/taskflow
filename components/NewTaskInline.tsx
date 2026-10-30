@@ -20,6 +20,7 @@ import UserPicker from "@/components/UserPicker";
 import TaskAttributeSelect from "@/components/TaskAttributeSelect";
 import { useInteraction } from "@/components/InteractionProvider";
 import TaskAttachmentPicker from "@/components/TaskAttachmentPicker";
+import DetectedLinks from "@/components/DetectedLinks";
 import { MAX_TASK_CREATION_FILE_SIZE } from "@/lib/taskCreationFiles";
 import { formatProjectFileSize } from "@/lib/projectFiles";
 
@@ -321,19 +322,22 @@ export default function NewTaskInline({
   );
 
   const resultField = (
-    <label className="block">
-      <span className="text-xs font-medium text-zinc-500">
-        Kết quả công việc
-      </span>
-      <textarea
-        name="result"
-        value={result}
-        onChange={(event) => setResult(event.target.value)}
-        rows={isDesktop ? 5 : 3}
-        placeholder="Nội dung đã hoàn thành hoặc bàn giao..."
-        className="tf-field mt-1 resize-y"
-      />
-    </label>
+    <div>
+      <label className="block">
+        <span className="text-xs font-medium text-zinc-500">
+          Kết quả công việc
+        </span>
+        <textarea
+          name="result"
+          value={result}
+          onChange={(event) => setResult(event.target.value)}
+          rows={isDesktop ? 5 : 3}
+          placeholder="Nội dung đã hoàn thành hoặc bàn giao..."
+          className="tf-field mt-1 resize-y"
+        />
+      </label>
+      <DetectedLinks text={result} />
+    </div>
   );
 
   const resultPicker = (

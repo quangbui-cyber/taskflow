@@ -7,7 +7,9 @@ import { ProfileInfoForm, ProfilePasswordForm } from "@/components/ProfileForms"
 import { ProfileSignatureForm } from "@/components/ProfileSignatureForm";
 import { readOwnSignatureAsset } from "@/lib/workflow/signatureAssets";
 import GoogleConnectionCard from "@/components/GoogleConnectionCard";
+import ExtensionTokensCard from "@/components/ExtensionTokensCard";
 import { canManageChatSpaces, canSendGmail, googleWorkspaceConfigured } from "@/lib/googleWorkspace";
+import { listUserExtensionTokens } from "@/lib/extensionAuth";
 
 const PROFILE_BLUE_DARK = "#1d4ed8";
 const PROFILE_BLUE_SOFT = "#eff6ff";
@@ -18,7 +20,7 @@ export default async function ProfilePage({
   searchParams: Promise<{ google?: string }>;
 }) {
   const [user, params] = await Promise.all([requireUser(), searchParams]);
-  const [google, sidebarProjects, signatureAsset, signatureSecurity] = await Promise.all([
+  const [google, sidebarProjects, signatureAsset, signatureSecurity, extensionTokens] = await Promise.all([
     prisma.user.findUnique({
       where: { id: user.id },
       select: { googleToken: true, googleEmail: true, googleScopes: true, birthday: true },
@@ -42,6 +44,7 @@ export default async function ProfilePage({
       where: { id: user.id },
       select: { signaturePinHash: true },
     }),
+    listUserExtensionTokens(user.id),
   ]);
   const scopes = google?.googleToken ? google.googleScopes : [];
 
@@ -95,6 +98,15 @@ export default async function ProfilePage({
             canSendGmail={canSendGmail(scopes)}
             canManageChat={canManageChatSpaces(scopes)}
             result={params.google ?? null}
+          />
+          <ExtensionTokensCard
+            initialTokens={extensionTokens.map((t) => ({
+              id: t.id,
+              label: t.label,
+              createdAt: t.createdAt.toISOString(),
+              lastUsedAt: t.lastUsedAt?.toISOString() ?? null,
+              revokedAt: t.revokedAt?.toISOString() ?? null,
+            }))}
           />
           <ProfilePasswordForm />
         </div>

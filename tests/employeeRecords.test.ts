@@ -92,7 +92,29 @@ test("HR export is parsed across sheets by employee code", () => {
   assert.equal(cuong.email, "");
 });
 
-test("a workbook without the overview sheet is rejected", () => {
+test("single-sheet employee list format is parsed directly", () => {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Hồ sơ nhân sự");
+  sheet.addRow([
+    "STT", "Họ và tên", "Email", "Giới tính", "Ngày sinh", "Số CCCD", "Điện thoại", "Địa chỉ", "Ngày bắt đầu làm việc", "Mã nhân sự",
+  ]);
+  sheet.addRow([
+    1, "Lê Hồng Yến Nhi", "nhi.le@example.vn", "Nữ", "15/08/1998", "079301009876", "0987654321", "Quận 3, TP.HCM", "01/06/2023", "NV042",
+  ]);
+  const rows = parseHrWorkbook(workbook);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].fullName, "Lê Hồng Yến Nhi");
+  assert.equal(rows[0].email, "nhi.le@example.vn");
+  assert.equal(rows[0].gender, "FEMALE");
+  assert.equal(rows[0].idNumber, "079301009876");
+  assert.equal(rows[0].phone, "0987654321");
+  assert.equal(rows[0].address, "Quận 3, TP.HCM");
+  assert.deepEqual(rows[0].dateOfBirth, new Date(Date.UTC(1998, 7, 15)));
+  assert.deepEqual(rows[0].startDate, new Date(Date.UTC(2023, 5, 1)));
+  assert.equal(rows[0].employeeCode, "NV042");
+});
+
+test("a workbook without employee headers is rejected", () => {
   const workbook = new ExcelJS.Workbook();
   workbook.addWorksheet("Sheet1").addRow(["A", "B"]);
   assert.throws(() => parseHrWorkbook(workbook), HrImportError);

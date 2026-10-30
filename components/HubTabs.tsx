@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { canViewRevenue } from "@/lib/auth";
-import { financeEnabled, meetingsEnabled } from "@/lib/features";
+import { creativeEnabled, financeEnabled, meetingsEnabled } from "@/lib/features";
 import { canManageHr } from "@/lib/employeeRecords";
 import { hubForSection, visibleSections, type ActiveSection } from "@/lib/navigation";
 
@@ -21,6 +21,7 @@ export default function HubTabs({
     showRevenue: canViewRevenue(role ?? ""),
     showSuppliers: financeEnabled(),
     showHr: canManageHr({ role, isHrManager }),
+    showCreative: creativeEnabled(),
   });
   if (sections.length < 2) return null;
 
