@@ -1,0 +1,2275 @@
+{
+  "why-the-first-brief-is-wrong-and-lazy": {
+    "titleVi": "ĐỪNG VỘI TIN BẢN BRIEF ĐẦU TIÊN",
+    "tags": [
+      "brief",
+      "quangcao",
+      "tuduy"
+    ],
+    "linesVi": [
+      {
+        "t": "Mới đây tôi thấy một bài đăng của một cô tên Annie, cô ấy viết:"
+      },
+      {
+        "t": "“Mỗi khi gặp câu hỏi lập trình cần cứu trợ gấp, tôi đăng lên Reddit rồi lấy tài khoản phụ vào tự trả lời bằng một đáp án sai toe toét."
+      },
+      {
+        "t": "Người ta chẳng màng giúp đỡ ai đâu, nhưng họ CỰC MÊ bắt bẻ người khác."
+      },
+      {
+        "t": "Lần nào cũng hiệu nghiệm 100%.”"
+      },
+      {
+        "t": "Annie quá khôn ngoan, nhưng hóa ra cô nàng đang áp dụng Định luật Cunningham."
+      },
+      {
+        "t": "Định luật này do Steven McGeady đặt ra năm 2010: “Cách tốt nhất để có câu trả lời đúng trên mạng không phải là đặt câu hỏi, mà là đăng một câu trả lời sai.”"
+      },
+      {
+        "t": "McGeady bảo ông học được điều này từ Ward Cunningham, cha đẻ của Wiki."
+      },
+      {
+        "t": "Nhưng Cunningham không chỉ nói về internet, lời khuyên của ông bao quát hơn: “Người ta sốt sắng chỉnh lưng một ý sai nhanh hơn nhiều so với việc trả lời một câu hỏi.”"
+      },
+      {
+        "t": "Với dân làm nghề chúng ta, điều này cực kỳ đắt giá. Bernbach từng nói, trong ngành truyền thông: “Địa hạt nghiên cứu đích thực của chúng ta là những sự thật nhân bản giản đơn, bất biến.”"
+      },
+      {
+        "t": "Ngài Arthur Conan Doyle là bậc thầy thấu hiểu bản tính con người, đó là thứ giúp thám tử Sherlock Holmes luôn trên cơ kẻ khác."
+      },
+      {
+        "t": "Trong tập ‘Viên hồng ngọc của bá tước’, Holmes cần moi thông tin từ một gã bán gia cầm."
+      },
+      {
+        "t": "Gã bán hàng khăng khăng từ chối, thế là Holmes gài một kèo cá cược sai mười mươi:"
+      },
+      {
+        "t": "“Tôi luôn sẵn lòng cược tiền vào mắt nhìn gia cầm của mình, tôi dám cuộc 5 bảng rằng con ngỗng tôi ăn là đồ nuôi ở quê.”\n“Thế thì ông mất đứt 5 bảng rồi, nó là đồ thành thị,” gã bán hàng đốp chát.\n“Làm gì có chuyện đó.” \n“Ông tưởng ông biết rõ về gia cầm hơn tôi, người sờ tay vào chúng từ thuở cởi truồng à? Tôi bảo cho mà biết, toàn bộ số ngỗng chuyển đến quán Alpha đều là ngỗng thành thị.”\n“Có nói đằng trời tôi cũng không tin.”\n“Thế có dám cá không?”\n“Cá thì coi như tôi cướp tiền của ông, vì tôi biết chắc tôi đúng. Nhưng tôi cứ cược một đồng vàng với ông, cho ông chừa thói cứng đầu.”\nGã bán hàng cười khẩy: “Lấy sổ ra đây cho tao, Bill.””"
+      },
+      {
+        "t": "(Gã bán hàng lập tức mở cuốn sổ mà trước đó sống chết không chịu mở. Holmes xem xét, lấy trọn thông tin mình cần, rồi vui vẻ chung đồng vàng.)"
+      },
+      {
+        "t": "Sau đó Holmes giải thích cho Watson:"
+      },
+      {
+        "t": "“Khi thấy một gã có bộ ria mép tỉa kiểu đó và tờ báo thể thao thò ra khỏi túi, cậu luôn có thể bẫy gã bằng một vụ cá cược,” Holmes nói. “Tôi dám cuộc rằng dẫu có đặt 100 bảng trước mặt, gã cũng chẳng đời nào nhả thông tin đầy đủ bằng việc gã nghĩ mình vừa thắng cược lột sạch túi tôi.”"
+      },
+      {
+        "t": "Holmes đúc kết một sự thật nhân bản muôn đời: “Người ta không thích khai cho bạn biết, nhưng họ cực thích cãi lại bạn.”"
+      },
+      {
+        "t": "Những kẻ chẳng thể, hoặc chẳng buồn giúp bạn làm việc, sẽ luôn nhảy bổ vào chỉ ra chỗ sai sau khi việc đã xong."
+      },
+      {
+        "t": "Chẳng hạn, những kẻ viết bản brief: họ chỉ nhìn ra vanh vách những gì đáng lẽ phải đưa vào quảng cáo ngay sau khi bạn vừa trình bày xong thành phẩm."
+      },
+      {
+        "t": "Gợi ý của họ tuyệt nhiên không hề có trong brief — nơi đáng lẽ chúng đã có ích trước khi bạn bắt tay vào làm."
+      },
+      {
+        "t": "Nhưng khi bạn đã cày xong, họ hăng hái vạch lá tìm sâu, rồi một bản brief mới lại ra đời."
+      },
+      {
+        "t": "Bởi vì soi mói công sức của người khác bao giờ cũng sướng hơn là tự bỏ công làm cho tử tế ngay từ đầu."
+      },
+      {
+        "t": "Đó là lý do dân sáng tạo phải luôn chất vấn bản brief trước khi động tay vào làm."
+      },
+      {
+        "t": "Như Robin Wight từng dạy: “Dân sáng tạo phải giằng xé bản brief như chó gặm giẻ rách, nếu nó rách bươm thì vứt, nếu nó trụ được thì mới là đồ xịn.”"
+      }
+    ]
+  },
+  "advertising-v-blagvertising": {
+    "titleVi": "QUẢNG CÁO HAY BỐC PHÉT?",
+    "tags": [
+      "quangcao",
+      "suthat",
+      "truyenthong"
+    ],
+    "linesVi": [
+      {
+        "t": "Bess Kalb là tác giả sách bán chạy, cô cũng viết kịch bản cho The New Yorker và chương trình của Jimmy Kimmel."
+      },
+      {
+        "t": "Sau vụ xả súng gần đây tại trường học ở Texas, cô đăng lại các dòng tweet của những thượng nghị sĩ bày tỏ nỗi đau xót trước thảm kịch."
+      },
+      {
+        "t": "Trước mỗi dòng tweet, cô chỉ ghi trần trụi số tiền chính xác mà từng thượng nghị sĩ nhận được từ Hiệp hội Súng trường Quốc gia (NRA) để tài trợ chiến dịch, không kèm lời bình luận nào."
+      },
+      {
+        "t": "NRA là tổ chức sống chết phản đối bất kỳ hình thức kiểm soát súng đạn nào."
+      },
+      {
+        "t": "Và đây là những thượng nghị sĩ đã bỏ phiếu chống lại các biện pháp kiểm soát súng:"
+      },
+      {
+        "t": "Thượng nghị sĩ Rob Portman (nhận 3.063.327 USD từ NRA):"
+      },
+      {
+        "t": "“Trái tim tôi hướng về gia đình các nạn nhân trong thảm kịch kinh hoàng tại Uvalde. Quốc gia chúng ta tiếc thương những đứa trẻ vô tội, người giáo viên và tất cả những ai bị ảnh hưởng bởi hành vi bạo lực vô nghĩa này.”"
+      },
+      {
+        "t": "Thượng nghị sĩ Todd Young (nhận 2.897.582 USD từ NRA):"
+      },
+      {
+        "t": "“Tôi vô cùng đau buồn trước vụ xả súng kinh hoàng hôm nay tại một trường tiểu học ở Uvalde, Texas. Đất nước chúng ta thương tiếc những sinh mạng vô tội bị cướp đi trong thảm kịch vô nghĩa này.”"
+      },
+      {
+        "t": "Thượng nghị sĩ Joni Ernst (nhận 3.124.773 USD từ NRA):"
+      },
+      {
+        "t": "“Một hành động tàn bạo, kinh hoàng và vô nghĩa. Trái tim tôi lúc này đang ở Texas.”"
+      },
+      {
+        "t": "Thượng nghị sĩ Pat Toomey (nhận 1.475.448 USD từ NRA):"
+      },
+      {
+        "t": "“Hôm nay tôi cùng toàn thể người dân Mỹ tiếc thương những người đã bị cướp đi mạng sống tại Uvalde. Thảm kịch này kinh hoàng bao nhiêu thì xé lòng bấy nhiêu. Tôi xin gửi lời chia buồn sâu sắc nhất tới gia đình và người thân của những người thiệt mạng, những người bị thương và toàn thể bang Texas.”"
+      },
+      {
+        "t": "Thượng nghị sĩ Mitt Romney (nhận 13.647.676 USD từ NRA):"
+      },
+      {
+        "t": "“Nỗi đau xé nát tâm can. Trẻ em bị thảm sát. Sinh mạng bị dập tắt. Trái tim cha mẹ quặn thắt. Thật không thể hiểu nổi. Tôi xin gửi lời cầu nguyện và chia buồn nhưng tôi biết điều đó là quá ít ỏi. Chúng ta phải tìm ra câu trả lời.”"
+      },
+      {
+        "t": "Thượng nghị sĩ Tom Cotton (nhận 1.968.714 USD từ NRA):"
+      },
+      {
+        "t": "“Anna và tôi cùng toàn thể người dân Arkansas cầu nguyện cho các nạn nhân và gia đình các em nhỏ ở Uvalde. Chúng tôi biết ơn lực lượng thực thi pháp luật và đội ngũ phản ứng nhanh đã hỗ trợ trước tội ác không thể tưởng tượng này.”"
+      },
+      {
+        "t": "Cựu Thượng nghị sĩ David Perdue (nhận 2.002.462 USD từ NRA):"
+      },
+      {
+        "t": "“Bonnie và tôi vô cùng đau buồn trước thảm kịch ở Uvalde và đang cầu nguyện cho các nạn nhân cùng gia đình họ.”"
+      },
+      {
+        "t": "Thượng nghị sĩ Ted Cruz (nhận 311.151 USD từ nhóm vận động hành lang súng đạn):"
+      },
+      {
+        "t": "“Heidi và tôi tha thiết cầu nguyện cho các em nhỏ và gia đình trong vụ xả súng kinh hoàng ở Uvalde. Chúng tôi đang liên hệ chặt chẽ với giới chức địa phương, nhưng thông tin chi tiết vẫn đang được cập nhật. Cảm ơn lực lượng thực thi pháp luật anh hùng và đội phản ứng nhanh đã hành động kịp thời.”"
+      },
+      {
+        "t": "Với tôi, đòn chí mạng nhất trong thông điệp của Bess Kalb là cô không đưa ra một lời bình phẩm nào."
+      },
+      {
+        "t": "Cô không cần phải làm thế. Cô chỉ việc đặt số tiền NRA tài trợ ngay cạnh dòng tweet của từng vị thượng nghị sĩ, rồi để mặc chúng ta tự nếm trải sự bất hòa nhận thức."
+      },
+      {
+        "t": "Những kẻ này vừa bày tỏ tiếc thương, đau xót trước thảm kịch, miệng nói khát khao tìm câu trả lời, nhưng đồng thời lại bỏ phiếu chống kiểm soát súng đạn và bỏ túi tiền của NRA."
+      },
+      {
+        "t": "Trong hai mươi năm qua, đã có 15 vụ thảm sát trường học tại Mỹ và 188 trẻ em bị súng cướp đi mạng sống."
+      },
+      {
+        "t": "Vậy theo bất kỳ tư duy tỉnh táo nào, điểm khởi đầu hiển nhiên phải là hạn chế súng đạn."
+      },
+      {
+        "t": "Nhưng các thượng nghị sĩ này tuyên bố họ sẵn sàng làm mọi thứ để ngăn bạo lực súng đạn, ngoại trừ việc cấm súng."
+      },
+      {
+        "t": "Liệu điều đó có liên quan gì đến hàng triệu đô la mà mỗi người bọn họ đút túi từ NRA không?"
+      },
+      {
+        "t": "Cô để chúng ta tự quyết định: đó là sự trùng hợp ngẫu nhiên và các vị nghị sĩ thực sự đau lòng, hay họ chỉ là những kẻ đạo đức giả đốn mạt với những lời lẽ sáo rỗng."
+      },
+      {
+        "t": "Đỉnh cao là cô đối xử với chúng ta như người trưởng thành: Sự thật đây, tự mà suy ngẫm lấy."
+      },
+      {
+        "t": "Đó cũng chính là cách vận hành của những quảng cáo xuất sắc nhất."
+      },
+      {
+        "t": "Mới đây tôi nghe một nhà điểu học trên đài BBC Radio 4 mô tả về chim sơn ca."
+      },
+      {
+        "t": "Bà ấy bảo: “Nó đúng như những gì ghi trên vỏ hộp.”"
+      },
+      {
+        "t": "Câu khẩu hiệu chiến dịch đó được hãng HHCL viết từ 30 năm trước, và nó đã đi thẳng vào đời sống ngôn ngữ hàng ngày."
+      },
+      {
+        "t": "Trong mẩu quảng cáo, người dẫn chuyện nhìn thẳng vào ống kính và nói mộc mạc: “Đây là Sơn bóng Mau khô Ronseal."
+      },
+      {
+        "t": "Chạm vào là khô trong khoảng 20 phút. Nghĩa là, sau 20 phút, bạn sờ vào và nó khô queo."
+      },
+      {
+        "t": "Sơn bóng Mau khô Ronseal: Đúng như những gì ghi trên vỏ hộp.”"
+      },
+      {
+        "t": "Đứng một mình, nó nghe khô khốc, thậm chí tẻ nhạt, nhưng bạn phải luôn nhìn nhận sự việc trong bối cảnh của nó."
+      },
+      {
+        "t": "Mẩu quảng cáo đó nổi bần bật giữa một mớ hỗn tạp những trò làm màu, lừa bịp, trịch thượng xung quanh, rồi đi thẳng vào câu cửa miệng của dân chúng."
+      },
+      {
+        "t": "Nó không nhảy múa, không kỹ xảo vi tính, không người nổi tiếng, không kể lể dông dài, không nhạc thời thượng, chẳng ẵm giải Cannes nào, nó chỉ là một làn gió trong lành, nói thẳng nói thật."
+      },
+      {
+        "t": "Đỉnh đến mức, nó bước ra khỏi màn ảnh và đi vào đời sống chỉ bằng cách nói cho người ta biết sản phẩm là gì, nó làm được gì, rồi để họ tự quyết định xem có muốn mua hay không."
+      },
+      {
+        "t": "Một quan điểm thật đáng nể: coi người tiêu dùng là những sinh thể có não và biết tự suy nghĩ."
+      }
+    ]
+  },
+  "start-with-the-truth": {
+    "titleVi": "BẮT ĐẦU TỪ SỰ THẬT",
+    "tags": [
+      "suthat",
+      "dinhvi",
+      "quangcao"
+    ],
+    "linesVi": [
+      {
+        "t": "Pablo Escobar là tên tội phạm giàu nhất mọi thời đại, thời đỉnh cao hắn thâu tóm gần 80% thị trường cocaine toàn cầu."
+      },
+      {
+        "t": "Khối tài sản cá nhân của hắn tương đương 64 tỷ USD theo thời giá ngày nay."
+      },
+      {
+        "t": "Hắn thành lập băng đảng Medellin và xây dựng mạng lưới vận chuyển tinh vi 70 đến 80 tấn hàng mỗi tháng vào Mỹ, các băng đảng khác phải trả cho hắn 25% đến 30% chỉ riêng tiền cước vận chuyển."
+      },
+      {
+        "t": "Nhưng làm thế nào hắn làm được điều đó? Điều gì khiến hắn khác biệt?"
+      },
+      {
+        "t": "Dĩ nhiên Escobar biết sức mạnh của bạo lực, hắn thủ tiêu các thành viên băng đảng đối thủ cũng như cảnh sát, thẩm phán và chính trị gia."
+      },
+      {
+        "t": "Nhưng quyền lực thực sự không chỉ đến từ việc giết người, nó đến từ việc khiến người khác làm theo điều bạn muốn."
+      },
+      {
+        "t": "Vì vậy Escobar đã phát triển một chiến lược tiếp thị với một câu khẩu hiệu đơn giản, nhớ đời, đóng vai trò như một lời kêu gọi hành động."
+      },
+      {
+        "t": "Khi mua chuộc những kẻ nắm quyền, hắn luôn chào bằng một câu cộc lốc: “Plata o plomo?”"
+      },
+      {
+        "t": "‘Plata o plomo’ trong tiếng Tây Ban Nha nghĩa là ‘Bạc hay chì?’"
+      },
+      {
+        "t": "Một lựa chọn cực kỳ giản đơn cho bạn: bạc (tiền) hay chì (đạn)?"
+      },
+      {
+        "t": "Và câu nói “Plata o plomo?” sẽ găm chặt vào tâm trí bạn."
+      },
+      {
+        "t": "Thử tưởng tượng bạn là một viên cảnh sát lương ba cọc ba đồng, bạn muốn nhận một cọc tiền chỉ để nhắm mắt làm ngơ, hay muốn bị bắn chết tươi, rồi ai sẽ nuôi vợ con bạn?"
+      },
+      {
+        "t": "Đương nhiên chẳng ai cần phải nói toạc những lời đó ra, chẳng cần thiết, chỉ một câu “Plata o plomo?” là ai nấy đều hiểu rành rọt chuyện gì đang chờ đợi."
+      },
+      {
+        "t": "Như mọi câu khẩu hiệu xuất sắc nhất, nó đi vào ngôn ngữ thường nhật như một chân lý hiển nhiên."
+      },
+      {
+        "t": "Câu khẩu hiệu ngắn gọn, ám ảnh đó đã giúp Escobar gây dựng nên mạng lưới ma túy lớn nhất hành tinh."
+      },
+      {
+        "t": "Lẽ dĩ nhiên, tự thân một câu nói không thể làm hết mọi việc."
+      },
+      {
+        "t": "Nhưng nó kết tinh toàn bộ tư duy phức tạp thành một lời hứa đơn giản, khó quên."
+      },
+      {
+        "t": "Và tất nhiên, nó phải bắt rễ từ sự thật, bằng không sẽ vô dụng."
+      },
+      {
+        "t": "Vài năm trước đó, Bill Bernbach đã làm một chiến dịch cho hãng xe cho thuê Avis."
+      },
+      {
+        "t": "Ông đào sâu nghiên cứu công ty, ông thấy dịch vụ của họ rất tốt, nhưng thế vẫn chưa đủ; ai chẳng tự vỗ ngực xưng mình tốt, tự nói thế thì vô nghĩa."
+      },
+      {
+        "t": "Sự thật duy nhất đập vào mắt là Avis nhỏ hơn Hertz (kẻ dẫn đầu thị trường)."
+      },
+      {
+        "t": "Nếu Bernbach chỉ rêu rao “Avis – Chúng tôi nỗ lực hơn”, thì chẳng có lý do gì để thiên hạ tin ông, chẳng có sự thật nào làm điểm tựa."
+      },
+      {
+        "t": "Nên Bernbach đã đưa ra tuyên bố: “Avis – Chúng tôi chỉ đứng số 2, vì thế chúng tôi phải nỗ lực hơn”."
+      },
+      {
+        "t": "Giờ thì đã có một sự thật đáng tin, bởi nó hoàn toàn hợp lý."
+      },
+      {
+        "t": "Kẻ đứng số 1 (Hertz) nghiễm nhiên bị định vị lại như một gã nhà giàu lười biếng, chẳng việc gì phải cố gắng cật lực như Avis."
+      },
+      {
+        "t": "Giờ thì người ta đã có lý do để tin vào khẩu hiệu ‘Avis – Chúng tôi nỗ lực hơn’."
+      },
+      {
+        "t": "Chiến dịch thành công vang dội đến mức trên khắp nước Mỹ, người ta bắt đầu đeo huy hiệu Avis có in câu khẩu hiệu đó và dán sticker Avis lên cản xe."
+      },
+      {
+        "t": "Ai cũng muốn đứng về phía kẻ chiếu dưới nhưng biết nỗ lực hơn người."
+      },
+      {
+        "t": "Ngày nay Avis có hơn 11.000 văn phòng trên toàn thế giới và là Công ty Cho thuê Xe hàng đầu tại 74 quốc gia bao gồm Mỹ, Canada, Úc, New Zealand, Ấn Độ, Trung Quốc, Singapore, Đan Mạch, Bỉ, Ba Lan, Cộng hòa Séc và Argentina."
+      },
+      {
+        "t": "Câu khẩu hiệu đó phát huy tác dụng nhờ đưa ra một tuyên bố dựa trên sự thật, chứ không phải một lời xảo ngôn rỗng tuếch."
+      },
+      {
+        "t": "Chẳng hạn: ‘Ford – Chúng tôi nỗ lực hơn’ sẽ chẳng có nghĩa lý gì, ‘Coca Cola – Chúng tôi nỗ lực hơn’ cũng thế, ‘Nestle – Chúng tôi nỗ lực hơn’ hay ‘Samsung – Chúng tôi nỗ lực hơn’ cũng vậy."
+      },
+      {
+        "t": "Một câu slogan hay không phải chỉ vì nó bắt tai, nó chỉ hiệu quả khi gắn liền với bản sắc riêng của thương hiệu, và nó hiệu quả bởi nó truyền tải một sự thật thương hiệu, chứ không phải lời xoa dịu sáo rỗng."
+      },
+      {
+        "t": "Đánh giá từ quảng cáo ngày nay, điều đó dường như quá khó đối với rất nhiều dân làm marketing."
+      },
+      {
+        "t": "Họ dường như chẳng thể nào thông suốt nổi điều giản dị ấy."
+      }
+    ]
+  },
+  "what-does-pivot-really-mean": {
+    "titleVi": "CHUYỂN HƯỚNG THẬT SỰ LÀ GÌ?",
+    "tags": [
+      "sangtao",
+      "tuduy",
+      "giaiphap"
+    ],
+    "linesVi": [
+      {
+        "t": "Vào những năm 1930, Andrew Higgins chỉ là một thợ đóng thuyền địa phương ở New Orleans."
+      },
+      {
+        "t": "Ông đóng những chiếc thuyền đáy bằng khác lạ chuyên đi vùng châu thổ Mississippi."
+      },
+      {
+        "t": "Những con thuyền này có mớn nước rất nông, chỉ cần khoảng 60 phân nước, cực kỳ lý tưởng cho những ai muốn lao vút qua những đầm lầy vùng Mississippi."
+      },
+      {
+        "t": "Higgins thiết kế phần đuôi hõm vào cho chân vịt để không bị quẹt đáy, còn mũi thuyền vát hình cái nêm để có thể lao thẳng lên bờ."
+      },
+      {
+        "t": "Rồi khi dỡ hàng xong, thuyền nhẹ đi và có thể dễ dàng lùi lại xuống nước."
+      },
+      {
+        "t": "Những con thuyền này là công cụ hoàn hảo cho đám buôn lậu rượu lủi vào bờ trong đêm, và cũng được chính lực lượng tuần duyên dùng để đuổi bắt đám buôn lậu đó."
+      },
+      {
+        "t": "Sau sự kiện Trân Châu Cảng, ai cũng thấy rõ rằng vào một thời điểm nào đó, Thủy quân Lục chiến Mỹ sẽ phải đổ bộ lên lãnh thổ đối phương để tấn công quân đội Đức và Nhật."
+      },
+      {
+        "t": "Cách đổ quân truyền thống lên đất địch từ trước đến nay luôn là đánh chiếm một cảng biển để tàu áp sát cầu cảng và dỡ lính sang bến."
+      },
+      {
+        "t": "Lực lượng tuần duyên gợi ý Thủy quân Lục chiến hãy nghía qua những chiếc thuyền Higgins đang đóng."
+      },
+      {
+        "t": "Mớn nước của chúng nông đến mức chẳng cần chiếm cảng làm gì, chúng có thể ủi thẳng lên bãi biển, bất kỳ bãi biển nào."
+      },
+      {
+        "t": "Họ hỏi Higgins liệu ông có thể đóng thuyền với phần mũi hạ xuống như một chiếc cầu dốc được không."
+      },
+      {
+        "t": "Và thế là Higgins chế tạo ra tàu LCVP (Tàu đổ bộ Chở quân và Phương tiện)."
+      },
+      {
+        "t": "Nó dài 11 mét, rộng 3,3 mét, tốc độ tối đa 12 hải lý/giờ và chở được một trung đội 36 lính."
+      },
+      {
+        "t": "Nó có thể lao thẳng lên bãi cát, thả trọn lính xuống rồi quay lại đón chuyến khác, tất cả chỉ mất 3 đến 4 phút."
+      },
+      {
+        "t": "Tuyệt nhất là quân địch sẽ không thể biết trước quân ta sẽ đổ bộ ở đâu."
+      },
+      {
+        "t": "Ví dụ, quân Đức đã dựng một bức tường phòng thủ dài 3.200 cây số từ vùng Bắc Cực của Na Uy đến Tây Ban Nha, các khu vực họ kiên cố hóa chủ yếu là các cảng như Cherbourg, Brest và Antwerp, và họ phải dàn mỏng 300.000 quân dọc suốt chiều dài đó."
+      },
+      {
+        "t": "Họ xây 15.000 boong-ke bê tông, ngốn 1,2 triệu tấn thép, 17 triệu mét khối bê tông, trị giá 206 tỷ USD theo thời giá hôm nay."
+      },
+      {
+        "t": "Rốt cuộc, ngày D-Day diễn ra trên dải bờ biển Normandy dài 130 cây số và khiến chúng hoàn toàn trở tay không kịp."
+      },
+      {
+        "t": "Nhờ có những chiếc LCVP (Thuyền Higgins), quân Đồng minh đã đổ bộ 160.000 quân ngay trong ngày đầu tiên."
+      },
+      {
+        "t": "Một sử gia Thủy quân Lục chiến nhận định: “Thuyền Higgins đã phá vỡ thế bế tắc trong việc vận chuyển từ tàu vào bờ. Không thể nào nói hết những lợi thế chiến thuật mà con thuyền này mang lại cho các chỉ huy đổ bộ của Mỹ.”"
+      },
+      {
+        "t": "Tổng tư lệnh Tối cao quân Đồng minh Dwight Eisenhower tuyên bố: “Andrew Higgins là người đã mang lại chiến thắng trong cuộc chiến này cho chúng ta. Nếu Higgins không thiết kế và đóng những chiếc LCVP đó, chúng ta không bao giờ có thể đổ bộ lên một bãi biển trống trải. Toàn bộ chiến lược chiến tranh hẳn đã phải thay đổi.”"
+      },
+      {
+        "t": "Năm 1938, Higgins chỉ có một xưởng đóng thuyền với 75 nhân công; đến năm 1943 ông có 7 đại công xưởng với 25.000 công nhân, và khi chiến tranh kết thúc ông đã đóng 23.358 chiếc thuyền."
+      },
+      {
+        "t": "Tương truyền Hitler gắt gỏng đòi biết làm sao lính Đồng minh có thể đổ bộ lên bờ đông đến thế chỉ trong một ngày."
+      },
+      {
+        "t": "Các tướng lĩnh khai báo về số lượng khổng lồ những con thuyền của Higgins."
+      },
+      {
+        "t": "Hitler gầm lên: “Thằng cha đó là ai, mẹ kiếp, ông nội Noah tái thế à?”"
+      },
+      {
+        "t": "Với tôi, sáng tạo thực sự nằm ở chỗ nhìn ra cách một thứ vốn đóng cho dân buôn lậu ở đầm lầy Mississippi có thể cách mạng hóa toàn bộ chiến tranh hiện đại."
+      },
+      {
+        "t": "Nó không đến từ việc ngồi nghĩ: “Hãy thiết kế một con thuyền không cần cảng”."
+      },
+      {
+        "t": "Nó đến từ tư duy: “Gã này đóng được thuyền đổ bộ lên bất cứ đâu, dùng thuyền của gã thôi”."
+      },
+      {
+        "t": "Sáng tạo không phải là ngồi trong hư không rồi tự dưng nảy ra ý tưởng trên trời rơi xuống."
+      },
+      {
+        "t": "Sáng tạo là chắp nối các mảnh ghép lại với nhau theo cách chưa ai từng nghĩ tới."
+      }
+    ]
+  },
+  "the-broom-of-theseus": {
+    "titleVi": "CÂY CHỔI CỦA THESEUS",
+    "tags": [
+      "ngonngu",
+      "truyenthong",
+      "trietly"
+    ],
+    "linesVi": [
+      {
+        "t": "Vào thế kỷ thứ nhất, Plutarch đã đặt ra nghịch lý ‘Con tàu của Theseus’."
+      },
+      {
+        "t": "Một con tàu giương buồm rời Hy Lạp suốt 30 năm, khi trở về từng tấm ván, từng cánh buồm, từng sợi dây thừng đều đã được thay mới, vậy nó có còn là con tàu đã ra khơi năm xưa không?"
+      },
+      {
+        "t": "Heraclitus, Socrates, Plato, Thomas Hobbes và John Locke đều đặt ra cùng một câu hỏi dưới những hình thức khác nhau."
+      },
+      {
+        "t": "Đó là câu hỏi về bản chất của thực tại: nó là vật chất hay chỉ là khái niệm?"
+      },
+      {
+        "t": "Đây là câu hỏi triết học quá sâu xa đối với người bình thường. Phải vậy không?"
+      },
+      {
+        "t": "Một trong những tập phim được yêu thích nhất của ‘Only Fools and Horses’ có tên là ‘Cây chổi của Trigger’."
+      },
+      {
+        "t": "Trigger là một người quét đường, gặp DelBoy trong quán cà phê, trên ngực đeo huân chương."
+      },
+      {
+        "t": "DelBoy: “Ủa sao chú mày được tặng huân chương đó vậy, Trigger?”"
+      },
+      {
+        "t": "Trigger: “Vì tiết kiệm tiền cho hội đồng thành phố. Tôi tình cờ khoe là tôi xài đúng một cây chổi suốt 20 năm nay. Mấy ổng ấn tượng quá nên trao huân chương cho tôi luôn.”"
+      },
+      {
+        "t": "DelBoy: “Làm quái nào một cây chổi xài được tận 20 năm?”"
+      },
+      {
+        "t": "Trigger: “Tôi giữ gìn nó kỹ lắm. Bảo dưỡng cẩn thận từng li. Cây chổi già này thay có 17 cái đầu chổi và 14 cái cán trong suốt ngần ấy năm thôi.”"
+      },
+      {
+        "t": "DelBoy: “Thế thì làm sao mà vẫn là cùng một cái chổi khốn nạn đó được?”"
+      },
+      {
+        "t": "Đó là một trong những tập nổi tiếng nhất vì ai xem cũng hiểu ngay miếng hài đó."
+      },
+      {
+        "t": "Những người chẳng hiểu nổi ‘Con tàu của Theseus’ lại hiểu tường tận ‘Cây chổi của Trigger’."
+      },
+      {
+        "t": "Bởi vì các biên kịch đã biến nó thành thứ dễ hiểu bằng chính thứ ngôn ngữ của khán giả."
+      },
+      {
+        "t": "Đó là một bài học đắt giá cho chúng ta."
+      },
+      {
+        "t": "Các biên kịch của ‘The Simpsons’ cũng hiểu rất rõ điều này."
+      },
+      {
+        "t": "Con dao cạo Occam được định nghĩa trang trọng là: “Đừng nhân bản các giả thiết vượt quá mức cần thiết.”"
+      },
+      {
+        "t": "Giờ hãy xem gia đình Simpsons xử lý khái niệm đó thế nào."
+      },
+      {
+        "t": "Người lớn phát hiện ra một chất kích dục nên thi nhau về nhà sớm rồi kéo rèm kín mít."
+      },
+      {
+        "t": "Bart, Milhouse và Lisa tranh cãi xem chuyện gì đang xảy ra."
+      },
+      {
+        "t": "Bart: “Rõ mười mươi rồi. Người lớn dứt khoát đang dọn đường cho cuộc xâm lăng của người ngoài hành tinh đi đĩa bay.”"
+      },
+      {
+        "t": "Milhouse: “Đồ ngốc, bộ không thấy đây là một âm mưu khổng lồ của chính phủ à, hay là mày cũng bị chúng nó tha hóa rồi?”"
+      },
+      {
+        "t": "Lisa: “Thôi đi, sao tụi ngốc các người toàn nhảy xổ vào những kết luận nhảm nhí thế? Chưa nghe về Con dao cạo Occam bao giờ à: lời giải thích đơn giản nhất thường là lời giải thích đúng?”"
+      },
+      {
+        "t": "Bart: “Được rồi, thế lời giải thích đơn giản nhất là gì?”"
+      },
+      {
+        "t": "Lisa (đảo mắt mỉa mai): “Em chịu, chắc là bọn họ toàn ma cà rồng ngược, phải mò về nhà trước khi trời tối đấy.”"
+      },
+      {
+        "t": "Bart và Milhouse: “Á á á, ma cà rồng ngược!”"
+      },
+      {
+        "t": "Gia đình Simpsons cũng giải thích khái niệm ‘ngụy biện suy diễn vô căn cứ’ để người bình dân cũng hiểu được."
+      },
+      {
+        "t": "Homer đang bốc phét về Đội tuần tra gấu của mình."
+      },
+      {
+        "t": "Homer: “Không thấy bóng dáng một con gấu nào. Đội tuần tra gấu chắc chắn hiệu quả như thần.”"
+      },
+      {
+        "t": "Lisa: “Đó là ngụy biện bố ơi, theo logic của bố thì con có thể bảo hòn đá này xua đuổi cọp.”"
+      },
+      {
+        "t": "Homer: “Ồ, nó hoạt động thế nào?”"
+      },
+      {
+        "t": "Lisa: “Nó có hoạt động quái đâu, nó chỉ là một cục đá ngớ ngẩn. Nhưng bố có thấy con cọp nào quanh đây không?”"
+      },
+      {
+        "t": "Homer: “… Lisa, bố muốn mua hòn đá của con.”"
+      },
+      {
+        "t": "‘Only Fools and Horses’ và ‘The Simpsons’ không bao giờ lên mặt dạy đời khán giả."
+      },
+      {
+        "t": "Họ giải thích những khái niệm phức tạp bằng thứ ngôn ngữ giản dị mà ai cũng hiểu được."
+      },
+      {
+        "gap": true
+      },
+      {
+        "t": "Dân quảng cáo chúng ta có thể học hỏi được rất nhiều từ điều đó."
+      },
+      {
+        "t": "Như Orson Welles từng nói: “Tôi chẳng nghĩ ra được thứ gì trên đời mà khán giả lại không hiểu."
+      },
+      {
+        "t": "Vấn đề duy nhất là làm cho họ thấy hứng thú; một khi đã hứng thú, họ có thể hiểu bất cứ thứ gì trên cõi đời này”."
+      }
+    ]
+  },
+  "ignorance-is-bliss": {
+    "titleVi": "CHẾT VÌ DỐT NÁT CÓ HỌC",
+    "tags": [
+      "chuyengia",
+      "tuduy",
+      "thucte"
+    ],
+    "linesVi": [
+      {
+        "t": "Năm 1865, Joseph Lister tuyên bố rằng nhiễm trùng vết thương không đến từ bên trong cơ thể, mà do các vi sinh vật từ bên ngoài xâm nhập vào."
+      },
+      {
+        "t": "Vì vậy, nếu bạn tiêu diệt vi sinh vật (vi trùng) bằng cách khử trùng, vết thương sẽ không bị nhiễm trùng."
+      },
+      {
+        "t": "Ông nói tay bác sĩ phẫu thuật và dụng cụ y tế phải được rửa bằng axit carbolic trước khi chạm vào vết thương."
+      },
+      {
+        "t": "Nhưng vào năm 1873, tạp chí The Lancet coi Thuyết Mầm bệnh là trò nực cười và đăng một loạt bài cảnh báo các bác sĩ phẫu thuật chớ chạy theo cái trào lưu ngớ ngẩn này."
+      },
+      {
+        "t": "Thật là một thảm họa, bởi vào ngày 2 tháng 7 năm 1881, Tổng thống James Garfield bị bắn vào lưng."
+      },
+      {
+        "t": "Bác sĩ Nhà Trắng khi đó là Willard Bliss, ông ta đọc trên The Lancet rằng khử trùng là nhảm nhí, nên ông ta thọc đôi bàn tay chưa rửa cùng những dụng cụ chưa tiệt trùng vào sâu trong miệng vết thương để mò tìm viên đạn."
+      },
+      {
+        "t": "Ban đầu tình trạng của tổng thống rất khả quan và ông có vẻ sẽ hồi phục hoàn toàn."
+      },
+      {
+        "t": "Nhưng do bị chọc ngoáy liên tục bằng đôi bàn tay bẩn thỉu, vết thương bắt đầu nhiễm trùng."
+      },
+      {
+        "t": "Bliss đinh ninh rằng đó là vì họ chưa lôi được viên đạn ra."
+      },
+      {
+        "t": "Alexander Graham Bell thậm chí còn chế tạo một máy dò kim loại để hỗ trợ tìm kiếm."
+      },
+      {
+        "t": "Nhưng ông chỉ được phép rà ở đúng chỗ mà Bliss nghĩ là có viên đạn."
+      },
+      {
+        "t": "Thành thử kết quả chẳng đi đến đâu, nhưng Bliss vẫn khăng khăng: “Mọi người đều nhất trí rằng vị trí viên đạn đã được xác định với độ chính xác hợp lý, và nó nằm ở thành trước của bụng, khoảng 5 inch phía dưới và lệch sang bên phải rốn.”"
+      },
+      {
+        "t": "Đến ngày 23 tháng 7, 3 tuần sau khi bị bắn, Garfield sốt tới 40 độ C và sút 18 ký."
+      },
+      {
+        "t": "Vết thương mưng mủ, và họ lại dùng một cái ống chưa tiệt trùng để hút mủ."
+      },
+      {
+        "t": "Đến ngày 18 tháng 9, ông bị viêm phổi và cao huyết áp, sang ngày hôm sau thì qua đời."
+      },
+      {
+        "t": "Khi khám nghiệm tử thi, viên đạn lại nằm ở phía bên kia cơ thể, bên trái, nơi mà Bliss đã sống chết không cho Bell rà tới."
+      },
+      {
+        "t": "Ira Rutkow, thành viên của Đại học Phẫu thuật Hoa Kỳ, nhận xét: “Vết thương của Tổng thống Garfield nhẹ đến mức trong thời đại ngày nay, ông ấy sẽ được xuất viện về nhà chỉ sau hai hoặc ba ngày.”"
+      },
+      {
+        "t": "Kẻ bắn Garfield, Charles Guiteau, thậm chí còn đem sự bất tài của giới y tế ra làm bình phong bào chữa: “Garfield chết vì tắc trách y khoa. Theo chính các bác sĩ của ông ấy, vết đạn không gây tử vong. Những bác sĩ điều trị sai mới đáng bị truy tố tội giết James Garfield, chứ không phải tôi.”"
+      },
+      {
+        "t": "Nhưng dĩ nhiên lời ngụy biện đó không có tác dụng và Guiteau bị xử tử."
+      },
+      {
+        "t": "Willard Bliss là bác sĩ Nhà Trắng, vị thế của ông ta là bất khả xâm phạm."
+      },
+      {
+        "t": "Ông ta HẲN PHẢI biết mình đang làm gì, việc nghi ngờ quyền uy của ông ta bị coi là lố bịch."
+      },
+      {
+        "t": "Và thế đấy, chúng ta đang ở đúng cái bẫy đó: kẻ có bằng cấp oách nhất, giọng nói sang nhất, xuất thân quyền quý nhất thì có uy tín nhất, họ ắt hẳn phải biết rõ nhất."
+      },
+      {
+        "t": "Mặc kệ sự thật rành rành và lẽ thường mách bảo."
+      },
+      {
+        "t": "Gần đây có người đăng trên Twitter:"
+      },
+      {
+        "t": "“Khác biệt giữa con người và động vật là gì?"
+      },
+      {
+        "t": "Động vật chẳng bao giờ để những con ngu nhất dẫn dắt bầy đàn”."
+      },
+      {
+        "t": "Điều đó rất đáng để dân quảng cáo và tiếp thị phải khắc cốt ghi tâm."
+      }
+    ]
+  },
+  "bad-data": {
+    "titleVi": "DỮ LIỆU RÁC",
+    "tags": [
+      "dulieu",
+      "nguybien",
+      "tuduy"
+    ],
+    "linesVi": [
+      {
+        "t": "Năm 2018, Tạp chí Y khoa Anh công bố một nghiên cứu của Giáo sư Robert Yeh thuộc Trường Y Harvard."
+      },
+      {
+        "t": "Nghiên cứu này nói về việc nhảy khỏi máy bay có dù và không có dù."
+      },
+      {
+        "t": "Phát hiện chính là: một chiếc dù chẳng tạo ra chút khác biệt nào đối với cơ hội sống sót của bạn."
+      },
+      {
+        "t": "“Báo cáo với tiêu đề ‘Sử dụng dù để ngăn ngừa tử vong và chấn thương nặng khi nhảy khỏi máy bay; Thử nghiệm ngẫu nhiên có đối chứng’ cho thấy các thiết bị an toàn không làm giảm đáng kể khả năng tử vong hoặc thương tích nghiêm trọng đối với người nhảy khỏi máy bay so với nhóm đối chứng chỉ đeo ba lô rỗng.”"
+      },
+      {
+        "t": "92 người được phỏng vấn cho nghiên cứu, nhưng chỉ 23 người đủ điều kiện tham gia."
+      },
+      {
+        "t": "12 người nhảy từ máy bay có dù, 13 người nhảy không có dù."
+      },
+      {
+        "t": "Kết quả cho thấy cả hai nhóm đều không gặp tổn hại hay thương tích nghiêm trọng nào, trên thực tế kết cục hoàn toàn giống nhau bất kể có đeo dù hay không."
+      },
+      {
+        "t": "Nhưng ẩn sâu ở giữa bài báo là một câu lưu ý nhỏ xíu ít ai để ý:"
+      },
+      {
+        "t": "“Các đối tượng tham gia có thể ít gặp nguy cơ tử vong hoặc chấn thương nặng hơn vì họ nhảy từ độ cao trung bình 0,6 mét (độ lệch chuẩn 0,1) từ một chiếc máy bay đang di chuyển với vận tốc trung bình 0 km/h (độ lệch chuẩn 0).”"
+      },
+      {
+        "t": "Nói cách khác, chiếc máy bay họ nhảy xuống đang đậu chết dí trên mặt đất."
+      },
+      {
+        "t": "Chẳng khác nào nhảy từ trên ghế xuống đất."
+      },
+      {
+        "t": "Dù chỉ được đưa vào như một lời chú thích bên lề, một câu thòng nhẹ, nhưng nó lại thay đổi hoàn toàn cục diện."
+      },
+      {
+        "t": "Nếu không đọc đoạn đó, ai nấy đều tự động mặc định kết quả này nói về cú nhảy từ máy bay ở độ cao hàng ngàn mét đang lao đi với vận tốc hàng trăm cây số một giờ."
+      },
+      {
+        "t": "Não bộ chúng ta tự ráp các từ lại với nhau: ‘máy bay’ – ‘nhảy’ – ‘dù’ và lập tức vẽ nên hình ảnh một ai đó đang lao mình giữa bầu trời xanh ngắt."
+      },
+      {
+        "t": "Đó chính là lý do Giáo sư Robert Yeh viết bài báo này."
+      },
+      {
+        "t": "Ông muốn vạch trần cái cách chúng ta vồ vập lấy các chi tiết trong các bài nghiên cứu rồi giật gân hóa những phần hấp dẫn."
+      },
+      {
+        "t": "Chúng ta hăm hở bám vào phần có thể tạo nên một cái tít giật gân mà chẳng thèm đoái hoài đến phần nhàm chán vốn phá hỏng câu chuyện."
+      },
+      {
+        "t": "Đó là lý do ông làm nghiên cứu này, như một đòn châm biếm thói lạm dụng nghiên cứu và hiểu sai dữ liệu. Như ông nói, bối cảnh mới là thứ quyết định."
+      },
+      {
+        "t": "Cách đây một thời gian, tôi xem TV và đọc báo."
+      },
+      {
+        "t": "Tin tức ngập tràn thông tin nghiên cứu chỉ ra rằng uống một chai rượu vang mỗi tuần làm tăng nguy cơ ung thư."
+      },
+      {
+        "t": "Nhưng kết luận đó bị cô lập trong chân không, không hề có bối cảnh."
+      },
+      {
+        "t": "Chẳng ai buồn hỏi xem tại sao người ta lại uống một chai rượu vang mỗi tuần."
+      },
+      {
+        "t": "Có lẽ do áp lực công việc gia tăng, có lẽ chính sự căng thẳng gây ra ung thư, bất kể có rượu vang hay không."
+      },
+      {
+        "t": "Nhưng chẳng ai buồn đào sâu hơn vì họ đã vớ được một câu chuyện giật gân rồi."
+      },
+      {
+        "t": "Như người đặt nền móng cho ngành thống kê toán học, Karl Pearson, từng nói: “Tương quan không đồng nghĩa với nhân quả.”"
+      },
+      {
+        "t": "Giống như ví dụ chiếc dù, một câu hỏi sai sẽ cho ra dữ liệu tương ứng, nhưng phớt lờ bối cảnh sẽ dẫn tới câu trả lời hoàn toàn sai bét."
+      },
+      {
+        "t": "Câu hỏi thực sự không phải là giữa việc nhảy có dù hay không dù."
+      },
+      {
+        "t": "Câu hỏi thực sự là giữa việc nhảy từ một vật đứng yên trên mặt đất và một vật đang bay trên không trung."
+      },
+      {
+        "t": "Nhưng dữ liệu không thể hé lộ điều đó, vì người ta đâu có hỏi dữ liệu câu đó."
+      },
+      {
+        "t": "Dữ liệu chỉ là những con số, nó không thể đưa ra kết luận, đó không phải việc của nó."
+      },
+      {
+        "t": "Bởi con người phải sở hữu một phần mềm mà dữ liệu không bao giờ có: lẽ thường."
+      }
+    ]
+  },
+  "the-great-leap-backwards": {
+    "titleVi": "BƯỚC THỤT LÙI VĨ ĐẠI",
+    "tags": [
+      "thuctien",
+      "tuduy",
+      "chienthuat"
+    ],
+    "linesVi": [
+      {
+        "t": "Đặng Tiểu Bình từng là người đàn ông quyền lực thứ hai ở Trung Quốc."
+      },
+      {
+        "t": "Quyền uy gần như bất khả xâm phạm."
+      },
+      {
+        "t": "Nhưng ông Đặng đã lỡ lời."
+      },
+      {
+        "t": "Ông nói: “Mèo trắng hay mèo đen không quan trọng, miễn là bắt được chuột.”"
+      },
+      {
+        "t": "Câu nói đó đã khiến người quyền lực thứ hai Trung Quốc bị tước hết chức vụ, bị bêu rếu trước công chúng và bị tống đi làm việc trong một nhà máy sản xuất máy kéo."
+      },
+      {
+        "t": "Bị đày ải bởi người quyền lực số một Trung Quốc: Mao Trạch Đông."
+      },
+      {
+        "t": "Bởi vì đây là cuộc tranh cãi nảy lửa về chính sách kinh tế."
+      },
+      {
+        "t": "Đặng Tiểu Bình tin rằng chủ nghĩa cộng sản là phương tiện để đạt tới mục đích."
+      },
+      {
+        "t": "Để mang lại một cuộc sống tốt đẹp hơn, công bằng hơn cho muôn dân."
+      },
+      {
+        "t": "Nhưng Mao Trạch Đông lại là một người theo chủ nghĩa Mác giáo điều cứng rắn."
+      },
+      {
+        "t": "Với Mao, chủ nghĩa cộng sản tự thân nó đã là mục đích tối hậu."
+      },
+      {
+        "t": "Thế nên với Mao, màu sắc của con mèo là chuyện hệ trọng."
+      },
+      {
+        "t": "Với Mao, tất cả các con mèo đều phải mang màu đỏ, bất kể chúng có bắt được chuột hay không."
+      },
+      {
+        "t": "Với Mao, mọi chính sách cộng sản đều phải được tuân thủ răm rắp."
+      },
+      {
+        "t": "Đồng nghĩa với việc toàn bộ tài sản tư nhân đều bị nhà nước tịch thu."
+      },
+      {
+        "t": "Dù bạn có làm việc cật lực đến đâu, bạn cũng chẳng nhận được hơn ai một xu."
+      },
+      {
+        "t": "Và người dân chết đói hàng loạt."
+      },
+      {
+        "t": "Đặng Tiểu Bình bảo chuyện này xảy ra vì đó không phải là bản tính của người Trung Hoa."
+      },
+      {
+        "t": "Ông Đặng nói người Trung Hoa chỉ phát triển mạnh nhờ cạnh tranh."
+      },
+      {
+        "t": "Ông Đặng cảm thấy cần phải khôi phục lại một số hình thức sở hữu tư nhân và lợi ích cá nhân."
+      },
+      {
+        "t": "Để khuyến khích người ta làm việc hăng say hơn, sản xuất nhiều của cải hơn."
+      },
+      {
+        "t": "Để nuôi sống được toàn dân, đôi khi bạn phải biết uốn nắn các quy tắc một chút."
+      },
+      {
+        "t": "Nhưng Mao tin vào giáo điều cộng sản sắt đá bất chấp hậu quả ra sao."
+      },
+      {
+        "t": "Dân có chết đói thì mặc kệ. Ráng chịu."
+      },
+      {
+        "t": "Ông Đặng không đồng tình."
+      },
+      {
+        "t": "Ông là người thực dụng, ông tin rằng Hình thức phải phục vụ Công năng."
+      },
+      {
+        "t": "Điều quan trọng nhất là một thứ phải làm được việc mà bạn muốn nó làm."
+      },
+      {
+        "t": "Việc đó là phải nuôi sống được toàn dân."
+      },
+      {
+        "t": "Nhưng với Mao, hình thức không phục vụ công năng; với Mao, công năng phải phục tùng hình thức."
+      },
+      {
+        "t": "Đặng là người thực tế, Mao là kẻ duy ý chí."
+      },
+      {
+        "t": "Dưới thời Mao, khoảng 20 triệu người Trung Quốc đã chết vì nạn đói."
+      },
+      {
+        "t": "Rồi Mao qua đời."
+      },
+      {
+        "t": "Đặng Tiểu Bình được phục chức và cuối cùng trở thành nhân vật quyền lực nhất Trung Quốc."
+      },
+      {
+        "t": "Và ông Đặng tuyên bố: “Chủ nghĩa xã hội và kinh tế thị trường không hề mâu thuẫn với nhau.”"
+      },
+      {
+        "t": "Trung Quốc vẫn giữ định hướng xã hội chủ nghĩa, nhưng người dân được phép sở hữu tài sản riêng."
+      },
+      {
+        "t": "Ai làm nhiều thì được hưởng nhiều."
+      },
+      {
+        "t": "Dưới thời ông Đặng, người dân Trung Quốc trở nên giàu có hơn và ăn no mặc ấm hơn bất kỳ thời kỳ nào trước đó."
+      },
+      {
+        "t": "Dưới thời ông Đặng, Trung Quốc vươn lên thành cường quốc kinh tế thứ hai trên toàn thế giới."
+      },
+      {
+        "t": "Bài học rút ra là: quy tắc sinh ra để phục vụ chúng ta chứ không phải để đè đầu cưỡi cổ chúng ta."
+      },
+      {
+        "t": "Tinh thần thực dụng luôn đè bẹp sự giáo điều."
+      },
+      {
+        "t": "Những bộ óc thông tuệ nhất xưa nay đều thấu suốt điều đó:"
+      },
+      {
+        "t": "“Hình thức phục vụ công năng.” – Bauhaus"
+      },
+      {
+        "t": "“Mục đích biện minh cho phương tiện.” – Machiavelli"
+      },
+      {
+        "t": "“Trời giúp kẻ tự giúp mình.” – Aesop"
+      },
+      {
+        "t": "“Mèo trắng hay mèo đen không quan trọng, miễn là bắt được chuột.” – Đặng Tiểu Bình"
+      }
+    ]
+  },
+  "the-medium-is-the-message-not-the-reality": {
+    "titleVi": "PHƯƠNG TIỆN LÀ THÔNG ĐIỆP, KHÔNG PHẢI THỰC TẾ",
+    "tags": [
+      "truyenthong",
+      "xuphuong",
+      "tuduy"
+    ],
+    "linesVi": [
+      {
+        "t": "Năm 891, Formosus được bầu làm Giáo hoàng; năm 896, ngài qua đời."
+      },
+      {
+        "t": "Kế vị ngài là Giáo hoàng Stephen VI, người chẳng ưa gì ngài."
+      },
+      {
+        "t": "Thực tế, ông ta ghét đến mức cáo buộc Formosus đã tiếm quyền Giáo hoàng một cách bất hợp pháp."
+      },
+      {
+        "t": "Nhưng chỉ bôi nhọ ký ức về Formosus thôi là chưa đủ thỏa mãn Giáo hoàng Stephen."
+      },
+      {
+        "t": "Ông ta muốn cả thiên hạ phải chứng kiến, thế là ông ta lôi xác chết của Formosus ra tòa xét xử."
+      },
+      {
+        "t": "Cái xác được dựng ngồi trên ghế bị cáo, bị luận tội và tra vấn gắt gao."
+      },
+      {
+        "t": "Hiển nhiên cái xác chẳng thể tự bào chữa, ngài bị kết tội và ba ngón tay dùng để ban phép lành của Formosus bị chặt đứt."
+      },
+      {
+        "t": "Xác chết bị vứt xuống sông Tiber, nhưng trôi dạt vào bờ cách đó một đoạn. Người ta coi đây là điềm gở, Giáo hoàng Stephen VI bị phế truất, bắt giam và bị bóp cổ chết trong ngục."
+      },
+      {
+        "t": "Giáo hoàng Formosus được phục hồi danh dự và cải táng trang trọng."
+      },
+      {
+        "t": "Nhưng Giáo hoàng tiếp theo là Sergius III lại lật ngược phán quyết phục hồi đó và tái áp đặt tội danh cho Formosus."
+      },
+      {
+        "t": "Giờ đây, chúng ta có thể nghĩ: ai thèm quan tâm chứ, mấy trò đó thì có ý nghĩa gì?"
+      },
+      {
+        "t": "Chẳng phải những gì đang diễn ra ngoài đời thực quan trọng hơn nhiều so với những trò đấu đá trong một thế giới tưởng tượng, lý thuyết, giả tạo hay sao?"
+      },
+      {
+        "t": "Tất cả những chuyện đó cũng ngớ ngẩn hệt như cơn sốt ầm ĩ về metaverse vậy."
+      },
+      {
+        "t": "Từ những lời tâng bốc gần đây, bạn có thể tin rằng chúng ta sắp bỏ lại thể xác trần tục này để bay lơ lửng trong một vũ trụ thực tế ảo – một ‘meta-verse’."
+      },
+      {
+        "t": "Những gì thực sự xảy ra là Mark Zuckerberg nhận thấy, để đế chế của mình tiếp tục phình to, hắn cần bành trướng vượt ra ngoài Facebook, vượt ra ngoài internet."
+      },
+      {
+        "t": "Hắn cần chúng ta tin rằng có cả một thế giới ảo nằm ngoài thế giới vật lý."
+      },
+      {
+        "t": "Thế giới này sẽ có mọi thứ mà tâm trí bạn có thể tưởng tượng, thực chất nó sẽ là một vũ trụ của tâm trí. Ờ thì, như Mandy Rice-Davies từng nói, hắn không nói thế thì nói cái gì nữa?"
+      },
+      {
+        "t": "Hắn đâu dại gì quảng cáo đây là cách mới để thu thập dữ liệu: theo dõi chuyển động mắt, biểu cảm khuôn mặt, v.v."
+      },
+      {
+        "t": "Lời khuyên của tôi là trước khi tin sái cổ vào bất kỳ dự đoán nào, hãy xem ai là kẻ đang nói ra chúng."
+      },
+      {
+        "t": "Hãy xem đó là một ý kiến khách quan, vô tư dựa trên sự thật, hay nó được thốt ra bởi một kẻ sẽ vớ bẫm nếu chúng ta tin lời hắn."
+      },
+      {
+        "t": "Một kẻ nào đó, ồ tôi chẳng biết nữa, đại loại như Trưởng bộ phận Đổi mới Truyền thông ở một công ty truyền thông hay agency quảng cáo, nơi họ luôn cần khách hàng phải vung thêm thật nhiều tiền."
+      },
+      {
+        "t": "Thử nhớ lại xem có bao nhiêu thứ từng được gọi là “kẻ thay đổi cuộc chơi”, được tung hô là sẽ chôn vùi ngành quảng cáo. Nào là mã QR, nào là blockchain."
+      },
+      {
+        "t": "Hay nhớ lại những dòng tít trên báo chí tiếp thị: POKÉMON GO SẼ CÁCH MẠNG HÓA HOÀN TOÀN CHIẾN LƯỢC TIẾP THỊ CỦA BẠN RA SAO."
+      },
+      {
+        "t": "Dĩ nhiên những kẻ đó sẽ chào mời bạn chiêu trò tiếp thị mới nhất, đó là cần câu cơm của họ mà."
+      },
+      {
+        "t": "Nhưng một thứ mới mẻ xuất hiện đâu có nghĩa là mọi thứ khác phải chết đi."
+      },
+      {
+        "t": "Nó chỉ đơn giản là có người sẽ dùng, và có người thì không."
+      },
+      {
+        "t": "Khi các kiến trúc sư lần đầu thiết kế nhà chọc trời, họ tin rằng chẳng bao lâu nữa cả nhân loại sẽ sống trong các tòa cao ốc, chẳng còn ai thèm ở nhà mặt đất nữa."
+      },
+      {
+        "t": "Sự thật là: một số người sống trong cao ốc, một số người vẫn thích ở nhà đất."
+      },
+      {
+        "t": "Tư duy của chúng ta cần phải có chỗ cho cả hai."
+      },
+      {
+        "t": "Nhớ cái dạo người ta đồn chuyển đổi số sẽ là dấu chấm hết cho ngành quảng cáo không?"
+      },
+      {
+        "t": "Điều đó cũng đâu có xảy ra, nó chỉ trở thành một nhánh khác của quảng cáo mà thôi."
+      },
+      {
+        "t": "Nhưng lối suy nghĩ bình tĩnh, lý trí thì làm sao bán được báo."
+      },
+      {
+        "t": "Người ta cần một mức độ cuồng loạn nhất định để khiến thiên hạ sợ bị bỏ lại phía sau."
+      },
+      {
+        "t": "Đó là lý do bạn sẽ không bao giờ thấy một dòng tít ghi: HÔM NAY CHẲNG CÓ GÌ MỚI CẢ, đơn giản vì nó chẳng bán được báo."
+      },
+      {
+        "t": "Các cụ có câu nói xưa: “Đừng bao giờ hỏi gã thợ cắt tóc xem bạn có cần cắt tóc hay không”."
+      }
+    ]
+  },
+  "dont-tell-clients-to-be-brave": {
+    "titleVi": "ĐỪNG BẮT KHÁCH HÀNG PHẢI DŨNG CẢM",
+    "tags": [
+      "khachhang",
+      "quangcao",
+      "hieuqua"
+    ],
+    "linesVi": [
+      {
+        "t": "ĐỪNG BẮT KHÁCH HÀNG PHẢI DŨNG CẢM"
+      },
+      {
+        "gap": true
+      },
+      {
+        "t": "Năm 1854, liên quân Anh - Pháp giao chiến với quân Nga trong Chiến tranh Krym."
+      },
+      {
+        "t": "Lữ đoàn Kỵ binh Nhẹ do Lãnh chúa Cardigan chỉ huy dàn đội hình chờ lệnh trong sốt ruột."
+      },
+      {
+        "t": "Ở đầu bên kia thung lũng, cách đó hơn một dặm, là 50 khẩu đại bác của Nga."
+      },
+      {
+        "t": "Trên một ngọn đồi phía trên, Lãnh chúa Raglan nắm quyền chỉ huy tối cao, ông nhìn thấy vài lính Nga đang kéo đi mấy khẩu pháo vừa chiếm được."
+      },
+      {
+        "t": "Ông muốn Lữ đoàn Kỵ binh Nhẹ tiến lên ngăn không cho quân Nga kéo pháo đi."
+      },
+      {
+        "t": "Ông viết mệnh lệnh và trao cho Đại úy Nolan mang tới cho Lãnh chúa Cardigan."
+      },
+      {
+        "t": "Bức thư viết: “Lãnh chúa Raglan mong muốn kỵ binh tiến nhanh lên phía trước, bám sát địch và cố gắng ngăn địch mang các khẩu pháo đi. Pháo binh kỵ binh có thể đi cùng. Kỵ binh Pháp ở bên cánh trái của ngài. Lập tức thi hành.”"
+      },
+      {
+        "t": "Nhưng dưới thung lũng, Lãnh chúa Cardigan không thể nhìn thấy quân Nga đang kéo pháo đi."
+      },
+      {
+        "t": "Khi ông hỏi Đại úy Nolan: “Pháo nào cơ?”, Nolan chỉ khoát tay về phía cuối thung lũng."
+      },
+      {
+        "t": "Tất cả những gì Cardigan nhìn thấy là 50 họng đại bác đang chực chờ ở cuối thung lũng."
+      },
+      {
+        "t": "Và theo những gì ông hiểu, ông vừa được lệnh tấn công thẳng vào đó, và ông đã làm vậy."
+      },
+      {
+        "t": "Cuộc xung phong quả cảm đến điên rồ: 600 kỵ binh tinh nhuệ nhất, tay không tấc sắt ngoài kiếm và giáo, lao thẳng vào họng 50 khẩu đại bác và bị tàn sát không thương tiếc."
+      },
+      {
+        "t": "Một vị tướng Pháp chứng kiến cuộc tấn công đã thốt lên: “C’est magnifique, mais ce n’est pas la guerre. C’est de la folie.“ (Thật tráng lệ, nhưng đó không phải là chiến tranh. Đó là sự điên rồ.)"
+      },
+      {
+        "t": "Quả cảm đấy, nhưng đó là một cuộc thảm sát, chẳng có lấy nửa phần cơ hội thắng."
+      },
+      {
+        "t": "Đó là sự dũng cảm chỉ để cho có vẻ dũng cảm."
+      },
+      {
+        "t": "Đó chính là cái gai trong mắt tôi khi các agency đem những ý tưởng ‘dũng cảm’ ra chào mời khách hàng, khi agency van nài khách hàng hãy ‘dũng cảm’ lên."
+      },
+      {
+        "t": "Nghe cứ như dũng cảm chỉ vì thích tỏ ra dũng cảm, chứ không phải vì đó là một nước đi khôn ngoan."
+      },
+      {
+        "t": "Phần thưởng cao quý nhất cho lòng dũng cảm là Huân chương Chữ thập Victoria."
+      },
+      {
+        "t": "Nó được trao tặng cho: “Lòng dũng cảm tột bậc, hoặc hành động xả thân, quả cảm phi thường hay đức hy sinh quên mình.”"
+      },
+      {
+        "t": "Như vậy cách hiểu chung về ‘dũng cảm’ là sợ vãi linh hồn nhưng vẫn cắn răng làm liều."
+      },
+      {
+        "t": "Thế thì có cái lý do quái nào lại đi xúi khách hàng chạy một quảng cáo trong khi họ đang sợ chết khiếp?"
+      },
+      {
+        "t": "Sự dũng cảm thì liên quan cái quái gì đến công việc kinh doanh của chúng ta?"
+      },
+      {
+        "t": "Thứ chúng ta phải làm là: thông minh, sắc sảo, táo bạo, bất ngờ, sáng tạo — tất cả những từ đó đều nhắm đến lợi thế kinh doanh."
+      },
+      {
+        "t": "Sự dũng cảm chẳng liên quan gì đến lợi thế kinh doanh, thậm chí hoàn toàn ngược lại."
+      },
+      {
+        "t": "Huân chương Chữ thập Victoria gắn liền lòng dũng cảm với sự hy sinh quên mình, đó chính xác là thứ đi ngược lại hoàn toàn với những gì chúng ta nên tư vấn."
+      },
+      {
+        "t": "Trước hết, khách hàng cần đảm bảo không đẩy những gì họ đang có vào vòng nguy hiểm, rồi sau đó họ mới tập trung phát triển nó."
+      },
+      {
+        "t": "Chẳng có khách hàng có trách nhiệm nào lại đi đánh cược tất cả vào một canh bạc ‘dũng cảm’, một sự hy sinh liều mạng."
+      },
+      {
+        "t": "Thế nhưng các agency vẫn tối ngày cằn nhằn rằng khách hàng không dám mua những tác phẩm ‘dũng cảm’."
+      },
+      {
+        "t": "Lý do chủ yếu là vì Cannes và các giải thưởng khác luôn tán dương những tác phẩm ‘dũng cảm’."
+      },
+      {
+        "t": "Những tác phẩm giật giải cao nhất được tung hô là ‘dũng cảm’."
+      },
+      {
+        "t": "Đơn giản vì những kẻ ngồi ghế giám khảo đánh đồng sáng tạo với nghệ thuật, với sự mới lạ, với những chiêu trò màu mè."
+      },
+      {
+        "t": "Thế nên dân trong các agency cứ đinh ninh rằng họ phải nhắm tới những tác phẩm ‘dũng cảm’, thay vì những tác phẩm hiệu quả."
+      },
+      {
+        "gap": true
+      },
+      {
+        "t": "Đó là lý do tôi thấy ‘dũng cảm’ là một từ ngữ thật ngớ ngẩn."
+      },
+      {
+        "t": "Nếu tôi là khách hàng, tôi sẽ cực kỳ cảnh giác với bất kỳ ai bảo tôi duyệt một ý tưởng chỉ vì nó dũng cảm."
+      },
+      {
+        "t": "Tôi thấy chẳng việc gì phải dũng cảm chỉ để làm màu cho sự dũng cảm."
+      },
+      {
+        "t": "Cái đích cuối cùng là phải tạo ra kết quả, và để làm được điều đó bạn cần tư duy sắc sảo, dũng cảm hay không chẳng có nghĩa lý gì."
+      }
+    ]
+  },
+  "how-to-control-the-communication": {
+    "titleVi": "CÁCH KIỂM SOÁT GIAO TIẾP",
+    "tags": [
+      "giaotiep",
+      "khachhang",
+      "truyenthong"
+    ],
+    "linesVi": [
+      {
+        "t": "Vợ tôi tên là Cathy Heng, à thực ra không phải, tên thật của cô ấy là Heng Siew Keow."
+      },
+      {
+        "t": "Nhưng ở Singapore, nơi cô ấy đi học, các giáo viên người Anh không tài nào nhớ nổi tên tiếng Hoa."
+      },
+      {
+        "t": "Nên các thầy cô tự chọn những cái tên mà họ dễ nhớ."
+      },
+      {
+        "t": "Siew Keow, Siew Hong và Siew Cheng (vợ tôi và các chị em gái) biến thành Cathy, Bebe và Betty."
+      },
+      {
+        "t": "Và từ đó trở đi thiên hạ cứ gọi họ bằng những cái tên ấy."
+      },
+      {
+        "t": "Không phải bằng những cái tên mà gia đình người Hoa hay ngôi chùa Đạo giáo đặt cho."
+      },
+      {
+        "t": "Mà bằng những cái tên phù hợp với thị trường mục tiêu: các thầy cô giáo."
+      },
+      {
+        "t": "Hai anh em trai của Cathy cũng vậy: Boon Huat và Boon Heng trở thành Tony và Alex."
+      },
+      {
+        "t": "Đơn giản vì đó là thứ mà các giáo viên người Anh nhớ được."
+      },
+      {
+        "t": "Chuyện tương tự thậm chí còn xảy ra với mẹ của Cathy."
+      },
+      {
+        "t": "Tên tiếng Hoa của bà là Lan Cheng, bị rút gọn thành LC (Elsie) và trở thành tên của bà từ bấy đến nay."
+      },
+      {
+        "t": "Quy luật vận hành là thế đấy. Chúng ta phải tắt chế độ phát loa đi và chuyển sang chế độ lắng nghe."
+      },
+      {
+        "t": "Chúng ta phải cân nhắc xem điều gì hiệu quả với thị trường mục tiêu trước khi nghĩ đến điều mình muốn."
+      },
+      {
+        "t": "Nếu bạn từng đặt tên cho con, bạn sẽ hiểu rõ điều này."
+      },
+      {
+        "t": "Tên tiếng Hoa của các con tôi là Hui Leng và Meng Chai, nhưng cái tên đó chẳng đời nào sống sót nổi ở London. Vì thế chúng tôi làm lễ rửa tội và đặt tên chúng là Jade và Lee."
+      },
+      {
+        "t": "Bạn phải để tâm đến đối tượng tiếp nhận, đến thị trường mục tiêu, bằng không bạn sẽ mất quyền kiểm soát."
+      },
+      {
+        "t": "Bác tôi được đặt tên là Henry, nhưng ai cũng gọi ông là Harry."
+      },
+      {
+        "t": "Ông không thích tên đó nên đổi thành Robert, thiên hạ lại gọi ông là Bob."
+      },
+      {
+        "t": "Bố tôi tên John, nên ai cũng gọi ông là Jack."
+      },
+      {
+        "t": "Mẹ tôi tên Ellen, nên ai cũng gọi bà là Nelly."
+      },
+      {
+        "t": "Dì tôi tên Mary, nên ai cũng gọi bà là Polly."
+      },
+      {
+        "t": "Người đời vẫn làm thế đấy. Thứ chúng ta muốn chẳng quan trọng."
+      },
+      {
+        "t": "Thứ thị trường mục tiêu muốn mới là thứ quyết định."
+      },
+      {
+        "t": "Nếu không chấp nhận sự thật đó, chúng ta sẽ mất quyền kiểm soát thông điệp của mình."
+      },
+      {
+        "t": "Tôi từng tận mắt thấy điều này nhiều năm trước khi còn là một nhân viên tập sự ở agency BMP."
+      },
+      {
+        "t": "Hãng bia Courage có một dòng bia tươi tên là Tavern đang ế chỏng gọng."
+      },
+      {
+        "t": "Bia ngon, quảng cáo cũng hay, nhưng làm đủ mọi cách doanh số vẫn cứ cắm đầu đi xuống."
+      },
+      {
+        "t": "Bộ phận hoạch định chiến lược quyết định đi ngược dòng để tìm gốc rễ vấn đề."
+      },
+      {
+        "t": "Họ lê la vào các quán rượu và quan sát cách dân nhậu gọi bia tươi."
+      },
+      {
+        "t": "Họ nhận ra rằng tại điểm mua hàng, việc người uống thể hiện sự ‘thân thuộc gần gũi’ với vại bia của mình là điều tối quan trọng."
+      },
+      {
+        "t": "Vấn đề là cái tên Tavern được đặt ra mà chẳng thèm tính xem người ta sẽ cất lời gọi nó thế nào."
+      },
+      {
+        "t": "Gọi ‘cho một vại Tavern’ nghe trịnh trọng và làm màu quá mức."
+      },
+      {
+        "t": "Mà bảo ‘cho một vại Tav’ thì chẳng ai thèm gọi thế."
+      },
+      {
+        "t": "Doanh số cứ thế tụt dốc vì người ta ngại cất lời gọi tên nó."
+      },
+      {
+        "t": "Thế là nó được đổi sang một cái tên dễ gọi hơn: ‘John Courage’."
+      },
+      {
+        "t": "Giờ thì người ta có thể thoải mái gọi ‘cho một vại JC’ ngay tại quầy bar."
+      },
+      {
+        "t": "Bớt kiểu cách đi nhiều, thân thiện hơn hẳn."
+      },
+      {
+        "t": "Doanh số lập tức cất cánh, cùng một loại bia nhưng từ chỗ chết yểu biến thành cú hích thành công vang dội."
+      },
+      {
+        "t": "Chỉ bằng cách bắt đầu từ những gì người ta muốn nghe, thay vì chỉ chăm chăm nói những gì chúng ta muốn nói."
+      },
+      {
+        "t": "Cách duy nhất để kiểm soát giao tiếp là tắt chế độ phát thanh và bật chế độ tiếp nhận."
+      }
+    ]
+  },
+  "the-answer-is-brand-now-whats-the-question": {
+    "titleVi": "CÂU TRẢ LỜI LÀ THƯƠNG HIỆU, VẬY CÂU HỎI LÀ GÌ?",
+    "tags": [
+      "thuonghieu",
+      "sanpham",
+      "nghiencuu"
+    ],
+    "linesVi": [
+      {
+        "t": "Theo kinh nghiệm của tôi, rất nhiều dân làm tiếp thị chẳng biết gì mấy về sản phẩm họ đang phụ trách."
+      },
+      {
+        "t": "Họ không nghĩ sản phẩm là quan trọng, họ nghĩ tất cả chỉ xoay quanh thương hiệu."
+      },
+      {
+        "t": "Với một người làm marketing, làm thương hiệu là chìa khóa bán hàng và tiếp thị luôn là câu trả lời cho mọi câu hỏi về thương hiệu."
+      },
+      {
+        "t": "Thế nên một chuyên gia tiếp thị hôm nay có thể làm về bánh kẹo, hai năm sau chuyển sang xe hơi, hai năm nữa sang hãng hàng không, rồi hai năm sau lại bán giày chạy bộ."
+      },
+      {
+        "t": "Bề dày kinh nghiệm tiếp thị qua nhiều ngành hàng khác nhau nghe có vẻ xịn sò. Với họ, thương hiệu là tất cả, ngành hàng nào cũng như nhau, chỉ là thứ có thể hoán đổi."
+      },
+      {
+        "t": "Câu trả lời luôn là thương hiệu, vậy câu hỏi là cái quái gì?"
+      },
+      {
+        "t": "Bertrand Russell từng nói gì về những kẻ luôn nhảy xổ vào mọi vấn đề với những câu trả lời có sẵn?"
+      },
+      {
+        "t": "“Để tránh những hành vi ngu xuẩn mà nhân loại hay mắc phải, chẳng cần đến thiên tài siêu phàm. Vài quy tắc đơn giản sẽ giúp bạn tránh được không phải mọi sai lầm, nhưng ít nhất là những sai lầm ngớ ngẩn."
+      },
+      {
+        "t": "Nếu vấn đề có thể giải quyết bằng quan sát, hãy tự mình quan sát."
+      },
+      {
+        "t": "Aristotle đáng lẽ đã tránh được sai lầm khi nghĩ rằng phụ nữ có ít răng hơn đàn ông, chỉ bằng một thao tác giản đơn là bảo bà vợ há miệng ra cho ông đếm. Ông đã không làm thế vì ông nghĩ mình biết rồi. Nghĩ rằng mình biết trong khi thực ra mình chẳng biết gì, là sai lầm chết người mà ai trong chúng ta cũng dễ mắc phải."
+      },
+      {
+        "t": "Bản thân tôi tin nhím ăn bọ cánh cứng màu đen, vì người ta bảo tôi vậy; nhưng nếu tôi viết một cuốn sách về tập tính của loài nhím, tôi sẽ không dám khẳng định cho đến khi tận mắt thấy một con nhím thưởng thức món ăn kém ngon miệng đó. Tuy nhiên, Aristotle lại kém cẩn trọng hơn. Các tác giả thời cổ đại và trung cổ biết tường tận về kỳ lân và kỳ giông lửa; chẳng ai trong số họ thấy cần phải tránh đưa ra những tuyên bố quả quyết về chúng chỉ vì họ chưa từng tận mắt thấy một con bao giờ.”"
+      },
+      {
+        "t": "Thứ mà dân tiếp thị gọi là nghiên cứu thực chất chỉ là nghiên cứu người tiêu dùng, họ chỉ hỏi mọi người nghĩ gì về thương hiệu."
+      },
+      {
+        "t": "Dân tiếp thị gần như chẳng bao giờ nghiên cứu sản phẩm."
+      },
+      {
+        "t": "Đó là lý do dân sáng tạo phải tự mình làm việc đó, để bắt đầu học hỏi về chủ đề ấy."
+      },
+      {
+        "t": "Nó được làm ra thế nào, ai thiết kế và vì sao, bán ở đâu, ai mua, đối thủ là ai – ưu và nhược điểm, lịch sử, các vấn đề của đội ngũ bán hàng, và nhiều thứ khác nữa."
+      },
+      {
+        "t": "Bạn phải mò xuống tận nhà máy để xem nó được chế tạo ra sao, nói chuyện với đội ngũ R&D, nói chuyện với các nhà bán lẻ, trò chuyện với khách hàng, những người đang dùng và cả những người đã bỏ không dùng nữa."
+      },
+      {
+        "t": "Và tất cả những việc đó phải diễn ra trước khi bạn thực sự bắt tay vào làm chiến dịch quảng cáo."
+      },
+      {
+        "t": "Tôi từng lặn lội tới: các nhà máy ô tô, nhà máy bia, xưởng sản xuất TV, lò bánh mì khổng lồ, đồn điền trà, xưởng bánh kẹo, chuỗi bán lẻ quần áo, công ty bảo hiểm, ngân hàng, khu chế xuất, địa điểm du lịch, đài truyền hình, xưởng làm tã lót trẻ em, hãng dược phẩm, nhà máy thủy tinh."
+      },
+      {
+        "t": "Một tay quản lý khách hàng, hay thân chủ, hay chuyên viên hoạch định chẳng bao giờ làm những việc này, bởi vì họ đã có sẵn câu trả lời trong đầu. Với họ, câu trả lời luôn là thương hiệu, vậy câu hỏi là cái gì?"
+      },
+      {
+        "t": "Là dân sáng tạo, nếu muốn hiểu tường tận về sản phẩm, chúng ta phải tự mình làm nghiên cứu đó."
+      },
+      {
+        "t": "Đó là lý do, với tư cách người làm sáng tạo, chúng ta không thể dựa dẫm vào bản brief của ai khác."
+      },
+      {
+        "t": "Thương hiệu là giọng điệu, là cảm xúc, là hình ảnh, là danh tiếng."
+      },
+      {
+        "t": "Còn sản phẩm mới là vật thể thực sự mà người tiêu dùng bỏ tiền ra mua, sản phẩm là những câu chữ đi vào quảng cáo. Sản phẩm là nội dung, thương hiệu là cách thể hiện."
+      },
+      {
+        "t": "Chúng ta không thể ngồi chờ phòng hoạch định thương hiệu mớm cho mình hiểu về sản phẩm."
+      },
+      {
+        "t": "Chúng ta phải tự mình dấn thân nghiên cứu (nghiên cứu sản phẩm, chứ không phải nghiên cứu người tiêu dùng)."
+      },
+      {
+        "t": "Như Russell đã nói, sai lầm lớn nhất là đinh ninh mình biết tỏng mà chẳng buồn tìm hiểu thực tế."
+      },
+      {
+        "t": "Hay như Will Rogers từng nói: “Thứ khiến bạn gặp rắc rối không phải là những gì bạn không biết. Mà là những gì bạn biết chắc như đinh đóng cột nhưng hóa ra lại hoàn toàn sai bét.”"
+      }
+    ]
+  },
+  "platonic-advertising": {
+    "titleVi": "QUẢNG CÁO KIỂU PLATO",
+    "tags": [
+      "quangcao",
+      "brief",
+      "sangtao"
+    ],
+    "linesVi": [
+      {
+        "t": "Nói một cách nôm na, Thuyết Ý niệm của Plato cho rằng có một thế giới hoàn mỹ tồn tại vượt lên trên thế giới vật chất mà chúng ta đang sống."
+      },
+      {
+        "t": "Nó không tồn tại dưới dạng hữu hình, mà như một lý tưởng để hướng tới."
+      },
+      {
+        "t": "Thế nên ở đó có chiếc ghế hoàn hảo, con ngựa hoàn hảo, cái tách hoàn hảo; bất cứ thứ gì bạn nghĩ ra đều có một hình mẫu hoàn hảo tồn tại dưới dạng trừu tượng."
+      },
+      {
+        "t": "Những Hình mẫu Hoàn hảo này là thứ chúng ta phải vươn tới, mọi thứ trong thế giới vật chất chỉ là nỗ lực thô thiển nhằm tiệm cận chúng."
+      },
+      {
+        "t": "Vào thời của Plato, cách đây 2.500 năm, điều này nghe chừng có lý."
+      },
+      {
+        "t": "40% dân số là nô lệ và mù chữ, vì vậy trong giới thượng lưu giàu có, việc có một mục tiêu duy nhất cho mọi thứ là điều hợp lý, bởi giới nhà giàu cơ bản đồng thuận với nhau."
+      },
+      {
+        "t": "Nhưng ngày nay, chúng ta hiểu rằng việc gán một công năng duy nhất cho bất kỳ thứ gì, chẳng hạn như một chiếc ghế, là điều vô nghĩa."
+      },
+      {
+        "t": "Chiếc ghế đó dùng để thư giãn như ghế bành, để ngồi làm việc như ghế văn phòng, để gấp gọn mang đi cắm trại, để kê trong nhà hàng, để gắn vào ô tô, để làm xe lăn, hay để ngồi giảng bài?"
+      },
+      {
+        "t": "Chúng ta thiết kế để tối ưu chi phí, để sản xuất hàng loạt, để tiện dụng, để bền vững hay vì tính thẩm mỹ?"
+      },
+      {
+        "t": "Rõ ràng không thể có một hình mẫu hoàn hảo duy nhất cho mọi chiếc ghế phải noi theo, khi mà chẳng có một công năng duy nhất nào cho mọi chiếc ghế."
+      },
+      {
+        "t": "Với bất kỳ Hình mẫu Hoàn hảo nào khác của Plato cũng vậy."
+      },
+      {
+        "t": "Dân số ngày nay đông hơn gấp vạn lần, và có vô vàn phát minh mới mà Plato không thể nào tưởng tượng nổi."
+      },
+      {
+        "t": "Thế nên các biến số cho mọi thứ lớn hơn rất nhiều so với những gì ông từng biết."
+      },
+      {
+        "t": "Lấy bản brief quảng cáo làm ví dụ: mỗi con người mới và mỗi sản phẩm mới đều đặt ra một bài toán khác nhau cần giải quyết."
+      },
+      {
+        "t": "Chúng ta không hướng tới sự hoàn hảo của hình thức, chúng ta hướng tới giải pháp tốt nhất cho vấn đề."
+      },
+      {
+        "t": "Nhưng cái ảo tưởng về một thế giới của những hình mẫu hoàn hảo vẫn dai dẳng; dĩ nhiên chúng ta không gọi thế, chúng ta gọi nó là ‘câu trả lời đúng’ và ai cũng nghĩ mình đang nắm giữ nó."
+      },
+      {
+        "t": "Nhưng hiển nhiên, mỗi người lại có một câu trả lời đúng khác nhau."
+      },
+      {
+        "t": "Và vì đinh ninh câu trả lời của mình là đáp án đúng duy nhất, chúng ta nghĩ đó là thứ mình bắt buộc phải bảo vệ đến cùng."
+      },
+      {
+        "t": "Thế là tôi phải chiến đấu sống chết để bảo vệ câu trả lời đúng (Hình mẫu Hoàn hảo) của tôi trước câu trả lời của bạn."
+      },
+      {
+        "t": "Và bạn cũng chiến đấu sống chết cho câu trả lời đúng (Hình mẫu Hoàn hảo) của bạn trước câu trả lời của tôi."
+      },
+      {
+        "t": "Và dẫu ai nấy đều thấy các Hình mẫu Hoàn hảo ngớ ngẩn thế nào trong thời đại này, chúng ta vẫn cắn xé nhau xem góc nhìn của ai mới là chuẩn mực."
+      },
+      {
+        "t": "Rồi cái tôi trỗi dậy, và chúng ta thậm chí chẳng còn tranh đấu vì câu trả lời đúng nữa, mà chỉ đấu đá xem ai là kẻ chiến thắng."
+      },
+      {
+        "t": "Đó chính là căn bệnh kinh niên trong quy trình làm brief."
+      },
+      {
+        "t": "‘Câu trả lời đúng’ đã bị đóng đinh ngay tại thời điểm bản brief được viết ra, thường là bởi nhân viên phụ trách khách hàng, thân chủ, hoặc chuyên viên chiến lược."
+      },
+      {
+        "t": "Một khi suy nghĩ của họ được đặt lên trang giấy, nó lập tức trở thành câu trả lời đúng, trở thành Hình mẫu Hoàn hảo cho đề bài đó."
+      },
+      {
+        "t": "Bản brief biến thành luật bất thành văn và cấm ai được đi chệch hướng."
+      },
+      {
+        "t": "Thành thử dân sáng tạo chẳng còn việc gì để làm ngoài việc răm rắp thi hành bản brief đó."
+      },
+      {
+        "t": "Điều đó đồng nghĩa với việc gọi họ là ‘dân sáng tạo’ chỉ là trò bịp bợm, thực chất họ chỉ là thợ trang trí, bị ép rắc chút kim tuyến lấp lánh lên một giải pháp tầm thường đội lốt mẫu số chung thấp nhất."
+      },
+      {
+        "t": "Gông cùm tư duy không bao giờ là mảnh đất cho sáng tạo đích thực."
+      },
+      {
+        "t": "Cơ hội chỉ nằm ở việc khai quật những thứ mà kẻ khác chưa nhìn thấy."
+      },
+      {
+        "t": "Cần phải có không gian cho sự biện chứng để khơi mở những điều bất ngờ."
+      },
+      {
+        "t": "Như Rory Sutherland từng nói: “Đôi khi, điều đối nghịch với một câu trả lời đúng lại là một câu trả lời đúng khác”."
+      }
+    ]
+  },
+  "competition-good-or-bad": {
+    "titleVi": "CẠNH TRANH: TỐT HAY XẤU?",
+    "tags": [
+      "canhtranh",
+      "doinhom",
+      "tuduy"
+    ],
+    "linesVi": [
+      {
+        "t": "Warren Buffett đã kiếm được 117 tỷ USD nhờ đầu tư khôn ngoan."
+      },
+      {
+        "t": "Đó là lý do một phụ nữ trong khán phòng tại một buổi nói chuyện đã xin lời khuyên của ông."
+      },
+      {
+        "t": "Bà vừa có trong tay vài nghìn đô la và muốn biết cách tốt nhất để đầu tư sinh lời."
+      },
+      {
+        "t": "Không chút do dự, Buffett bảo: “Hãy trả sạch nợ thẻ tín dụng của bà đi”."
+      },
+      {
+        "t": "Bà ấy lộ rõ vẻ thất vọng, đó đâu phải câu trả lời bà muốn nghe; bà muốn một mẹo đầu tư giúp bà đổi đời cơ mà."
+      },
+      {
+        "t": "Buffett bèn giải thích: “Bà đang phải trả lãi suất khoảng 18% cho nợ thẻ tín dụng. Chẳng có khoản đầu tư an toàn nào ngoài kia mang lại cho bà mức lợi nhuận 18% cả. Mức cao nhất bà có thể nhận được giỏi lắm là khoảng 4% hoặc 5%. Vì thế gom tiền ném vào một khoản đầu tư 5% trong khi đang bị chảy máu 18% là điều hoàn toàn vô nghĩa."
+      },
+      {
+        "t": "Nếu bà kiếm được 5% lãi nhưng phải trả 18% tiền lãi vay, bà đang lỗ ròng 13%.”"
+      },
+      {
+        "t": "Người phụ nữ ngồi xuống, hiển nhiên lời Buffett nói rất có lý, nhưng đó không phải câu trả lời bà ta thèm khát."
+      },
+      {
+        "t": "Bà không hứng thú với chuyện trả nợ, việc đó quá đỗi tẻ nhạt; bà muốn kiếm tiền bằng đầu tư, thế mới kích thích chứ."
+      },
+      {
+        "t": "Đó chính là lý do vì sao Warren Buffett là tỷ phú đô la, còn hầu hết chúng ta thì không."
+      },
+      {
+        "t": "Ông bảo mình gây dựng cơ đồ không phải nhờ đưa ra những quyết định thiên tài, mà chỉ đơn giản là tránh né những quyết định ngu xuẩn."
+      },
+      {
+        "t": "Đó là minh chứng rõ ràng cho điều ông muốn nói: ông tránh xa Thiên kiến Lạc quan."
+      },
+      {
+        "t": "Đây là xu hướng thổi phồng mặt tích cực và xem nhẹ rủi ro tiêu cực."
+      },
+      {
+        "t": "Nhà thần kinh học nhận thức Tali Sharot nhận định chính điều này đã dẫn tới cuộc khủng hoảng tài chính năm 2008."
+      },
+      {
+        "t": "Khi khao khát chiến thắng của thị trường tài chính đè bẹp mọi lý trí và trở thành một nỗi ám ảnh mù quáng."
+      },
+      {
+        "t": "William Muir, một nhà sinh vật học tại Đại học Purdue, từng tiến hành một thí nghiệm trên đàn gà."
+      },
+      {
+        "t": "Ông chia chúng thành hai nhóm: nhóm những con đẻ lượng trứng bình thường và nhóm những con đẻ siêu nhiều trứng, ông gọi là ‘siêu gà’."
+      },
+      {
+        "t": "Sau hai thế hệ, những con gà bình thường lại đẻ được nhiều trứng hơn, trong khi chỉ còn đúng 3 con ‘siêu gà’ sống sót, số còn lại đều bị mổ chết đến rách da toạc thịt."
+      },
+      {
+        "t": "Kết luận của Muir là sự cạnh tranh khốc liệt cực đoan thực chất gây ra tai họa."
+      },
+      {
+        "t": "Khi những con siêu gà bị tách khỏi bầy, những con gà bình thường có thể thoải mái đẻ trứng mà không bị quấy phá, đe dọa."
+      },
+      {
+        "t": "Trong khi đó, đám siêu gà lại lao vào cắn xé, tiêu diệt lẫn nhau."
+      },
+      {
+        "t": "Margaret Heffernan, giáo sư tại Đại học Bath, coi đây là một phép ẩn dụ cho hành vi con người trong kinh doanh, và sự độc hại của cạnh tranh nội bộ."
+      },
+      {
+        "t": "Trong cơn say muốn thắng bằng mọi giá, những nhân viên hiếu thắng cực độ chỉ chăm chăm vào thành tích cá nhân thay vì thành công chung của tập thể."
+      },
+      {
+        "t": "Khi đó, con đường để thăng tiến là dìm hàng, triệt hạ cơ hội của đồng nghiệp để làm cho bản thân mình trông nổi bật hơn."
+      },
+      {
+        "t": "Thay vì chung lưng đấu cật cùng đội ngũ chống lại đối thủ bên ngoài, tâm điểm lại biến thành cuộc chiến cá nhân bằng cách giẫm đạp lên những kẻ bên trong."
+      },
+      {
+        "t": "Bà dẫn chứng các đội bóng làm ví dụ, chẳng hạn Real Madrid đối đầu với Barcelona."
+      },
+      {
+        "t": "Real Madrid từng có ‘Dàn Galacticos’, tập hợp những cầu thủ đắt giá nhất hành tinh, nơi mỗi cá nhân đều phải chứng minh giá trị khổng lồ của mình trước các đồng đội khác."
+      },
+      {
+        "t": "Việc đội bóng thắng hay thua bị xếp sau việc cá nhân họ thi đấu chói sáng ra sao."
+      },
+      {
+        "t": "Trong khi Barcelona có một tập thể thi đấu vì nhau thay vì kèn cựa lẫn nhau: họ chỉ thắng khi cả đội bóng giành chiến thắng."
+      },
+      {
+        "t": "Tôi dám chắc ai trong chúng ta cũng biết những kẻ dành nhiều năng lượng cho trò đấu đá chính trị nơi công sở hơn là cống hiến cho công việc."
+      },
+      {
+        "t": "Những kẻ đặt thành công của bản thân lên trên hết thảy mọi thứ."
+      },
+      {
+        "t": "Chúng ta thấy điều đó ở khắp mọi nơi; dù một kẻ có tài năng đến đâu, chỉ cần loại bỏ cái cá tính độc hại đó ra, toàn bộ đội ngũ sẽ lập tức vận hành trơn tru hơn nhiều."
+      },
+      {
+        "t": "Và đó chính là sự trớ trêu: rốt cuộc, chọn sai hình thức cạnh tranh chính là tự đào mồ chôn mình."
+      }
+    ]
+  },
+  "positive-vs-negative-advertising": {
+    "titleVi": "TỰ DO TÍCH CỰC VÀ TỰ DO TIÊU CỰC",
+    "tags": [
+      "tuduy",
+      "quangcao",
+      "trietly"
+    ],
+    "linesVi": [
+      {
+        "t": "Hầu hết mọi người đều nghĩ tự do là một khái niệm khá đơn giản: không bị trói buộc."
+      },
+      {
+        "t": "Nhưng Isaiah Berlin đã chỉ ra rằng điều đó không đúng, ngược lại, tự do vô cùng phức tạp."
+      },
+      {
+        "t": "Berlin nói quan niệm sai lầm lớn nhất là nghĩ chỉ có một loại tự do, trong khi thực tế có hai loại tự do đối nghịch nhau chan chát: tự do tích cực và tự do tiêu cực."
+      },
+      {
+        "t": "Tự do tích cực là thứ tự do mà hầu hết chúng ta đều nhận biết: đó là tự do ĐƯỢC LÀM một điều gì đó."
+      },
+      {
+        "t": "Nhưng còn một loại khác: tự do KHỎI một điều gì đó."
+      },
+      {
+        "t": "Berlin khẳng định hai loại tự do này triệt tiêu lẫn nhau: bạn càng có nhiều loại này thì càng có ít loại kia."
+      },
+      {
+        "t": "Chẳng hạn, tự do tích cực là quyền tự do cho tất cả mọi người ĐƯỢC mang súng."
+      },
+      {
+        "t": "Nhưng điều này sẽ làm giảm tự do tiêu cực: sự tự do KHỎI bạo lực súng đạn."
+      },
+      {
+        "t": "Để tăng quyền tự do tiêu cực KHỎI bạo lực súng đạn, bạn buộc phải cấm súng."
+      },
+      {
+        "t": "Nhưng điều đó lại bóp nghẹt quyền tự do tích cực ĐƯỢC mang súng."
+      },
+      {
+        "t": "Thế nên khi bạn vặn nút tăng một loại tự do lên, bạn đang vặn giảm loại tự do kia xuống."
+      },
+      {
+        "t": "Bằng cách tăng tự do tích cực ĐƯỢC phóng xe nhanh bao nhiêu tùy thích, bạn làm giảm tự do tiêu cực KHỎI tai nạn giao thông."
+      },
+      {
+        "t": "Bằng cách tăng tự do tiêu cực KHỎI tai nạn giao thông, bạn làm giảm tự do tích cực ĐƯỢC phóng nhanh."
+      },
+      {
+        "t": "Đó chính là điều Berlin muốn nói khi khẳng định hai thứ tự do này luôn triệt tiêu lẫn nhau."
+      },
+      {
+        "t": "Tự do tích cực cho phép bất kỳ ai ĐƯỢC kiếm bao nhiêu tiền tùy thích đồng nghĩa với việc một số kẻ sẽ trở nên giàu có nứt đố đổ vách."
+      },
+      {
+        "t": "Nhưng nó cũng có nghĩa là họ sẽ vơ vét nhiều hơn mức trung bình, khiến những người khác phải chịu cảnh thiếu thốn."
+      },
+      {
+        "t": "Tức là nó tước đoạt quyền tự do tiêu cực KHỎI đói nghèo."
+      },
+      {
+        "t": "Nếu chúng ta quyết định cào bằng cho tất cả mọi người, ta tăng tự do tiêu cực KHỎI đói nghèo, nhưng lại bóp nghẹt tự do tích cực ĐƯỢC kiếm nhiều tiền hơn bằng việc lao động chăm chỉ hơn."
+      },
+      {
+        "t": "Đây rõ ràng là cuộc xung đột giữa chủ nghĩa tư bản cực đoan và chủ nghĩa cộng sản cực đoan."
+      },
+      {
+        "t": "Nhưng sự xung đột giữa hai loại tự do này không chỉ gói gọn trong kinh tế."
+      },
+      {
+        "t": "Cuộc xung đột giữa hai thứ tự do này có can hệ gì tới công việc làm nghề của chúng ta?"
+      },
+      {
+        "t": "Ồ, tự do ĐƯỢC làm ra những quảng cáo khiến ai nấy đều thích thú và trầm trồ đòi hỏi sự tập trung cao độ vào chất lượng và quỹ thời gian để trau chuốt."
+      },
+      {
+        "t": "Nhưng điều đó đồng nghĩa với việc phải tốn nhiều tiền bạc hơn để sản xuất quảng cáo, tức là giảm bớt tự do thu về lợi nhuận béo bở tức thì."
+      },
+      {
+        "t": "Ngược lại, tự do ĐƯỢC làm quảng cáo càng rẻ tiền, càng cẩu thả càng tốt sẽ tước đoạt quyền tự do KHỎI sự nhàm chán và bực bội của người xem."
+      },
+      {
+        "t": "Rồi nữa, tự do ĐƯỢC tạo ra những quảng cáo đột phá và phấn khích sẽ làm giảm quyền tự do KHỎI sự bất an, nơi mà quảng cáo phải nằm trong vòng an toàn, dễ đoán."
+      },
+      {
+        "t": "Nhưng việc gia tăng tự do KHỎI sự bất an đồng nghĩa với việc chỉ được tung ra những quảng cáo an toàn đến mức nhạt nhẽo và buồn ngủ."
+      },
+      {
+        "t": "Tự do ĐƯỢC khác biệt và nổi bật làm giảm tự do KHỎI cảm giác bất an khi trở nên khác người."
+      },
+      {
+        "t": "Nhưng tự do KHỎI cảm giác bất an lại bóp chết tự do ĐƯỢC LÀM điều gì đó mới mẻ và bất ngờ."
+      },
+      {
+        "t": "Vì vậy Isaiah Berlin đã đúng: luôn luôn là một cuộc giằng co giữa hai thứ tự do."
+      },
+      {
+        "t": "Chẳng có cái nào đúng hay sai tuyệt đối, nhưng đó luôn là một sự đánh đổi."
+      },
+      {
+        "t": "Đôi khi lựa chọn đúng là tự do ĐƯỢC làm điều gì đó khác thường, đôi khi lựa chọn đúng lại là tự do KHỎI phải gánh chịu rủi ro."
+      },
+      {
+        "t": "Lựa chọn sai lầm duy nhất là giả vờ như mình không phải lựa chọn."
+      },
+      {
+        "t": "Giả vờ như chúng ta có thể vơ cả hai thứ vào lòng cùng một lúc."
+      },
+      {
+        "t": "Đó là cách chúng ta tự lừa phỉnh bản thân, và đó luôn luôn là một lựa chọn sai lầm."
+      }
+    ]
+  },
+  "this-isnt-sociology-this-is-advertising": {
+    "titleVi": "ĐÂY LÀ QUẢNG CÁO, KHÔNG PHẢI XÃ HỘI HỌC",
+    "tags": [
+      "quangcao",
+      "thucte",
+      "nguoitieudung"
+    ],
+    "linesVi": [
+      {
+        "t": "Cho đến những năm 1960, Detroit chỉ chuyên sản xuất những chiếc xe to kềnh càng, càng bự càng tốt."
+      },
+      {
+        "t": "Nhưng vào thập niên 60, làn sóng phản văn hóa và hãng Volkswagen bắt đầu đảo ngược xu thế đó."
+      },
+      {
+        "t": "Những chiếc xe khổng lồ không còn là biểu tượng của thành đạt nữa, mà trở thành biểu tượng của sự tham lam."
+      },
+      {
+        "t": "Những mẫu xe nhỏ gọn của châu Âu như Volvo bắt đầu được nhìn nhận là sự lựa chọn thông minh hơn."
+      },
+      {
+        "t": "Vào những năm 1970, xe hơi Nhật Bản cũng bắt đầu tràn vào với số lượng lớn."
+      },
+      {
+        "t": "Nhận thấy xu hướng đổi chiều, Detroit không còn lựa chọn nào khác ngoài việc phải chuyển mình từ việc đúc những khối kim loại bọc crom khổng lồ sang những chiếc xe nhỏ gọn, tiết kiệm nhiên liệu."
+      },
+      {
+        "t": "Nhưng họ không có đủ thời gian hay kinh nghiệm để tự tay thiết kế, thay đổi dây chuyền và xây nhà máy sản xuất những chiếc xe nhỏ đó."
+      },
+      {
+        "t": "Thế là họ nhập khẩu xe từ nước ngoài về rồi dán mác xe Mỹ lên."
+      },
+      {
+        "t": "General Motors đã làm chiêu này với dòng Isuzu Gemini."
+      },
+      {
+        "t": "Chiếc Isuzu Gemini thực chất là bản sao của Opel Kadett; GM nghĩ một cái tên nghe mùi Đức sẽ dễ bán hơn một cái tên nghe sặc mùi Nhật, nên họ đổi tên nó thành Buick Opel."
+      },
+      {
+        "t": "Detroit vẫn đang chật vật cố hiểu tâm thức mới của làn sóng phản văn hóa: nó không ồn ào, phô trương và khoác lác như truyền thống của họ trước đây, mà khiêm nhường, biết tự trào."
+      },
+      {
+        "t": "Từ thành công vang dội của VW và các quảng cáo của họ, Detroit thấy rõ tông giọng mới thông minh hơn nhiều, bớt khoe khoang, trung thực hơn, đối xử với khách hàng như những người có học thức."
+      },
+      {
+        "t": "Đây là một khái niệm hoàn toàn xa lạ với Detroit và họ trầy trật để hiểu nó."
+      },
+      {
+        "t": "Họ biết mình cần phải đưa chiếc xe của mình vào chung danh sách cân nhắc mua sắm cùng những chiếc xe nhỏ khác."
+      },
+      {
+        "t": "Vì vậy, nước đi hiển nhiên là tung ra một màn so găng trực tiếp với những chiếc xe nhập khẩu mà người ta đang mua, để kéo chiếc Buick Opel vào chung mâm với nhóm đó."
+      },
+      {
+        "t": "Đó là toan tính của họ khi tung ra chiến dịch: MÀN SO GĂNG CỦA 5 CHIẾC XE."
+      },
+      {
+        "t": "Họ đem chiếc Buick Opel ra so sánh với Toyota Corolla, Subaru DL, Datsun B210 và VW Rabbit."
+      },
+      {
+        "t": "Họ thuê một cây bút độc lập từ tạp chí Car & Driver đứng ra thực hiện các bài kiểm tra, bao gồm: khả năng tăng tốc, mức tiêu hao nhiên liệu, độ bám cua, độ êm ái và không gian nội thất, rồi họ công bố kết quả. Về khả năng đỗ xe và sức mạnh động cơ, Buick Opel đứng nhất; về độ nhạy tay lái, nó đồng hạng nhất; về độ thoải mái, nó đứng thứ ba; và về chi phí bảo dưỡng, nó bét bảng."
+      },
+      {
+        "t": "Khi mọi cuộc thử nghiệm hoàn tất, họ tự hào tung ra chiến dịch quảng cáo công bố kết quả MÀN SO GĂNG CỦA 5 CHIẾC XE."
+      },
+      {
+        "t": "Chiếc Buick Opel về nhì chung cuộc."
+      },
+      {
+        "t": "Họ rêu rao kết quả này vì đã ngộ nhận hai điều ngớ ngẩn: 1) sự trung thực đậm chất phản văn hóa sẽ giúp hình ảnh của họ đứng ngang hàng với quảng cáo của VW, 2) việc họ về nhì sẽ khiến khách hàng chuộng họ hơn tất cả những chiếc xe xếp dưới họ."
+      },
+      {
+        "t": "Thứ mà họ đã quên bẵng mất là họ đang sống trong thế giới quảng cáo trần trụi ngoài đời thực."
+      },
+      {
+        "t": "Người tiêu dùng chẳng hơi đâu đọc những dòng chữ khiêm tốn dài dòng đó, tất cả những gì họ muốn biết chỉ là: “Thằng nào về nhất?”"
+      },
+      {
+        "t": "Và thằng về nhất là VW Rabbit."
+      },
+      {
+        "t": "Mấy tay ở Buick cứ ảo tưởng rằng mình sẽ được tôn trọng vì đức tính trung thực, họ đinh ninh sự tôn trọng đó sẽ lan tỏa sang thương hiệu, và thiên hạ sẽ đổ xô đi mua một chiếc xe thật thà."
+      },
+      {
+        "t": "Nhưng đời nào quảng cáo lại vận hành theo kiểu ngây thơ như thế."
+      },
+      {
+        "t": "Mẩu quảng cáo của Buick Opel thực chất đang làm quảng cáo không công cho VW Rabbit."
+      },
+      {
+        "t": "Và Volkswagen lập tức chớp lấy thời cơ bằng cách cho chạy lại chính mẩu quảng cáo SO GĂNG 5 XE của Buick."
+      },
+      {
+        "t": "Kèm lời cảm ơn Buick vì đã rêu rao cho toàn thiên hạ biết VW Rabbit là chiếc xe ngon hơn Buick Opel."
+      },
+      {
+        "t": "Mẩu quảng cáo của Buick đã giúp VW bán sạch 1,4 triệu chiếc Rabbit trong suốt mười năm sau đó."
+      },
+      {
+        "t": "Bởi người tiêu dùng ngoài đời thực chẳng rảnh rỗi soi từng dòng chữ nhỏ trong quảng cáo như dân trong ngành, họ chỉ cần nắm lấy cái kết quả to đùng trên cùng."
+      },
+      {
+        "t": "Thấy chưa, đây đâu phải là môn xã hội học để mà ngồi thấu cảm tinh thần thời đại rồi mong khách hàng sẽ đem lòng yêu mến chúng ta."
+      },
+      {
+        "t": "Đây là quảng cáo, nơi người đời phải móc những đồng tiền mồ hôi nước mắt ra để chi trả."
+      }
+    ]
+  },
+  "leave-the-woman-at-the-river": {
+    "titleVi": "HÃY ĐỂ NGƯỜI PHỤ NỮ LẠI BÊN BỜ SÔNG",
+    "tags": [
+      "quyetdinh",
+      "trachnhiem",
+      "tuduy"
+    ],
+    "linesVi": [
+      {
+        "t": "Có một câu chuyện Phật giáo cổ: một vị sư già và một chú tiểu đang trên đường hành hương thì gặp một con sông."
+      },
+      {
+        "t": "Có một cô gái trẻ đang đứng bên bờ sông khóc nức nở."
+      },
+      {
+        "t": "Vị sư già bước lại hỏi cô gặp chuyện gì."
+      },
+      {
+        "t": "Cô gái bảo cần sang sông gấp để thăm người mẹ ốm nặng, nhưng dòng nước chảy xiết quá khiến cô không dám bước qua."
+      },
+      {
+        "t": "Vị sư già liền bảo cô trèo lên lưng ông để ông cõng qua sông."
+      },
+      {
+        "t": "Thế là cô gái ôm chặt lấy ông trong lúc ông cẩn thận lội qua làn nước xiết, còn chú tiểu thì trố mắt nhìn theo."
+      },
+      {
+        "t": "Khi sang tới bờ bên kia, cô gái cảm ơn rồi cất bước đi tiếp."
+      },
+      {
+        "t": "Hai thầy trò tiếp tục hành trình, nhưng có điều gì đó rõ ràng đang gặm nhấm tâm can chú tiểu."
+      },
+      {
+        "t": "Chân mày chú cau lại, nét mặt ngày càng tối sầm."
+      },
+      {
+        "t": "Đi được nhiều dặm đường, chú không tài nào kìm nén được nữa, bèn thốt lên: “Người xuất gia chúng ta không được phép đụng chạm vào nữ giới, vậy mà thầy lại cõng một cô gái trên lưng, sao thầy lại làm thế?”"
+      },
+      {
+        "t": "Vị sư già nhìn chú với ánh mắt bao dung rồi thủng thỉnh đáp: “Ta đã để cô ấy lại bên bờ sông rồi, còn con thì vẫn đang cõng cô ấy đấy thôi.”"
+      },
+      {
+        "t": "Tôi luôn tâm đắc câu chuyện này vì nó là kim chỉ nam cho mọi quyết định."
+      },
+      {
+        "t": "Với tôi, bài học rút ra là: hãy đưa ra quyết định rồi quên nó đi, đừng có ngồi đó mà bồn chồn lo lắng rồi cứ nhai đi nhai lại quyết định đó trong đầu."
+      },
+      {
+        "t": "Việc đó chỉ làm bạn chậm chạp và cản trở bạn tiến lên phía trước."
+      },
+      {
+        "t": "Đã quyết định là phải làm."
+      },
+      {
+        "t": "Nếu bạn chưa sẵn sàng hành động thì bạn chưa thực sự quyết định."
+      },
+      {
+        "t": "Đó là lý do người ta hay thấy tôi cộc lốc, tôi ghét việc cứ phải lật đi lật lại những quyết định đã qua."
+      },
+      {
+        "t": "Một khi đã chốt xong xuôi, hãy xắn tay áo lên làm và bước tiếp."
+      },
+      {
+        "t": "Nếu chúng ta đã thống nhất để ai đó làm việc gì, hãy tránh sang một bên, đừng có lượn lờ soi mói trên đầu họ, hãy để họ tự làm."
+      },
+      {
+        "t": "Nếu không sẵn lòng để họ làm, ta đã không nên đồng ý ngay từ đầu."
+      },
+      {
+        "t": "Tôi biết từ ‘nhị phân’ dạo này không được chuộng lắm, nhưng tôi thích mọi thứ phải rõ ràng nhị phân."
+      },
+      {
+        "t": "Tôi thích trắng đen, lên xuống, vào ra, có hoặc không, bật hoặc tắt, nóng hoặc lạnh."
+      },
+      {
+        "t": "Tôi chuộng sự rõ ràng."
+      },
+      {
+        "t": "Những quyết định mập mờ ba phải chỉ là sự thoái thác; không có sự rõ ràng thì chẳng ai chịu trách nhiệm, ai cũng có sẵn một lý do để ngụy biện, một chỗ để chui rúc trốn tránh."
+      },
+      {
+        "t": "Nhưng rõ ràng đồng nghĩa với trách nhiệm, và điều đó khiến hầu hết mọi người thấy khó ở."
+      },
+      {
+        "t": "Đó là lý do họ thấy tôi cộc cằn."
+      },
+      {
+        "t": "Tôi thích làm việc với những người thích gánh vác trách nhiệm, những người muốn làm chủ công việc của mình, những người không thích kẻ khác cứ dòm ngó qua vai."
+      },
+      {
+        "t": "Với tôi, một đội ngũ phải vận hành như thế: anh lo việc của anh, và để tôi yên ổn làm việc của tôi."
+      },
+      {
+        "t": "Tôi ghét cay ghét đắng việc phải làm việc với những kẻ việc mình thì làm chẳng xong mà lại cứ thích xía mũi vào việc của tôi."
+      },
+      {
+        "t": "Điều đó chỉ tổ làm hỏng bét cả hai việc."
+      },
+      {
+        "t": "Những agency xuất sắc nhất mà tôi từng biết là nơi mà giám đốc mỹ thuật, người viết lời quảng cáo, chuyên viên quản lý khách hàng, chuyên viên hoạch định, chuyên viên truyền thông, và cả khách hàng, ai nấy đều tập trung dồn sức làm công việc của mình một cách tốt nhất có thể, thay vì can thiệp vào việc của tôi."
+      },
+      {
+        "t": "Nếu bạn thấy ai đó không làm nổi việc, đừng có xía vào can thiệp, hãy sa thải họ và tìm người khác đủ sức làm."
+      },
+      {
+        "t": "Chừng nào người ta còn rảnh rỗi xía mũi vào việc của kẻ khác, chừng đó họ vẫn chưa làm tử tế công việc của chính mình."
+      },
+      {
+        "t": "Đó là những gì tôi học được từ câu chuyện Phật giáo cổ xưa ấy."
+      },
+      {
+        "t": "Đưa ra quyết định và dẹp nó sang một bên, bước tiếp đi."
+      },
+      {
+        "t": "Đừng tốn thời gian nghĩ về những quyết định trong quá khứ hay công việc của người khác nữa."
+      },
+      {
+        "t": "Hãy để người phụ nữ lại bên bờ sông."
+      }
+    ]
+  },
+  "the-more-you-know-the-better": {
+    "titleVi": "CÀNG BIẾT NHIỀU CÀNG TỐT",
+    "tags": [
+      "kienthuc",
+      "chienthuat",
+      "quangcao"
+    ],
+    "linesVi": [
+      {
+        "t": "Một trong những người bạn của tôi thời trường mỹ thuật, Tom, từng nhận học bổng bóng bầu dục."
+      },
+      {
+        "t": "Đó là ở Mỹ, nên nó không phải thứ bóng đá chúng ta vẫn gọi, mà là bóng bầu dục Mỹ."
+      },
+      {
+        "t": "Nhưng Tom bị dập nát đầu gối, và bác sĩ bảo nếu cậu còn chơi nữa thì sẽ không bao giờ đi lại được."
+      },
+      {
+        "t": "Thế là chấm dứt học bổng thể thao, nhưng cậu ấy vẫn nói rất nhiều về môn bóng này."
+      },
+      {
+        "t": "Theo những gì tôi nhớ, đội giữ bóng có 4 lượt để tiến lên được 10 thước."
+      },
+      {
+        "t": "Mỗi đội có hai đội hình, phòng ngự và tấn công: nếu bạn có bóng bạn tung đội tấn công vào sân, nếu mất bóng bạn đổi sang đội phòng ngự."
+      },
+      {
+        "t": "Tom ở đội phòng ngự, nên việc cản phá liên tục chính là nguyên nhân hủy hoại đầu gối của cậu ấy."
+      },
+      {
+        "t": "Tôi hỏi cậu có bao nhiêu chiến thuật thi đấu, cậu bảo có khoảng 75 bài tấn công và khoảng 125 bài phòng ngự."
+      },
+      {
+        "t": "Nhưng bạn không cần phải nhớ hết toàn bộ, bạn biết tuần tới mình sẽ đấu với ai nên bạn tập khoảng 20 bài để khắc chế lối chơi của họ: nếu họ là đội chuyên chạy bạn tập các bài va chạm cản phá, nếu họ là đội chuyên ném bóng bạn tập các bài bắt bài đánh chặn."
+      },
+      {
+        "t": "Thế nên một phần lớn trận đấu đã diễn ra từ trước khi trận đấu thực sự bắt đầu."
+      },
+      {
+        "t": "Ở đâu cũng vậy thôi, trận đấu trí luôn đi trước trận đấu thực tế."
+      },
+      {
+        "t": "Lấy môn cờ vua làm ví dụ, có hàng tá nước đi khai cuộc cần phải học: Gambit Hậu, Phòng thủ Sicilian, Khai cuộc Catalan, Ván cờ Italy, Tốt độc, Phòng thủ Hà Lan, Khai cuộc Trung tâm, Gambit Vua từ chối, v.v."
+      },
+      {
+        "t": "Bạn càng biết nhiều nước đi, cơ hội chiến thắng của bạn càng cao, đó là lẽ thường tình."
+      },
+      {
+        "t": "Nhưng có một nơi chúng ta lại không thèm tuân theo quy luật này: ngành quảng cáo."
+      },
+      {
+        "t": "Trong ngành quảng cáo, chúng ta khao khát học được duy nhất một quy tắc rồi áp dụng nó vào mọi trường hợp."
+      },
+      {
+        "t": "Cách đây một thời gian câu trả lời luôn là Dữ liệu lớn và Công nghệ quảng cáo, rồi sau đó là Mã QR, rồi Pokémon Go, rồi Tiếp thị qua người có tầm ảnh hưởng, rồi Khoa học Hành vi."
+      },
+      {
+        "t": "Tôi chẳng có ác cảm gì với những thứ đó, nhưng một câu trả lời không thể là chìa khóa vạn năng cho mọi bài toán."
+      },
+      {
+        "t": "Giống như bóng bầu dục hay cờ vua hay bất cứ môn nào khác, bạn càng biết nhiều nước đi bạn càng có nhiều lựa chọn, bạn càng dễ thích ứng và tư duy của bạn càng khó bị bắt bài."
+      },
+      {
+        "t": "Vì vậy với chúng ta, cuộc tranh luận có thể là tăng trưởng thị trường hay giành thị phần, hàng tiêu dùng lâu bền hay hàng tiêu dùng nhanh, nhận biết thương hiệu hay mục đích thương hiệu, thời trang hay độ bền, thương hiệu hay sản phẩm, mua vì tình thế bắt buộc hay hàng xa xỉ phô trương, cùng hàng tá lựa chọn tiếp thị căn bản khác."
+      },
+      {
+        "t": "Vấn đề cốt lõi là, nếu bạn không biết tất cả những thứ này, bạn sẽ chẳng có lấy một lựa chọn nào trong tay."
+      },
+      {
+        "t": "Bạn sẽ chỉ có một phản xạ giật đầu gối duy nhất cho mọi vấn đề."
+      },
+      {
+        "t": "Rosser Reeves phát minh ra USP (Đặc điểm Bán hàng Độc nhất), nó rất tuyệt nhưng đó dường như là câu trả lời duy nhất mà agency của ông từng có."
+      },
+      {
+        "t": "Tương tự như nỗi ám ảnh hiện tại với thương hiệu như thể đó là đáp án khả dĩ duy nhất trên đời."
+      },
+      {
+        "t": "Điều đó chẳng khác nào vội vã đưa ra câu trả lời trước cả khi bạn biết câu hỏi là gì."
+      },
+      {
+        "t": "Chẳng hạn, tôi nghe người ta tranh cãi rằng TV tốt cho nhà quảng cáo hơn trực tuyến, và để chứng minh họ sẽ lôi các thương hiệu lớn đang dùng TV ra làm dẫn chứng."
+      },
+      {
+        "t": "Cá nhân tôi thích làm quảng cáo trên TV hơn, nhưng nó đâu thể luôn luôn đúng cho tất cả mọi người."
+      },
+      {
+        "t": "Lỡ như bạn không có ngân sách khủng như các ông lớn thì sao?"
+      },
+      {
+        "t": "Một ngân sách eo hẹp sẽ bốc hơi không kèn không trống trên TV nhưng có thể phát huy tác dụng tốt hơn nhiều trên môi trường trực tuyến."
+      },
+      {
+        "t": "Lỡ như thương hiệu thậm chí còn chẳng phải là vấn đề thì sao?"
+      },
+      {
+        "t": "Lỡ như bạn đang tung ra một ngành hàng hoàn toàn mới và bạn cần thay đổi hành vi của người tiêu dùng thì sao?"
+      },
+      {
+        "t": "Sự ưu tiên thương hiệu giúp ích được gì trong một thị trường còn chưa tồn tại?"
+      },
+      {
+        "t": "Nỗi ám ảnh mù quáng với một lối tư duy duy nhất sẽ khiến bạn tê liệt."
+      },
+      {
+        "t": "Nó chẳng khác nào một cầu thủ bóng bầu dục hay một kỳ thủ cờ vua chỉ biết đúng một nước đi duy nhất."
+      },
+      {
+        "t": "Đó là lý do những người giỏi nhất trong bất kỳ trò chơi hay ngành kinh doanh nào luôn học hỏi càng nhiều phương án càng tốt."
+      },
+      {
+        "t": "Họ không chỉ học những tư duy thời thượng, những thứ mà ai ai cũng biết."
+      },
+      {
+        "t": "Họ học những nguyên lý, những nền tảng cốt lõi, bởi vì kiến thức luôn luôn là một lợi thế."
+      }
+    ]
+  },
+  "existential-advertising": {
+    "titleVi": "QUẢNG CÁO HIỆN SINH",
+    "tags": [
+      "trietly",
+      "quangcao",
+      "hieuqua"
+    ],
+    "linesVi": [
+      {
+        "t": "Quảng cáo đâu có phức tạp, chỉ là chúng ta thích làm cho nó nghe có vẻ phức tạp mà thôi."
+      },
+      {
+        "t": "Được rồi, thử nhìn thế này xem: quảng cáo về cơ bản chia làm hai trường phái tư tưởng, Sartre hoặc Kant."
+      },
+      {
+        "t": "Sartre là một nhà triết học hiện sinh; nghe đến đó là thấy phức tạp hơn thực tế rồi."
+      },
+      {
+        "t": "Nó được gọi là chủ nghĩa hiện sinh vì phương châm cốt lõi của nó là: “sự hiện hữu đi trước bản chất”."
+      },
+      {
+        "t": "Nghe lại có vẻ rắm rối, nhưng nó chỉ có nghĩa đơn giản là: sự tồn tại của một ai đó diễn ra trước những quy tắc về việc chúng ta nên sống như thế nào."
+      },
+      {
+        "t": "Vì vậy sự tồn tại mới là thực tế, còn các quy tắc chỉ là thứ được bịa ra sau đó."
+      },
+      {
+        "t": "Thấy chưa, thực ra nó chẳng hề phức tạp chút nào."
+      },
+      {
+        "t": "Nếu chúng ta còn không tồn tại, thì làm sao có thể có bất kỳ quy tắc nào được?"
+      },
+      {
+        "t": "Khi đã như vậy, chẳng thể có cái đúng hay cái sai tuyệt đối, chỉ có những gì chúng ta tự mình quyết định."
+      },
+      {
+        "t": "Dù không có đúng sai tuyệt đối, nhưng vẫn có những quy tắc để xã hội vận hành."
+      },
+      {
+        "t": "Thế nên nếu chúng ta phá vỡ các quy tắc xã hội, sẽ có những hệ quả kéo theo."
+      },
+      {
+        "t": "Tôi thấy điều này được mô tả chuẩn xác nhất là: “Không có đúng và sai, chỉ có nguyên nhân và kết quả”."
+      },
+      {
+        "t": "Vì thế chúng ta không thể trốn đằng sau khái niệm đúng sai, chúng ta đưa ra quyết định và phải tự gánh lấy hậu quả."
+      },
+      {
+        "t": "Điều đó khiến rất nhiều người cảm thấy khó chịu, như Sartre từng nói: “Chúng ta bị kết án là phải tự do”."
+      },
+      {
+        "t": "Trốn tránh sau những ý định tốt đẹp chỉ là hành động ‘ngụy tín’ – ‘sống thiếu chân thật’."
+      },
+      {
+        "t": "Nó giải thoát chúng ta khỏi trách nhiệm đối với hành động của mình, bởi chúng ta có thể nấp sau cái mà ta tự xưng là đúng hay sai."
+      },
+      {
+        "t": "Vì vậy đối với Sartre, hệ quả từ hành động của chúng ta mới là thực tế duy nhất."
+      },
+      {
+        "t": "Kant thì hoàn toàn đối lập với Sartre."
+      },
+      {
+        "t": "Kant tin rằng chúng ta không bao giờ có thể đảm bảo chắc chắn hệ quả từ hành động của mình, thế nên dự đoán chúng là điều ảo tưởng."
+      },
+      {
+        "t": "Do đó Kant tin rằng ý định là tất cả."
+      },
+      {
+        "t": "Kant tin vào ‘mệnh lệnh tuyệt đối’, nghe có vẻ phức tạp nhưng chẳng cần phải thế."
+      },
+      {
+        "t": "Bạn phải hành xử theo cách mà bạn muốn tất cả mọi người trên thế giới đều hành xử như vậy, vào mọi lúc, không có ngoại lệ."
+      },
+      {
+        "t": "Nếu bạn quyết định muốn mọi người đều phải trung thực, bạn phải luôn luôn trung thực một cách vô điều kiện trong mọi tình huống, bất chấp hậu quả ra sao."
+      },
+      {
+        "t": "Chẳng hạn, một người bạn chạy đến gõ cửa nhà bạn và cầu xin bạn giấu cô ấy vì đang bị một kẻ sát nhân truy đuổi."
+      },
+      {
+        "t": "Bạn giấu cô ấy, nhưng rồi tên sát nhân đến gõ cửa và hỏi bạn có đang giấu cô ấy trong nhà không."
+      },
+      {
+        "t": "Đối với Kant, bạn buộc phải trung thực và thừa nhận là có, đó chính là mệnh lệnh tuyệt đối."
+      },
+      {
+        "t": "Tuyệt đối có nghĩa là bạn không bao giờ có sự lựa chọn."
+      },
+      {
+        "t": "Còn chủ nghĩa hiện sinh có nghĩa là bạn luôn luôn phải lựa chọn."
+      },
+      {
+        "t": "Với Kant, ý định là tất cả bất chấp hậu quả ra sao."
+      },
+      {
+        "t": "Với Sartre, chúng ta phải lựa chọn hệ quả, ý định chỉ là một thứ ảo ảnh."
+      },
+      {
+        "t": "Vậy điều này liên quan gì đến quảng cáo?"
+      },
+      {
+        "t": "Tôi thấy ngành quảng cáo hiện nay đang hành xử hệt như Kant: ý định là tất cả bất chấp hậu quả ra sao."
+      },
+      {
+        "t": "Người ta đặt niềm tin tuyệt đối vào mục đích thương hiệu, chẳng cần biết người xem có nhớ nổi cái tên không, hay thậm chí bán cái gì, miễn là họ đồng cảm với lời kêu gọi cảm xúc thì người ta tin rằng khách hàng sẽ chọn mua thương hiệu đó."
+      },
+      {
+        "t": "Đối nghịch với điều này là Sartre, nơi chẳng có quy tắc nào cho quảng cáo, chỉ có kết quả thực tế mới là chân lý."
+      },
+      {
+        "t": "Tên sản phẩm là gì, nó làm được gì, bán cho ai, dùng phương tiện truyền thông nào là tốt nhất, cái gì sẽ khiến người ta chú ý và ghi nhớ, làm sao để chiếm thế thượng phong trước đối thủ cạnh tranh."
+      },
+      {
+        "t": "Thị hiếu quảng cáo hiện nay thiên về quảng cáo kiểu Kant: ý định là tất cả."
+      },
+      {
+        "t": "Quảng cáo kiểu hiện sinh bị coi là thô thiển và lỗi thời."
+      },
+      {
+        "t": "Dĩ nhiên, cả quảng cáo kiểu Kant lẫn quảng cáo kiểu hiện sinh không phải lúc nào cũng đúng hay sai tuyệt đối."
+      },
+      {
+        "t": "Nhưng nếu buộc phải lựa chọn, tôi biết chắc mình sẽ chọn trường phái nào."
+      }
+    ]
+  },
+  "the-cost-of-everything-and-the-value-of-nothing": {
+    "titleVi": "BIẾT GIÁ MỌI THỨ NHƯNG CHẲNG HIỂU GIÁ TRỊ CỦA THỨ GÌ",
+    "tags": [
+      "giatri",
+      "chiphi",
+      "kinhdoanh"
+    ],
+    "linesVi": [
+      {
+        "t": "Ngay trước cuộc khủng hoảng tài chính năm 2008, công ty chúng tôi mất đi vị CEO."
+      },
+      {
+        "t": "Murray Chick là chuyên viên hoạch định, tôi và Gordon là dân sáng tạo, chẳng ai trong chúng tôi là dân quản lý khách hàng, nên chúng tôi cần một CEO mới thật gấp."
+      },
+      {
+        "t": "Khi khủng hoảng xảy ra, chúng tôi phải bảo vệ công ăn việc làm cho rất nhiều nhân viên."
+      },
+      {
+        "t": "Vì vậy chúng tôi nhanh chóng sáp nhập với một công ty khác đã có sẵn CEO."
+      },
+      {
+        "t": "Chúng tôi cứu được việc làm của mọi người, nhưng nếu có thêm thời gian suy xét, chúng tôi hẳn đã nhận ra đó không phải là một sự kết hợp phù hợp, bởi chúng tôi không cùng tư duy."
+      },
+      {
+        "t": "Ví dụ: chúng tôi có một giám đốc phát triển kinh doanh mới được trả lương theo số ngày làm việc mỗi tuần."
+      },
+      {
+        "t": "Nếu làm 1 ngày một tuần anh ta nhận 20.000 bảng một năm, 2 ngày một tuần nhận 40.000 bảng một năm, cứ thế nhân lên."
+      },
+      {
+        "t": "Chúng tôi thuê anh ta làm 3 ngày một tuần, nên anh ta nhận 60.000 bảng một năm."
+      },
+      {
+        "t": "Anh ta là một trong những giám đốc phát triển kinh doanh mới giỏi nhất mà chúng tôi từng có."
+      },
+      {
+        "t": "Trước đây chúng tôi từng có những giám đốc phát triển kinh doanh dắt chúng tôi đi gặp vô số khách hàng, nhưng thường chỉ tổ phí thời gian."
+      },
+      {
+        "t": "Những người chúng tôi được gặp không đủ thẩm quyền để quyết định bất cứ điều gì, nhưng họ lại rất khoái xem qua các tác phẩm sáng tạo của các agency quảng cáo."
+      },
+      {
+        "t": "Và nếu những người này không thực sự có nhu cầu tìm agency mới, việc đó chỉ làm lãng phí thời gian của tất cả mọi người."
+      },
+      {
+        "t": "Điểm tuyệt vời ở người giám đốc kinh doanh mới của chúng tôi là anh biết rõ nên đưa chúng tôi vào những cuộc gặp nào."
+      },
+      {
+        "t": "Anh dành thời gian xây dựng các mối quan hệ để nắm được khách hàng nào thực sự đang rục rịch muốn đổi agency."
+      },
+      {
+        "t": "Rồi anh đưa chúng tôi vào danh sách đó, để chúng tôi không phải phí hoài thời gian thuyết trình cho những kẻ chỉ đi dạo xem hàng cho vui."
+      },
+      {
+        "t": "Anh đưa chúng tôi vào những danh sách đấu thầu thực thụ, và chúng tôi đã giành được hai khách hàng lớn trong vòng một năm, làm nên những tác phẩm tuyệt vời cho cả hai hợp đồng đó, nên chúng tôi vô cùng hài lòng về anh."
+      },
+      {
+        "t": "Nhưng vị CEO của agency mà chúng tôi vừa sáp nhập thì chẳng hài lòng chút nào."
+      },
+      {
+        "t": "Ông ta bảo tôi: “Gã này nhận 60.000 bảng một năm mà chỉ làm việc có 3 ngày một tuần. Tôi có thể thuê một cô thư ký làm công việc của hắn với giá 25.000 bảng và cô ta sẽ làm cả 5 ngày một tuần.”"
+      },
+      {
+        "t": "Tôi không biết phải nói sao nữa, chúng tôi đánh giá công việc của người giám đốc kinh doanh mới dựa trên những tiêu chí hoàn toàn khác nhau."
+      },
+      {
+        "t": "Tôi không nghĩ số ngày cái mông của anh ta dính trên ghế văn phòng mỗi tuần là điều quan trọng."
+      },
+      {
+        "t": "Tôi nghĩ chúng tôi trả tiền cho anh ta để đem về hợp đồng mới, và xét trên thước đo đó thì anh ta hoàn toàn xứng đáng đến từng xu."
+      },
+      {
+        "t": "Tôi bảo: “Xem này, chúng ta từng thuê những người rẻ hơn làm đủ 5 ngày một tuần và rốt cuộc chẳng đem về nổi một hợp đồng mới nào, thế mới là ném tiền qua cửa sổ."
+      },
+      {
+        "t": "Anh này tốn kém hơn nhưng đã mang về hai hợp đồng béo bở, thế nên 60.000 bảng đó là đồng tiền được chi tiêu quá xứng đáng.”"
+      },
+      {
+        "t": "Nhưng tay CEO không chịu nghe, ông ta sa thải người đàn ông nhận 60.000 bảng đó và giao việc cho một cô thư ký 25.000 bảng, và từ đó về sau chúng tôi chẳng bao giờ giành thêm được một hợp đồng mới nào nữa."
+      },
+      {
+        "t": "Dưới con mắt của tay CEO, ông ta đã tiết kiệm được 35.000 bảng; còn theo góc nhìn của tôi, ông ta chỉ đang ném 25.000 bảng xuống cống."
+      },
+      {
+        "t": "Oscar Wilde từng mỉa mai một kẻ: “Hắn biết giá cả của mọi thứ nhưng chẳng hiểu giá trị của bất cứ thứ gì.”"
+      },
+      {
+        "t": "Vậy câu hỏi quản trị ở đây là: bạn nên nhìn vào giá cả hay giá trị?"
+      },
+      {
+        "t": "Giá của tay giám đốc kinh doanh mới là 60.000 bảng, nhưng giá trị là hai hợp đồng lớn."
+      },
+      {
+        "t": "Giá của cô thư ký là 25.000 bảng, nhưng giá trị bằng không."
+      },
+      {
+        "t": "Mike Gold từng nói với tôi: “Phương trình duy nhất là: thứ bạn nhận được có xứng đáng với cái giá bạn bỏ ra hay không?”"
+      },
+      {
+        "t": "Tôi nghĩ Goldie nói chuẩn xác, rốt cuộc mọi chuyện luôn quy về điều đó."
+      },
+      {
+        "t": "Chúng ta làm trong ngành quảng cáo, chúng ta phải hiểu cách nó vận hành."
+      },
+      {
+        "t": "Như John Ruskin từng nói: “Hầu như chẳng có thứ gì trên đời này mà người ta không thể làm dở hơn một chút để bán rẻ hơn một chút, và những kẻ chỉ chăm chăm nhìn vào giá cả chính là con mồi béo bở của hạng người này.”"
+      }
+    ]
+  }
+}

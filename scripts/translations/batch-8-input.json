@@ -1,0 +1,2195 @@
+[
+  {
+    "slug": "why-the-first-brief-is-wrong-and-lazy",
+    "originalTitle": "WHY THE FIRST BRIEF IS WRONG AND LAZY",
+    "originalLines": [
+      {
+        "t": "Recently I saw a post from someone called Annie, she said:"
+      },
+      {
+        "t": "“Every time I have a programming question and I really need help, I post it on Reddit and then log into another account and reply to it with an obscenely incorrect answer."
+      },
+      {
+        "t": "People don’t care about helping others, but they LOVE correcting others."
+      },
+      {
+        "t": "Works 100% of the time.”"
+      },
+      {
+        "t": "This is very smart on Annie’s part, but it turns out Annie is using Cunningham’s Law."
+      },
+      {
+        "t": "This was coined by Steven McGeady in 2010 and states: “The best way to get the right answer on the Internet is not to ask a question, it’s to post the wrong answer.”"
+      },
+      {
+        "t": "McGeady says he learned this from Ward Cunningham, the inventor of Wiki."
+      },
+      {
+        "t": "But Cunningham wasn’t talking specifically about the internet, his advice was more general:“People are quicker to correct a wrong idea than to answer a question”"
+      },
+      {
+        "t": "For us, this is a very interesting: Bernbach says, in the communications business, “Our proper area of study is simple, timeless, human truths”."
+      },
+      {
+        "t": "Sir Arthur Conan Doyle was a student of human nature, it’s what gives his detective, Sherlock Holmes, an advantage over others."
+      },
+      {
+        "t": "In ‘The Adventure of the Blue Carbuncle’ Holmes needs information from a salesman."
+      },
+      {
+        "t": "The salesman refuses to help, so Holmes makes a bet with him that is clearly incorrect:"
+      },
+      {
+        "t": "“I’m always ready to back my opinion on a matter of fowls, and I have a fiver on it that the bird I ate is country bred.”\n“Well, then, you’ve lost your fiver, for it’s town bred,” snapped the salesman.\n“It’s nothing of the kind.” \n“D’you think you know more about fowls than I, who have handled them ever since I was a nipper? I tell you, all those birds that went to the Alpha were town bred.”\n“You’ll never persuade me to believe that.”\n“Will you bet, then?”\n“It’s merely taking your money, for I know that I am right. But I’ll have a sovereign on with you, just to teach you not to be obstinate.”\nThe salesman chuckled grimly. “Bring me the books, Bill,” said he.”"
+      },
+      {
+        "t": "(The salesman opens the books he previously refused to open. Holmes inspects them, gets all the information he needs, then surrenders the sovereign.)"
+      },
+      {
+        "t": "Later Holmes explains to Watson:"
+      },
+      {
+        "t": "“When you see a man with whiskers of that cut and the ‘Pink ’un’ protruding out of his pocket, you can always draw him by a bet,” said Holmes. “I daresay that if I had put £100 down in front of him, that man would not have given me such complete information as was drawn from him by the idea that he was doing me on a wager.”"
+      },
+      {
+        "t": "Holmes sums up the simple timeless human truth: “People don’t like telling you things, but they love to contradict you”."
+      },
+      {
+        "t": "The people who couldn’t, or wouldn’t, help you do the job will always tell you what’s wrong with it after it’s done."
+      },
+      {
+        "t": "For instance, the people who write the brief and can spot exactly what you should have put in the ad once you present the finished work."
+      },
+      {
+        "t": "Their suggestions weren’t written in the brief where they would have been helpful before you did the work."
+      },
+      {
+        "t": "But after you’ve done the work, they are keen to say exactly what’s wrong with it, and a new brief is issued."
+      },
+      {
+        "t": "Because it’s more interesting to crit someone else’s work than to put in the effort to do the job properly in the first place."
+      },
+      {
+        "t": "That’s why it’s important for creatives to question the brief before starting work on it."
+      },
+      {
+        "t": "As Robin Wight used to say, “Creatives should tug at the brief like a dog pulling at a piece of cloth, if it holds it’s good, if it comes apart it isn’t”."
+      }
+    ]
+  },
+  {
+    "slug": "advertising-v-blagvertising",
+    "originalTitle": "ADVERTISING V BLAGVERTISING",
+    "originalLines": [
+      {
+        "t": "Bess Kalb is a best-selling author, she’s also a writer for the New Yorker and the Jimmy Kimmel show."
+      },
+      {
+        "t": "After the recent school shootings in Texas, she’s reposted the tweets from senators expressing their grief at the tragedy."
+      },
+      {
+        "t": "Before each tweet she states, without comment, the exact amount each Senator has received in campaign contributions from the National Rifle Association (NRA)."
+      },
+      {
+        "t": "The NRA are passionately committed to preventing any form of gun-control at all costs."
+      },
+      {
+        "t": "So these are the senators who voted against gun control measures:"
+      },
+      {
+        "t": "Senator Rob Portman ($3,063,327 from the NRA):"
+      },
+      {
+        "t": "“My heart goes out to the families of the victims of this horrible tragedy in Uvalde. Our nation mourns for the innocent children, teacher, and all those affected by this senseless act of violence.”"
+      },
+      {
+        "t": "Senator Todd Young ($2,897,582 from the NRA):"
+      },
+      {
+        "t": "“I am deeply saddened by the horrific shooting today at an elementary school in Uvalde, Texas. Our nation mourns the innocent lives taken in this senseless tragedy.”"
+      },
+      {
+        "t": "Senator Joni Ernst ($3,124,773 from the NRA):"
+      },
+      {
+        "t": "“A senseless, horrendous act of evil. My heart is with those in Texas right now.”"
+      },
+      {
+        "t": "Senator Pat Toomey ($1,475,448 from the NRA):"
+      },
+      {
+        "t": "“Today I join all Americans in mourning those whose lives have been stolen at Uvalde. This tragedy is as horrifying as it is heart breaking. My deepest condolences are with the families & loved ones of those killed, with those who were injured, & with the entire state of Texas.”"
+      },
+      {
+        "t": "Senator Mitt Romney ($13,647,676 from the NRA):"
+      },
+      {
+        "t": "“Grief overwhelms the soul. Children slaughtered. Lives extinguished. Parents’ hearts wrenched. Incomprehensible. I offer prayer and condolence but I know that it is grossly inadequate. We must find answers.”"
+      },
+      {
+        "t": "Senator Tom Cotton ($1,968.714 from the NRA):"
+      },
+      {
+        "t": "“Anna and I join all Arkansans in praying for the victims and the children’s’ families in Uvalde. And we’re grateful for law enforcement and the first responder who are helping in the face of this unimaginable evil.”"
+      },
+      {
+        "t": "Ex-Senator David Perdue ($2,002,462 from the NRA):"
+      },
+      {
+        "t": "“Bonnie and I are heartbroken by the tragedy in Uvalde and are praying for the victims and their families.”"
+      },
+      {
+        "t": "Senator Ted Cruz ($311,151 from the gun lobby):"
+      },
+      {
+        "t": "“Heidi & I are fervently lifting up in prayer the children and families in the horrific shooting in Uvalde. We are in close contact with local officials, but the precise details are still unfolding. Thank you to heroic law enforcement & first responders for acting so swiftly.”"
+      },
+      {
+        "t": "For me, the most effective part of Bess Kalb’s message is she doesn’t comment at all."
+      },
+      {
+        "t": "She doesn’t have to, she simply puts up the NRA’s contribution next to each senator’s tweet, then leaves it up to us to experience cognitive dissonance."
+      },
+      {
+        "t": "These people are expressing grief and sympathy with the tragedy, saying they are desperate to find answers, and yet, at the same time they are voting against gun-control and are paid by the NRA."
+      },
+      {
+        "t": "In the last twenty years, there have been 15 school massacres in America and 188 children killed by guns."
+      },
+      {
+        "t": "So by any sane reasoning the start point must be to limit access to guns."
+      },
+      {
+        "t": "But these senators say they will do anything to stop the gun violence, except limiting guns."
+      },
+      {
+        "t": "Could that have anything to do with the millions of dollars each of them receives from the NRA?"
+      },
+      {
+        "t": "She leaves it up to us to decide for ourselves whether it’s pure coincidence and the senators are genuinely grief-stricken, or whether they are corrupt hypocrites and their words are meaningless."
+      },
+      {
+        "t": "The best part is she treats us like grownups – Here are the facts, work it out for yourself."
+      },
+      {
+        "t": "That’s how the best advertising works."
+      },
+      {
+        "t": "Recently I heard an ornithologist on BBC radio 4, describing a skylark."
+      },
+      {
+        "t": "She said, “Well, it does what it says on the tin.”"
+      },
+      {
+        "t": "That campaign line was written by HHCL 30 years ago and it’s passed into the language."
+      },
+      {
+        "t": "In the ad, the presenter looks to camera and simply says: “This is Ronseal Quick Drying Varnish."
+      },
+      {
+        "t": "It’s touch-dry in about 20 minutes. So, in 20 minutes, you can touch it and it will be dry."
+      },
+      {
+        "t": "Ronseal Quick Drying varnish: It does exactly what it says on the tin.”"
+      },
+      {
+        "t": "On its own it sounds flat, boring even, but you must always judge a thing in context."
+      },
+      {
+        "t": "That ad stood out from all the noisy, patronising hucksterism around it and passed into the language."
+      },
+      {
+        "t": "It had no dancing, no computer graphics, no celebrities, no storytelling, no trendy music, no Cannes award winners, it was just a plain-speaking breath of fresh air."
+      },
+      {
+        "t": "So much so, that it came off the screen and into the language just by telling people what the product was, and what it did, and letting them decide for themselves whether they wanted it."
+      },
+      {
+        "t": "What a concept, treating human beings as if they have a brain and can make up their own minds."
+      }
+    ]
+  },
+  {
+    "slug": "start-with-the-truth",
+    "originalTitle": "START WITH THE TRUTH",
+    "originalLines": [
+      {
+        "t": "Pablo Escobar was the richest criminal ever, at his peak he controlled nearly 80% of the global cocaine market."
+      },
+      {
+        "t": "His personal fortune was worth the equivalent of $64 billion today."
+      },
+      {
+        "t": "He founded the Medellin cartel and built a sophisticated network to transport 70/80 tons a month to the USA, the other cartels were paying him 25%-30% just for shipping."
+      },
+      {
+        "t": "But how did he do it, what made him different?"
+      },
+      {
+        "t": "Escobar knew the power of violence of course, he murdered rival cartel members as well as policemen, judges, and politicians."
+      },
+      {
+        "t": "But real power doesn’t just come from killing people, it comes from getting people to do what you want them to do."
+      },
+      {
+        "t": "So Escobar developed a marketing strategy with a simple, memorable strapline that acted as a call-to-action."
+      },
+      {
+        "t": "Bribing people in authority, he would always offer it with the simple line: “Plata o plomo?”"
+      },
+      {
+        "t": "‘Plata o plomo’ is Spanish for ‘Silver or lead?’"
+      },
+      {
+        "t": "It’s a very simple option for you: silver (money) or lead (bullets)?"
+      },
+      {
+        "t": "But the line “Plata o plomo?” will stay in your mind."
+      },
+      {
+        "t": "Imagine you are an underpaid police officer, would you prefer some money just to look the other way, or would you prefer to be gunned down, who will look after your family then?"
+      },
+      {
+        "t": "Of course, none of that was said, it wasn’t needed, just the line “Plata o plomo?” and everyone knew exactly what it meant."
+      },
+      {
+        "t": "Like all the best lines, it got into the language as a cliché, a piece of common sense."
+      },
+      {
+        "t": "That simple memorable line helped Escobar build the biggest drugs network in the world."
+      },
+      {
+        "t": "A line won’t do all the work on its own of course."
+      },
+      {
+        "t": "But it does coalesce the thinking, the complexity, into a simple, memorable promise."
+      },
+      {
+        "t": "Of course, it must be founded in the truth, or it won’t work."
+      },
+      {
+        "t": "Several years earlier, Bill Bernbach did a campaign for Avis rental cars."
+      },
+      {
+        "t": "He investigated the company thoroughly, he found they were very good, but that’s not enough, everyone claims to be good, on its own it’s meaningless."
+      },
+      {
+        "t": "The only truth that stood out, was that Avis was smaller than Hertz (the market leader)."
+      },
+      {
+        "t": "If Bernbach had just claimed “Avis – We Try Harder” there was no reason for anyone to believe him, no truth to stake a claim in."
+      },
+      {
+        "t": "So Bernbach made the claim: “Avis – We’re Only Number 2, So We Have To Try Harder”."
+      },
+      {
+        "t": "Now there was a truth that was believable because it made absolute sense."
+      },
+      {
+        "t": "Number 1 (Hertz) was repositioned, by inference, as the lazy fat-cat, they didn’t have to try as hard as Avis."
+      },
+      {
+        "t": "Now there was a reason to believe ‘Avis – We Try Harder’."
+      },
+      {
+        "t": "The campaign worked so well that all over America people began wearing the Avis badgeand line, and putting the Avis sticker on their bumpers."
+      },
+      {
+        "t": "Everyone wanted to identify with the little guy who worked harder."
+      },
+      {
+        "t": "Today, Avis has 11,000 offices worldwide and is the Leading Car Rental Company in 74 countries including USA, Canada, Australia, New Zealand, India, China, Singapore, Denmark, Belgium, Poland, Czech Republic and Argentina."
+      },
+      {
+        "t": "That line worked by making a claim that’s based in truth, not just an empty claim."
+      },
+      {
+        "t": "For instance: ‘Ford – We Try Harder’ wouldn’t mean anything, nor would ‘Coca Cola – We Try Harder’, nor would ‘Nestle – We Try Harder’, nor would ‘Samsung – We Try Harder’."
+      },
+      {
+        "t": "A line isn’t good just because it’s catchy, it only works when it’s specific to a brand, and it only works then because it’s delivering a brand truth, not just an empty feel good claim."
+      },
+      {
+        "t": "Judging by current advertising, that’s too difficult for a lot of marketing people."
+      },
+      {
+        "t": "They can’t seem to get their heads round that."
+      }
+    ]
+  },
+  {
+    "slug": "what-does-pivot-really-mean",
+    "originalTitle": "WHAT DOES PIVOT REALLY MEAN?",
+    "originalLines": [
+      {
+        "t": "In the 1930s, Andrew Higgins was just a local boat-builder in New Orleans."
+      },
+      {
+        "t": "He built unusual, flat-bottom craft for the Mississippi Delta."
+      },
+      {
+        "t": "These boats had a very shallow draft, they needed about two feet of water, which was perfect for people wanting to travel at speed through the Mississippi swamplands."
+      },
+      {
+        "t": "Higgins designed them with a hollow shape at the rear for the propeller, so it wouldn’t drag on the bottom, and a wedge shape under the bow, so it could run right up onto land."
+      },
+      {
+        "t": "Then, when the cargo was taken off, the boat was lighter and could simply be reversed back out into the water."
+      },
+      {
+        "t": "The boats were perfect for rum-runners bringing illegal booze ashore at night, they were also used by the coastguards chasing the rum-runners."
+      },
+      {
+        "t": "After Pearl Harbour, it became obvious that at some future point the US Marines would need to land in enemy territory, to attack the German and Japanese forces."
+      },
+      {
+        "t": "The traditional way of landing soldiers in enemy territory had always meant capturing a portso that vessels could pull alongside a dock and unload troops over the side onto the pier."
+      },
+      {
+        "t": "The coastguard suggested to the Marines that they look at the boats Higgins was building."
+      },
+      {
+        "t": "The draft was so shallow they didn’t need to capture a port, they could run the boats right up onto a beach, any beach."
+      },
+      {
+        "t": "They asked Higgins if he could build the boat so the front came down like a ramp."
+      },
+      {
+        "t": "So that’s what Higgins built, the LCVP (Landing Craft Vehicle or Personnel)."
+      },
+      {
+        "t": "It was 36 feet long and 11 feet wide, it had a top speed of 12 knots and could carry a platoonof 36 soldiers."
+      },
+      {
+        "t": "It could run right up the beach, drop them all off and go back to get another load, all in 3 to 4 minutes."
+      },
+      {
+        "t": "The best part was the enemy wouldn’t know where the landing would come."
+      },
+      {
+        "t": "For instance, the Germans had built a 2,000-mile defensive wall from artic Norway to Spain, the parts they had mainly fortified were harbours like Cherbourg, Brest, and Antwerp, and they had to stretch 300,000 troops along the length of it."
+      },
+      {
+        "t": "They built 15,000 concrete bunkers, used 1.2 million tons of steel, 17 million cubic metres of concrete, costing $206 billion in today’s money."
+      },
+      {
+        "t": "In the event, D Day took place on an 80 mile stretch of Normandy coast and caught them totally by surprise."
+      },
+      {
+        "t": "Because of the LCVPs (Higgins Boats) the allies landed 160,000 troops on the first day."
+      },
+      {
+        "t": "A Marine Corps historian said, “The Higgins Boat broke the gridlock on ship-to-shoremovement. It is impossible to overstate the tactical advantages this craft gave U.S.amphibious commanders.”"
+      },
+      {
+        "t": "Supreme Allied Commander Dwight Eisenhower said, “Andrew Higgins is the man who won the war for us. If Higgins had not designed and built those LCVPs we never could have landed over an open beach. The whole strategy of the war would have been different.”"
+      },
+      {
+        "t": "In 1938, Higgins had a single boat yard with 75 employees; by 1943 he had 7 massive boatyards with 25,000 workers, by the end of the war he’d built 23,358 boats."
+      },
+      {
+        "t": "Apparently, Hitler demanded to know how so many allied soldiers got ashore in a single day."
+      },
+      {
+        "t": "His Generals told him about the huge number of Higgins boats."
+      },
+      {
+        "t": "Hitler yelled, “Who is he, fucking Noah?”"
+      },
+      {
+        "t": "For me the real creativity comes from seeing how something built for rum-runners in the Mississippi swamps could revolutionise modern warfare."
+      },
+      {
+        "t": "It didn’t come from thinking, “Let’s design a boat that doesn’t need a port”."
+      },
+      {
+        "t": "It came from thinking “This guy builds boats that can land anywhere, let’s use them”."
+      },
+      {
+        "t": "Creativity isn’t thinking in limbo and having an idea out-of-the-blue."
+      },
+      {
+        "t": "Creativity is putting things together in a way no one else would think of."
+      }
+    ]
+  },
+  {
+    "slug": "the-broom-of-theseus",
+    "originalTitle": "THE BROOM OF THESEUS",
+    "originalLines": [
+      {
+        "t": "In the 1st century, Plutarch coined the ‘Ship of Theseus’ paradox."
+      },
+      {
+        "t": "A ship sails away from Greece for 30 years, when it returns every plank, every sail, every rope, has been replaced, so is it still the ship that sailed away?"
+      },
+      {
+        "t": "Heraclitus, Socrates, Plato, Thomas Hobbes, and John Locke all asked the same question in different forms."
+      },
+      {
+        "t": "It’s a question about the nature of reality: is it matter or is it just concept?"
+      },
+      {
+        "t": "This is too deep a philosophical question for ordinary people. Or is it?"
+      },
+      {
+        "t": "One of the most popular episode of Only Fools and Horses was called ‘Trigger’s Broom’."
+      },
+      {
+        "t": "Trigger is a road sweeper and meets DelBoy in a café, he’s wearing a medal."
+      },
+      {
+        "t": "DelBoy: “So what did you get that medal for, Trigger?”"
+      },
+      {
+        "t": "Trigger: “Saving the council money. I happened to mention that I’ve had the same broom for the last 20 years. They were very impressed and gave me a medal.”"
+      },
+      {
+        "t": "DelBoy: “How can the same broom have lasted you 20 years?”"
+      },
+      {
+        "t": "Trigger: “I’ve looked after it well. I’ve maintained it carefully. This old broom has had 17 new heads and 14 new handles in that time.”"
+      },
+      {
+        "t": "DelBoy: “Then how the hell can it be the same bloody broom?”"
+      },
+      {
+        "t": "It’s one of the most popular episodes because everyone gets the joke."
+      },
+      {
+        "t": "The people who wouldn’t understand The Ship of Theseus can understand Trigger’s Broom."
+      },
+      {
+        "t": "Because the writers have made it accessible using their audience’s language."
+      },
+      {
+        "t": "That’s a great lesson for us."
+      },
+      {
+        "t": "The writers of The Simpsons understood that, too."
+      },
+      {
+        "t": "Occam’s Razor is formally explained as: “Do not multiply possibilities beyond necessity.”"
+      },
+      {
+        "t": "Now see how the Simpsons handle that concept."
+      },
+      {
+        "t": "Adults have discovered an aphrodisiac and are coming home early and drawing the curtains."
+      },
+      {
+        "t": "Bart, Milhouse, and Lisa debate what’s going on."
+      },
+      {
+        "t": "Bart: “Okay, it’s now painfully clear. The adults are definitely paving the way for an invasion by the flying-saucer people.”"
+      },
+      {
+        "t": "Milhouse: “You fool, can’t you see it’s a massive government conspiracy, or have they gottento you too?”"
+      },
+      {
+        "t": "Lisa: “Stop it, why do you dummies jump to such ridiculous conclusions? Haven’t you ever heard of Occam’s Razor: the simplest explanation is probably the correct one?”"
+      },
+      {
+        "t": "Bart: “Okay, so what’s the simplest explanation?”"
+      },
+      {
+        "t": "Lisa: (rolls eyes sarcastically): “I don’t know, maybe they’re all reverse vampires and they have to get home before dark.”"
+      },
+      {
+        "t": "Bart and Milhouse: “Aaargh, reverse vampires!”"
+      },
+      {
+        "t": "The Simpsons also explain ‘specious reasoning’ so that ordinary people can get it."
+      },
+      {
+        "t": "Homer is bragging about his Bear Patrol."
+      },
+      {
+        "t": "Homer: “Not a bear in sight. The Bear Patrol must be working like a charm”"
+      },
+      {
+        "t": "Lisa: “That’s specious reasoning Dad, by your logic I can claim this rock keeps tigers away.”"
+      },
+      {
+        "t": "Homer: “Oh, how does it work?”"
+      },
+      {
+        "t": "Lisa: “It doesn’t work, it’s a stupid rock. But I don’t see any tigers around here, do you?”"
+      },
+      {
+        "t": "Homer: “… Lisa, I want to buy your rock.”"
+      },
+      {
+        "t": "‘Only Fools and Horses’ and ‘The Simpsons’ don’t talk down to people."
+      },
+      {
+        "t": "They explain complicated concepts in simple language anyone can understand."
+      },
+      {
+        "gap": true
+      },
+      {
+        "t": "We in advertising could learn a lot from that."
+      },
+      {
+        "t": "As Orson Welles said: “I can think of nothing an audience won’t understand."
+      },
+      {
+        "t": "The only problem is to interest them; once they are interested they understand anything in the world”."
+      }
+    ]
+  },
+  {
+    "slug": "ignorance-is-bliss",
+    "originalTitle": "IGNORANCE IS BLISS",
+    "originalLines": [
+      {
+        "t": "In 1865, Joseph Lister stated that infection in a wound didn’t come from insidethe body, it was transferred by micro-organisms from outside the body."
+      },
+      {
+        "t": "So, if you killed the micro-organisms (germs) by sterilisation, the wound wouldn’t get infected."
+      },
+      {
+        "t": "He said a surgeon’s hands and instruments therefore must be washed in carbolic acid before coming into contact with a wound."
+      },
+      {
+        "t": "But in 1873, the Lancet considered Germ Theory so ridiculous it published a series of articles warning surgeons against this silly fad."
+      },
+      {
+        "t": "Which was a shame, because on July 2nd 1881 President James Garfield was shot in the back."
+      },
+      {
+        "t": "The White House doctor was Willard Bliss, he’d read in the Lancet that sterilisation was nonsense so he probed about inside the wound with unwashed hands and unwashed instruments to find the musket-ball."
+      },
+      {
+        "t": "Initially the president’s condition was good and he seemed likely to make a full recovery."
+      },
+      {
+        "t": "But due to continual probing with unwashed hands, he developed an infection."
+      },
+      {
+        "t": "Bliss was convinced this was because they hadn’t found the musket-ball."
+      },
+      {
+        "t": "Alexander Graham Bell even developed a metal detector to help find it."
+      },
+      {
+        "t": "But he was only allowed to probe where Bliss thought the musket-ball was."
+      },
+      {
+        "t": "Consequently results were inconclusive, but Bliss claimed it was,“unanimously agreed that the location of the ball has been ascertained with reasonable certainty, and that it lies, as heretofore stated, in the front wall of the abdomen, about five inches below and to the right of the navel.”"
+      },
+      {
+        "t": "By July 23rd, 3 weeks after being shot, Garfield had a temperature of 104 degrees and he’d lost 40lbs in weight."
+      },
+      {
+        "t": "He had an abscess in the wound, drained with an unwashed tube."
+      },
+      {
+        "t": "By September 18th he developed pneumonia and hypertension, and by the next day he was dead."
+      },
+      {
+        "t": "At the autopsy the musket-ball was found to be on the other side of the body, the left side, where Bliss had refused to allow Bell to investigate."
+      },
+      {
+        "t": "Ira Rutkow, a member of the American College of Surgeons, says, “President Garfield had such a nonlethal wound that in today’s world he would have gone home in a matter of two or three days.”"
+      },
+      {
+        "t": "The man who shot Garfield, Charles Guiteau, even used medical incompetence as his defence, stating: “Garfield died from malpractice. According to his own physicians, he was not fatally shot. The doctors who mistreated him ought to be indicted for murdering James Garfield, not me.”"
+      },
+      {
+        "t": "But of course it didn’t work and Guiteau was executed."
+      },
+      {
+        "t": "Willard Bliss was the White House doctor, he was unassailable."
+      },
+      {
+        "t": "He MUST know what he was doing, it was ridiculous to question his authority."
+      },
+      {
+        "t": "And yet that’s where we are: the person with the best qualifications, the best accent, the best breeding, has the most credibility, they must know best."
+      },
+      {
+        "t": "Despite what the facts and our own common sense tells us."
+      },
+      {
+        "t": "Someone recently posted on twitter:"
+      },
+      {
+        "t": "“What’s the difference between humans and animals?"
+      },
+      {
+        "t": "Animals would never allow the dumbest ones to lead the pack”."
+      },
+      {
+        "t": "That’s worth remembering for advertising and marketing."
+      }
+    ]
+  },
+  {
+    "slug": "bad-data",
+    "originalTitle": "BAD DATA",
+    "originalLines": [
+      {
+        "t": "In 2018, the British Medical Journal published a paper by Professor Robert Yeh of the Harvard Medical School."
+      },
+      {
+        "t": "It concerned jumping from aircraft with and without a parachute."
+      },
+      {
+        "t": "The main finding was that a parachute made no difference to your chances of survival."
+      },
+      {
+        "t": "“The paper, titled ‘Parachute Use to Prevent Death and Major Trauma When Jumping from Aircraft; Randomised Controlled Trial’ finds that the safety devices do not significantly reduce the likelihood of death or major injury for people jumping from an aircraft as compared with the control group, equipped only with empty backpacks.”"
+      },
+      {
+        "t": "92 people were interviewed for the study, of these just 23 were found eligible to take part."
+      },
+      {
+        "t": "12 jumped from a plane with a parachute, 13 jumped without a parachute."
+      },
+      {
+        "t": "Findings were that neither group suffered any significant harm or injury, in fact outcomes were identical whether wearing a parachute or not."
+      },
+      {
+        "t": "But hidden in the middle of the paper was a sentence with a barely noticeable caveat:"
+      },
+      {
+        "t": "“The participants might have been at lower risk of death or major trauma because they jumped from an average altitude of 0.6m (standard deviation 0.1) from an aircraft moving at an average 0 km/h (standard deviation 0).”"
+      },
+      {
+        "t": "In other words, the plane they jumped from was stationery on the ground."
+      },
+      {
+        "t": "A bit like jumping off a chair."
+      },
+      {
+        "t": "Which, although it was only included as a caveat in the paper, a mere aside, actually made all the difference."
+      },
+      {
+        "t": "Without reading that part, everyone automatically assumes the results concern jumping from a plane thousands of feet high moving at hundreds of miles an hour."
+      },
+      {
+        "t": "Our brain adds together the words: ‘airplane’-‘jump’–‘parachute’ and supplies a picture of someone jumping into a clear blue sky."
+      },
+      {
+        "t": "This is the reason Professor Robert Yeh wrote the paper."
+      },
+      {
+        "t": "He wanted to demonstrate the way we leap on details in research papers and sensationalise the sexy parts."
+      },
+      {
+        "t": "We then run away with the part that makes a great headline without bothering with the mundane part that won’t help the story."
+      },
+      {
+        "t": "That’s why he wrote the study, as a satire on the mis-use of research and misunderstanding of data. As he said, the context is critical."
+      },
+      {
+        "t": "I watched TV and read the papers a while back."
+      },
+      {
+        "t": "The news was full of the fact that research had shown a bottle of wine a week increased the risk of cancer."
+      },
+      {
+        "t": "But that’s taken in limbo with no context."
+      },
+      {
+        "t": "No one bothered to ask why anyone was drinking a bottle of wine a week."
+      },
+      {
+        "t": "Maybe it was due to increased stress, maybe stress causes cancer, with or without the wine."
+      },
+      {
+        "t": "But no one bothered to dig any deeper because they’d found an exciting story."
+      },
+      {
+        "t": "As the founder of the discipline of mathematical statistics, Karl Pearson, said “Correlation does not imply causation”."
+      },
+      {
+        "t": "As in the parachute example, the wrong question reveals certain data, but ignoring the context can give the wrong answer."
+      },
+      {
+        "t": "The real question wasn’t between jumping with and without a parachute."
+      },
+      {
+        "t": "The real question was between jumping from a stationery object on the ground and a moving object in the air."
+      },
+      {
+        "t": "But the data can’t reveal that, because the data wasn’t asked that question."
+      },
+      {
+        "t": "Data is just numbers, it can’t provide conclusions, that’s not its job."
+      },
+      {
+        "t": "Because a human should possess software that data doesn’t, common sense."
+      }
+    ]
+  },
+  {
+    "slug": "the-great-leap-backwards",
+    "originalTitle": "THE GREAT LEAP BACKWARDS",
+    "originalLines": [
+      {
+        "t": "Deng Xiaoping was the second most powerful man in China."
+      },
+      {
+        "t": "Virtually untouchable."
+      },
+      {
+        "t": "But Deng said something wrong."
+      },
+      {
+        "t": "He said “It doesn’t matter what colour a cat is as long as it catches mice”."
+      },
+      {
+        "t": "That statement got the second most powerful man in China removed from office, publicly vilified, and sent to work in a tractor factory."
+      },
+      {
+        "t": "Sent there by the first most powerful man in China: Mao Zedong."
+      },
+      {
+        "t": "Because this was an argument about economic policy."
+      },
+      {
+        "t": "Deng Xiaoping believed communism was a means to an end."
+      },
+      {
+        "t": "To achieve a better, fairer life for everyone."
+      },
+      {
+        "t": "But Mao Zedong was a hard-line Marxist."
+      },
+      {
+        "t": "For Mao communism was the end, in itself."
+      },
+      {
+        "t": "So for Mao it did matter what colour all the cats were."
+      },
+      {
+        "t": "For Mao all the cats had to be red, whether they caught mice or not."
+      },
+      {
+        "t": "For Mao, all communist policies had to be strictly adhered to."
+      },
+      {
+        "t": "Which meant all personal property was confiscated by the state."
+      },
+      {
+        "t": "However hard you worked you got no more than anyone else."
+      },
+      {
+        "t": "And people were starving."
+      },
+      {
+        "t": "Deng Xiaoping said this was because it wasn’t the Chinese way."
+      },
+      {
+        "t": "Deng said the Chinese thrive on competition."
+      },
+      {
+        "t": "Deng felt some forms of personal property and personal gain should be reintroduced."
+      },
+      {
+        "t": "To encourage people to work harder, to produce more."
+      },
+      {
+        "t": "In order to feed all the people you might have to bend the rules a little."
+      },
+      {
+        "t": "But Mao believed in hard-line communist dogma whatever the results."
+      },
+      {
+        "t": "If people starved, they starved. That was just too bad."
+      },
+      {
+        "t": "Deng disagreed."
+      },
+      {
+        "t": "He was a pragmatist, he believed Form Follows Function."
+      },
+      {
+        "t": "The most important thing is that something does the job you want it to do."
+      },
+      {
+        "t": "That job was to feed the population."
+      },
+      {
+        "t": "But for Mao form did not follow function, for Mao function followed form."
+      },
+      {
+        "t": "Deng was a pragmatist, Mao was a purist."
+      },
+      {
+        "t": "Under Mao, around 20 million Chinese died as a result of starvation."
+      },
+      {
+        "t": "Then Mao died."
+      },
+      {
+        "t": "And Deng was reinstated and eventually became the most powerful man in China."
+      },
+      {
+        "t": "And Deng said “socialism and market economics are not incompatible”."
+      },
+      {
+        "t": "China remained communist, but the people were allowed to own individual property."
+      },
+      {
+        "t": "Those who worked harder could earn more."
+      },
+      {
+        "t": "Under Deng, the Chinese people became richer and better fed than they’d ever been."
+      },
+      {
+        "t": "Under Deng, China became the second greatest economic power in thewhole world."
+      },
+      {
+        "t": "The lesson is, the rules are there to serve us not to oppress us."
+      },
+      {
+        "t": "Pragmatism beats dogmatism."
+      },
+      {
+        "t": "But the smartest and most intelligent have always known that:"
+      },
+      {
+        "t": "“Form Follows Function.” – Bauhaus"
+      },
+      {
+        "t": "“The end justifies the means.” – Machiavelli"
+      },
+      {
+        "t": "“God helps those who help themselves.” – Aesop"
+      },
+      {
+        "t": "“It doesn’t matter what colour a cat is so long as it catches mice.” – Deng Xiaoping"
+      }
+    ]
+  },
+  {
+    "slug": "the-medium-is-the-message-not-the-reality",
+    "originalTitle": "THE MEDIUM IS THE MESSAGE, NOT THE REALITY",
+    "originalLines": [
+      {
+        "t": "In 891, Formosus was elected Pope; in 896, he died."
+      },
+      {
+        "t": "He was followed by Pope Stephen VI, who was not a fan of his."
+      },
+      {
+        "t": "In fact, he was so not a fan that he accused Formosus of acceding to the Papacy illegally."
+      },
+      {
+        "t": "But accusing Formosus’ memory wasn’t enough for Pope Stephen."
+      },
+      {
+        "t": "He needed the world to know, so he had Formosus’ corpse put on trial."
+      },
+      {
+        "t": "The corpse was propped up in the dock, accused and cross-questioned."
+      },
+      {
+        "t": "Obviously the corpse didn’t defend itself very well, it was convicted and three fingers, on the hand that Formosus had used for blessings, were amputated."
+      },
+      {
+        "t": "The corpse was thrown into the river Tiber, but a little way downstream it washed ashore.This was taken as an omen, Pope Stephen VI was deposed, arrested and thrown into prison, where he was strangled."
+      },
+      {
+        "t": "Pope Formosus was reinstated and formally reinterred."
+      },
+      {
+        "t": "But the next Pope was Segius III, and he overturned the reinstatement of Pope Formosus andreinstated his conviction."
+      },
+      {
+        "t": "Now, we may think, who cares, why does any of that matter?"
+      },
+      {
+        "t": "Isn’t what’s going on in the real world more important than what’s going on in some imaginary, theoretical, pretend-world?"
+      },
+      {
+        "t": "It all makes about as much sense as the fuss about the metaverse."
+      },
+      {
+        "t": "From all the recent hype, you may believe we are shortly going to leave our earthly bodies behind and float about in a virtual reality universe – a ‘meta’ verse."
+      },
+      {
+        "t": "What actually happened is Mark Zuckerberg decided, to keep his empire growing, he neededto expand beyond Facebook, beyond the internet."
+      },
+      {
+        "t": "He needed us to believe there’s an entire virtual world outside the physical world."
+      },
+      {
+        "t": "This world will be everything your mind can imagine, in fact it will be a universe of the mind. Well yes, in the words of Mandy Rice-Davies, he would say that wouldn’t he?"
+      },
+      {
+        "t": "He wouldn’t sell this as way to collect new data: eye-tracking, facial-expressions, etc."
+      },
+      {
+        "t": "My advice is before we listen to any predictions, we should check out who’s making them."
+      },
+      {
+        "t": "Just see if they are an objective, unbiased opinion based on facts, or if they are made by someone who gains a lot by making us believe them."
+      },
+      {
+        "t": "Someone who is, oh I don’t know, Head of Media Innovations say, at a media company or ad agency where they need clients to spend lots more money."
+      },
+      {
+        "t": "Just think back to any of the last game-changers which, we were told, would mean the deathof advertising. Like QR codes, or blockchain."
+      },
+      {
+        "t": "Or, remember all the headlines in the marketing press: HOW POKEMON GO WILLCOMPLETELY REVOLUTIONISE YOUR MARKETING STRATEGY."
+      },
+      {
+        "t": "Of course these people will sell you the latest marketing gimmick, that’s their job."
+      },
+      {
+        "t": "But a new thing happening doesn’t mean the death of everything else."
+      },
+      {
+        "t": "It just means some people will do it and some people won’t."
+      },
+      {
+        "t": "When architects first began designing skyscrapers they believed everyone would soon be living in skyscrapers, no one would live in houses anymore."
+      },
+      {
+        "t": "The truth is, some people live in skyscrapers, some people live in houses."
+      },
+      {
+        "t": "There needs to be room in our thinking for both kinds."
+      },
+      {
+        "t": "Remember how digital was going to be the death of advertising?"
+      },
+      {
+        "t": "That didn’t happen either, it simply became another branch of advertising."
+      },
+      {
+        "t": "But calm, rational thinking doesn’t sell papers."
+      },
+      {
+        "t": "We need a level of hysteria to make people frightened of missing out."
+      },
+      {
+        "t": "That’s why you’ll never see a headline that says: NOTHING MUCH HAPPENED TODAY, because it doesn’t sell papers."
+      },
+      {
+        "t": "There’s an old saying: “Never ask a barber whether you need a haircut”."
+      }
+    ]
+  },
+  {
+    "slug": "dont-tell-clients-to-be-brave",
+    "originalTitle": "DON’T TELL CLIENTS TO BE BRAVE",
+    "originalLines": [
+      {
+        "t": "DON’T TELL CLIENTS TO BE BRAVE"
+      },
+      {
+        "gap": true
+      },
+      {
+        "t": "In 1854, the British and French were fighting the Russians in the Crimean war."
+      },
+      {
+        "t": "The Light Brigade was led by Lord Cardigan, they were lined up in formation waiting impatiently for orders."
+      },
+      {
+        "t": "At the other end of the valley, over a mile away, were 50 Russian cannons."
+      },
+      {
+        "t": "On a hill above, Lord Raglan was in overall command, he could see some Russian troopstowing away a few guns they’d just captured."
+      },
+      {
+        "t": "He wanted the Light Brigade to go and stop them towing the guns away."
+      },
+      {
+        "t": "He wrote the order and handed it to Captain Nolan to deliver to Lord Cardigan."
+      },
+      {
+        "t": "The message said: “Lord Raglan wishes the cavalry to advance rapidly to the front, follow the enemy, and try to prevent the enemy carrying away the guns. Troop horse artillery may accompany. French cavalry is on your left. Immediate.”"
+      },
+      {
+        "t": "But in the valley, Lord Cardigan couldn’t see the Russians towing the guns away."
+      },
+      {
+        "t": "When he asked Captain Nolan “What guns?” Nolan just gestured down the valley."
+      },
+      {
+        "t": "All Cardigan could see was the 50 cannons at the end of the valley."
+      },
+      {
+        "t": "And, so far as he was concerned, he’d just been ordered to attack these, which he did."
+      },
+      {
+        "t": "The charge was incredibly brave, 600 of the finest cavalry with nothing but swords and lances, charged straight into the mouths of 50 cannons and were slaughtered."
+      },
+      {
+        "t": "A French General observing the charge commented: “C’est magnifique, mais ce n’est pas la guerre. C’est de la folie.“ (It is magnificent, but it is not war. It is madness.)"
+      },
+      {
+        "t": "It was brave but it was a massacre, it had no chance of succeeding."
+      },
+      {
+        "t": "It was brave just for the sake of being brave."
+      },
+      {
+        "t": "This is my problem when agencies show a client ‘brave’ work, when agencies ask a client to be ‘brave’."
+      },
+      {
+        "t": "It sounds like being brave for the sake of being brave, not because it’s the smart thing to do."
+      },
+      {
+        "t": "The highest award for bravery is the Victoria Cross."
+      },
+      {
+        "t": "It’s awarded for, “The most conspicuous bravery, or some daring or pre-eminent act of valour or self-sacrifice.”"
+      },
+      {
+        "t": "So the general understanding of ‘bravery’ is being scared stiff but doing it anyway."
+      },
+      {
+        "t": "What possible incentive is it to tell a client to run the ad even though he’s scared stiff?"
+      },
+      {
+        "t": "What does bravery have to do with anything in our business?"
+      },
+      {
+        "t": "What we should be doing is: smart, clever, audacious, unexpected, creative, all these words are concerned with business advantage."
+      },
+      {
+        "t": "Bravery has nothing to do with business advantage, quite the reverse."
+      },
+      {
+        "t": "The Victoria Cross associates bravery with self-sacrifice, that’s exactly the opposite of what we should be recommending."
+      },
+      {
+        "t": "First, a client needs to make sure they don’t jeopardise what they’ve got, and then they can concentrate on growing it."
+      },
+      {
+        "t": "No responsible client would gamble everything on a ‘brave’ risk, a self-sacrifice."
+      },
+      {
+        "t": "And yet agencies consistently complain that clients aren’t buying ‘brave’ work."
+      },
+      {
+        "t": "This is mainly because Cannes, and other award schemes, applaud ‘brave’ work."
+      },
+      {
+        "t": "Work that wins the highest awards is held up as being ‘brave’."
+      },
+      {
+        "t": "This is because the people on the jury confuse creativity with art, novelty, gimmicks, etc."
+      },
+      {
+        "t": "Therefore, people in ad agencies assume they should aim for ‘brave’ work, rather than effective work."
+      },
+      {
+        "gap": true
+      },
+      {
+        "t": "That’s why I think ‘brave’ is a silly word."
+      },
+      {
+        "t": "If I was a client I’d be suspicious of anyone asking me to buy work because it was brave."
+      },
+      {
+        "t": "I don’t think there’s any point in being brave for brave’s sake."
+      },
+      {
+        "t": "I think the point is to get a result, for that you require clever thinking, brave is irrelevant."
+      }
+    ]
+  },
+  {
+    "slug": "how-to-control-the-communication",
+    "originalTitle": "HOW TO CONTROL THE COMMUNICATION",
+    "originalLines": [
+      {
+        "t": "My wife’s name is Cathy Heng, except it isn’t, her name is Heng Siew Keow."
+      },
+      {
+        "t": "But in Singapore, where she went to school, the English teachers couldn’t remember all the Chinese names."
+      },
+      {
+        "t": "So the teachers picked names they could remember."
+      },
+      {
+        "t": "Siew Keow, Siew Hong, and Siew Cheng (my wife and her sisters) became Cathy, Bebe, and Betty."
+      },
+      {
+        "t": "And that’s how they’ve been known ever since."
+      },
+      {
+        "t": "Not by names the Chinese family and their Taoist temple gave them."
+      },
+      {
+        "t": "But by names that worked for the target market: the teachers."
+      },
+      {
+        "t": "It was the same with Cathy’s two brothers: Boon Huat and Boon Heng became Tony and Alex."
+      },
+      {
+        "t": "Because that was what the English teachers could remember."
+      },
+      {
+        "t": "The same thing even happened to Cathy’s mum."
+      },
+      {
+        "t": "Her Chinese name is Lan Cheng, this was shortened to LC (Elsie) which became her name ever since."
+      },
+      {
+        "t": "And that’s the way it works. We have to come off broadcast and go on receive."
+      },
+      {
+        "t": "We have to consider what works with our target market before we consider what we want."
+      },
+      {
+        "t": "If you’ve ever named a child, you know this."
+      },
+      {
+        "t": "Our children’s Chinese names are Hui Leng and Meng Chai, but that was never going to work in London. So we christened them Jade and Lee."
+      },
+      {
+        "t": "You have to consider the audience, the target market, or you lose control of it."
+      },
+      {
+        "t": "My Uncle was christened Henry, but everyone called him Harry."
+      },
+      {
+        "t": "He didn’t like that name so he changed it to Robert, everyone called him Bob."
+      },
+      {
+        "t": "My dad’s name was John, so everyone called him Jack."
+      },
+      {
+        "t": "My mum’s name was Ellen, so everyone called her Nelly."
+      },
+      {
+        "t": "My aunt’s name was Mary, so everyone called her Polly."
+      },
+      {
+        "t": "That’s what people do. What matters isn’t what we want."
+      },
+      {
+        "t": "What matters is what the target market wants."
+      },
+      {
+        "t": "If we don’t accept that, we lose control of our communication."
+      },
+      {
+        "t": "I saw this in action years ago when I was a junior at BMP."
+      },
+      {
+        "t": "Courage had a draught beer called Tavern that was dying."
+      },
+      {
+        "t": "It was a good beer, the advertising was good, but whatever we tried sales were going down."
+      },
+      {
+        "t": "Planning decided to get upstream of the problem."
+      },
+      {
+        "t": "They went into pubs and watched how people ordered draught beer."
+      },
+      {
+        "t": "They found it was very important, at the point of purchase, for a drinker to ‘demonstrate familiarity’ with their pint."
+      },
+      {
+        "t": "The problem was Tavern had been named without considering how people would ask for it."
+      },
+      {
+        "t": "And asking for ‘a pint of Tavern’ just sounded too pompous."
+      },
+      {
+        "t": "And they wouldn’t ask for ‘a pint of Tav’."
+      },
+      {
+        "t": "Sales dropped off as people stopped asking for it."
+      },
+      {
+        "t": "So it was renamed to something people could adapt, it was called ‘John Courage’."
+      },
+      {
+        "t": "This meant people could ask for ‘a pint of JC’ at the bar."
+      },
+      {
+        "t": "Much less formal, much more friendly."
+      },
+      {
+        "t": "Sales took off, and the identical beer went from a failure to a success."
+      },
+      {
+        "t": "Just by starting with what people wanted to hear instead of just what wewanted to say."
+      },
+      {
+        "t": "How to control the communication is to come off broadcast and go on receive."
+      }
+    ]
+  },
+  {
+    "slug": "the-answer-is-brand-now-whats-the-question",
+    "originalTitle": "THE ANSWER IS BRAND NOW WHAT’S THE QUESTION?",
+    "originalLines": [
+      {
+        "t": "In my experience, a lot of marketing people don’t know much about the product they’re working on."
+      },
+      {
+        "t": "They don’t think the product is important, they think it’s all about brand."
+      },
+      {
+        "t": "To a marketing person, branding is what sells and marketing is always the answer to all brand questions."
+      },
+      {
+        "t": "So a marketing professional might be working on confectionary today, then two years later on cars, then two years later on an airline, then two years later on running shoes."
+      },
+      {
+        "t": "A breadth of marketing experience across different product categories seems like a good thing. To them, the brand is everything, the product category is interchangeable."
+      },
+      {
+        "t": "The answer is brand now what’s the question?"
+      },
+      {
+        "t": "What does Bertrand Russell have to say about people who come at all problems with ready-made answers?"
+      },
+      {
+        "t": "“To avoid the various foolish operations to which mankind are prone, no superhuman genius is required. A few simple rules will keep you, not from all error, but from silly error."
+      },
+      {
+        "t": "If the matter is one that can be settled by observation, make the observation yourself."
+      },
+      {
+        "t": "Aristotle could have avoided the mistake of thinking that women have fewer teeth than men, by the simple device of asking Mrs Aristotle to keep her mouth open while he counted. He did not do so because thought he knew. Thinking that you know, when in fact you don’t, is a fatal mistake to which we are all prone."
+      },
+      {
+        "t": "I believe myself that hedgehogs eat black beetles, because I have been told that they do; but if I were writing a book on the habits of hedgehogs, I should not commit myself until I had seen one enjoying this unappetising diet. Aristotle, however, was less cautious. Ancient and medieval authors knew all about unicorns and salamanders; not one of them thought it necessary to avoid dogmatic statements about them simply because they had never seen one of them.”"
+      },
+      {
+        "t": "What marketing people call research is only ever consumer research, they ask people what they think about the brand."
+      },
+      {
+        "t": "Marketing people almost never research the product."
+      },
+      {
+        "t": "That’s why creatives have to do it, to start learning about that subject."
+      },
+      {
+        "t": "How it’s made, who designed it and why, where it’s sold, who buys it, the competition – the benefits and drawbacks, the history, salesforce problems, and more."
+      },
+      {
+        "t": "You have to go to the factory to see it being made, talk to the R&D guys, talk to retailers, talk to customers, current-users, and ex-users."
+      },
+      {
+        "t": "And all of that is before you actually start working on the ad campaign."
+      },
+      {
+        "t": "I’ve visited: car factories, breweries, TV factories, huge bakeries, tea plantations, confectionary manufacturers, clothing retailers, insurance firms, banks, development areas, holiday destinations, broadcasters, baby-nappy makers, pharmaceuticals, glass factories."
+      },
+      {
+        "t": "An account man, or client, or planner doesn’t do these things, because they already know the answer. For them, the answer is brand now what’s the question?"
+      },
+      {
+        "t": "As creatives, if we want to know about the product, we have to do that research ourselves."
+      },
+      {
+        "t": "That’s why, as a creative, we can’t depend on someone else’s brief."
+      },
+      {
+        "t": "The brand is the tone-of-voice, the feeling, the image, the reputation."
+      },
+      {
+        "t": "The product is the actual object the consumer buys, the product is the words that go into the ads. The product is the content, the brand is the execution."
+      },
+      {
+        "t": "We can’t wait for the brand-planning dept to brief us on the product."
+      },
+      {
+        "t": "We have to go and do the research (not consumer research, product research) ourselves."
+      },
+      {
+        "t": "As Russell said, the biggest mistake is believing we know without finding out."
+      },
+      {
+        "t": "Or, as Will Rogers said, “It ain’t what you don’t know that gets you into trouble. It’s what you know for sure that just ain’t so.”"
+      }
+    ]
+  },
+  {
+    "slug": "platonic-advertising",
+    "originalTitle": "PLATONIC ADVERTISING",
+    "originalLines": [
+      {
+        "t": "Roughly speaking, Plato’s Theory of Forms is that a world of perfection exists beyond the purely physical world we inhabit."
+      },
+      {
+        "t": "It doesn’t exist in a tangible way, but as an ideal to be aspired to."
+      },
+      {
+        "t": "So the perfect chair exists there, the perfect horse, the perfect cup; whatever you can think of the perfect form of it exists in abstract."
+      },
+      {
+        "t": "These Perfect Forms are what we must aspire to, anything in the physical world can only be a crude attempt to get close to them."
+      },
+      {
+        "t": "In Plato’s time, 2,500 years ago, this probably made sense."
+      },
+      {
+        "t": "40 percent of the population were slaves and uneducated, so amongst the rich, it made sense to have a single goal for everything, because the rich mainly agreed on it."
+      },
+      {
+        "t": "Today however, we understand that to have a single purpose for anything, like a chair, doesn’t make sense."
+      },
+      {
+        "t": "Is the chair to relax in like an armchair, or to work from like an office chair, or to take camping and be collapsible, or to use in a restaurant, or to fit into a car, or to use as a wheelchair, or to teach from?"
+      },
+      {
+        "t": "Are we designing for cost, or reproduction, or utility, or sustainability, or appearance?"
+      },
+      {
+        "t": "It’s obvious to us there can’t be one perfect form that all chairs should aspire to when there isn’t a single purpose for every chair to perform."
+      },
+      {
+        "t": "The same with any of Plato’s other Perfect Forms."
+      },
+      {
+        "t": "There are many more times the number of people alive today, and there are many more new inventions, than Plato could possibly have conceived of."
+      },
+      {
+        "t": "So the variables for everything are many times greater than he knew."
+      },
+      {
+        "t": "Take the advertising brief: each new person and each new product presents a different problem that needs solving."
+      },
+      {
+        "t": "We don’t aspire to perfection of the form, we aspire to the best solution for the problem."
+      },
+      {
+        "t": "But the idea persists that there is a world of perfect forms, of course, we don’t call it that, we call it ‘the right answer’ and everyone thinks they’ve got it."
+      },
+      {
+        "t": "But, of course, everyone’s got a different right answer."
+      },
+      {
+        "t": "And because we think our answer is the only right answer, we think it is the one we must aspire to."
+      },
+      {
+        "t": "So I have to fight for my right answer (Perfect Form) over your answer."
+      },
+      {
+        "t": "And you fight for your right answer (Perfect Form) over my answer."
+      },
+      {
+        "t": "And even though we can all see how silly Perfect Forms would be today, we still fight over whose vision of it is correct."
+      },
+      {
+        "t": "And then ego kicks in, and we’re not even fighting over the right answer, we’re just fighting to see who wins."
+      },
+      {
+        "t": "This is the problem with the briefing process."
+      },
+      {
+        "t": "The right answer is decided at the time the brief is written, usually by the account person, the client, the planner (aka strategist)."
+      },
+      {
+        "t": "Once their thoughts are committed to paper they become the right answer, the Perfect Form, on the subject."
+      },
+      {
+        "t": "They brief becomes law and cannot be deviated from."
+      },
+      {
+        "t": "So there’s nothing left for the creatives to do but execute that brief."
+      },
+      {
+        "t": "Which means ‘creatives’ is a misnomer, they are actually mere stylists, being asked to sprinkle some glitter on a lowest-common-denominator solution."
+      },
+      {
+        "t": "Restriction of thought is never a recipe for real creativity."
+      },
+      {
+        "t": "Opportunity lies in unearthing what other people haven’t seen."
+      },
+      {
+        "t": "There needs to be room for a dialectic to unearth the unexpected."
+      },
+      {
+        "t": "As Rory Sutherland said, “Sometimes, the opposite of a right answer is another right answer”"
+      }
+    ]
+  },
+  {
+    "slug": "competition-good-or-bad",
+    "originalTitle": "COMPETITION, GOOD OR BAD?",
+    "originalLines": [
+      {
+        "t": "Warren Buffett has made $117 billion by investing wisely."
+      },
+      {
+        "t": "This was the reason a lady in the audience at one of his talks asked his advice."
+      },
+      {
+        "t": "She’d just come into a few thousand dollars and wanted to know the best way to invest it."
+      },
+      {
+        "t": "Without hesitating, Buffett said “Pay off your credit card debt”."
+      },
+      {
+        "t": "She looked disappointed, that wasn’t the answer she wanted, she wanted an investment tip that would make her rich."
+      },
+      {
+        "t": "So Buffett explained, “You’re paying about 18% interest on your credit card debt. There isn’t any safe investment that’s going to give you an 18% return. The most you’ll get is probably around 4% or 5%. So it doesn’t make any sense to put your money into a 5% investment while you’re losing 18% at the same time."
+      },
+      {
+        "t": "If you’re getting 5% interest but paying out 18% interest, you’re losing 13%.”"
+      },
+      {
+        "t": "The woman sat down, sure Buffett made sense but it wasn’t the answer she wanted."
+      },
+      {
+        "t": "She wasn’t interested in paying what she owed, that was boring, she wanted to make money by investing, that was exciting."
+      },
+      {
+        "t": "Which is why Warren Buffett is a multi-billionaire and most of us aren’t."
+      },
+      {
+        "t": "He says he made his fortune not by making brilliant decisions, but just by avoiding stupid ones."
+      },
+      {
+        "t": "That’s a good example of what he means: he avoids the Optimism Bias."
+      },
+      {
+        "t": "This is the tendency to overestimate the upside and underestimate the downside."
+      },
+      {
+        "t": "This is what cognitive neuroscientist, Tali Short, says led to the financial downturn of 2008."
+      },
+      {
+        "t": "When the financial market’s desire to win against all reason, became an obsession."
+      },
+      {
+        "t": "William Muir, a biologist at Purdue university, conducted an experiment with chickens."
+      },
+      {
+        "t": "He separated them into two groups, those that laid a normal amount of eggs and those that laid many more eggs, which he called ‘super-chickens’."
+      },
+      {
+        "t": "After two generations, the normal chickens were producing more eggs, but only 3 of the ‘super-chickens’ were still alive, the rest had been pecked to death."
+      },
+      {
+        "t": "Muir’s conclusion was that extreme competition had actually been harmful."
+      },
+      {
+        "t": "Once the super-chickens had been removed from the group, the normal chickens were able to produce comfortably without being harassed."
+      },
+      {
+        "t": "The super-chickens meanwhile had attacked each other."
+      },
+      {
+        "t": "Margaret Heffernan, a professor at Bath university, sees this as an analogy for human behaviour in business, and how harmful internal competition can be."
+      },
+      {
+        "t": "In trying to win at all costs, highly competitive employees become fixated on personal success rather than group success."
+      },
+      {
+        "t": "In which case, the way to succeed is to harm the chances of your co-workers in order to make yourself look better by comparison."
+      },
+      {
+        "t": "Instead of supporting the group against outside competition, the focus becomes personal success by competing against those inside the group."
+      },
+      {
+        "t": "She cites football teams as an example, Real Madrid versus Barcelona for instance."
+      },
+      {
+        "t": "Real Madrid had ‘Los Galacticos’, the most expensive footballers on the planet, who each had to justify their enormous cost against everyone else on the team."
+      },
+      {
+        "t": "Whether the team won was less important than how well they personally played."
+      },
+      {
+        "t": "Whereas Barcelona had a team that played for each other, instead of competing with each other: they only won when the team won."
+      },
+      {
+        "t": "I’m sure we all know people who put more energy into the politics than they do into the job."
+      },
+      {
+        "t": "People who focus on their own success above everything else."
+      },
+      {
+        "t": "We can find it everywhere, no matter how gifted someone is, once the toxic personality is removed the whole team performs better."
+      },
+      {
+        "t": "And that’s the irony, in the end the wrong sort of competition is self-defeating."
+      }
+    ]
+  },
+  {
+    "slug": "positive-vs-negative-advertising",
+    "originalTitle": "POSITIVE VS NEGATIVE ADVERTISING",
+    "originalLines": [
+      {
+        "t": "Most people think freedom is a pretty simple concept: lack of restrictions."
+      },
+      {
+        "t": "But Isaiah Berlin showed that isn’t true, on the contrary freedom is complicated."
+      },
+      {
+        "t": "Berlin said the main misconception was that there was just one kind of freedom, when in fact there were two diametrically opposed freedoms: positive and negative."
+      },
+      {
+        "t": "Positive freedom is the freedom most of us recognise, it is the freedom TO DO something."
+      },
+      {
+        "t": "But there is another kind: the freedom FROM something."
+      },
+      {
+        "t": "Berlin said the two freedoms are antithetical: the more you have of one, the less you have of the other."
+      },
+      {
+        "t": "For instance, a positive freedom would be the freedom for everyone TO carry a gun."
+      },
+      {
+        "t": "But this would reduce a negative freedom, the freedom FROM gun violence."
+      },
+      {
+        "t": "To increase the negative freedom FROM gun violence, you would need to ban guns."
+      },
+      {
+        "t": "But this would decrease the positive freedom TO carry guns."
+      },
+      {
+        "t": "So when you turn the dial up on one freedom, you turn it down on the other."
+      },
+      {
+        "t": "By increasing the positive freedom TO drive as fast as you want, you decrease the negative freedom FROM road accidents."
+      },
+      {
+        "t": "By increasing the negative freedom FROM road accidents, you decrease the positive freedom TO drive fast."
+      },
+      {
+        "t": "This is what Berlin meant by the two freedoms being antithetical."
+      },
+      {
+        "t": "The positive freedom for everyone TO make as much money as they want means some people will become fantastically rich."
+      },
+      {
+        "t": "But it also means they will have more than the average, so some people must go without."
+      },
+      {
+        "t": "Which means it removes the negative freedom FROM hunger and poverty."
+      },
+      {
+        "t": "If we decide on equality for everyone we increase the negative freedom FROM poverty, but we decrease the positive freedom TO get more money by working harder."
+      },
+      {
+        "t": "This is obviously the conflict between extreme capitalism and extreme communism."
+      },
+      {
+        "t": "But the conflict between the two freedoms isn’t just economic."
+      },
+      {
+        "t": "What bearing does this conflict between the two freedoms have on what we do?"
+      },
+      {
+        "t": "Well the freedom TO make advertising that everyone enjoys and admire means a concentration on quality and time to produce it."
+      },
+      {
+        "t": "But that means more money spent on making the advertising, which means less freedom to make massive profits."
+      },
+      {
+        "t": "Conversely, the freedom TO make advertising as cheaply and poorly as possible removes the freedom FROM boredom and irritation."
+      },
+      {
+        "t": "Then again, the freedom TO make advertising that is innovative and exciting reduces the freedom FROM insecurity, where advertising must be predictable."
+      },
+      {
+        "t": "But increasing the freedom FROM insecurity means only running ads that have had been made predictable, so they are dull."
+      },
+      {
+        "t": "The freedom TO be different and to stand out decreases the freedom FROM feeling insecure by being different."
+      },
+      {
+        "t": "But the freedom FROM feeling insecure, means reducing the freedom TO DO something that’s innovative and unexpected."
+      },
+      {
+        "t": "So Isaiah Berlin was right, it’s always a conflict between the two freedoms."
+      },
+      {
+        "t": "Neither is right or wrong, but it is always a choice."
+      },
+      {
+        "t": "Sometimes the right choice is the freedom TO do something unusual, sometimes the right choice is the freedom FROM taking a risk."
+      },
+      {
+        "t": "The only choice that’s wrong is to pretend that it isn’t a choice."
+      },
+      {
+        "t": "To pretend that we can have it both ways."
+      },
+      {
+        "t": "That’s how we fool ourselves, and that is always the wrong choice."
+      }
+    ]
+  },
+  {
+    "slug": "this-isnt-sociology-this-is-advertising",
+    "originalTitle": "THIS ISN’T SOCIOLOGY, THIS IS ADVERTISING",
+    "originalLines": [
+      {
+        "t": "Up until the 1960s, Detroit only produced huge cars, the bigger the better."
+      },
+      {
+        "t": "But in the 1960s the counter-culture and Volkswagen began to reverse the trend."
+      },
+      {
+        "t": "Massive cars were no longer a symbol of success, just greed."
+      },
+      {
+        "t": "Smaller European cars like Volvo began to be seen as the more intelligent choice."
+      },
+      {
+        "t": "In the 1970s, Japanese cars were also being imported in large numbers."
+      },
+      {
+        "t": "Seeing the trend, Detroit had no choice but to change from making huge lumps of metalcovered in chrome to smaller, efficient cars."
+      },
+      {
+        "t": "But they didn’t have the time or the experience to begin designing, retooling, and building factories to make these small cars themselves."
+      },
+      {
+        "t": "So they brought them from abroad and rebadged them as American cars."
+      },
+      {
+        "t": "General Motors did this with the Isuzu Gemini."
+      },
+      {
+        "t": "The Isuzu Gemini was a copy of the Opel Kadett, GM thought a German sounding car would sell better than a Japanese sounding one, so they renamed it the Buick Opel."
+      },
+      {
+        "t": "Detroit was still trying to understand the new mood of the counter-culture, it wasn’t big and loud and boastful as it had traditionally been, it was modest, self-deprecating."
+      },
+      {
+        "t": "From the massive success of VW and their advertising, they could see the tone was much more intelligent, less about bragging, more about honesty, more about treating customers as if they were intelligent."
+      },
+      {
+        "t": "This was a new concept for Detroit and they struggled to understand it."
+      },
+      {
+        "t": "They knew they needed to get their car on the same shopping list as other small cars."
+      },
+      {
+        "t": "So the obvious thing was to run a comparison against the imported cars that people were buying, to make everyone see the Buick Opel as part of that group."
+      },
+      {
+        "t": "That was their thinking when they ran: THE 5 CAR SHOWDOWN."
+      },
+      {
+        "t": "They compared the Buick Opel to the Toyota Corolla, the Subaru DL, the Datsun B210, and the VW Rabbit."
+      },
+      {
+        "t": "They had an independent writer from Car & Driver magazine conduct the tests, including: acceleration, mileage, cornering, quietness, and roominess, then they published the results. In parking and engine-power the Buick Opel came first, in steering they came joint first, in comfort they came third, and in maintenance they came last."
+      },
+      {
+        "t": "When all the tests were finished, they proudly ran their advertising campaign announcing the result of THE 5 CAR SHOWDOWN."
+      },
+      {
+        "t": "The Buick Opel had come second overall."
+      },
+      {
+        "t": "They published this because they wrongly thought two things: 1) their counter-culture honesty would place their image alongside VW’s advertising, 2) the fact of them coming second would make them preferred to all the cars that came below them."
+      },
+      {
+        "t": "What they had forgotten was that they were in the very real world of advertising."
+      },
+      {
+        "t": "Consumers didn’t read the modest copy, all they wanted to know was: “Who came first?”"
+      },
+      {
+        "t": "And who came first was the VW Rabbit."
+      },
+      {
+        "t": "The people at Buick had assumed they would be respected for their honesty, they assumed this resect would be passed on to the brand, people would want to buy an honest car."
+      },
+      {
+        "t": "But of course that isn’t how advertising works."
+      },
+      {
+        "t": "The Buick Opel advertising was actually doing the VW Rabbit’s advertising for it."
+      },
+      {
+        "t": "And Volkswagen recognised this by re-running Buick’s 5 CAR CHALLENGE advertising."
+      },
+      {
+        "t": "And thanking Buick for telling everyone the VW Rabbit was a better car than the Buick Opel."
+      },
+      {
+        "t": "The Buick advertising helped VW sell 1.4 million Rabbits over the next ten years."
+      },
+      {
+        "t": "Because real people don’t pore over every detail of ads the way ad-people do, they just want to know the top line."
+      },
+      {
+        "t": "See, this isn’t sociology where we understand the zeitgeist and consumers love us for it."
+      },
+      {
+        "t": "This is advertising where real people spend their hard-earned money."
+      }
+    ]
+  },
+  {
+    "slug": "leave-the-woman-at-the-river",
+    "originalTitle": "LEAVE THE WOMAN AT THE RIVER",
+    "originalLines": [
+      {
+        "t": "There’s an old Buddhist story: an older and a younger monk are on a pilgrimage when they come to a river."
+      },
+      {
+        "t": "There’s a young woman standing by the river sobbing."
+      },
+      {
+        "t": "The older monk asks her what’s the matter."
+      },
+      {
+        "t": "She says she has to go to see her sick mother but she’s too frightened to cross the fast-flowing river."
+      },
+      {
+        "t": "The older monk says she should hop on his back and he’ll carry her across."
+      },
+      {
+        "t": "So she clings on to him as he carefully wades across the river, the younger monk looking on."
+      },
+      {
+        "t": "When they get across, the young woman thanks him and goes on her way."
+      },
+      {
+        "t": "As the two monks walk on, something is clearly bothering the younger monk."
+      },
+      {
+        "t": "His brow gets furrowed, his mood gets darker."
+      },
+      {
+        "t": "After many miles he can’t contain it any longer, he bursts out: “We are not supposed to have anything to do with women, but you carried one on your back, how could you?”"
+      },
+      {
+        "t": "The older monk looks at him indulgently and says, “I left her back at the river, but you’re still carrying her.”"
+      },
+      {
+        "t": "I always like that story because it’s a guide to decisions."
+      },
+      {
+        "t": "For me the lesson is to make the decision then forget about it, don’t keep worrying about it and remaking the decision in your head."
+      },
+      {
+        "t": "All that does is slow you down and stop you from moving on."
+      },
+      {
+        "t": "Make the decision then do it."
+      },
+      {
+        "t": "If you’re not prepared to do it then you haven’t really made the decision."
+      },
+      {
+        "t": "That’s why people find me brusque, I don’t like to keep going back over decisions."
+      },
+      {
+        "t": "Once they’re made, let’s act on it and move on."
+      },
+      {
+        "t": "If we agree that someone will do something, then we get out of the way, we don’t keep hovering over them, we let them do it."
+      },
+      {
+        "t": "If we’re not prepared to let them do it then we shouldn’t have agreed to it."
+      },
+      {
+        "t": "I know ‘binary’ isn’t a very popular expression at present, but I like things binary."
+      },
+      {
+        "t": "I like black and white, up and down, in or out, yes or no, on or off, hot or cold."
+      },
+      {
+        "t": "I like clarity."
+      },
+      {
+        "t": "Grey decisions just mean a fudge, there’s no clarity so no one’s responsible, everyone’s got an excuse, somewhere to hide."
+      },
+      {
+        "t": "But clarity means responsibility, and that’s uncomfortable for most people."
+      },
+      {
+        "t": "That’s why they find me brusque."
+      },
+      {
+        "t": "I like to work with people who like responsibility, people who want ownership of their job, people who don’t want other people looking over their shoulder."
+      },
+      {
+        "t": "For me that’s how a team works, you do your job and let me do mine."
+      },
+      {
+        "t": "I hate working with people who can’t do their own job and so they want to do mine."
+      },
+      {
+        "t": "That just means they screw up two jobs."
+      },
+      {
+        "t": "The best agencies I’ve known are where the art director, the copywriter, the account-handler, the planner, the media person, the client, all concentrate on doing their own job the best they possibly can, instead of interfering in mine."
+      },
+      {
+        "t": "If you don’t think someone can do a job don’t interfere, fire them and get someone who can do the job."
+      },
+      {
+        "t": "As long as people are interfering in other people’s jobs, they’re not doing their own job properly."
+      },
+      {
+        "t": "That’s what I learned from that old Buddhist story."
+      },
+      {
+        "t": "Make a decision and stop thinking about it, move on."
+      },
+      {
+        "t": "Stop thinking about past decisions or other people’s jobs."
+      },
+      {
+        "t": "Leave the woman at the river."
+      }
+    ]
+  },
+  {
+    "slug": "the-more-you-know-the-better",
+    "originalTitle": "THE MORE YOU KNOW THE BETTER",
+    "originalLines": [
+      {
+        "t": "One of my mates at art school, Tom, was on a football scholarship."
+      },
+      {
+        "t": "This was America, so it wasn’t what we call football, it was American football."
+      },
+      {
+        "t": "But Tom crushed his knee, and was told if he played anymore he’d never walk again."
+      },
+      {
+        "t": "That was the end of his football scholarship, but he still talked a lot about the game."
+      },
+      {
+        "t": "As I remember it, the team that had the ball had 4 chances to make 10 yards."
+      },
+      {
+        "t": "Each team had two squads, defence and attack: if you had the ball you fielded your attack, if you lost the ball you switched to your defence."
+      },
+      {
+        "t": "Tom was on defence, so lots of tackling was how he’d ruined his knee."
+      },
+      {
+        "t": "I asked him how many plays there were, he said about 75 offensive plays and about 125 defensive plays."
+      },
+      {
+        "t": "But you didn’t have to remember them all, you knew who you were playing next week so you practiced about 20 plays that would combat their style: if they were a running team you practiced contact plays, if they were a team that threw the ball you practiced interceptions."
+      },
+      {
+        "t": "So a lot of the game was played before the game was played."
+      },
+      {
+        "t": "It’s the same everywhere, the mental game comes before the actual game."
+      },
+      {
+        "t": "Take chess, there are dozens of moves to learn: The Queen’s Gambit, the Sicilian Defence, the Catalan Opening, the Italian Game, the Poisoned Pawn, the Dutch Defence, the Centre Game, the King’s Gambit (declined), and so on."
+      },
+      {
+        "t": "The more moves you know, the more chance you have of winning, that’s common sense."
+      },
+      {
+        "t": "But one place we don’t observe this rule is advertising."
+      },
+      {
+        "t": "In advertising, we are desperate to learn one rule and have it apply in every instance."
+      },
+      {
+        "t": "A while ago the answer was always Big Data and AdTech, then it was QR Codes, then it was Pokémon Go, then it was Influencer Marketing, then it was Behavioural Science."
+      },
+      {
+        "t": "I don’t have a problem with any of those, but one answer is not the answer to everything."
+      },
+      {
+        "t": "Like football or chess or anything else, the more moves you know the more options you have, the more adaptable you are, the less predictable your thinking."
+      },
+      {
+        "t": "So for us, the debate might be market-growth v market-share, or consumer durable v FMCG,or brand-awareness v brand-purpose, or fashion v durability, or brand v product, or distress purchase v Veblen goods, or a dozen other basic marketing options."
+      },
+      {
+        "t": "The point being, if you don’t know all of these, you won’t have the options."
+      },
+      {
+        "t": "You just have one kneejerk answer to every problem."
+      },
+      {
+        "t": "Rosser Reeves invented the USP, Unique Selling Proposition, it was very good but it was the only answer his agency ever seemed to have."
+      },
+      {
+        "t": "Similar to the current fixation with brand as the only possible answer, ever."
+      },
+      {
+        "t": "That is simply coming up with the answer before you even know what the question is."
+      },
+      {
+        "t": "For instance, I hear people arguing that TV is better for advertisers than online, and for proof they will cite the big brands that use TV."
+      },
+      {
+        "t": "Personally, I prefer working in TV but it can’t always be right for everyone."
+      },
+      {
+        "t": "What if you don’t have the budget of the big brands?"
+      },
+      {
+        "t": "A small budget will disappear on TV but might work much better online."
+      },
+      {
+        "t": "What if brand isn’t even the issue?"
+      },
+      {
+        "t": "What if you’re launching a new category and you need to change consumer behaviour?"
+      },
+      {
+        "t": "How will brand preference help in a market that doesn’t exist yet?"
+      },
+      {
+        "t": "A fixation with one kind of thinking will keep you paralysed."
+      },
+      {
+        "t": "Which is the same as a football player or a chess player having just one move."
+      },
+      {
+        "t": "That’s why the best players in any game or business learn as many options as possible."
+      },
+      {
+        "t": "They don’t just learn the current thinking, what everyone else knows."
+      },
+      {
+        "t": "They learn the principals, the foundations, because knowledge is always an advantage."
+      }
+    ]
+  },
+  {
+    "slug": "existential-advertising",
+    "originalTitle": "EXISTENTIAL ADVERTISING",
+    "originalLines": [
+      {
+        "t": "Advertising isn’t complicated, but we like to make it sound like it is."
+      },
+      {
+        "t": "Okay try this: advertising splits basically into two schools of thought, Sartre or Kant."
+      },
+      {
+        "t": "Sartre was an existentialist; that already sounds more complicated than it is."
+      },
+      {
+        "t": "It’s called existentialism because its motto is: “existence precedes essence”."
+      },
+      {
+        "t": "Which again sounds complicated, but just means that someone existing happens before the rules about how we should exist."
+      },
+      {
+        "t": "So existence is the reality, the rules are made up afterwards."
+      },
+      {
+        "t": "See, that’s actually not complicated at all."
+      },
+      {
+        "t": "If we don’t exist, how can there be any rules?"
+      },
+      {
+        "t": "That being the case, there can’t be any absolute right or wrong, just what we decide."
+      },
+      {
+        "t": "Although there isn’t an absolute right or wrong, there are rules for how society works."
+      },
+      {
+        "t": "So if we break society’s rules, there are consequences."
+      },
+      {
+        "t": "I found it best described as: “There is no right and wrong, there is only cause and effect”."
+      },
+      {
+        "t": "So we can’t hide behind right and wrong, we make a decision and take the consequences."
+      },
+      {
+        "t": "That’s uncomfortable for a lot of people, as Sartre said “We are condemned to be free”."
+      },
+      {
+        "t": "Hiding behind good intentions was acting ‘in bad faith’ – ‘behaving inauthentically’."
+      },
+      {
+        "t": "It freed us from responsibility for our actions because we could hide behind what we claimedwas right or wrong."
+      },
+      {
+        "t": "So for Sartre, the consequences of our action were the only reality."
+      },
+      {
+        "t": "Kant was the opposite of Sartre."
+      },
+      {
+        "t": "Kant believed we could never guarantee the consequences of our actions, so to predict them was delusional."
+      },
+      {
+        "t": "Kant believed therefore that intention was everything."
+      },
+      {
+        "t": "Kant believed in the ‘categorical imperative’, that sounds complicated but it needn’t be."
+      },
+      {
+        "t": "You must behave as you would wish everyone in the world to behave, at all times, there are no exceptions."
+      },
+      {
+        "t": "If you decide you want everyone to be honest, you must always be unthinkingly honest in all situations, regardless of the consequences."
+      },
+      {
+        "t": "For instance, your friend may come to your door and ask you to hide her because she is being chased by a murderer."
+      },
+      {
+        "t": "You hide her, but then the murderer comes to your door and asks if you are hiding her."
+      },
+      {
+        "t": "For Kant, you have to be honest and admit you are, that is the categorical imperative."
+      },
+      {
+        "t": "Imperative meaning you never have a choice."
+      },
+      {
+        "t": "Existentialism means you always have to choose."
+      },
+      {
+        "t": "For Kant, the intention is everything regardless of the consequences."
+      },
+      {
+        "t": "For Sartre, we must choose the consequences, intention is just an illusion."
+      },
+      {
+        "t": "So how does this relate to advertising?"
+      },
+      {
+        "t": "I see current advertising as behaving like Kant, intention is everything regardless of the consequences."
+      },
+      {
+        "t": "Total faith is placed in brand-purpose, it doesn’t matter whether anyone remembers the name, or even what’s being sold, as long as they identify with the emotional appeal the belief is they will choose whatever the brand is."
+      },
+      {
+        "t": "Against this is Sartre, where there are no rules for advertising, just the fact of results."
+      },
+      {
+        "t": "What the product’s name is, what it does, who it’s being sold to, what media is best used, what will get noticed and remembered, how to take advantage over the competition."
+      },
+      {
+        "t": "Current advertising preference is for Kantian advertising, intention is everything."
+      },
+      {
+        "t": "Existential advertising is seen as crude and old-fashioned."
+      },
+      {
+        "t": "Of course, neither Kantian nor existential advertising is always right or wrong."
+      },
+      {
+        "t": "But if I had to make a choice, I know which one I’d choose."
+      }
+    ]
+  },
+  {
+    "slug": "the-cost-of-everything-and-the-value-of-nothing",
+    "originalTitle": "THE COST OF EVERYTHING AND THE VALUE OF NOTHING",
+    "originalLines": [
+      {
+        "t": "Just before the 2008 financial crash, we lost our CEO."
+      },
+      {
+        "t": "Murray Chick was a planner, Gordon and I were creatives, none of us were account handlers, so we needed a new CEO fast."
+      },
+      {
+        "t": "When the crash happened we had a lot of employee’s jobs to protect."
+      },
+      {
+        "t": "So we quickly merged with another company who had a CEO."
+      },
+      {
+        "t": "We saved everyone’s jobs but if we’d had more time to think we’d have realised it wasn’t a good fit, because we didn’t think the same way."
+      },
+      {
+        "t": "For instance: we had a new-business director who was paid according to how many days a week he worked."
+      },
+      {
+        "t": "If he worked one day a week he got £20k a year, 2 days per week £40k a year, and so on."
+      },
+      {
+        "t": "We employed him for 3 days a week, so he got £60k a year."
+      },
+      {
+        "t": "He was one of the best new business directors we’d ever had."
+      },
+      {
+        "t": "We’d previously had new business directors that got us in to see lots of clients, but it was usually just wasted time."
+      },
+      {
+        "t": "The people we got to see weren’t senior enough to decide anything, but they enjoyed looking through ad agencies’ creative work."
+      },
+      {
+        "t": "And if these people aren’t looking for a new agency, that just wastes everyone’s time."
+      },
+      {
+        "t": "The great thing about our new business director was he knew which meetings to get us into."
+      },
+      {
+        "t": "He would spend his time making contacts so that he knew which clients were actuallythinking of changing agencies."
+      },
+      {
+        "t": "Then he would get us included on that list, so we weren’t wasting time presenting to people who were just window shopping."
+      },
+      {
+        "t": "He got us on serious pitch lists, and we won two major clients in a year, and did great work on both accounts, so we were very happy with him."
+      },
+      {
+        "t": "But the CEO of the agency we merged with wasn’t happy at all."
+      },
+      {
+        "t": "He said to me, “This guy’s on £60k per year but he only works 3 days a week. I can get a secretary to do his job for £25k and she’ll work 5 days a week.”"
+      },
+      {
+        "t": "I didn’t quite know what to say, we weren’t judging the new business director’s job on the same criteria."
+      },
+      {
+        "t": "I didn’t think it mattered how many days a week his bum occupied a chair in the office."
+      },
+      {
+        "t": "I thought we were paying him for new business, and on that metric he was good value."
+      },
+      {
+        "t": "I said “Look, we’ve had cheaper people who work 5 days a week and we end up with no new business at all, so that’s money wasted."
+      },
+      {
+        "t": "He costs more but he’s delivered two great pieces of business, so that’s £60k well spent.”"
+      },
+      {
+        "t": "But the CEO wasn’t having it, he fired the guy on £60k and put a £25k secretary on it, and we never won another piece of new business."
+      },
+      {
+        "t": "As far as the CEO was concerned, he’d saved £35k; as far as I was concerned he was just wasting £25k."
+      },
+      {
+        "t": "Oscar Wilde said of someone, “He knows the price of everything and the value of nothing.”"
+      },
+      {
+        "t": "So the management question is, should you consider price or value?"
+      },
+      {
+        "t": "The price of the new business guy was £60k, but the value was two great accounts."
+      },
+      {
+        "t": "The price of the secretary was £25k, but the value was zero."
+      },
+      {
+        "t": "Mike Gold once said to me, “The only equation is: is what you get worth what it costs?”"
+      },
+      {
+        "t": "I think Goldie was right, that’s what it always comes down to."
+      },
+      {
+        "t": "We work in advertising, we should know how it works."
+      },
+      {
+        "t": "As John Ruskin said: “There is hardly anything in the world that some man cannot make a little worse and sell a little cheaper, and the people who consider price only are this man’s lawful prey.”"
+      }
+    ]
+  }
+]

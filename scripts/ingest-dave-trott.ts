@@ -100,7 +100,7 @@ async function main() {
   let failed = 0;
 
   // Cào theo lô để vừa nhanh vừa không làm quá tải server
-  const BATCH_SIZE = 5;
+  const BATCH_SIZE = 10;
 
   for (let page = 1; page <= maxPages; page += BATCH_SIZE) {
     const pageNumbers: number[] = [];
