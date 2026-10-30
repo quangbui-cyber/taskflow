@@ -25,6 +25,7 @@ import { PRIORITIES, STATUSES, type MemberDTO, type TaskDTO } from "@/lib/types"
 import DeadlineField, { toDeadlineLocalValue } from "@/components/DeadlineField";
 import Avatar from "@/components/Avatar";
 import CommentBody from "@/components/CommentBody";
+import DetectedLinks from "@/components/DetectedLinks";
 import CommentComposer from "@/components/CommentComposer";
 import UserPicker from "@/components/UserPicker";
 import TaskFileSection from "@/components/TaskFileSection";
@@ -302,6 +303,7 @@ export default function TaskWorkspaceModal({
                   placeholder="Ghi nội dung đã hoàn thành, đường dẫn hoặc thông tin bàn giao..."
                   className="tf-field resize-y border-emerald-200 bg-emerald-50/30 focus:bg-white"
                 />
+                <DetectedLinks text={result} />
                 <TaskFileSection taskId={task.id} kind="RESULT" initialFiles={task.files.filter((file) => file.kind === "RESULT")} currentUserId={currentUserId} />
               </TaskContentSection>
 
