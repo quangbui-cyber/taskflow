@@ -12,6 +12,7 @@ import {
 } from "@/lib/caro";
 import { caroSound } from "@/lib/caroSound";
 import CaroBoard, { CaroPiece } from "./CaroBoard";
+import GameLeaderboard from "@/components/GameLeaderboard";
 import {
   createOnlineGame,
   joinOnlineGame,
@@ -42,10 +43,9 @@ type AiDifficulty = "easy" | "hard";
 
 interface CaroGameProps {
   initialRoomCode?: string | null;
-  currentUserName?: string;
 }
 
-export default function CaroGame({ initialRoomCode = null, currentUserName = "Tôi" }: CaroGameProps) {
+export default function CaroGame({ initialRoomCode = null }: CaroGameProps) {
   // Chỉ có 2 chế độ: "ai" (Chơi với máy) và "online" (Chơi online)
   const [mode, setMode] = useState<GameMode>(initialRoomCode ? "online" : "ai");
   const [difficulty, setDifficulty] = useState<AiDifficulty>("hard");
@@ -229,7 +229,7 @@ export default function CaroGame({ initialRoomCode = null, currentUserName = "T�
     setIsJoining(true);
     setOnlineError(null);
     setTimeoutMessage(null);
-    const res = await createOnlineGame(currentUserName);
+    const res = await createOnlineGame();
     setIsJoining(false);
     if (res.success && res.game) {
       setOnlineRoomCode(res.game.code);
@@ -247,7 +247,7 @@ export default function CaroGame({ initialRoomCode = null, currentUserName = "T�
     setIsJoining(true);
     setOnlineError(null);
     setTimeoutMessage(null);
-    const res = await joinOnlineGame(code, currentUserName);
+    const res = await joinOnlineGame(code);
     setIsJoining(false);
     if (res.success && res.game) {
       setOnlineRoomCode(res.game.code);
@@ -307,7 +307,7 @@ export default function CaroGame({ initialRoomCode = null, currentUserName = "T�
     caroSound.playStone();
     setTimeLeft(15);
     setTimeoutMessage(null);
-    const res = await makeOnlineMove(onlineRoomCode, r, c, myRole);
+    const res = await makeOnlineMove(onlineRoomCode, r, c);
     if (res.success && res.game) {
       setOnlineGame(res.game);
       if (res.game.winner && res.game.winner !== "DRAW") {
@@ -395,7 +395,7 @@ export default function CaroGame({ initialRoomCode = null, currentUserName = "T�
       }
     } else if (mode === "online" && onlineRoomCode && onlineGame?.status === "PLAYING") {
       const timedOutPlayer = onlineGame.turn;
-      handleOnlineTimeout(onlineRoomCode, timedOutPlayer).then((res) => {
+      handleOnlineTimeout(onlineRoomCode).then((res) => {
         if (res.success && res.game) {
           setOnlineGame(res.game);
           const loser = timedOutPlayer === "X" ? res.game.playerXName : res.game.playerOName;
@@ -788,7 +788,7 @@ export default function CaroGame({ initialRoomCode = null, currentUserName = "T�
             </div>
           )}
 
-          {isOnlineActive && onlineGame.status !== "WAITING" && onlineGame.status !== "READY" && (
+          {isOnlineActive && onlineGame.status === "FINISHED" && (
             <button type="button" onClick={handleOnlineStart} className={`w-full ${primaryBtn}`}>
               <Plus size={16} />
               Ván mới
@@ -821,6 +821,11 @@ export default function CaroGame({ initialRoomCode = null, currentUserName = "T�
           </div>
         </section>
       </div>
+
+      <GameLeaderboard
+        game="caro"
+        refreshKey={onlineGame?.status === "FINISHED" ? `${onlineGame.code}-${onlineGame.scoreX}-${onlineGame.scoreO}-${onlineGame.updatedAt}` : null}
+      />
     </div>
   );
 }

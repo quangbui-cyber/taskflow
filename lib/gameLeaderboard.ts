@@ -1,4 +1,5 @@
-// Bảng xếp hạng Sudoku online theo tháng (giờ Việt Nam, UTC+7, không đổi giờ mùa hè).
+// Bảng xếp hạng thi đấu online theo tháng, dùng chung cho Sudoku và Caro.
+// Tháng tính theo giờ Việt Nam (UTC+7, không đổi giờ mùa hè).
 
 const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
 
@@ -86,3 +87,16 @@ export function buildLeaderboard(matches: MatchResult[]): LeaderboardRow[] {
   });
   return rows;
 }
+
+export type GameLeaderboardEntry = LeaderboardRow & {
+  name: string;
+  avatarUrl: string | null;
+  isMe: boolean;
+};
+
+export type GameLeaderboard = {
+  month: MonthKey;
+  currentMonth: MonthKey;
+  totalMatches: number;
+  rows: GameLeaderboardEntry[];
+};

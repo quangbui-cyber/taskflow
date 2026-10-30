@@ -13,14 +13,8 @@ import {
   type Grid,
   type SudokuDifficulty,
 } from "@/lib/sudoku";
-import {
-  buildLeaderboard,
-  isMonthKey,
-  monthKeyOf,
-  monthRange,
-  type LeaderboardRow,
-  type MonthKey,
-} from "@/lib/sudokuLeaderboard";
+import { loadLeaderboard } from "@/lib/gameLeaderboardData";
+import type { GameLeaderboard } from "@/lib/gameLeaderboard";
 
 export type SudokuSide = "HOST" | "GUEST";
 export type SudokuStatus = "WAITING" | "READY" | "PLAYING" | "FINISHED";
@@ -373,53 +367,23 @@ export async function forfeitSudokuRound(code: string): Promise<Result> {
   return { success: true, game: toState(updated, user.id) };
 }
 
-export type SudokuLeaderboardEntry = LeaderboardRow & {
-  name: string;
-  avatarUrl: string | null;
-  isMe: boolean;
-};
-
-export type SudokuLeaderboard = {
-  month: MonthKey;
-  currentMonth: MonthKey;
-  totalMatches: number;
-  rows: SudokuLeaderboardEntry[];
-};
-
 /** Bảng xếp hạng số trận thắng online trong một tháng (mặc định tháng hiện tại). */
 export async function getSudokuLeaderboard(
   month?: string
-): Promise<{ success: boolean; leaderboard?: SudokuLeaderboard; error?: string }> {
+): Promise<{ success: boolean; leaderboard?: GameLeaderboard; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: LOGIN_ERROR };
   try {
-    const currentMonth = monthKeyOf(new Date());
-    const key = isMonthKey(month) && month <= currentMonth ? month : currentMonth;
-    const { start, end } = monthRange(key);
-    const matches = await prisma.sudokuMatch.findMany({
-      where: { finishedAt: { gte: start, lt: end } },
-      select: { hostUserId: true, guestUserId: true, winnerUserId: true },
-    });
-    const rows = buildLeaderboard(matches);
-    const users = await prisma.user.findMany({
-      where: { id: { in: rows.map((r) => r.userId) } },
-      select: { id: true, name: true, avatarUrl: true },
-    });
-    const byId = new Map(users.map((u) => [u.id, u]));
-    return {
-      success: true,
-      leaderboard: {
-        month: key,
-        currentMonth,
-        totalMatches: matches.length,
-        rows: rows.map((r) => ({
-          ...r,
-          name: byId.get(r.userId)?.name || "Thành viên",
-          avatarUrl: byId.get(r.userId)?.avatarUrl ?? null,
-          isMe: r.userId === user.id,
-        })),
-      },
-    };
+    const leaderboard = await loadLeaderboard(
+      ({ start, end }) =>
+        prisma.sudokuMatch.findMany({
+          where: { finishedAt: { gte: start, lt: end } },
+          select: { hostUserId: true, guestUserId: true, winnerUserId: true },
+        }),
+      user.id,
+      month
+    );
+    return { success: true, leaderboard };
   } catch (error) {
     console.error("Lỗi tải bảng xếp hạng Sudoku:", error);
     return { success: false, error: "Không thể tải bảng xếp hạng." };

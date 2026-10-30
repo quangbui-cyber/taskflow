@@ -13,6 +13,7 @@ import {
   pickHintCell,
   remainingCounts,
   solve,
+  TIME_LIMIT_SEC,
 } from "../lib/sudoku";
 
 function isValidSolution(grid: number[]): boolean {
@@ -71,4 +72,11 @@ test("sudoku: formatClock", () => {
   assert.equal(formatClock(0), "00:00");
   assert.equal(formatClock(65), "01:05");
   assert.equal(formatClock(-3), "00:00");
+});
+
+test("sudoku: time limits are at least 15 minutes and grow with difficulty", () => {
+  assert.equal(TIME_LIMIT_SEC.easy, 15 * 60);
+  assert.equal(TIME_LIMIT_SEC.medium, 15 * 60);
+  assert.ok(TIME_LIMIT_SEC.hard > TIME_LIMIT_SEC.medium);
+  assert.ok(TIME_LIMIT_SEC.expert > TIME_LIMIT_SEC.hard);
 });

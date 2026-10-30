@@ -23,7 +23,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { buildLeaderboard, monthKeyOf, monthRange } from "@/lib/sudokuLeaderboard";
+import { buildLeaderboard, monthKeyOf, monthRange } from "@/lib/gameLeaderboard";
 import { canCreateProjects, requireUser } from "@/lib/auth";
 import { daysUntil, isOverdue } from "@/lib/dates";
 import { creativeEnabled, meetingsEnabled } from "@/lib/features";
@@ -141,7 +141,19 @@ function QuickAction({
   );
 }
 
-function GameLink({ href, label, icon: Icon }: { href: string; label: string; icon: LucideIcon }) {
+type GameLeader = { wins: number; user: { id: string; name: string; avatarUrl: string | null } };
+
+function GameLink({
+  href,
+  label,
+  icon: Icon,
+  leader,
+}: {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  leader?: GameLeader | null;
+}) {
   return (
     <Link
       href={href}
@@ -152,7 +164,18 @@ function GameLink({ href, label, icon: Icon }: { href: string; label: string; ic
         <Icon size={17} aria-hidden="true" />
       </span>
       <span className="flex-1">{label}</span>
-      <ChevronRight size={16} className="text-zinc-400 transition-transform duration-150 group-hover:translate-x-0.5" aria-hidden="true" />
+      {leader && (
+        <span
+          className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-zinc-500"
+          aria-label={`Dẫn đầu tháng này: ${leader.user.name}, ${leader.wins} trận thắng`}
+        >
+          <Trophy size={13} className="shrink-0 text-brand-600" aria-hidden="true" />
+          <Avatar id={leader.user.id} name={leader.user.name} avatarUrl={leader.user.avatarUrl} className="h-5 w-5 text-[9px]" />
+          <span className="max-w-[84px] truncate">{leader.user.name}</span>
+          <span className="font-semibold tabular-nums text-zinc-700">{leader.wins}</span>
+        </span>
+      )}
+      <ChevronRight size={16} className="shrink-0 text-zinc-400 transition-transform duration-150 group-hover:translate-x-0.5" aria-hidden="true" />
     </Link>
   );
 }
@@ -224,6 +247,7 @@ export default async function HomePage({
   const year = today.getUTCFullYear();
   const showMeetings = meetingsEnabled();
   const month = recognitionMonthRange();
+  const gameMonth = monthRange(monthKeyOf(now));
   const openTaskProject = {
     status: { notIn: [...ARCHIVED_PROJECT_STATUS_KEYS] },
     members: { some: { userId: user.id } },
@@ -247,6 +271,7 @@ export default async function HomePage({
     birthdayPeople,
     unreadNotifications,
     sudokuMatches,
+    caroMatches,
   ] = await Promise.all([
     prisma.user.findUniqueOrThrow({
       where: { id: user.id },
@@ -339,27 +364,30 @@ export default async function HomePage({
       select: { id: true, name: true, avatarUrl: true, birthday: true },
     }),
     prisma.notification.count({ where: { userId: user.id, read: false } }),
-    (() => {
-      const { start, end } = monthRange(monthKeyOf(now));
-      return prisma.sudokuMatch.findMany({
-        where: { finishedAt: { gte: start, lt: end } },
-        select: { hostUserId: true, guestUserId: true, winnerUserId: true },
-      });
-    })(),
+    prisma.sudokuMatch.findMany({
+      where: { finishedAt: { gte: gameMonth.start, lt: gameMonth.end } },
+      select: { hostUserId: true, guestUserId: true, winnerUserId: true },
+    }),
+    prisma.caroMatch.findMany({
+      where: { finishedAt: { gte: gameMonth.start, lt: gameMonth.end } },
+      select: { hostUserId: true, guestUserId: true, winnerUserId: true },
+    }),
   ]);
 
-  // Người dẫn đầu bảng xếp hạng Sudoku tháng này (chỉ hiện khi đã có người thắng).
-  const sudokuTop = buildLeaderboard(sudokuMatches)[0];
-  const sudokuLeader =
-    sudokuTop && sudokuTop.wins > 0
-      ? {
-          wins: sudokuTop.wins,
-          user: await prisma.user.findUnique({
-            where: { id: sudokuTop.userId },
-            select: { id: true, name: true, avatarUrl: true },
-          }),
-        }
-      : null;
+  // Người dẫn đầu từng game trong tháng này (chỉ hiện khi đã có người thắng).
+  const gameTops = [buildLeaderboard(sudokuMatches)[0], buildLeaderboard(caroMatches)[0]].map((row) =>
+    row && row.wins > 0 ? row : null
+  );
+  const leaderUsers = await prisma.user.findMany({
+    where: { id: { in: gameTops.flatMap((row) => (row ? [row.userId] : [])) } },
+    select: { id: true, name: true, avatarUrl: true },
+  });
+  const leaderOf = (row: (typeof gameTops)[number]): GameLeader | null => {
+    const found = row ? leaderUsers.find((u) => u.id === row.userId) : null;
+    return row && found ? { wins: row.wins, user: found } : null;
+  };
+  const sudokuLeader = leaderOf(gameTops[0]);
+  const caroLeader = leaderOf(gameTops[1]);
 
   // Sinh nhật: ai có sinh nhật hôm nay và trong 30 ngày tới (chỉ ngày/tháng).
   const birthdays = upcomingBirthdays(birthdayPeople, now);
@@ -876,29 +904,9 @@ export default async function HomePage({
 
               <Card title="Góc giải trí" icon={Gamepad2} labelledBy="games-heading" delay={250}>
                 <div className="space-y-1.5">
-                  <GameLink href="/caro" label="Cờ Caro" icon={Grid2x2X} />
-                  <GameLink href="/sudoku" label="Sudoku" icon={Grid3x3} />
+                  <GameLink href="/caro" label="Cờ Caro" icon={Grid2x2X} leader={caroLeader} />
+                  <GameLink href="/sudoku" label="Sudoku" icon={Grid3x3} leader={sudokuLeader} />
                 </div>
-                {sudokuLeader?.user && (
-                  <Link
-                    href="/sudoku"
-                    prefetch={false}
-                    aria-label={`Dẫn đầu Sudoku tháng này: ${sudokuLeader.user.name}, ${sudokuLeader.wins} trận thắng`}
-                    className="mt-3 flex items-center gap-2.5 border-t border-zinc-100 pt-3 text-sm"
-                  >
-                    <Trophy size={16} className="shrink-0 text-brand-600" aria-hidden="true" />
-                    <Avatar
-                      id={sudokuLeader.user.id}
-                      name={sudokuLeader.user.name}
-                      avatarUrl={sudokuLeader.user.avatarUrl}
-                      className="h-6 w-6 text-[10px]"
-                    />
-                    <span className="min-w-0 flex-1 truncate font-medium text-zinc-800">{sudokuLeader.user.name}</span>
-                    <span className="shrink-0 text-xs font-semibold tabular-nums text-zinc-500">
-                      {sudokuLeader.wins} thắng
-                    </span>
-                  </Link>
-                )}
               </Card>
 
               {showMeetings && (

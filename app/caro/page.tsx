@@ -40,7 +40,7 @@ export default async function CaroPage({
       <main className="tf-main">
         <HubTabs section="caro" role={user.role} isHrManager={user.isHrManager} />
         <div className="tf-page">
-          <CaroGame initialRoomCode={room || null} currentUserName={user.name || "Kỳ thủ"} />
+          <CaroGame initialRoomCode={room || null} />
         </div>
       </main>
     </div>

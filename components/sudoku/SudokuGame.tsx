@@ -41,7 +41,7 @@ import {
 } from "@/lib/sudoku";
 import { caroSound as sound } from "@/lib/caroSound";
 import SudokuBoard from "./SudokuBoard";
-import SudokuLeaderboard from "./SudokuLeaderboard";
+import GameLeaderboard from "@/components/GameLeaderboard";
 import {
   createSudokuRoom,
   forfeitSudokuRound,
@@ -1131,7 +1131,7 @@ export default function SudokuGame({ initialRoomCode = null }: SudokuGameProps) 
         </div>
       )}
 
-      <SudokuLeaderboard refreshKey={room?.status === "FINISHED" ? `${room.code}-${room.scoreHost}-${room.scoreGuest}` : null} />
+      <GameLeaderboard game="sudoku" refreshKey={room?.status === "FINISHED" ? `${room.code}-${room.scoreHost}-${room.scoreGuest}` : null} />
     </div>
   );
 }

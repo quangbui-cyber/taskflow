@@ -3,8 +3,9 @@
 import React, { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Trophy } from "lucide-react";
 import Avatar from "@/components/Avatar";
-import { monthLabel, shiftMonth } from "@/lib/sudokuLeaderboard";
-import { getSudokuLeaderboard, type SudokuLeaderboard as Board } from "@/app/actions/sudokuOnline";
+import { monthLabel, shiftMonth, type GameLeaderboard as Board } from "@/lib/gameLeaderboard";
+import { getSudokuLeaderboard } from "@/app/actions/sudokuOnline";
+import { getCaroLeaderboard } from "@/app/actions/caroOnline";
 
 const TOP = 10;
 
@@ -14,19 +15,22 @@ const RANK_STYLE: Record<number, string> = {
   3: "bg-brand-100 text-brand-800",
 };
 
-interface SudokuLeaderboardProps {
+const LOADERS = { sudoku: getSudokuLeaderboard, caro: getCaroLeaderboard } as const;
+
+interface GameLeaderboardProps {
+  game: keyof typeof LOADERS;
   /** Đổi giá trị này để tải lại (ví dụ khi vừa xong một ván online). */
   refreshKey?: string | null;
 }
 
-export default function SudokuLeaderboard({ refreshKey = null }: SudokuLeaderboardProps) {
+export default function GameLeaderboard({ game, refreshKey = null }: GameLeaderboardProps) {
   const [month, setMonth] = useState<string | null>(null);
   const [board, setBoard] = useState<Board | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
-    getSudokuLeaderboard(month ?? undefined).then((res) => {
+    LOADERS[game](month ?? undefined).then((res) => {
       if (!alive) return;
       if (res.success && res.leaderboard) {
         setBoard(res.leaderboard);
@@ -36,7 +40,7 @@ export default function SudokuLeaderboard({ refreshKey = null }: SudokuLeaderboa
     return () => {
       alive = false;
     };
-  }, [month, refreshKey]);
+  }, [game, month, refreshKey]);
 
   const shownMonth = board?.month ?? month;
   const atCurrent = !board || board.month >= board.currentMonth;

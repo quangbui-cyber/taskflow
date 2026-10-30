@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildLeaderboard, isMonthKey, monthKeyOf, monthLabel, monthRange, shiftMonth } from "../lib/sudokuLeaderboard";
+import { buildLeaderboard, isMonthKey, monthKeyOf, monthLabel, monthRange, shiftMonth } from "../lib/gameLeaderboard";
 
 test("leaderboard: month boundaries follow Vietnam time", () => {
   // 31/10 23:30 giờ VN = 31/10 16:30 UTC → vẫn là tháng 10.

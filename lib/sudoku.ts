@@ -28,7 +28,7 @@ const TARGET_CLUES: Record<SudokuDifficulty, number> = {
 
 /** Giới hạn thời gian (giây) khi bật đếm giờ. */
 export const TIME_LIMIT_SEC: Record<SudokuDifficulty, number> = {
-  easy: 10 * 60,
+  easy: 15 * 60,
   medium: 15 * 60,
   hard: 25 * 60,
   expert: 40 * 60,

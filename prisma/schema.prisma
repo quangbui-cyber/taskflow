@@ -912,10 +912,29 @@ model CaroGame {
   status      String   @default("WAITING") // WAITING | PLAYING | FINISHED
   scoreX      Int      @default(0)
   scoreO      Int      @default(0)
+  // Tài khoản thật của hai bên (X = chủ phòng, O = người vào sau). Phòng cũ chưa có thì để trống.
+  hostUserId    String?
+  guestUserId   String?
+  startedAt     DateTime? // lúc bắt đầu ván hiện tại
+  turnStartedAt DateTime? // lúc bắt đầu lượt hiện tại, để máy chủ kiểm tra hết giờ
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([code])
+}
+
+// Kết quả từng trận Caro online, dùng cho bảng xếp hạng theo tháng
+model CaroMatch {
+  id           String   @id @default(cuid())
+  roomCode     String
+  hostUserId   String
+  guestUserId  String
+  winnerUserId String?  // null = hoà
+  finishReason String   // FIVE | TIMEOUT | DRAW
+  durationSec  Int
+  finishedAt   DateTime @default(now())
+
+  @@index([finishedAt])
 }
 
 
