@@ -6,7 +6,6 @@ import {
   Building2,
   CalendarDays,
   FileText,
-  MessagesSquare,
   ShieldCheck,
   UsersRound,
 } from "lucide-react";
@@ -20,7 +19,7 @@ import ProjectEditButton from "@/components/ProjectEditButton";
 import ProjectActionsMenu from "@/components/ProjectActionsMenu";
 import ProjectDescriptionDisclosure from "@/components/ProjectDescriptionDisclosure";
 import { chatAppConfigured, chatAppProblem } from "@/lib/googleChatApp";
-import ProjectChatSpacePanel from "@/components/ProjectChatSpacePanel";
+import ProjectChatButton from "@/components/ProjectChatButton";
 import { canAddChatApp, canManageChatSpaces, googleWorkspaceConfigured } from "@/lib/googleWorkspace";
 import ProjectFilesPanel from "@/components/ProjectFilesPanel";
 import ProjectFinancePanel from "@/components/ProjectFinancePanel";
@@ -59,16 +58,15 @@ export default async function ProjectPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string; task?: string; google?: string }>;
+  searchParams: Promise<{ tab?: string; task?: string; google?: string; chat?: string }>;
 }) {
   const { id } = await params;
-  const { tab, task: requestedTaskId, google: googleResult } = await searchParams;
+  const { tab, task: requestedTaskId, google: googleResult, chat: chatIntent } = await searchParams;
   const user = await requireUser();
   const project = await prisma.project.findUnique({
     where: { id },
     include: {
       client: { select: { id: true, name: true } },
-      googleChatSpaceBy: { select: { name: true } },
       responsibleTeam: { select: { id: true, name: true } },
       responsibleGroup: { select: { id: true, name: true } },
       account: {
@@ -269,21 +267,16 @@ export default async function ProjectPage({
   // Tab Tài chính chỉ có ở dự án Khách hàng (dự án Nội bộ không có báo giá/IC).
   const hasFinanceTab = showFinance && project.category === "CLIENT";
   const activeTab =
-    tab === "chat" || tab === "webhook"
-      ? "chat"
-      : tab === "files"
-        ? "files"
-        : tab === "finance" && hasFinanceTab
-          ? "finance"
-          : "tasks";
+    tab === "files"
+      ? "files"
+      : tab === "finance" && hasFinanceTab
+        ? "finance"
+        : "tasks";
   const canManageChat = isMember || user.role === "ADMIN";
-  const viewerGoogle =
-    activeTab === "chat"
-      ? await prisma.user.findUnique({
-          where: { id: user.id },
-          select: { googleToken: true, googleScopes: true },
-        })
-      : null;
+  const viewerGoogle = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { googleToken: true, googleScopes: true },
+  });
   const canViewRevenue = hasRevenueAccess(user.role) && project.category === "CLIENT";
   const categoryInfo = projectCategoryInfo(project.category);
   const projectMetadata = extractProjectMetadata(project.description);
@@ -303,7 +296,6 @@ export default async function ProjectPage({
     const tabLinks = [
       { href: `/projects/${project.id}`, label: "Task" },
       { href: `/projects/${project.id}?tab=files`, label: "Tài liệu" },
-      { href: `/projects/${project.id}?tab=chat`, label: "Nhóm Chat" },
     ];
     return (
       <div className="flex min-h-screen flex-col bg-[#f7f8fa] md:h-screen md:max-h-screen md:overflow-hidden">
@@ -439,13 +431,22 @@ export default async function ProjectPage({
                     triggerClassName="tf-button-secondary !min-h-9 !px-3 !py-1.5 text-sm"
                   />
                 )}
-                <Link
-                  href={`/projects/${project.id}?tab=chat`}
-                  className="tf-button-secondary !min-h-9 !px-3 !py-1.5 text-sm"
-                >
-                  <MessagesSquare size={15} strokeWidth={1.8} aria-hidden="true" />
-                  Nhóm Chat
-                </Link>
+                <ProjectChatButton
+                  projectId={project.id}
+                  space={project.googleChatSpaceUri ? { uri: project.googleChatSpaceUri } : null}
+                  canManage={canManageChat}
+                  canUnlink={isOwner || user.role === "ADMIN" || project.googleChatSpaceById === user.id}
+                  viewerConnected={Boolean(
+                    viewerGoogle?.googleToken &&
+                      canManageChatSpaces(viewerGoogle.googleScopes) &&
+                      (!chatAppConfigured() || canAddChatApp(viewerGoogle.googleScopes))
+                  )}
+                  configured={googleWorkspaceConfigured()}
+                  chatAppReady={chatAppConfigured()}
+                  chatAppProblem={chatAppProblem()}
+                  autoCreate={chatIntent === "create"}
+                  googleResult={googleResult ?? null}
+                />
                 {isOwner && <ProjectActionsMenu projectId={project.id} />}
               </div>
             </div>
@@ -583,43 +584,10 @@ export default async function ProjectPage({
                 </span>
               )}
             </Link>
-            <Link
-              href={`/projects/${project.id}?tab=chat`}
-              className={`rounded-[7px] px-3 py-1.5 text-sm font-medium transition-colors ${
-                activeTab === "chat"
-                  ? "bg-brand-50 text-brand-800"
-                  : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
-              }`}
-            >
-              Nhóm Chat
-            </Link>
           </nav>
         </header>
 
-        {activeTab === "chat" ? (
-          <div className="flex-1 space-y-4 overflow-auto bg-[#f7f8fa] p-4 sm:p-6">
-            <ProjectChatSpacePanel
-              projectId={project.id}
-              space={
-                project.googleChatSpaceUri
-                  ? { uri: project.googleChatSpaceUri, creatorName: project.googleChatSpaceBy?.name ?? null }
-                  : null
-              }
-              memberCount={project.members.length}
-              canManage={canManageChat}
-              canUnlink={isOwner || user.role === "ADMIN" || project.googleChatSpaceById === user.id}
-              viewerConnected={Boolean(
-                viewerGoogle?.googleToken &&
-                  canManageChatSpaces(viewerGoogle.googleScopes) &&
-                  (!chatAppConfigured() || canAddChatApp(viewerGoogle.googleScopes))
-              )}
-              configured={googleWorkspaceConfigured()}
-              googleResult={googleResult ?? null}
-              chatAppReady={chatAppConfigured()}
-              chatAppProblem={chatAppProblem()}
-            />
-          </div>
-        ) : activeTab === "files" ? (
+        {activeTab === "files" ? (
           <div className="flex-1 overflow-auto bg-[#f7f8fa] p-4 sm:p-6">
             <ProjectFilesPanel
               projectId={project.id}
