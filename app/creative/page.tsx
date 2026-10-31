@@ -158,12 +158,7 @@ export default async function CreativeArchivePage() {
 function ArchiveHeader({ readCount, total }: { readCount?: number; total?: number }) {
   return (
     <header className="flex flex-wrap items-end justify-between gap-4">
-      <div className="max-w-2xl space-y-2">
-        <h1 className="tf-page-title text-zinc-950">Góc Đọc & Cảm Hứng</h1>
-        <p className="text-[15px] leading-relaxed text-zinc-500">
-          Mỗi sáng một câu chuyện về quảng cáo và tư duy sáng tạo của Dave Trott, dịch sang tiếng Việt.
-        </p>
-      </div>
+      <h1 className="tf-page-title text-zinc-950">Góc Đọc & Cảm Hứng</h1>
       {typeof readCount === "number" && total ? (
         <p className="inline-flex items-center gap-2 text-[13px] text-zinc-600">
           <CheckCircle2 size={16} className="text-brand-600" aria-hidden="true" />

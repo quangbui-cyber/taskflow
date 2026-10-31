@@ -243,7 +243,9 @@ function FilterButton({
       aria-selected={active}
       onClick={onClick}
       className={`inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-[9px] px-3.5 text-sm transition-colors duration-150 ease-out motion-reduce:transition-none ${
-        active ? "bg-white font-semibold text-zinc-950 shadow-sm" : "font-medium text-zinc-600 hover:text-zinc-950"
+        active
+          ? "bg-brand-100 font-semibold text-brand-900 shadow-xs"
+          : "font-medium text-zinc-600 hover:text-zinc-950"
       }`}
     >
       {children}
