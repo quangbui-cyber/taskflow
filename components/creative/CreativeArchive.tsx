@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowRight, Bookmark, BookOpen, Check, Heart, Search } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { ArrowRight, Bookmark, BookOpen, Check, ChevronDown, Heart, Search, User } from "lucide-react";
 import { creativeHeading, serifBody } from "@/app/fonts";
-import { estimateReadingMinutes, getArticleAuthor } from "@/lib/creative";
+import { estimateReadingMinutes } from "@/lib/creative";
 import { toggleSaveArticle } from "@/app/actions/creative";
 
 export interface CreativeCardData {
@@ -24,6 +25,8 @@ export interface CreativeCardData {
   wordCount: number;
   publishedDate: string | null;
   tags: string[];
+  authorSlug: string;
+  authorName: string;
   excerpt: string;
   likeCount: number;
   isLiked: boolean;
@@ -36,6 +39,8 @@ interface CreativeArchiveProps {
   articles: CreativeCardData[];
   /** Người xem đã đăng nhập: hiện trạng thái đã đọc / đã lưu */
   personal: boolean;
+  /** Tác giả khởi tạo từ query URL (?tac-gia=slug) */
+  initialAuthor?: string | null;
 }
 
 type FilterTab = "all" | "saved" | "read";
@@ -46,11 +51,52 @@ function normalize(text: string) {
   return text
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/đ/g, "d");
 }
 
-export default function CreativeArchive({ articles, personal }: CreativeArchiveProps) {
+function highlight(text: string, rawQuery: string): ReactNode {
+  const q = normalize(rawQuery.trim());
+  if (!q) return text;
+
+  const chars = Array.from(text);
+  const norm = chars.map((c) => normalize(c)).join("");
+  const parts: ReactNode[] = [];
+  let lastIndex = 0;
+  let index = norm.indexOf(q, lastIndex);
+
+  if (index === -1) return text;
+
+  let key = 0;
+  while (index !== -1) {
+    if (index > lastIndex) {
+      parts.push(chars.slice(lastIndex, index).join(""));
+    }
+    parts.push(
+      <mark key={key++} className="rounded-sm bg-brand-100 text-inherit">
+        {chars.slice(index, index + q.length).join("")}
+      </mark>
+    );
+    lastIndex = index + q.length;
+    index = norm.indexOf(q, lastIndex);
+  }
+
+  if (lastIndex < chars.length) {
+    parts.push(chars.slice(lastIndex).join(""));
+  }
+
+  return <>{parts}</>;
+}
+
+export default function CreativeArchive({
+  articles,
+  personal,
+  initialAuthor = null,
+}: CreativeArchiveProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const [filterTab, setFilterTab] = useState<FilterTab>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -58,35 +104,67 @@ export default function CreativeArchive({ articles, personal }: CreativeArchiveP
   const [savedOverrides, setSavedOverrides] = useState<Record<string, boolean>>({});
   const [, startTransition] = useTransition();
 
+  // Thống kê tác giả từ dữ liệu bài viết (sắp xếp giảm dần theo số bài)
+  const authorCounts = useMemo(() => {
+    const counts = new Map<string, { slug: string; name: string; count: number }>();
+    for (const a of articles) {
+      const existing = counts.get(a.authorSlug);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        counts.set(a.authorSlug, { slug: a.authorSlug, name: a.authorName, count: 1 });
+      }
+    }
+    return Array.from(counts.values()).sort((a, b) => b.count - a.count);
+  }, [articles]);
+
+  const rawAuthorSlug = searchParams?.get("tac-gia") ?? initialAuthor ?? null;
+  const authorFilter = useMemo(() => {
+    if (!rawAuthorSlug) return null;
+    return authorCounts.some((a) => a.slug === rawAuthorSlug) ? rawAuthorSlug : null;
+  }, [rawAuthorSlug, authorCounts]);
+
+  const [prevAuthor, setPrevAuthor] = useState(authorFilter);
+  if (prevAuthor !== authorFilter) {
+    setPrevAuthor(authorFilter);
+    setVisibleCount(PAGE_SIZE);
+  }
+
   const isSaved = (a: CreativeCardData) => savedOverrides[a.id] ?? a.isSaved;
   const savedCount = articles.filter(isSaved).length;
   const readCount = articles.filter((a) => a.isRead).length;
 
   const query = normalize(searchQuery.trim());
-  const isBrowsing = filterTab === "all" && !query;
+  const isBrowsing = filterTab === "all" && !query && !authorFilter;
 
   const filtered = useMemo(() => {
     return articles.filter((a) => {
       if (filterTab === "saved" && !(savedOverrides[a.id] ?? a.isSaved)) return false;
       if (filterTab === "read" && !a.isRead) return false;
+      if (authorFilter && a.authorSlug !== authorFilter) return false;
       if (!query) return true;
       const haystack = normalize(
-        [a.displayTitle, a.originalTitle, a.titleVi ?? "", a.excerpt, a.tags.join(" ")].join(" ")
+        [a.displayTitle, a.originalTitle, a.titleVi ?? "", a.authorName, a.excerpt, a.tags.join(" ")].join(" ")
       );
       return haystack.includes(query);
     });
-  }, [articles, filterTab, query, savedOverrides]);
+  }, [articles, filterTab, authorFilter, query, savedOverrides]);
 
   const featured = isBrowsing ? filtered[0] : undefined;
-  const rest = isBrowsing ? filtered.slice(1, 1 + visibleCount) : filtered;
-  const hiddenCount = isBrowsing ? Math.max(0, filtered.length - 1 - visibleCount) : 0;
+  const rest = isBrowsing ? filtered.slice(1, 1 + visibleCount) : filtered.slice(0, visibleCount);
+  const hiddenCount = isBrowsing
+    ? Math.max(0, filtered.length - 1 - visibleCount)
+    : Math.max(0, filtered.length - visibleCount);
 
-  // Gom bài theo nhóm thời gian khi đang xem tất cả; khi lọc/tìm thì hiện một danh sách
+  // Gom bài theo nhóm thời gian khi đang duyệt tự do; khi lọc/tìm thì hiện một danh sách kết quả
   const sections = (() => {
     if (!isBrowsing) {
       if (rest.length === 0) return [];
+      const selectedAuthor = authorCounts.find((a) => a.slug === authorFilter);
       const label = query
         ? `Kết quả cho “${searchQuery.trim()}”`
+        : authorFilter
+        ? `Bài của ${selectedAuthor?.name ?? ""}`
         : filterTab === "read"
         ? "Bài bạn đã đọc"
         : "Bài đã lưu";
@@ -119,6 +197,20 @@ export default function CreativeArchive({ articles, personal }: CreativeArchiveP
     setVisibleCount(PAGE_SIZE);
   };
 
+  const handleSelectAuthor = (slug: string | null) => {
+    setVisibleCount(PAGE_SIZE);
+
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    if (slug) {
+      params.set("tac-gia", slug);
+    } else {
+      params.delete("tac-gia");
+    }
+    const qs = params.toString();
+    const nextUrl = qs ? `${pathname}?${qs}` : pathname;
+    router.replace(nextUrl, { scroll: false });
+  };
+
   return (
     <div className="space-y-8">
       {featured && (
@@ -130,29 +222,38 @@ export default function CreativeArchive({ articles, personal }: CreativeArchiveP
         />
       )}
 
-      {/* Bộ lọc và tìm kiếm */}
+      {/* Hàng công cụ: Bộ lọc cá nhân / số bài + Menu tác giả + Tìm kiếm */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        {personal ? (
-          <div
-            role="tablist"
-            aria-label="Lọc bài viết"
-            className="grid grid-cols-3 gap-0.5 rounded-[12px] bg-zinc-200/60 p-1 sm:inline-grid"
-          >
-            <FilterButton active={filterTab === "all"} onClick={() => changeTab("all")}>
-              Tất cả <span className="font-medium text-zinc-500">{articles.length}</span>
-            </FilterButton>
-            <FilterButton active={filterTab === "saved"} onClick={() => changeTab("saved")}>
-              Đã lưu {savedCount > 0 && <span className="font-medium text-zinc-500">{savedCount}</span>}
-            </FilterButton>
-            <FilterButton active={filterTab === "read"} onClick={() => changeTab("read")}>
-              Đã đọc {readCount > 0 && <span className="font-medium text-zinc-500">{readCount}</span>}
-            </FilterButton>
-          </div>
-        ) : (
-          <p className="text-sm text-zinc-500">{articles.length} bài viết</p>
-        )}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          {personal ? (
+            <div
+              role="tablist"
+              aria-label="Lọc bài viết"
+              className="grid grid-cols-3 gap-0.5 rounded-[12px] bg-zinc-200/60 p-1 sm:inline-grid"
+            >
+              <FilterButton active={filterTab === "all"} onClick={() => changeTab("all")}>
+                Tất cả <span className="font-medium text-zinc-500">{articles.length}</span>
+              </FilterButton>
+              <FilterButton active={filterTab === "saved"} onClick={() => changeTab("saved")}>
+                Đã lưu {savedCount > 0 && <span className="font-medium text-zinc-500">{savedCount}</span>}
+              </FilterButton>
+              <FilterButton active={filterTab === "read"} onClick={() => changeTab("read")}>
+                Đã đọc {readCount > 0 && <span className="font-medium text-zinc-500">{readCount}</span>}
+              </FilterButton>
+            </div>
+          ) : (
+            <p className="text-sm font-medium text-zinc-500">{articles.length} bài viết</p>
+          )}
 
-        <div className="relative sm:w-80">
+          <AuthorMenu
+            authors={authorCounts}
+            totalCount={articles.length}
+            selectedSlug={authorFilter}
+            onSelect={handleSelectAuthor}
+          />
+        </div>
+
+        <div className="relative w-full sm:w-80">
           <label htmlFor="creative-search" className="sr-only">
             Tìm bài viết
           </label>
@@ -164,7 +265,7 @@ export default function CreativeArchive({ articles, personal }: CreativeArchiveP
           <input
             id="creative-search"
             type="search"
-            placeholder="Tìm theo tựa đề, nội dung…"
+            placeholder="Tìm tựa bài, tác giả, nội dung…"
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
@@ -182,7 +283,13 @@ export default function CreativeArchive({ articles, personal }: CreativeArchiveP
           </h2>
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
             {section.items.map((article) => (
-              <ArticleCard key={article.id} article={article} personal={personal} saved={isSaved(article)} />
+              <ArticleCard
+                key={article.id}
+                article={article}
+                personal={personal}
+                saved={isSaved(article)}
+                searchQuery={query ? searchQuery.trim() : undefined}
+              />
             ))}
           </div>
         </section>
@@ -196,6 +303,8 @@ export default function CreativeArchive({ articles, personal }: CreativeArchiveP
           <h2 className="text-base font-semibold text-zinc-950">
             {query
               ? "Không tìm thấy bài phù hợp"
+              : authorFilter
+              ? "Không có bài phù hợp"
               : filterTab === "saved"
               ? "Bạn chưa lưu bài nào"
               : filterTab === "read"
@@ -205,6 +314,8 @@ export default function CreativeArchive({ articles, personal }: CreativeArchiveP
           <p className="max-w-sm text-sm leading-relaxed text-zinc-500">
             {query
               ? "Thử tìm bằng từ khóa khác nhé."
+              : authorFilter
+              ? "Tác giả này chưa có bài nào ở mục đã chọn."
               : filterTab === "saved"
               ? "Khi đọc thấy bài hay, bấm “Lưu để đọc sau” để giữ lại ở đây."
               : "Các bài đọc mới được phát hành mỗi sáng các ngày trong tuần."}
@@ -221,6 +332,166 @@ export default function CreativeArchive({ articles, personal }: CreativeArchiveP
           >
             Xem thêm {Math.min(hiddenCount, PAGE_SIZE)} bài cũ hơn
           </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AuthorMenu({
+  authors,
+  totalCount,
+  selectedSlug,
+  onSelect,
+}: {
+  authors: { slug: string; name: string; count: number }[];
+  totalCount: number;
+  selectedSlug: string | null;
+  onSelect: (slug: string | null) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const optionsRef = useRef<(HTMLButtonElement | null)[]>([]);
+
+  const selectedAuthor = authors.find((a) => a.slug === selectedSlug);
+  const currentLabel = selectedAuthor ? selectedAuthor.name : "Tất cả tác giả";
+
+  // Đóng dropdown khi nhấn chuột ra ngoài
+  useEffect(() => {
+    if (!isOpen) return;
+    const handlePointerDown = (e: MouseEvent | TouchEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+    };
+  }, [isOpen]);
+
+  // Điều hướng bàn phím (mũi tên, Escape, Home, End)
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!isOpen) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setIsOpen(true);
+      }
+      return;
+    }
+
+    if (e.key === "Escape") {
+      e.preventDefault();
+      setIsOpen(false);
+      triggerRef.current?.focus();
+      return;
+    }
+
+    const items = optionsRef.current.filter(Boolean) as HTMLButtonElement[];
+    if (items.length === 0) return;
+
+    const currentIndex = items.findIndex((el) => el === document.activeElement);
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const nextIndex = currentIndex < items.length - 1 ? currentIndex + 1 : 0;
+      items[nextIndex]?.focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const prevIndex = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
+      items[prevIndex]?.focus();
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      items[0]?.focus();
+    } else if (e.key === "End") {
+      e.preventDefault();
+      items[items.length - 1]?.focus();
+    }
+  };
+
+  const handleSelect = (slug: string | null) => {
+    onSelect(slug);
+    setIsOpen(false);
+    triggerRef.current?.focus();
+  };
+
+  return (
+    <div ref={containerRef} className="relative w-full sm:w-auto" onKeyDown={handleKeyDown}>
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((prev) => !prev)}
+        className={`inline-flex h-11 w-full sm:w-auto items-center justify-between gap-2.5 rounded-[10px] border px-3.5 text-sm transition-[transform,background-color,border-color,color] duration-150 ease-out hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${
+          selectedSlug
+            ? "border-brand-200 bg-brand-50 font-semibold text-brand-900"
+            : "border-zinc-200 bg-white font-medium text-zinc-700 hover:border-zinc-300"
+        }`}
+      >
+        <span className="flex items-center gap-2 truncate">
+          <User size={16} className={selectedSlug ? "text-brand-700" : "text-zinc-500"} aria-hidden="true" />
+          <span className="truncate">{currentLabel}</span>
+        </span>
+        <ChevronDown
+          size={15}
+          className={`shrink-0 transition-transform duration-150 motion-reduce:transition-none ${
+            isOpen ? "rotate-180" : ""
+          } ${selectedSlug ? "text-brand-700" : "text-zinc-400"}`}
+          aria-hidden="true"
+        />
+      </button>
+
+      {isOpen && (
+        <div
+          role="listbox"
+          aria-label="Lọc theo tác giả"
+          className="tf-popover-enter absolute left-0 top-12 z-40 w-full sm:w-64 max-w-[calc(100vw-2rem)] overflow-hidden rounded-[12px] border border-zinc-200 bg-white p-1.5 shadow-lg motion-reduce:animate-none"
+        >
+          <button
+            ref={(el) => {
+              optionsRef.current[0] = el;
+            }}
+            type="button"
+            role="option"
+            aria-selected={selectedSlug === null}
+            onClick={() => handleSelect(null)}
+            className={`flex w-full items-center justify-between gap-3 rounded-[8px] px-3 py-2 text-left text-sm transition-colors ${
+              selectedSlug === null
+                ? "bg-brand-50 font-semibold text-brand-900"
+                : "text-zinc-700 hover:bg-zinc-50"
+            }`}
+          >
+            <span className="truncate">Tất cả tác giả</span>
+            <span className="shrink-0 text-xs font-medium text-zinc-400">{totalCount}</span>
+          </button>
+          <div className="my-1 border-t border-zinc-100" role="separator" />
+          {authors.map((author, idx) => {
+            const isSelected = selectedSlug === author.slug;
+            return (
+              <button
+                key={author.slug}
+                ref={(el) => {
+                  optionsRef.current[idx + 1] = el;
+                }}
+                type="button"
+                role="option"
+                aria-selected={isSelected}
+                onClick={() => handleSelect(author.slug)}
+                className={`flex w-full items-center justify-between gap-3 rounded-[8px] px-3 py-2 text-left text-sm transition-colors ${
+                  isSelected
+                    ? "bg-brand-50 font-semibold text-brand-900"
+                    : "text-zinc-700 hover:bg-zinc-50"
+                }`}
+              >
+                <span className="truncate">{author.name}</span>
+                <span className="shrink-0 text-xs font-medium text-zinc-400">{author.count}</span>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
@@ -265,7 +536,6 @@ function FeaturedArticle({
   onToggleSave: () => void;
 }) {
   const minutes = estimateReadingMinutes(article.wordCount);
-  const author = getArticleAuthor(article.tags);
   const href = `/creative/${article.slug}`;
 
   return (
@@ -278,7 +548,7 @@ function FeaturedArticle({
           <span className="rounded-full bg-brand-100 px-2.5 py-1 text-xs font-semibold text-brand-900">
             Bài mới nhất
           </span>
-          <span className="font-medium text-zinc-700">{author.name}</span>
+          <span className="font-medium text-zinc-700">{article.authorName}</span>
           <span>·</span>
           <span>
             {article.dateLabel} · {minutes} phút đọc
@@ -352,13 +622,14 @@ function ArticleCard({
   article,
   personal,
   saved,
+  searchQuery,
 }: {
   article: CreativeCardData;
   personal: boolean;
   saved: boolean;
+  searchQuery?: string;
 }) {
   const minutes = estimateReadingMinutes(article.wordCount);
-  const author = getArticleAuthor(article.tags);
   const muted = personal && article.isRead;
 
   return (
@@ -369,7 +640,9 @@ function ArticleCard({
     >
       <div className="flex items-center justify-between gap-2 text-xs text-zinc-500">
         <span className="flex items-center gap-1.5 truncate">
-          <span className="font-medium text-zinc-800">{author.name}</span>
+          <span className="font-medium text-zinc-800">
+            {searchQuery ? highlight(article.authorName, searchQuery) : article.authorName}
+          </span>
           <span>·</span>
           <span>{minutes} phút đọc</span>
         </span>
@@ -398,7 +671,7 @@ function ArticleCard({
             muted ? "text-zinc-600" : "text-zinc-950"
           }`}
         >
-          {article.displayTitle}
+          {searchQuery ? highlight(article.displayTitle, searchQuery) : article.displayTitle}
         </h3>
         {article.displaySubtitle && <p className="truncate text-[13px] text-zinc-500">{article.displaySubtitle}</p>}
       </div>

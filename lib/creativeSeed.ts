@@ -17,7 +17,7 @@ interface SeedArticle {
 }
 
 /**
- * Đảm bảo database luôn có sẵn đủ 50 bài viết Dave Trott ở trạng thái PUBLISHED
+ * Đảm bảo database luôn có sẵn các bài viết ở trạng thái PUBLISHED
  * Tự động chạy trên mọi môi trường (local dev, staging, Vercel production).
  */
 export async function ensureInitialCreativeArticles() {
@@ -32,7 +32,7 @@ export async function ensureInitialCreativeArticles() {
     (a) => Array.isArray(a.linesVi) && a.linesVi.length > 0
   ).length;
 
-  // Nếu đã đủ 50 bài PUBLISHED và có đầy đủ linesVi thì không cần chạy lại
+  // Nếu đã đủ bài PUBLISHED từ seed và có đầy đủ linesVi thì không cần chạy lại
   if (withViCount >= typedSeed.length) return;
 
   for (let i = 0; i < typedSeed.length; i++) {

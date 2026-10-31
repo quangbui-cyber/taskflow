@@ -41,7 +41,7 @@ export function financeEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
 }
 
 /**
- * Góc Đọc & Cảm Hứng (Dave Trott daily inspiration drops).
+ * Góc Đọc & Cảm Hứng (câu chuyện sáng tạo từ các bậc thầy quảng cáo).
  * Bật mặc định. Đặt CREATIVE_ENABLED=false (hoặc 0) để tạm ẩn.
  */
 export function creativeEnabled(env: NodeJS.ProcessEnv = process.env): boolean {

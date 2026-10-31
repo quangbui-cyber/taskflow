@@ -1,5 +1,5 @@
 /**
- * Tiện ích và kiểu dữ liệu cho Góc Đọc & Cảm Hứng (Dave Trott daily drops).
+ * Tiện ích và kiểu dữ liệu cho Góc Đọc & Cảm Hứng.
  */
 
 export type ArticleTextLine = { t: string };
@@ -120,7 +120,7 @@ export function countWords(lines: ArticleLine[]): number {
 }
 
 /**
- * Ước lượng thời gian đọc theo số từ (Dave Trott staccato đọc nhanh, ~150-180 từ/phút)
+ * Ước lượng thời gian đọc theo số từ (~150-180 từ/phút)
  */
 export function estimateReadingMinutes(wordCount: number): number {
   return Math.max(1, Math.ceil(wordCount / 160));
@@ -172,6 +172,8 @@ export interface AuthorMetadata {
   sourceLabel: string;
   defaultSourceUrl: string;
   bioVi: string;
+  /** Chỉ true với Dave Trott (có bài gốc trực tuyến đầy đủ); các tác giả từ sách/trích đoạn là false */
+  hasOriginalArticles: boolean;
 }
 
 export const KNOWN_AUTHORS: Record<string, AuthorMetadata> = {
@@ -183,6 +185,7 @@ export const KNOWN_AUTHORS: Record<string, AuthorMetadata> = {
     sourceLabel: "davetrott.co.uk",
     defaultSourceUrl: "https://davetrott.co.uk",
     bioVi: "Cựu Giám đốc Sáng tạo BMP, GGT, tác giả của 'Predatory Thinking' và 'Creative Mischief'.",
+    hasOriginalArticles: true,
   },
   "paul-arden": {
     slug: "paul-arden",
@@ -192,6 +195,7 @@ export const KNOWN_AUTHORS: Record<string, AuthorMetadata> = {
     sourceLabel: "Phaidon Press",
     defaultSourceUrl: "https://www.phaidon.com/store/general-non-fiction/its-not-how-good-you-are-its-how-good-you-want-to-be-9780714843377/",
     bioVi: "Phù thủy quảng cáo đưa Saatchi & Saatchi lên đỉnh cao thế giới, tác giả cuốn sách kinh điển 'It's Not How Good You Are, It's How Good You Want to Be'.",
+    hasOriginalArticles: false,
   },
   "george-lois": {
     slug: "george-lois",
@@ -201,6 +205,7 @@ export const KNOWN_AUTHORS: Record<string, AuthorMetadata> = {
     sourceLabel: "Phaidon Press",
     defaultSourceUrl: "https://www.phaidon.com/store/general-non-fiction/damn-good-advice-for-people-with-talent-9780714863481/",
     bioVi: "Nhà tiên phong tạo nên thời kỳ hoàng kim của quảng cáo Madison Avenue, tác giả 92 bìa Esquire huyền thoại và cuốn 'Damn Good Advice'.",
+    hasOriginalArticles: false,
   },
   "rory-sutherland": {
     slug: "rory-sutherland",
@@ -210,6 +215,7 @@ export const KNOWN_AUTHORS: Record<string, AuthorMetadata> = {
     sourceLabel: "Penguin Books",
     defaultSourceUrl: "https://www.penguin.co.uk/books/291244/alchemy-by-sutherland-rory/9780753556528",
     bioVi: "Bậc thầy tâm lý học hành vi và thuật giả kim tiếp thị, tác giả cuốn sách bestseller 'Alchemy: The Surprising Power of Ideas That Don't Make Sense'.",
+    hasOriginalArticles: false,
   },
   "bob-hoffman": {
     slug: "bob-hoffman",
@@ -219,6 +225,7 @@ export const KNOWN_AUTHORS: Record<string, AuthorMetadata> = {
     sourceLabel: "adcontrarian.com",
     defaultSourceUrl: "https://www.adcontrarian.com",
     bioVi: "Cựu CEO Hoffman/Lewis, cây bút gai góc số 1 thế giới về lột trần ảo tưởng tiếp thị số, tác giả 'BadMen' và 'Advertising for Skeptics'.",
+    hasOriginalArticles: false,
   },
   "john-hegarty": {
     slug: "john-hegarty",
@@ -228,6 +235,7 @@ export const KNOWN_AUTHORS: Record<string, AuthorMetadata> = {
     sourceLabel: "Thames & Hudson",
     defaultSourceUrl: "https://www.thamesandhudson.com/hegarty-on-advertising-turning-intelligence-into-magic-9780500293621",
     bioVi: "Hiệp sĩ hoàng gia Anh, huyền thoại tạo nên 'Vorsprung durch Technik' của Audi và 'When the world zigs, zag' của Levi's.",
+    hasOriginalArticles: false,
   },
 };
 
@@ -243,6 +251,19 @@ export function getArticleAuthor(tags: string[] = []): AuthorMetadata {
     }
   }
   return KNOWN_AUTHORS["dave-trott"];
+}
+
+/**
+ * Trả về link tới bài viết gốc nếu tác giả có xuất bản bài trực tuyến (Dave Trott)
+ * Với tác giả từ sách/trích dẫn, trả về null để không dẫn link sai lệch.
+ */
+export function getOriginalArticleUrl(article: {
+  originalUrl?: string | null;
+  tags?: string[];
+}): string | null {
+  const author = getArticleAuthor(article.tags);
+  if (!author.hasOriginalArticles) return null;
+  return article.originalUrl?.trim() || null;
 }
 
 // ---------------------------------------------------------------------------

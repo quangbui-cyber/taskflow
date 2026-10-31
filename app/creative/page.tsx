@@ -8,8 +8,10 @@ import { creativeEnabled } from "@/lib/features";
 import {
   describeCreativeDay,
   extractPullQuote,
+  getArticleAuthor,
   isTextLine,
   toDisplayTitle,
+  KNOWN_AUTHORS,
   type ArticleLine,
 } from "@/lib/creative";
 import { ensureInitialCreativeArticles } from "@/lib/creativeSeed";
@@ -21,11 +23,14 @@ import CreativeArchive, {
 
 export const metadata: Metadata = {
   title: "Góc Đọc & Cảm Hứng · myCreative",
-  description:
-    "Kho lưu trữ những câu chuyện quảng cáo và tư duy sáng tạo của Dave Trott.",
+  description: "Những câu chuyện quảng cáo và tư duy sáng tạo từ các bậc thầy trong nghề.",
 };
 
-export default async function CreativeArchivePage() {
+interface CreativeArchivePageProps {
+  searchParams?: Promise<{ "tac-gia"?: string }>;
+}
+
+export default async function CreativeArchivePage({ searchParams }: CreativeArchivePageProps) {
   if (!creativeEnabled()) {
     notFound();
   }
@@ -79,6 +84,7 @@ export default async function CreativeArchivePage() {
 
     const userReader = user ? article.readers.find((r) => r.userId === user.id) : null;
     const likeCount = article.readers.filter((r) => r.likedAt !== null).length;
+    const author = getArticleAuthor(article.tags);
 
     return {
       id: article.id,
@@ -94,6 +100,8 @@ export default async function CreativeArchivePage() {
       wordCount: article.wordCount,
       publishedDate: article.publishedDate?.toISOString() ?? null,
       tags: article.tags,
+      authorSlug: author.slug,
+      authorName: author.name,
       excerpt,
       likeCount,
       isLiked: Boolean(userReader?.likedAt),
@@ -102,6 +110,13 @@ export default async function CreativeArchivePage() {
       status: article.status,
     };
   });
+
+  const sp = searchParams ? await searchParams : undefined;
+  const rawAuthor = sp?.["tac-gia"];
+  const initialAuthor =
+    rawAuthor && (rawAuthor in KNOWN_AUTHORS || cardsData.some((c) => c.authorSlug === rawAuthor))
+      ? rawAuthor
+      : null;
 
   if (!user) {
     return (
@@ -127,7 +142,7 @@ export default async function CreativeArchivePage() {
         <main className="mx-auto max-w-[1120px] space-y-8 px-4 py-8 sm:px-6">
           <ArchiveHeader />
 
-          <CreativeArchive articles={cardsData} personal={false} />
+          <CreativeArchive articles={cardsData} personal={false} initialAuthor={initialAuthor} />
         </main>
       </div>
     );
@@ -147,7 +162,7 @@ export default async function CreativeArchivePage() {
               total={cardsData.length}
             />
 
-            <CreativeArchive articles={cardsData} personal />
+            <CreativeArchive articles={cardsData} personal initialAuthor={initialAuthor} />
           </div>
         </div>
       </main>
@@ -157,18 +172,23 @@ export default async function CreativeArchivePage() {
 
 function ArchiveHeader({ readCount, total }: { readCount?: number; total?: number }) {
   return (
-    <header className="flex flex-wrap items-end justify-between gap-4">
-      <h1 className="tf-page-title text-zinc-950">Góc Đọc & Cảm Hứng</h1>
-      {typeof readCount === "number" && total ? (
-        <p className="inline-flex items-center gap-2 text-[13px] text-zinc-600">
-          <CheckCircle2 size={16} className="text-brand-600" aria-hidden="true" />
-          Bạn đã đọc{" "}
-          <strong className="font-semibold text-zinc-950">
-            {readCount}/{total}
-          </strong>{" "}
-          bài
-        </p>
-      ) : null}
+    <header className="space-y-1">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <h1 className="tf-page-title text-zinc-950">Góc Đọc & Cảm Hứng</h1>
+        {typeof readCount === "number" && total ? (
+          <p className="inline-flex items-center gap-2 text-[13px] text-zinc-600">
+            <CheckCircle2 size={16} className="text-brand-600" aria-hidden="true" />
+            Bạn đã đọc{" "}
+            <strong className="font-semibold text-zinc-950">
+              {readCount}/{total}
+            </strong>{" "}
+            bài
+          </p>
+        ) : null}
+      </div>
+      <p className="text-sm text-zinc-500">
+        Mỗi sáng một câu chuyện về quảng cáo và tư duy sáng tạo, từ những bậc thầy trong nghề.
+      </p>
     </header>
   );
 }

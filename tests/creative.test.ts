@@ -6,12 +6,15 @@ import {
   describeCreativeDay,
   estimateReadingMinutes,
   extractPullQuote,
+  getArticleAuthor,
+  getOriginalArticleUrl,
   getWeekdaySchedule,
   isGapLine,
   isTextLine,
   parseHtmlToLines,
   slugifyTitle,
   toDisplayTitle,
+  KNOWN_AUTHORS,
 } from "../lib/creative";
 
 test("slugifyTitle formats English titles properly", () => {
@@ -147,4 +150,38 @@ test("extractPullQuote picks a quoted or whole-line bold sentence", () => {
   assert.equal(extractPullQuote([{ t: "**Cứ để đó cho chúng tôi, chúng tôi lo hết mọi thứ”.**" }]), null);
   assert.equal(extractPullQuote([{ t: "**ĐĂNG KIỂM CHÍNH BẠN, ĐỪNG ĐỢI NGƯỜI KHÁC LÀM.**" }]), null);
   assert.equal(extractPullQuote([{ t: "**nghe như chiêu trò của mấy gã thợ dệt tartan**" }]), null);
+});
+
+test("getArticleAuthor identifies authors by tag or defaults to Dave Trott", () => {
+  assert.equal(getArticleAuthor([]).slug, "dave-trott");
+  assert.equal(getArticleAuthor(["author:paul-arden"]).slug, "paul-arden");
+  assert.equal(getArticleAuthor(["advertising", "author:rory-sutherland"]).name, "Rory Sutherland");
+  assert.equal(getArticleAuthor(["author:unknown-person"]).slug, "dave-trott");
+  assert.equal(Object.keys(KNOWN_AUTHORS).length, 6);
+  assert.equal(KNOWN_AUTHORS["dave-trott"].hasOriginalArticles, true);
+  assert.equal(KNOWN_AUTHORS["paul-arden"].hasOriginalArticles, false);
+});
+
+test("getOriginalArticleUrl returns article URL only for authors with original articles", () => {
+  assert.equal(
+    getOriginalArticleUrl({
+      originalUrl: "https://davetrott.co.uk/2024/01/post/",
+      tags: [],
+    }),
+    "https://davetrott.co.uk/2024/01/post/"
+  );
+  assert.equal(
+    getOriginalArticleUrl({
+      originalUrl: "https://www.phaidon.com/book",
+      tags: ["author:paul-arden"],
+    }),
+    null
+  );
+  assert.equal(
+    getOriginalArticleUrl({
+      originalUrl: "https://penguin.co.uk/books",
+      tags: ["author:rory-sutherland"],
+    }),
+    null
+  );
 });

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { creativeEnabled } from "@/lib/features";
-import { type ArticleLine } from "@/lib/creative";
+import { getArticleAuthor, toDisplayTitle, type ArticleLine } from "@/lib/creative";
 import ZenReader from "@/components/creative/ZenReader";
 
 interface PageProps {
@@ -14,14 +14,16 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { slug } = await params;
   const article = await prisma.creativeArticle.findUnique({
     where: { slug },
-    select: { originalTitle: true, titleVi: true },
+    select: { originalTitle: true, titleVi: true, tags: true },
   });
 
   if (!article) return { title: "Không tìm thấy bài viết · myCreative" };
 
+  const author = getArticleAuthor(article.tags);
+
   return {
     title: `${article.titleVi || article.originalTitle} · Góc Đọc myCreative`,
-    description: `Góc Đọc & Cảm Hứng Dave Trott: ${article.originalTitle}`,
+    description: `Góc Đọc & Cảm Hứng · ${author.name}: ${article.originalTitle}`,
   };
 }
 
@@ -61,25 +63,64 @@ export default async function CreativeArticlePage({ params }: PageProps) {
     },
   });
 
-  // Tìm bài trước và bài sau (đã phát hành hoặc được lên lịch)
-  const [prevArticle, nextArticle] = await Promise.all([
+  // Tìm bài trước và bài sau xếp theo ngày phát hành (chỉ lấy bài đã phát hành tới hiện tại)
+  const now = new Date();
+  const currentPubDate = article.publishedDate;
+
+  const [prevRecord, nextRecord] = await Promise.all([
     prisma.creativeArticle.findFirst({
       where: {
-        createdAt: { lt: article.createdAt },
         status: "PUBLISHED",
+        publishedDate: { lte: now },
+        OR: currentPubDate
+          ? [
+              { publishedDate: { lt: currentPubDate } },
+              { publishedDate: currentPubDate, createdAt: { lt: article.createdAt } },
+            ]
+          : [{ createdAt: { lt: article.createdAt } }],
       },
-      orderBy: { createdAt: "desc" },
-      select: { slug: true, originalTitle: true, titleVi: true },
+      orderBy: [{ publishedDate: "desc" }, { createdAt: "desc" }],
+      select: { slug: true, originalTitle: true, titleVi: true, tags: true },
     }),
     prisma.creativeArticle.findFirst({
       where: {
-        createdAt: { gt: article.createdAt },
         status: "PUBLISHED",
+        publishedDate: { lte: now },
+        OR: currentPubDate
+          ? [
+              { publishedDate: { gt: currentPubDate } },
+              { publishedDate: currentPubDate, createdAt: { gt: article.createdAt } },
+            ]
+          : [{ createdAt: { gt: article.createdAt } }],
       },
-      orderBy: { createdAt: "asc" },
-      select: { slug: true, originalTitle: true, titleVi: true },
+      orderBy: [{ publishedDate: "asc" }, { createdAt: "asc" }],
+      select: { slug: true, originalTitle: true, titleVi: true, tags: true },
     }),
   ]);
+
+  const prevArticle = prevRecord
+    ? {
+        slug: prevRecord.slug,
+        displayTitle: toDisplayTitle(
+          prevRecord.titleVi || prevRecord.originalTitle,
+          prevRecord.titleVi ? "vi" : "en",
+          prevRecord.originalTitle
+        ),
+        authorName: getArticleAuthor(prevRecord.tags).name,
+      }
+    : null;
+
+  const nextArticle = nextRecord
+    ? {
+        slug: nextRecord.slug,
+        displayTitle: toDisplayTitle(
+          nextRecord.titleVi || nextRecord.originalTitle,
+          nextRecord.titleVi ? "vi" : "en",
+          nextRecord.originalTitle
+        ),
+        authorName: getArticleAuthor(nextRecord.tags).name,
+      }
+    : null;
 
   return (
     <ZenReader

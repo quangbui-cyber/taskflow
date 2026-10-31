@@ -18,6 +18,7 @@ import {
   estimateReadingMinutes,
   formatCreativeDate,
   getArticleAuthor,
+  getOriginalArticleUrl,
   isGapLine,
 } from "@/lib/creative";
 import {
@@ -44,8 +45,8 @@ interface ZenReaderProps {
   initialLikeCount: number;
   initialSaved: boolean;
   initialRead: boolean;
-  prevArticle?: { slug: string; originalTitle: string; titleVi: string | null } | null;
-  nextArticle?: { slug: string; originalTitle: string; titleVi: string | null } | null;
+  prevArticle?: { slug: string; displayTitle: string; authorName: string } | null;
+  nextArticle?: { slug: string; displayTitle: string; authorName: string } | null;
 }
 
 /**
@@ -184,6 +185,7 @@ export default function ZenReader({
   };
 
   const author = getArticleAuthor(article.tags);
+  const originalArticleUrl = getOriginalArticleUrl(article);
   const readingMinutes = estimateReadingMinutes(article.wordCount);
   const origLines = article.originalLines || [];
   const linesVi = article.linesVi && article.linesVi.length > 0 ? article.linesVi : null;
@@ -364,16 +366,18 @@ export default function ZenReader({
               </button>
             </div>
 
-            {/* Link bài gốc */}
-            <a
-              href={article.originalUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-800 underline underline-offset-4"
-            >
-              <span>Xem bài gốc trên {author.sourceLabel}</span>
-              <ExternalLink size={12} />
-            </a>
+            {/* Link bài gốc (chỉ hiện khi tác giả có bài gốc thật trực tuyến) */}
+            {originalArticleUrl && (
+              <a
+                href={originalArticleUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-800 underline underline-offset-4"
+              >
+                <span>Xem bài gốc trên {author.sourceLabel}</span>
+                <ExternalLink size={12} />
+              </a>
+            )}
           </div>
 
           {/* Điều hướng bài trước / bài tiếp theo */}
@@ -384,12 +388,13 @@ export default function ZenReader({
                   href={`/creative/${prevArticle.slug}`}
                   className="group flex flex-col rounded-[14px] border border-zinc-200 bg-white p-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-xs"
                 >
-                  <span className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 group-hover:text-zinc-600">
+                  <span className="flex items-center gap-1 text-[11px] font-semibold text-zinc-400 group-hover:text-zinc-600">
                     <ChevronLeft size={13} /> Bài trước
                   </span>
                   <span className="mt-1 line-clamp-1 text-xs font-semibold text-zinc-900">
-                    {prevArticle.titleVi || prevArticle.originalTitle}
+                    {prevArticle.displayTitle}
                   </span>
+                  <span className="mt-0.5 text-[11px] text-zinc-500">{prevArticle.authorName}</span>
                 </Link>
               ) : (
                 <div />
@@ -400,12 +405,13 @@ export default function ZenReader({
                   href={`/creative/${nextArticle.slug}`}
                   className="group flex flex-col items-end text-right rounded-[14px] border border-zinc-200 bg-white p-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-xs"
                 >
-                  <span className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 group-hover:text-zinc-600">
+                  <span className="flex items-center gap-1 text-[11px] font-semibold text-zinc-400 group-hover:text-zinc-600">
                     Bài tiếp theo <ChevronRight size={13} />
                   </span>
                   <span className="mt-1 line-clamp-1 text-xs font-semibold text-zinc-900">
-                    {nextArticle.titleVi || nextArticle.originalTitle}
+                    {nextArticle.displayTitle}
                   </span>
+                  <span className="mt-0.5 text-[11px] text-zinc-500">{nextArticle.authorName}</span>
                 </Link>
               ) : (
                 <div />
@@ -415,17 +421,24 @@ export default function ZenReader({
 
           {/* Hộp ghi nhận bản quyền tôn trọng tác giả */}
           <div className="mt-10 rounded-[14px] bg-zinc-100/70 p-4 text-center text-xs text-zinc-500 leading-relaxed">
-            Bài viết của <strong>{author.name}</strong> ({author.role}). Nguồn trích xuất từ{" "}
-            <a
-              href={article.originalUrl || author.defaultSourceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-medium text-zinc-700 underline underline-offset-2 hover:text-zinc-950"
-            >
-              {author.sourceLabel}
-            </a>
-            . Bản dịch tiếng Việt được thực hiện bởi <strong>myCreative</strong> nhằm phục vụ
-            mục đích học tập, trau dồi sáng tạo và lan tỏa cảm hứng nội bộ.
+            {author.slug === "dave-trott" ? (
+              <>
+                Bài viết gốc của {author.name} tại{" "}
+                <a
+                  href={originalArticleUrl || author.defaultSourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-zinc-700 underline underline-offset-2 hover:text-zinc-950"
+                >
+                  {author.sourceLabel}
+                </a>
+                . Bản dịch tiếng Việt của <strong>myCreative</strong>, dùng cho mục đích học tập nội bộ.
+              </>
+            ) : (
+              <>
+                Nội dung của {author.name}. Bản dịch tiếng Việt của <strong>myCreative</strong>, dùng cho mục đích học tập nội bộ.
+              </>
+            )}
           </div>
         </footer>
       </main>
