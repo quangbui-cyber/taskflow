@@ -161,6 +161,91 @@ export function getWeekdaySchedule(startDate: Date, count: number): Date[] {
 
 
 // ---------------------------------------------------------------------------
+// Thông tin các tác giả trong Góc Đọc myCreative
+// ---------------------------------------------------------------------------
+
+export interface AuthorMetadata {
+  slug: string;
+  name: string;
+  role: string;
+  sourceDomain: string;
+  sourceLabel: string;
+  defaultSourceUrl: string;
+  bioVi: string;
+}
+
+export const KNOWN_AUTHORS: Record<string, AuthorMetadata> = {
+  "dave-trott": {
+    slug: "dave-trott",
+    name: "Dave Trott",
+    role: "Huyền thoại Quảng cáo Anh quốc",
+    sourceDomain: "davetrott.co.uk",
+    sourceLabel: "davetrott.co.uk",
+    defaultSourceUrl: "https://davetrott.co.uk",
+    bioVi: "Cựu Giám đốc Sáng tạo BMP, GGT, tác giả của 'Predatory Thinking' và 'Creative Mischief'.",
+  },
+  "paul-arden": {
+    slug: "paul-arden",
+    name: "Paul Arden",
+    role: "Cựu Giám đốc Sáng tạo Saatchi & Saatchi",
+    sourceDomain: "phaidon.com",
+    sourceLabel: "Phaidon Press",
+    defaultSourceUrl: "https://www.phaidon.com/store/general-non-fiction/its-not-how-good-you-are-its-how-good-you-want-to-be-9780714843377/",
+    bioVi: "Phù thủy quảng cáo đưa Saatchi & Saatchi lên đỉnh cao thế giới, tác giả cuốn sách kinh điển 'It's Not How Good You Are, It's How Good You Want to Be'.",
+  },
+  "george-lois": {
+    slug: "george-lois",
+    name: "George Lois",
+    role: "Bố già Cách mạng Sáng tạo Mỹ",
+    sourceDomain: "phaidon.com",
+    sourceLabel: "Phaidon Press",
+    defaultSourceUrl: "https://www.phaidon.com/store/general-non-fiction/damn-good-advice-for-people-with-talent-9780714863481/",
+    bioVi: "Nhà tiên phong tạo nên thời kỳ hoàng kim của quảng cáo Madison Avenue, tác giả 92 bìa Esquire huyền thoại và cuốn 'Damn Good Advice'.",
+  },
+  "rory-sutherland": {
+    slug: "rory-sutherland",
+    name: "Rory Sutherland",
+    role: "Phó Chủ tịch Ogilvy UK",
+    sourceDomain: "penguin.co.uk",
+    sourceLabel: "Penguin Books",
+    defaultSourceUrl: "https://www.penguin.co.uk/books/291244/alchemy-by-sutherland-rory/9780753556528",
+    bioVi: "Bậc thầy tâm lý học hành vi và thuật giả kim tiếp thị, tác giả cuốn sách bestseller 'Alchemy: The Surprising Power of Ideas That Don't Make Sense'.",
+  },
+  "bob-hoffman": {
+    slug: "bob-hoffman",
+    name: "Bob Hoffman",
+    role: "The Ad Contrarian",
+    sourceDomain: "adcontrarian.com",
+    sourceLabel: "adcontrarian.com",
+    defaultSourceUrl: "https://www.adcontrarian.com",
+    bioVi: "Cựu CEO Hoffman/Lewis, cây bút gai góc số 1 thế giới về lột trần ảo tưởng tiếp thị số, tác giả 'BadMen' và 'Advertising for Skeptics'.",
+  },
+  "john-hegarty": {
+    slug: "john-hegarty",
+    name: "Sir John Hegarty",
+    role: "Đồng sáng lập BBH (Bartle Bogle Hegarty)",
+    sourceDomain: "thamesandhudson.com",
+    sourceLabel: "Thames & Hudson",
+    defaultSourceUrl: "https://www.thamesandhudson.com/hegarty-on-advertising-turning-intelligence-into-magic-9780500293621",
+    bioVi: "Hiệp sĩ hoàng gia Anh, huyền thoại tạo nên 'Vorsprung durch Technik' của Audi và 'When the world zigs, zag' của Levi's.",
+  },
+};
+
+export function getArticleAuthor(tags: string[] = []): AuthorMetadata {
+  if (Array.isArray(tags)) {
+    for (const tag of tags) {
+      if (typeof tag === "string" && tag.startsWith("author:")) {
+        const slug = tag.replace("author:", "").trim();
+        if (KNOWN_AUTHORS[slug]) {
+          return KNOWN_AUTHORS[slug];
+        }
+      }
+    }
+  }
+  return KNOWN_AUTHORS["dave-trott"];
+}
+
+// ---------------------------------------------------------------------------
 // Hiển thị trên trang Góc Đọc
 // ---------------------------------------------------------------------------
 

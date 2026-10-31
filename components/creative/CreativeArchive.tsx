@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { ArrowRight, Bookmark, BookOpen, Check, Heart, Search } from "lucide-react";
 import { creativeHeading, serifBody } from "@/app/fonts";
-import { estimateReadingMinutes } from "@/lib/creative";
+import { estimateReadingMinutes, getArticleAuthor } from "@/lib/creative";
 import { toggleSaveArticle } from "@/app/actions/creative";
 
 export interface CreativeCardData {
@@ -265,6 +265,7 @@ function FeaturedArticle({
   onToggleSave: () => void;
 }) {
   const minutes = estimateReadingMinutes(article.wordCount);
+  const author = getArticleAuthor(article.tags);
   const href = `/creative/${article.slug}`;
 
   return (
@@ -277,6 +278,8 @@ function FeaturedArticle({
           <span className="rounded-full bg-brand-100 px-2.5 py-1 text-xs font-semibold text-brand-900">
             Bài mới nhất
           </span>
+          <span className="font-medium text-zinc-700">{author.name}</span>
+          <span>·</span>
           <span>
             {article.dateLabel} · {minutes} phút đọc
           </span>
@@ -355,6 +358,7 @@ function ArticleCard({
   saved: boolean;
 }) {
   const minutes = estimateReadingMinutes(article.wordCount);
+  const author = getArticleAuthor(article.tags);
   const muted = personal && article.isRead;
 
   return (
@@ -364,10 +368,12 @@ function ArticleCard({
       className="group flex flex-col gap-3 rounded-[16px] border border-zinc-200 bg-white p-5 shadow-sm transition-[transform,border-color] duration-150 ease-out hover:-translate-y-0.5 hover:border-brand-300 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
     >
       <div className="flex items-center justify-between gap-2 text-xs text-zinc-500">
-        <span>
-          {article.dateLabel} · {minutes} phút đọc
+        <span className="flex items-center gap-1.5 truncate">
+          <span className="font-medium text-zinc-800">{author.name}</span>
+          <span>·</span>
+          <span>{minutes} phút đọc</span>
         </span>
-        <span className="flex items-center gap-2">
+        <span className="flex shrink-0 items-center gap-2">
           {saved && (
             <Bookmark size={14} className="text-brand-700" fill="currentColor" aria-label="Đã lưu" />
           )}

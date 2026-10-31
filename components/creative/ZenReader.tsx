@@ -17,6 +17,7 @@ import {
   type ArticleLine,
   estimateReadingMinutes,
   formatCreativeDate,
+  getArticleAuthor,
   isGapLine,
 } from "@/lib/creative";
 import {
@@ -182,6 +183,7 @@ export default function ZenReader({
     } catch {}
   };
 
+  const author = getArticleAuthor(article.tags);
   const readingMinutes = estimateReadingMinutes(article.wordCount);
   const origLines = article.originalLines || [];
   const linesVi = article.linesVi && article.linesVi.length > 0 ? article.linesVi : null;
@@ -272,7 +274,7 @@ export default function ZenReader({
             <span>•</span>
             <span>{readingMinutes} phút đọc</span>
             <span>•</span>
-            <span>Dave Trott</span>
+            <span className="font-medium text-zinc-700">{author.name}</span>
           </div>
 
           {/* Tiêu đề tiếng Anh gốc IN HOA */}
@@ -369,7 +371,7 @@ export default function ZenReader({
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-800 underline underline-offset-4"
             >
-              <span>Xem bài gốc trên davetrott.co.uk</span>
+              <span>Xem bài gốc trên {author.sourceLabel}</span>
               <ExternalLink size={12} />
             </a>
           </div>
@@ -413,14 +415,14 @@ export default function ZenReader({
 
           {/* Hộp ghi nhận bản quyền tôn trọng tác giả */}
           <div className="mt-10 rounded-[14px] bg-zinc-100/70 p-4 text-center text-xs text-zinc-500 leading-relaxed">
-            Bài viết gốc của huyền thoại quảng cáo <strong>Dave Trott</strong> tại{" "}
+            Bài viết của <strong>{author.name}</strong> ({author.role}). Nguồn trích xuất từ{" "}
             <a
-              href="https://davetrott.co.uk"
+              href={article.originalUrl || author.defaultSourceUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="font-medium text-zinc-700 underline underline-offset-2 hover:text-zinc-950"
             >
-              davetrott.co.uk
+              {author.sourceLabel}
             </a>
             . Bản dịch tiếng Việt được thực hiện bởi <strong>myCreative</strong> nhằm phục vụ
             mục đích học tập, trau dồi sáng tạo và lan tỏa cảm hứng nội bộ.
