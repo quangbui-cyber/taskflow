@@ -49,7 +49,7 @@ export const paulArdenArticles = [
       "Hắn lùa tất cả mọi người vào phòng họp để mổ xẻ xem rốt cuộc hỏng ở khâu nào.",
       "Bên Account đổ riệt cho Creative làm bài quá bay bổng, tự sướng và xa rời brief.",
       "Bên Creative chửi ngược lại Account vứt sang một bản brief rác rưởi vô phương cứu chữa.",
-      "Đám Chiến lược đổ lỗi cho khách hàng quá bảo thủ, đầu óc mù tịt không ngấm nổi số liệu.",
+      "Đám Strategy đổ lỗi cho khách hàng quá bảo thủ, đầu óc mù tịt không ngấm nổi số liệu.",
       "Còn dàn Sếp lớn thì than vãn thời gian chuẩn bị quá gấp gáp.",
       "Ai nấy đều có một lý do vô cùng chính đáng.",
       "Ai nấy đều vô can.",

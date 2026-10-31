@@ -672,3 +672,4 @@ export const johnHegartyArticles = [
     ]
   }
 ];
+
