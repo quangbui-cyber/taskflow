@@ -6,7 +6,8 @@
  *   npx tsx scripts/apply-revised-translations.ts --apply    # sao lưu rồi ghi
  *
  * - Chỉ cập nhật titleVi và linesVi; không đụng status, tags, publishedDate.
- * - Từ chối chạy nếu DATABASE_URL không trỏ về localhost (áp production là quyết định riêng).
+ * - Từ chối chạy nếu DATABASE_URL không trỏ về localhost, trừ khi đặt ALLOW_REMOTE=1
+ *   (áp production là quyết định riêng; sao lưu khi đó có tên backup-remote-<ngày>.json).
  * - Luôn ghi sao lưu backup-<ngày>.json (slug, titleVi, linesVi hiện có) trước khi ghi.
  */
 import fs from "fs";
@@ -22,10 +23,12 @@ async function main() {
 
   const url = process.env.DATABASE_URL ?? "";
   const host = url.match(/@([^:/?]+)/)?.[1] ?? "";
-  if (!["localhost", "127.0.0.1", "::1"].includes(host)) {
-    console.error(`DATABASE_URL trỏ tới "${host}", không phải localhost. Dừng.`);
+  const isLocal = ["localhost", "127.0.0.1", "::1"].includes(host);
+  if (!isLocal && process.env.ALLOW_REMOTE !== "1") {
+    console.error(`DATABASE_URL trỏ tới "${host}", không phải localhost. Đặt ALLOW_REMOTE=1 nếu thật sự muốn áp lên database này. Dừng.`);
     process.exit(1);
   }
+  console.log(`Database: ${host}`);
 
   const revised = JSON.parse(fs.readFileSync(path.join(dir, "all-150.json"), "utf-8")) as Record<
     string,
@@ -62,7 +65,7 @@ async function main() {
   }
 
   const date = new Date().toISOString().slice(0, 10);
-  const backupPath = path.join(dir, `backup-${date}.json`);
+  const backupPath = path.join(dir, `backup-${isLocal ? "" : "remote-"}${date}.json`);
   if (fs.existsSync(backupPath)) {
     console.error(`${backupPath} đã tồn tại, không ghi đè. Đổi tên hoặc xóa rồi chạy lại.`);
     process.exit(1);
