@@ -199,7 +199,9 @@ async function SettingsContent({
   const [accounts, salesTeams, accountUsers] = await Promise.all([
     prisma.account.findMany({
       include: {
-        user: { select: { id: true, name: true, email: true, avatarUrl: true } },
+        user: {
+          select: { id: true, name: true, email: true, avatarUrl: true, isActive: true },
+        },
         _count: { select: { projects: true } },
       },
       orderBy: { name: "asc" },
@@ -260,6 +262,7 @@ async function SettingsContent({
           projectCount: account._count.projects,
           teamId: account.teamId,
           linked: Boolean(account.userId),
+          archived: account.user ? !account.user.isActive : false,
         }))}
         accountUsers={accountUsers}
         teams={sortedTeams.map((team) => ({ id: team.id, name: team.name }))}

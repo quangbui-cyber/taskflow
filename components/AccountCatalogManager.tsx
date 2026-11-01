@@ -32,6 +32,7 @@ type AccountItem = {
   projectCount: number;
   teamId: string | null;
   linked: boolean;
+  archived: boolean;
 };
 
 function accountUserOptions(users: AccountUserOption[]): UserPickerOption[] {
@@ -74,7 +75,8 @@ function LegacyAccountRow({
   }
 
   function removeAccount() {
-    if (!window.confirm(`Xoá "${account.name}" khỏi danh sách Account?`)) return;
+    if (!window.confirm(`Xoá "${account.name}" khỏi danh sách Account?`))
+      return;
     startTransition(async () => {
       const result = await deleteAccount(account.id);
       setIsError(Boolean(result.error));
@@ -92,7 +94,8 @@ function LegacyAccountRow({
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-zinc-800">{account.name}</p>
           <p className="text-xs text-amber-700">
-            Dữ liệu cũ · đang gắn {account.projectCount} project · cần liên kết user Account
+            Dữ liệu cũ · đang gắn {account.projectCount} project · cần liên kết
+            user Account
           </p>
         </div>
         <button
@@ -145,11 +148,7 @@ function LegacyAccountRow({
           Lưu
         </button>
       </div>
-      {message && isError && (
-        <p className="text-xs text-red-600">
-          {message}
-        </p>
-      )}
+      {message && isError && <p className="text-xs text-red-600">{message}</p>}
     </li>
   );
 }
@@ -183,7 +182,8 @@ function LinkedAccountRow({
   }
 
   function removeAccount() {
-    if (!window.confirm(`Xoá "${account.name}" khỏi danh sách Account?`)) return;
+    if (!window.confirm(`Xoá "${account.name}" khỏi danh sách Account?`))
+      return;
     startTransition(async () => {
       const result = await deleteAccount(account.id);
       setIsError(Boolean(result.error));
@@ -206,11 +206,11 @@ function LinkedAccountRow({
         />
         <span className="min-w-0 flex-1">
           <span className="block truncate font-medium">{account.name}</span>
-          <span className="block truncate text-xs text-zinc-400">{account.email}</span>
+          <span className="block truncate text-xs text-zinc-400">
+            {account.email}
+          </span>
           {message && isError && (
-            <span className="mt-1 block text-xs text-red-600">
-              {message}
-            </span>
+            <span className="mt-1 block text-xs text-red-600">{message}</span>
           )}
         </span>
       </span>
@@ -283,96 +283,171 @@ export default function AccountCatalogManager({
       }
       return result;
     },
-    {}
+    {},
   );
   useActionFeedback(state);
-  const linkedAccounts = accounts.filter((account) => account.linked);
+  const [view, setView] = useState<"active" | "archived">("active");
+  const archivedAccounts = accounts.filter((account) => account.archived);
+  const linkedAccounts = accounts.filter(
+    (account) => account.linked && !account.archived,
+  );
   const legacyAccounts = accounts.filter((account) => !account.linked);
+  const activeCount = linkedAccounts.length + legacyAccounts.length;
+  const showArchived = view === "archived" && archivedAccounts.length > 0;
   const pickerOptions = accountUserOptions(accountUsers);
+  const views = [
+    { key: "active" as const, label: "Đang hoạt động", count: activeCount },
+    {
+      key: "archived" as const,
+      label: "Đã vô hiệu hóa",
+      count: archivedAccounts.length,
+    },
+  ];
 
   return (
     <div className="tf-panel overflow-hidden xl:col-span-2">
-      <div className="border-b border-zinc-100 px-5 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-100 px-5 py-3">
         <h2 className="font-semibold">Account</h2>
+        {archivedAccounts.length > 0 && (
+          <div
+            className="tf-scroll-tabs flex items-center gap-0.5 rounded-[7px] bg-zinc-100/80 p-0.5"
+            role="group"
+            aria-label="Lọc danh sách Account"
+          >
+            {views.map((item) => {
+              const selected =
+                (showArchived ? "archived" : "active") === item.key;
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => setView(item.key)}
+                  style={{ fontSize: "13px", lineHeight: "18px" }}
+                  className={`flex min-h-8 shrink-0 items-center gap-1 rounded-[6px] px-2.5 font-medium transition-colors ${
+                    selected
+                      ? "bg-white text-zinc-950 shadow-sm"
+                      : "text-zinc-500 hover:bg-white/55 hover:text-zinc-800"
+                  }`}
+                >
+                  {item.label}
+                  <span
+                    className={selected ? "text-brand-700" : "text-zinc-400"}
+                  >
+                    {item.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      <form
-        ref={formRef}
-        action={formAction}
-        className="grid gap-2 p-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
-      >
-        <UserPicker
-          name="userId"
-          value={selectedUserId}
-          onChange={setSelectedUserId}
-          options={pickerOptions}
-          placeholder="Chọn tài khoản Account"
-          emptyLabel="Chọn tài khoản Account"
-          ariaLabel="Chọn tài khoản Account"
-        />
-        <div className="relative min-w-0">
-          <select
-            name="teamId"
-            defaultValue=""
-            required
-            className="tf-field appearance-none !pr-10"
+      {showArchived ? (
+        <ul className="divide-y divide-zinc-100">
+          {archivedAccounts.map((account) => (
+            <LinkedAccountRow
+              key={account.id}
+              account={account}
+              teams={teams}
+            />
+          ))}
+        </ul>
+      ) : (
+        <>
+          <form
+            ref={formRef}
+            action={formAction}
+            className="grid gap-2 p-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
           >
-            <option value="">Chọn Team bắt buộc</option>
-            {teams.map((team) => (
-              <option key={team.id} value={team.id}>
-                {team.name}
-              </option>
-            ))}
-          </select>
-          <ChevronDown
-            size={15}
-            className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-500"
-            aria-hidden="true"
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={pending || !selectedUserId || accountUsers.length === 0 || teams.length === 0}
-          className="tf-button-primary"
-          aria-busy={pending}
-        >
-          {pending ? (
-            <span className="tf-spinner" aria-hidden="true" />
-          ) : (
-            <Plus size={16} aria-hidden="true" />
+            <UserPicker
+              name="userId"
+              value={selectedUserId}
+              onChange={setSelectedUserId}
+              options={pickerOptions}
+              placeholder="Chọn tài khoản Account"
+              emptyLabel="Chọn tài khoản Account"
+              ariaLabel="Chọn tài khoản Account"
+            />
+            <div className="relative min-w-0">
+              <select
+                name="teamId"
+                defaultValue=""
+                required
+                className="tf-field appearance-none !pr-10"
+              >
+                <option value="">Chọn Team bắt buộc</option>
+                {teams.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                size={15}
+                className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-500"
+                aria-hidden="true"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={
+                pending ||
+                !selectedUserId ||
+                accountUsers.length === 0 ||
+                teams.length === 0
+              }
+              className="tf-button-primary"
+              aria-busy={pending}
+            >
+              {pending ? (
+                <span className="tf-spinner" aria-hidden="true" />
+              ) : (
+                <Plus size={16} aria-hidden="true" />
+              )}
+              {pending ? "Đang lưu..." : "Lưu"}
+            </button>
+          </form>
+
+          {accountUsers.length === 0 && (
+            <p className="px-4 pb-3 text-xs text-zinc-400">
+              Tất cả người dùng Admin hoặc Account đã được thêm vào danh sách
+              Account.
+            </p>
           )}
-          {pending ? "Đang lưu..." : "Lưu"}
-        </button>
-      </form>
+          {teams.length === 0 && (
+            <p className="px-4 pb-3 text-xs text-amber-700">
+              Hãy tạo Team trước khi thêm Account.
+            </p>
+          )}
+          {state.error && (
+            <p className="px-4 pb-3 text-xs text-red-600">{state.error}</p>
+          )}
 
-      {accountUsers.length === 0 && (
-        <p className="px-4 pb-3 text-xs text-zinc-400">
-          Tất cả người dùng Admin hoặc Account đã được thêm vào danh sách Account.
-        </p>
+          <ul className="divide-y divide-zinc-100">
+            {linkedAccounts.length === 0 && legacyAccounts.length === 0 && (
+              <li className="px-5 py-3 text-sm text-zinc-400">
+                Chưa có Account.
+              </li>
+            )}
+            {linkedAccounts.map((account) => (
+              <LinkedAccountRow
+                key={account.id}
+                account={account}
+                teams={teams}
+              />
+            ))}
+            {legacyAccounts.map((account) => (
+              <LegacyAccountRow
+                key={account.id}
+                account={account}
+                users={accountUsers}
+                teams={teams}
+              />
+            ))}
+          </ul>
+        </>
       )}
-      {teams.length === 0 && (
-        <p className="px-4 pb-3 text-xs text-amber-700">
-          Hãy tạo Team trước khi thêm Account.
-        </p>
-      )}
-      {state.error && <p className="px-4 pb-3 text-xs text-red-600">{state.error}</p>}
-
-      <ul className="divide-y divide-zinc-100">
-        {linkedAccounts.length === 0 && legacyAccounts.length === 0 && (
-          <li className="px-5 py-3 text-sm text-zinc-400">Chưa có Account.</li>
-        )}
-        {linkedAccounts.map((account) => (
-          <LinkedAccountRow key={account.id} account={account} teams={teams} />
-        ))}
-        {legacyAccounts.map((account) => (
-          <LegacyAccountRow
-            key={account.id}
-            account={account}
-            users={accountUsers}
-            teams={teams}
-          />
-        ))}
-      </ul>
     </div>
   );
 }
