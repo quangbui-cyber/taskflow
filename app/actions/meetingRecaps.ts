@@ -20,12 +20,19 @@ import { findRecapMeeting, loadRecapUsage } from "@/lib/meetingRecapData";
 import { recapLimits, summaryLimitReason } from "@/lib/meetingRecapLimits";
 import { deleteRecapAudio, runMeetingRecap, saveRecapToProject } from "@/lib/meetingRecapJob";
 import { sendMeetingRecapEmail } from "@/lib/meetingRecapMail";
+import {
+  mergeGlossarySuggestions,
+  readGlossarySuggestions,
+  suggestGlossaryFromEdit,
+} from "@/lib/recapGlossary";
+import { resolveRecapRecipients, syncRecapRecipients } from "@/lib/meetingRecapRecipients";
 import { notify } from "@/lib/notify";
 import { prisma } from "@/lib/prisma";
 import { createLinkedRecapTask, lockRecap, publishRecap, resolveRecapSuggestion } from "@/lib/recapWorkflow";
 import { readPublishedRecap } from "@/lib/recapPublication";
 import { attachMeetingProject } from "@/lib/recapProject";
 import { queueDrivePush } from "@/lib/driveStorage";
+import { pushMeetingRecapToDriveSafe } from "@/lib/recapDrive";
 
 export type MeetingRecapActionState = { error?: string; success?: string };
 
@@ -51,6 +58,8 @@ export async function attachProjectToMeeting(meetingId: string, projectId: strin
   const result = await attachMeetingProject(prisma, meetingId, projectId, user);
   if ("error" in result) return { error: result.error };
   if (result.archived) queueDrivePush(result.projectId);
+  // Biên bản đã vào tài liệu dự án: bỏ bản trong thư mục "Biên bản họp" (nếu có).
+  after(() => pushMeetingRecapToDriveSafe(meetingId));
   refresh(meetingId);
   revalidatePath(`/projects/${result.projectId}`);
   return { success: result.archived
@@ -99,14 +108,44 @@ export async function saveMeetingRecapContent(
   const value = normalizeRecapContent(content);
   if (!value) return { error: "Biên bản không được để trống." };
 
-  const saved = await prisma.meetingRecap.updateMany({ where: { id: recap.id, status: "READY" }, data: { content: value } });
+  // Chỗ người ghi biên bản vừa đổi từ/cụm từ trở thành gợi ý cho từ điển (chờ người đó chọn).
+  let glossarySuggestions = readGlossarySuggestions(recap.glossarySuggestions);
+  if (recap.content) {
+    const found = suggestGlossaryFromEdit(recap.content, value);
+    if (found.length) {
+      const known = await prisma.recapGlossaryTerm.findMany({
+        where: { kind: "TERM", text: { in: found.map((item) => item.right) } },
+        select: { text: true },
+      });
+      glossarySuggestions = mergeGlossarySuggestions(
+        glossarySuggestions,
+        found,
+        known.map((term) => term.text)
+      );
+    }
+  }
+
+  const saved = await prisma.meetingRecap.updateMany({
+    where: { id: recap.id, status: "READY" },
+    data: { content: value, glossarySuggestions },
+  });
   if (!saved.count) return { error: "Biên bản đang được xử lý. Hãy tải lại trang." };
   refresh(meetingId);
   return { success: "Đã lưu biên bản." };
 }
 
-/** Gửi biên bản: người tham dự xem được trong app, nhận thông báo và email. */
-export async function sendMeetingRecap(meetingId: string): Promise<MeetingRecapActionState> {
+export type SendRecapInput = {
+  /** Người tham dự bị bỏ chọn, không gửi cho họ lần này */
+  skipUserIds: string[];
+  /** Toàn bộ người nhận thêm ngoài danh sách tham dự (lưu lại cho các lần gửi sau) */
+  extraUserIds: string[];
+};
+
+/** Gửi biên bản: người nhận xem được trong app, nhận thông báo và email. */
+export async function sendMeetingRecap(
+  meetingId: string,
+  input: SendRecapInput = { skipUserIds: [], extraUserIds: [] }
+): Promise<MeetingRecapActionState> {
   const loaded = await loadManaged(meetingId);
   if ("error" in loaded) return { error: loaded.error };
   const { meeting, user } = loaded;
@@ -114,25 +153,29 @@ export async function sendMeetingRecap(meetingId: string): Promise<MeetingRecapA
   if (!recap || recap.status !== "READY" || !recap.content?.trim()) {
     return { error: "Biên bản chưa sẵn sàng để gửi." };
   }
+  const idList = (value: unknown) =>
+    Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : [];
+  const skipUserIds = idList(input?.skipUserIds);
+  const extraUserIds = idList(input?.extraUserIds);
+
+  const synced = await syncRecapRecipients(meetingId, extraUserIds, user.id);
+  if (!synced.ok) return { error: synced.error };
 
   const sentAt = new Date();
   const publication = await publishRecap(prisma, recap.id, sentAt);
   if (!publication) return { error: "Biên bản đang được xử lý. Hãy tải lại trang." };
   const savedToProject = await saveRecapToProject(meetingId, user, sentAt, publication);
-  const recipients = await prisma.meetingAttendee.findMany({
-    where: { meetingId, response: { not: "DECLINED" }, user: { isActive: true } },
-    select: { userId: true },
-  });
-  const recipientIds = [meeting.organizerId, ...recipients.map((row) => row.userId)].filter(
-    (id) => id !== user.id
-  );
+  const recipients = await resolveRecapRecipients(meetingId, { skipUserIds, extraUserIds: synced.userIds });
+  const recipientIds = recipients.map((person) => person.id).filter((id) => id !== user.id);
   await notify(recipientIds, {
     type: "MEETING_RECAP_SHARED",
     message: `Đã có biên bản họp “${meeting.title}”.`,
     meetingId,
   });
+  // Họp không gắn dự án: lưu Google Doc vào "Biên bản họp" trên Drive.
+  if (!savedToProject) after(() => pushMeetingRecapToDriveSafe(meetingId));
   after(async () => {
-    const result = await sendMeetingRecapEmail(meetingId, publication);
+    const result = await sendMeetingRecapEmail(meetingId, publication, skipUserIds);
     if (!result.ok && result.error !== "Chưa cấu hình email.") {
       console.warn("Meeting recap email could not be sent.");
     }
@@ -144,7 +187,7 @@ export async function sendMeetingRecap(meetingId: string): Promise<MeetingRecapA
     success:
       (recipientIds.length
         ? `Đã gửi biên bản cho ${recipientIds.length} người.`
-        : "Đã lưu biên bản. Cuộc họp không có người tham dự nào khác.") + projectNote,
+        : "Đã lưu biên bản. Không có người nhận nào khác.") + projectNote,
   };
 }
 

@@ -18,6 +18,7 @@ import {
 } from "@/lib/meetingRecap";
 import { recapActionOrder, toRecapActionExport } from "@/lib/meetingRecapData";
 import { publishedActionProgress, publishedRecapExport, readPublishedRecap, readRecapSuggestions, toRecapActionView } from "@/lib/recapPublication";
+import { readGlossarySuggestions } from "@/lib/recapGlossary";
 import { recapLimits } from "@/lib/meetingRecapLimits";
 import { formatHour } from "@/lib/dates";
 import { formatMeetingWhen } from "@/lib/meetings";
@@ -47,6 +48,7 @@ export default async function MeetingRecapPage({
         select: { userId: true, user: { select: { id: true, name: true, avatarUrl: true } } },
         orderBy: { createdAt: "asc" },
       },
+      recapRecipients: { select: { userId: true } },
       recap: {
         include: {
           actionItems: {
@@ -92,6 +94,13 @@ export default async function MeetingRecapPage({
   const people = [meeting.organizer, ...meeting.attendees.map((attendee) => attendee.user)].filter(
     (person, index, all) => all.findIndex((other) => other.id === person.id) === index
   );
+  const sendDirectory = canManage
+    ? await prisma.user.findMany({
+        where: { isActive: true, id: { notIn: people.map((person) => person.id) } },
+        select: { id: true, name: true, email: true, avatarUrl: true },
+        orderBy: { name: "asc" },
+      })
+    : [];
   const publication = readPublishedRecap(recap?.publishedSnapshot);
   const liveItems = (recap?.actionItems ?? []).map(toRecapActionView);
   const actionItems: RecapActionItemView[] = canManage ? liveItems
@@ -175,6 +184,12 @@ export default async function MeetingRecapPage({
 
           <MeetingRecapPanel
             meetingId={meeting.id}
+            meetingTitle={meeting.title}
+            meetingWhen={formatMeetingWhen(meeting.startAt, meeting.endAt)}
+            sendPeople={people}
+            sendDirectory={sendDirectory}
+            glossarySuggestions={canManage ? readGlossarySuggestions(recap?.glossarySuggestions) : []}
+            sendExtraIds={meeting.recapRecipients.map((row) => row.userId)}
             canManage={canManage}
             enabled={meetingRecapsEnabled()}
             startBlock={startBlock}

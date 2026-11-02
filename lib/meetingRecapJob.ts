@@ -28,6 +28,7 @@ import {
 } from "@/lib/meetingRecapAi";
 import { loadRecapUsage } from "@/lib/meetingRecapData";
 import { recapLimits, retranscribeAllowed, summaryLimitReason } from "@/lib/meetingRecapLimits";
+import { loadRecapGlossary } from "@/lib/recapGlossaryData";
 import { notify } from "@/lib/notify";
 import { prisma } from "@/lib/prisma";
 
@@ -128,6 +129,8 @@ export async function runMeetingRecap(recapId: string, startedAt: Date): Promise
   const managerIds = [meeting.organizerId, meeting.recorderId, recap.createdById];
   const personNames = [meeting.organizer.name, ...attendeeNames];
   const hintWords = transcriptionHintWords(meeting.title, personNames);
+  // Từ điển lỗi thì vẫn chạy bình thường, chỉ thiếu phần gợi ý thêm.
+  const glossary = await loadRecapGlossary().catch(() => ({ terms: [], rules: [] }));
 
   try {
     let transcript = recap.transcript ?? "";
@@ -138,7 +141,11 @@ export async function runMeetingRecap(recapId: string, startedAt: Date): Promise
       const firstStartedAt = Date.now();
       const result = await transcribeAudioUrl({
         audioUrl,
-        prompt: buildTranscriptionPrompt(meeting.title, personNames),
+        prompt: buildTranscriptionPrompt(
+          meeting.title,
+          personNames,
+          glossary.terms.map((term) => term.text)
+        ),
       });
       const firstPassMs = Date.now() - firstStartedAt;
       const billedSeconds = Math.max(1, Math.ceil(result.duration));
@@ -215,7 +222,8 @@ export async function runMeetingRecap(recapId: string, startedAt: Date): Promise
         attendees: attendeeNames,
         description: meeting.description,
       },
-      limitTranscriptForSummary(transcript)
+      limitTranscriptForSummary(transcript),
+      glossary
     );
     // Chép lời lâu thì phần viết biên bản chỉ còn thời gian còn lại; không kịp thì báo lỗi
     // (bản chép lời đã lưu) để người tổ chức bấm "Thử viết lại" ở một lượt mới.

@@ -33,6 +33,7 @@ const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
 export const DOCS_FOLDER_NAME = "Tài liệu";
 export const TASKS_FOLDER_NAME = "Công việc";
 export const COMPANY_DOCS_FOLDER_NAME = "Tài liệu công ty";
+export const MEETING_RECAPS_FOLDER_NAME = "Biên bản họp";
 
 export const driveFolderKeys = {
   year: (year: number) => `year:${year}`,
@@ -42,6 +43,8 @@ export const driveFolderKeys = {
   task: (taskId: string) => `task:${taskId}`,
   companyDocs: () => "company:docs",
   docSet: (setId: string) => `docset:${setId}`,
+  meetingRecaps: () => "meeting-recaps",
+  meetingRecapsYear: (year: number) => `meeting-recaps:${year}`,
 };
 
 /** Năm của dự án theo giờ Việt Nam (thư mục năm). */
@@ -97,6 +100,12 @@ export async function taskFolder(taskId: string) {
 
 export async function companyDocsFolder() {
   return ensureFolder(driveFolderKeys.companyDocs(), COMPANY_DOCS_FOLDER_NAME, sharedDriveId());
+}
+
+/** Biên bản của cuộc họp không gắn dự án: "Biên bản họp/<năm họp>". */
+export async function meetingRecapsFolder(year: number) {
+  const root = await ensureFolder(driveFolderKeys.meetingRecaps(), MEETING_RECAPS_FOLDER_NAME, sharedDriveId());
+  return ensureFolder(driveFolderKeys.meetingRecapsYear(year), String(year), root);
 }
 
 export async function documentSetFolder(setId: string) {

@@ -11,6 +11,21 @@ async function lockMeeting(tx: Prisma.TransactionClient, meetingId: string) {
   await tx.$queryRaw`SELECT id FROM "Meeting" WHERE id = ${meetingId} FOR UPDATE`;
 }
 
+type DocxMeeting = {
+  title: string; startAt: Date; endAt: Date; room: { name: string } | null;
+  organizer: { name: string }; attendees: { user: { name: string } }[];
+};
+
+/** File Word của bản biên bản đã gửi (dùng cho tài liệu dự án và thư mục Biên bản họp trên Drive). */
+export function publishedRecapDocx(meeting: DocxMeeting, snapshot: PublishedRecap, sentAt: Date): Uint8Array<ArrayBuffer> {
+  return buildRecapDocx({
+    title: meeting.title, when: formatMeetingWhen(meeting.startAt, meeting.endAt),
+    room: meeting.room?.name ?? null, organizer: meeting.organizer.name,
+    attendees: meeting.attendees.map((row) => row.user.name),
+    content: publishedRecapExport(snapshot), sentAt,
+  });
+}
+
 /** Caller holds the meeting lock. Store only a published version, even while AI is rewriting. */
 async function archiveRecap(tx: Prisma.TransactionClient, meetingId: string, uploader: Viewer,
   publication?: PublishedRecap, expectedSentAt?: Date): Promise<boolean> {
@@ -31,12 +46,7 @@ async function archiveRecap(tx: Prisma.TransactionClient, meetingId: string, upl
   if (expectedSentAt && expectedSentAt.getTime() !== recap.sentAt.getTime()) return false;
   const snapshot = publication ?? readPublishedRecap(recap.publishedSnapshot);
   if (!snapshot?.content.trim()) return false;
-  const data = buildRecapDocx({
-    title: meeting.title, when: formatMeetingWhen(meeting.startAt, meeting.endAt),
-    room: meeting.room?.name ?? null, organizer: meeting.organizer.name,
-    attendees: meeting.attendees.map((row) => row.user.name),
-    content: publishedRecapExport(snapshot), sentAt: recap.sentAt,
-  });
+  const data = publishedRecapDocx(meeting, snapshot, recap.sentAt);
   const file = { name: recapDocxFileName(meeting.title, meeting.startAt), mimeType: DOCX_MIME_TYPE, size: data.length, data };
   const existing = recap.projectFileId ? await tx.projectFile.findFirst({
     where: { id: recap.projectFileId, projectId: meeting.projectId }, select: { id: true },
