@@ -1,6 +1,7 @@
 import {
   isOpenQuestionSection,
   isRecapPlaceholder,
+  isSummarySection,
   parseExportActionLine,
   parseRecapSections,
   type RecapSection,
@@ -89,7 +90,16 @@ function Section({ section }: { section: RecapSection }) {
           ))}
         </div>
       )}
-      {section.items.length > 0 && <NumberedList items={section.items} warn={warn} />}
+      {section.items.length > 0 &&
+        (isSummarySection(section.title) ? (
+          <ul className="list-disc space-y-1.5 pl-5 text-[15px] leading-7 text-zinc-800 marker:text-brand-500">
+            {section.items.map((item, index) => (
+              <li key={index}>{item}</li>
+            ))}
+          </ul>
+        ) : (
+          <NumberedList items={section.items} warn={warn} />
+        ))}
     </section>
   );
 }

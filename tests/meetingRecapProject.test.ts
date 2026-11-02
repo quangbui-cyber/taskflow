@@ -60,13 +60,22 @@ test("the Word document holds the meeting details and recap, safely escaped", ()
   assert.match(xml, /Không dùng phòng/);
   assert.match(xml, /Ngọc Giàu/);
   assert.match(xml, /<w:b\/>.*Tóm tắt/);
-  assert.match(xml, /• Gửi báo giá — Phụ trách: Lan — Hạn: Thứ Sáu/);
+  assert.match(xml, />Gửi báo giá<\/w:t>/);
+  assert.match(xml, />Lan · Hạn Thứ Sáu<\/w:t>/);
+  assert.match(xml, /<w:tbl>/);
   assert.match(xml, /gửi lúc 15:30 22\/10\/2026/);
 
   const docx = buildRecapDocx(sample);
   const text = new TextDecoder().decode(docx);
   assert.ok(text.includes("[Content_Types].xml"));
   assert.ok(text.includes("word/document.xml"));
+  // Logo Creative Station ở đầu trang đầu: header, ảnh PNG và các liên kết giữa chúng.
+  assert.ok(text.includes("word/header1.xml"));
+  assert.ok(text.includes("word/media/logo.png"));
+  assert.ok(text.includes('Target="media/logo.png"'));
+  assert.ok(Buffer.from(docx).includes(Buffer.from([0x89, 0x50, 0x4e, 0x47])), "the PNG bytes are in the file");
+  assert.match(xml, /<w:headerReference w:type="first" r:id="rIdHeader"\/>/);
+  assert.match(xml, /<w:titlePg\/>/);
   assert.equal(DOCX_MIME_TYPE, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
 });
 
