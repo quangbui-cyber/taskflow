@@ -312,10 +312,10 @@ test("the summary prompt fences the transcript and tells the model to ignore ins
 
 test("model output is validated and rendered into topics, without the action items", () => {
   assert.equal(parseRecapSummary(null), null);
-  assert.equal(parseRecapSummary({ overview: "", topics: [], decisions: [], actionItems: [] }), null);
+  assert.equal(parseRecapSummary({ overview: [], topics: [], decisions: [], actionItems: [] }), null);
 
   const summary = parseRecapSummary({
-    overview: "  Chốt kế hoạch sân khấu Jabil. ",
+    overview: ["  Chốt kế hoạch sân khấu Jabil. ", "Giữ trần ngân sách", 7],
     topics: [
       { title: "Ngân sách", points: ["Trần 200 triệu", 42, "  "], conclusion: "Giữ nguyên trần" },
       { title: "", points: ["Không có tên chủ đề nên bị bỏ"], conclusion: "" },
@@ -330,7 +330,7 @@ test("model output is validated and rendered into topics, without the action ite
     openQuestions: "không phải mảng",
   });
   assert.deepEqual(summary, {
-    overview: "Chốt kế hoạch sân khấu Jabil.",
+    overview: ["Chốt kế hoạch sân khấu Jabil.", "Giữ trần ngân sách"],
     topics: [{ title: "Ngân sách", points: ["Trần 200 triệu"], conclusion: "Giữ nguyên trần" }],
     decisions: ["Dùng màn LED 6x3m"],
     actionItems: [
@@ -341,14 +341,15 @@ test("model output is validated and rendered into topics, without the action ite
   });
 
   const content = renderRecapContent(summary!);
-  assert.match(content, /^## Tóm tắt\nChốt kế hoạch sân khấu Jabil\./);
+  assert.match(content, /^## Tóm tắt\n- Chốt kế hoạch sân khấu Jabil\.\n- Giữ trần ngân sách\n/);
+  assert.deepEqual(parseRecapSummary({ overview: "Đoạn văn kiểu cũ.", topics: [] })?.overview, ["Đoạn văn kiểu cũ."]);
   assert.match(content, /## Nội dung thảo luận\n### Ngân sách\n- Trần 200 triệu\nKết luận: Giữ nguyên trần/);
   assert.match(content, /## Vấn đề còn mở\n- Không có\./);
   assert.ok(!content.includes("Việc cần làm"), "action items live in their own list");
 
   const blocks = parseRecapContent(content);
   assert.deepEqual(blocks[0], { type: "heading", text: "Tóm tắt" });
-  assert.deepEqual(blocks[1], { type: "text", text: "Chốt kế hoạch sân khấu Jabil." });
+  assert.deepEqual(blocks[1], { type: "list", items: ["Chốt kế hoạch sân khấu Jabil.", "Giữ trần ngân sách"] });
   assert.deepEqual(blocks[2], { type: "heading", text: "Nội dung thảo luận" });
   assert.deepEqual(blocks[3], { type: "subheading", text: "Ngân sách" });
   assert.deepEqual(blocks[4], { type: "list", items: ["Trần 200 triệu"] });
@@ -526,7 +527,7 @@ test("Groq errors become clear Vietnamese messages", async () => {
 
 test("Gemini is asked for structured JSON and its answer is validated", async () => {
   const answer = {
-    overview: "Chốt lịch giao hàng.",
+    overview: ["Chốt lịch giao hàng."],
     topics: [{ title: "Tiến độ", points: ["Trễ 2 ngày"], conclusion: "" }],
     decisions: [],
     actionItems: [{ task: "Gọi khách", owner: "Ngọc", due: "Chưa rõ", dueDate: "" }],

@@ -359,7 +359,8 @@ export function buildTranscriptionPrompt(title: string, names: string[], glossar
 export type RecapTopic = { title: string; points: string[]; conclusion: string };
 export type RecapActionItem = { task: string; owner: string; due: string; dueDate: string };
 export type RecapSummary = {
-  overview: string;
+  /** 3–5 ý ngắn; ý đầu là mục đích cuộc họp */
+  overview: string[];
   topics: RecapTopic[];
   decisions: string[];
   actionItems: RecapActionItem[];
@@ -370,7 +371,12 @@ export type RecapSummary = {
 export const RECAP_SUMMARY_SCHEMA = {
   type: "OBJECT",
   properties: {
-    overview: { type: "STRING", description: "Tóm tắt 2–4 câu: mục đích và kết quả chính của cuộc họp." },
+    overview: {
+      type: "ARRAY",
+      items: { type: "STRING" },
+      description:
+        "Tóm tắt 3–5 ý, mỗi ý một câu ngắn (tối đa khoảng 25 chữ). Ý đầu nêu mục đích cuộc họp, các ý sau là kết quả chính.",
+    },
     topics: {
       type: "ARRAY",
       description: "Nội dung thảo luận chia theo chủ đề (thường 2–6 chủ đề), theo thứ tự được bàn trong cuộc họp.",
@@ -470,7 +476,8 @@ const isUnknown = (value: string) => !value || /^chưa rõ\.?$/i.test(value);
 export function parseRecapSummary(raw: unknown): RecapSummary | null {
   if (!raw || typeof raw !== "object") return null;
   const data = raw as Record<string, unknown>;
-  const overview = clean(data.overview, 2000);
+  // Bản cũ của schema trả một đoạn văn: giữ thành một ý.
+  const overview = typeof data.overview === "string" ? cleanList([data.overview], 1) : cleanList(data.overview, 6);
   const topics = Array.isArray(data.topics)
     ? data.topics
         .map((item) => {
@@ -505,7 +512,7 @@ export function parseRecapSummary(raw: unknown): RecapSummary | null {
     openQuestions: cleanList(data.openQuestions),
   };
   const empty =
-    !summary.overview &&
+    summary.overview.length === 0 &&
     summary.topics.length === 0 &&
     summary.decisions.length === 0 &&
     summary.actionItems.length === 0;
@@ -529,7 +536,7 @@ export function renderRecapContent(summary: RecapSummary): string {
     : ["- Không ghi nhận.", ""];
   return [
     "## Tóm tắt",
-    summary.overview || "Chưa có tóm tắt.",
+    ...list(summary.overview, "Chưa có tóm tắt."),
     "",
     "## Nội dung thảo luận",
     ...topics,
@@ -755,6 +762,11 @@ export function isRecapPlaceholder(item: string): boolean {
   return /^(không có|không ghi nhận|chưa có)(?=[\s.,;:!]|$)/iu.test(item.trim());
 }
 
+/** Mục Tóm tắt: các ý hiện thành gạch đầu dòng thường, không đánh số. */
+export function isSummarySection(title: string): boolean {
+  return /^tóm tắt$/i.test(title.trim());
+}
+
 /** Mục cần chú ý (màu vàng) thay vì màu thương hiệu. */
 export function isOpenQuestionSection(title: string): boolean {
   return /vấn đề còn mở/i.test(title);
@@ -804,6 +816,12 @@ function htmlNumberedRows(items: string[], warn: boolean): string {
   return `<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border:1px solid #e4e4e7;border-radius:12px;border-collapse:separate">${rows}</table>`;
 }
 
+function htmlBullets(items: string[]): string {
+  return `<ul style="margin:0;padding-left:20px">${items
+    .map((item) => `<li style="margin:4px 0">${escapeHtml(item)}</li>`)
+    .join("")}</ul>`;
+}
+
 function htmlTopic(topic: RecapTopicBlock, index: number): string {
   const body = [
     ...topic.notes.map((text) => `<p style="margin:0 0 6px">${escapeHtml(text)}</p>`),
@@ -831,7 +849,11 @@ export function recapContentToHtml(content: string): string {
           : "",
         ...section.paragraphs.map((text) => `<p style="margin:0 0 6px">${escapeHtml(text)}</p>`),
         ...section.topics.map(htmlTopic),
-        section.items.length ? htmlNumberedRows(section.items, warn) : "",
+        section.items.length
+          ? isSummarySection(section.title)
+            ? htmlBullets(section.items)
+            : htmlNumberedRows(section.items, warn)
+          : "",
       ].join("");
     })
     .join("");
