@@ -12,6 +12,7 @@ import SalesTeamManager from "@/components/SalesTeamManager";
 import AccountCatalogManager from "@/components/AccountCatalogManager";
 import ClientCatalogManager from "@/components/ClientCatalogManager";
 import MeetingRoomManager from "@/components/MeetingRoomManager";
+import RecapGlossaryManager from "@/components/RecapGlossaryManager";
 import DriveStorageSettings from "@/components/DriveStorageSettings";
 import { googleAuthConfigured } from "@/lib/googleAuth";
 import { pendingDriveFileCounts } from "@/lib/driveStorage";
@@ -23,6 +24,7 @@ const SETTINGS_TABS = [
   { key: "client", label: "Client" },
   { key: "account", label: "Team & Account" },
   { key: "rooms", label: "Phòng họp" },
+  { key: "glossary", label: "Từ điển họp" },
   { key: "storage", label: "Lưu trữ" },
 ] as const;
 
@@ -196,6 +198,14 @@ async function SettingsContent({
     );
   }
 
+  if (activeTab === "glossary") {
+    const entries = await prisma.recapGlossaryTerm.findMany({
+      orderBy: [{ kind: "asc" }, { useCount: "desc" }, { updatedAt: "desc" }],
+      select: { id: true, kind: true, text: true, heardAs: true, useCount: true },
+    });
+    return <RecapGlossaryManager entries={entries} />;
+  }
+
   const [accounts, salesTeams, accountUsers] = await Promise.all([
     prisma.account.findMany({
       include: {
@@ -277,7 +287,7 @@ export default async function AdminPage({
   const requestedTab = params.tab === "team" ? "account" : params.tab;
   const activeTab: SettingsTab =
     isSettingsTab(requestedTab) &&
-    (requestedTab !== "rooms" || meetingsEnabled())
+    ((requestedTab !== "rooms" && requestedTab !== "glossary") || meetingsEnabled())
     ? requestedTab
     : "create-user";
   const sidebarProjects = await prisma.project.findMany({
@@ -316,7 +326,7 @@ export default async function AdminPage({
             aria-label="Các mục cài đặt"
           >
             {SETTINGS_TABS.filter(
-              (tab) => tab.key !== "rooms" || meetingsEnabled()
+              (tab) => (tab.key !== "rooms" && tab.key !== "glossary") || meetingsEnabled()
             ).map((tab) => (
               <Link
                 key={tab.key}

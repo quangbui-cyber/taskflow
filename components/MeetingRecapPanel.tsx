@@ -22,11 +22,14 @@ import {
 } from "@/app/actions/meetingRecaps";
 import { useInteraction } from "@/components/InteractionProvider";
 import MeetingRecorder from "@/components/MeetingRecorder";
+import RecapContentView from "@/components/RecapContentView";
+import RecapGlossarySuggestions from "@/components/RecapGlossarySuggestions";
+import type { GlossarySuggestion } from "@/lib/recapGlossary";
+import RecapSendDialog, { type RecapDirectoryPerson, type RecapPerson } from "@/components/RecapSendDialog";
 import {
   RECAP_AUDIO_ACCEPT,
   RECAP_UNCLEAR_TEXT,
   formatClock,
-  parseRecapContent,
   unclearTranscriptStats,
 } from "@/lib/meetingRecap";
 import { formatLimit, friendlyUploadError, uploadRecapAudio } from "@/lib/recapUploadClient";
@@ -56,37 +59,6 @@ const formatDateTime = (value: string) =>
     month: "2-digit",
     year: "numeric",
   }).format(new Date(value));
-
-function RecapContent({ content }: { content: string }) {
-  return (
-    <div className="space-y-2 text-[15px] leading-7 text-zinc-700">
-      {parseRecapContent(content).map((block, index) =>
-        block.type === "heading" ? (
-          <h2 key={index} className="pt-3 text-base font-semibold text-zinc-950 first:pt-0">
-            {block.text}
-          </h2>
-        ) : block.type === "subheading" ? (
-          <h3 key={index} className="pt-1.5 text-[15px] font-semibold text-zinc-800">
-            {block.text}
-          </h3>
-        ) : block.type === "list" ? (
-          <ul key={index} className="list-disc space-y-1 pl-5 marker:text-zinc-400">
-            {block.items.map((item, itemIndex) => (
-              <li key={itemIndex}>{item}</li>
-            ))}
-          </ul>
-        ) : block.text.startsWith("Kết luận:") ? (
-          <p key={index}>
-            <span className="font-semibold text-zinc-900">Kết luận:</span>
-            {block.text.slice("Kết luận:".length)}
-          </p>
-        ) : (
-          <p key={index}>{block.text}</p>
-        )
-      )}
-    </div>
-  );
-}
 
 /** Bản chép lời đầy đủ, kèm cảnh báo khi có đoạn máy không chép được. */
 function TranscriptDetails({ recap, transcript }: { recap: MeetingRecapView; transcript: string }) {
@@ -291,8 +263,24 @@ export default function MeetingRecapPanel({
   recap,
   actionItems = null,
   copyText = null,
+  meetingTitle = "",
+  meetingWhen = "",
+  sendPeople = [],
+  sendDirectory = [],
+  sendExtraIds = [],
+  glossarySuggestions = [],
 }: {
+  /** Từ người ghi biên bản vừa sửa, chờ chọn thêm vào từ điển */
+  glossarySuggestions?: GlossarySuggestion[];
   meetingId: string;
+  meetingTitle?: string;
+  meetingWhen?: string;
+  /** Người tổ chức và người được mời, mặc định nhận biên bản */
+  sendPeople?: RecapPerson[];
+  /** Đồng nghiệp có thể thêm làm người nhận */
+  sendDirectory?: RecapDirectoryPerson[];
+  /** Người nhận thêm đã lưu từ các lần gửi trước */
+  sendExtraIds?: string[];
   meetingUrl: string | null;
   /** Mục "Việc cần làm" (hiển thị dưới nội dung biên bản). */
   actionItems?: ReactNode;
@@ -314,6 +302,7 @@ export default function MeetingRecapPanel({
   const [pending, startTransition] = useTransition();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(recap?.content ?? "");
+  const [sending, setSending] = useState(false);
 
   const processing = recap?.status === "PROCESSING" && !recap.stale;
 
@@ -347,7 +336,7 @@ export default function MeetingRecapPanel({
       <section className="tf-panel px-5 py-5">
         {content ? (
           <>
-            <RecapContent content={content} />
+            <RecapContentView content={content} />
             {actionItems}
           </>
         ) : (
@@ -476,15 +465,10 @@ export default function MeetingRecapPanel({
                     type="button"
                     disabled={pending}
                     className="tf-button-primary !min-h-9 !px-3 text-xs"
-                    onClick={() => {
-                      const again = recap?.sentAt ? " lại" : "";
-                      if (window.confirm(`Gửi${again} biên bản cho người tham dự? Họ sẽ nhận thông báo và email.`)) {
-                        run(() => sendMeetingRecap(meetingId));
-                      }
-                    }}
+                    onClick={() => setSending(true)}
                   >
                     <Send size={14} aria-hidden="true" />
-                    {recap?.sentAt ? "Gửi lại" : "Gửi cho người tham dự"}
+                    {recap?.sentAt ? "Gửi lại" : "Gửi biên bản"}
                   </button>
                 </>
               )}
@@ -515,7 +499,11 @@ export default function MeetingRecapPanel({
               </div>
             </div>
           ) : (
-            <RecapContent content={content} />
+            <RecapContentView content={content} />
+          )}
+
+          {canManage && !editing && (
+            <RecapGlossarySuggestions meetingId={meetingId} suggestions={glossarySuggestions} />
           )}
 
           {actionItems}
@@ -590,6 +578,19 @@ export default function MeetingRecapPanel({
             </div>
           )}
         </section>
+      )}
+      {sending && (
+        <RecapSendDialog
+          title={meetingTitle}
+          when={meetingWhen}
+          attendees={sendPeople}
+          directory={sendDirectory}
+          initialExtraIds={sendExtraIds}
+          pending={pending}
+          resend={Boolean(recap?.sentAt)}
+          onClose={() => setSending(false)}
+          onSend={(input) => run(() => sendMeetingRecap(meetingId, input), () => setSending(false))}
+        />
       )}
     </div>
   );

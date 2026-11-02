@@ -2,6 +2,7 @@ import { emailAppUrl, emailSenderAddress, sendEmail, type EmailResult } from "@/
 import { recapContentToHtml } from "@/lib/meetingRecap";
 import { publishedRecapExport, readPublishedRecap, type PublishedRecap } from "@/lib/recapPublication";
 import { formatMeetingWhen } from "@/lib/meetings";
+import { resolveRecapRecipients } from "@/lib/meetingRecapRecipients";
 import { prisma } from "@/lib/prisma";
 
 function escapeHtml(value: string): string {
@@ -12,19 +13,22 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** Gửi biên bản cho người tổ chức và mọi người được mời (trừ người đã từ chối). */
-export async function sendMeetingRecapEmail(meetingId: string, publication?: PublishedRecap): Promise<EmailResult> {
+/**
+ * Gửi biên bản cho người tổ chức, người được mời (trừ người đã từ chối) và người nhận thêm.
+ * `skipUserIds` là những người bị bỏ chọn trong hộp thoại gửi.
+ */
+export async function sendMeetingRecapEmail(
+  meetingId: string,
+  publication?: PublishedRecap,
+  skipUserIds: string[] = []
+): Promise<EmailResult> {
   if (!emailSenderAddress()) return { ok: false, error: "Chưa cấu hình email." };
 
   const meeting = await prisma.meeting.findUnique({
     where: { id: meetingId },
     include: {
       room: { select: { name: true } },
-      organizer: { select: { name: true, email: true, isActive: true } },
-      attendees: {
-        where: { user: { isActive: true }, response: { not: "DECLINED" } },
-        select: { user: { select: { name: true, email: true } } },
-      },
+      organizer: { select: { name: true } },
       recap: {
         select: { publishedSnapshot: true },
       },
@@ -35,12 +39,7 @@ export async function sendMeetingRecapEmail(meetingId: string, publication?: Pub
   const content = publishedRecapExport(snapshot);
 
   const to = [
-    ...new Set(
-      [
-        ...(meeting.organizer.isActive ? [meeting.organizer.email] : []),
-        ...meeting.attendees.map((attendee) => attendee.user.email),
-      ].filter(Boolean)
-    ),
+    ...new Set((await resolveRecapRecipients(meetingId, { skipUserIds })).map((person) => person.email).filter(Boolean)),
   ];
   if (to.length === 0) return { ok: true };
 

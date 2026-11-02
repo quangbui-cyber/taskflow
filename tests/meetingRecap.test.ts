@@ -23,6 +23,10 @@ import {
   mergeRecoveredSegments,
   normalizeRecapContent,
   parseRecapContent,
+  parseRecapSections,
+  isRecapPlaceholder,
+  isOpenQuestionSection,
+  parseExportActionLine,
   parseRecapDueDate,
   parseRecapSummary,
   recapActionItemRows,
@@ -76,6 +80,18 @@ test("audio pathnames stay inside the meeting's folder with a supported extensio
   assert.equal(isRecapAudioPathname("cm123abc", "meeting-recaps/other/audio.mp3"), false);
   assert.equal(isRecapAudioPathname("cm123abc", "meeting-recaps/cm123abc/../x/audio.mp3"), false);
   assert.equal(isRecapAudioPathname("cm123abc", "meeting-recaps/cm123abc/audio.exe"), false);
+});
+
+test("extra recap recipients open the recap and read it only after it is sent", () => {
+  const meeting = { organizerId: "org", recorderId: null, attendees: [{ userId: "a1" }], recapRecipients: [{ userId: "r1" }] };
+  const recipient = { id: "r1", role: "MEMBER" };
+  const outsider = { id: "x", role: "MEMBER" };
+
+  assert.equal(canManageMeetingRecap(meeting, recipient), false);
+  assert.equal(canOpenMeetingRecap(meeting, recipient), true);
+  assert.equal(canOpenMeetingRecap(meeting, outsider), false);
+  assert.equal(canReadMeetingRecap(meeting, { sentAt: null }, recipient), false);
+  assert.equal(canReadMeetingRecap(meeting, { sentAt: new Date() }, recipient), true);
 });
 
 test("only the organizer and admins manage recaps; attendees read after it is sent", () => {
@@ -429,7 +445,7 @@ test("email, Word and copy get the action items appended as a list", () => {
 
 test("recap HTML for email escapes everything the AI or organizer wrote", () => {
   const html = recapContentToHtml('## Kết luận\n### <b>Chủ đề</b>\n- <script>alert("x")</script>\nA & B');
-  assert.match(html, /<h4[^>]*>&lt;b&gt;Chủ đề&lt;\/b&gt;<\/h4>/);
+  assert.match(html, />&lt;b&gt;Chủ đề&lt;\/b&gt;</);
   assert.ok(!html.includes("<script>"));
   assert.match(html, /&lt;script&gt;alert\(&quot;x&quot;\)&lt;\/script&gt;/);
   assert.match(html, /A &amp; B/);
@@ -680,4 +696,34 @@ test("a full-length in-app recording still fits Groq's file size limit", async (
   const longest = recapLimits(env({})).maxAudioMinutes * 60 * (RECORDING_BITS_PER_SECOND / 8);
   // Chừa 20% cho phần đầu file/container.
   assert.ok(longest * 1.2 < RECAP_MAX_AUDIO_BYTES, `${Math.round(longest / 1e6)} MB`);
+});
+
+test("recap sections group topics with their conclusion for the card layout", () => {
+  const sections = parseRecapSections(
+    "## Tóm tắt\nChốt kế hoạch.\n\n## Nội dung thảo luận\n### Ngân sách\n- Tăng social\n- Giảm OOH\nKết luận: Duyệt B\n\n### Thiết kế\n- KV còn 2 vòng\n\n## Quyết định\n- Chọn B\n\n## Vấn đề còn mở\n- Không có."
+  );
+  assert.deepEqual(sections.map((section) => section.title), ["Tóm tắt", "Nội dung thảo luận", "Quyết định", "Vấn đề còn mở"]);
+  assert.deepEqual(sections[0].paragraphs, ["Chốt kế hoạch."]);
+  assert.deepEqual(sections[1].topics, [
+    { title: "Ngân sách", points: ["Tăng social", "Giảm OOH"], notes: [], conclusion: "Duyệt B" },
+    { title: "Thiết kế", points: ["KV còn 2 vòng"], notes: [], conclusion: null },
+  ]);
+  assert.deepEqual(sections[2].items, ["Chọn B"]);
+  assert.equal(isRecapPlaceholder(sections[3].items[0]), true);
+  assert.equal(isOpenQuestionSection(sections[3].title), true);
+  assert.deepEqual(parseExportActionLine("[Đã xong] Đặt xe — Phụ trách: Huy — Hạn: 04/11"), {
+    done: true,
+    title: "Đặt xe",
+    owner: "Huy",
+    due: "04/11",
+  });
+});
+
+test("the summary prompt keeps unclear audio out of the open questions", () => {
+  const { system } = buildRecapPrompt(
+    { title: "Họp", when: "x", room: null, organizer: "A", attendees: [], description: null },
+    "nội dung"
+  );
+  assert.match(system, /không nhắc tới nó ở bất kỳ đâu trong biên bản \(kể cả Vấn đề còn mở\)/);
+  assert.doesNotMatch(system, /ghi vào Vấn đề còn mở là cần xác nhận lại/);
 });
