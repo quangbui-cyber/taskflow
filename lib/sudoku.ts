@@ -123,7 +123,7 @@ export function solve(input: Grid): Grid | null {
   return walk() ? grid : null;
 }
 
-function generateSolved(rng: () => number): Grid {
+export function generateSolved(rng: () => number = Math.random): Grid {
   const grid: Grid = new Array(CELLS).fill(0);
   const walk = (): boolean => {
     const cell = pickCell(grid);
