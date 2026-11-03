@@ -987,6 +987,8 @@ model SudokuGame {
   guestUserId   String?
   guestName     String?
   difficulty    String    @default("medium") // easy | medium | hard | expert
+  variant       String    @default("classic") // classic | killer
+  cages         Json? // KillerCage[], no solution digits
   timerEnabled  Boolean   @default(true)
   timeLimitSec  Int       @default(900)
   puzzle        Json? // number[81], 0 = ô trống

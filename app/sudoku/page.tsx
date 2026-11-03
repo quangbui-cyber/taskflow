@@ -7,7 +7,7 @@ import SudokuGame from "@/components/sudoku/SudokuGame";
 
 export const metadata: Metadata = {
   title: "Sudoku 9x9 · myCreative",
-  description: "Góc giải trí Sudoku 9x9: giải một mình hoặc đua giải với đồng nghiệp",
+  description: "Góc giải trí Sudoku 9x9: Sudoku thường và Killer Sudoku, giải một mình hoặc đua giải với đồng nghiệp",
 };
 
 export default async function SudokuPage({
