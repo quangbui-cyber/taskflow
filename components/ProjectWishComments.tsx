@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useRef, useState, useTransition } from "react";
-import { MessageCircle, Send } from "lucide-react";
+import { ChevronDown, MessageCircle, Send } from "lucide-react";
 import { createProjectWish, retryProjectWishChat, type ProjectWishState } from "@/app/actions/projectWishes";
 import Avatar from "@/components/Avatar";
 
@@ -66,6 +66,7 @@ export default function ProjectWishComments({
   count: number;
 }) {
   const [body, setBody] = useState("");
+  const [open, setOpen] = useState(true);
   const requestId = useRef<string | null>(null);
   const [state, action, pending] = useActionState(async (previous: ProjectWishState, data: FormData) => {
     requestId.current ??= crypto.randomUUID();
@@ -86,19 +87,35 @@ export default function ProjectWishComments({
     <div className="mt-4">
       {wishes.length > 0 && (
         <div className="mb-3">
-          <p className="mb-3 text-xs font-semibold text-zinc-500">{count} lời chúc hôm nay</p>
-          <ul className="space-y-3">
-            {wishes.slice(0, 3).map((wish) => <WishComment key={wish.id} wish={wish} currentUserId={currentUserId} />)}
-          </ul>
-          {wishes.length > 3 && (
-            <details className="mt-2">
-              <summary className="cursor-pointer py-2 text-xs font-semibold text-brand-700">
-                Xem thêm {wishes.length - 3} lời chúc
-              </summary>
-              <ul className="mt-2 max-h-72 space-y-3 overflow-y-auto">
-                {wishes.slice(3).map((wish) => <WishComment key={wish.id} wish={wish} currentUserId={currentUserId} />)}
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => setOpen((value) => !value)}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-[8px] text-xs font-semibold text-zinc-500 transition-colors duration-150 hover:text-zinc-800"
+          >
+            {count} lời chúc hôm nay
+            <ChevronDown
+              size={14}
+              aria-hidden="true"
+              className={`transition-transform duration-150 motion-reduce:transition-none ${open ? "" : "-rotate-90"}`}
+            />
+          </button>
+          {open && (
+            <div className="mt-2">
+              <ul className="space-y-3">
+                {wishes.slice(0, 3).map((wish) => <WishComment key={wish.id} wish={wish} currentUserId={currentUserId} />)}
               </ul>
-            </details>
+              {wishes.length > 3 && (
+                <details className="mt-2">
+                  <summary className="cursor-pointer py-2 text-xs font-semibold text-brand-700">
+                    Xem thêm {wishes.length - 3} lời chúc
+                  </summary>
+                  <ul className="mt-2 max-h-72 space-y-3 overflow-y-auto">
+                    {wishes.slice(3).map((wish) => <WishComment key={wish.id} wish={wish} currentUserId={currentUserId} />)}
+                  </ul>
+                </details>
+              )}
+            </div>
           )}
         </div>
       )}
