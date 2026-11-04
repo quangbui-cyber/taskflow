@@ -10,6 +10,7 @@ import {
   type EmployeeRecordState,
 } from "@/app/actions/employeeRecords";
 import Avatar from "@/components/Avatar";
+import { matchesPerson, type SearchablePerson } from "@/lib/peopleSearch";
 import { useActionFeedback, useInteraction } from "@/components/InteractionProvider";
 import {
   GENDERS,
@@ -486,13 +487,16 @@ export function HrManagerPicker({
   users,
   selectedIds,
 }: {
-  users: Array<{ id: string; name: string }>;
+  users: SearchablePerson[];
   selectedIds: string[];
 }) {
   const router = useRouter();
   const { notify } = useInteraction();
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<string[]>(selectedIds);
+  const [query, setQuery] = useState("");
+  const [onlySelected, setOnlySelected] = useState(false);
+  const filtered = users.filter((user) => matchesPerson(user, query) && (!onlySelected || selected.includes(user.id)));
 
   function toggle(id: string) {
     const next = selected.includes(id) ? selected.filter((value) => value !== id) : [...selected, id];
@@ -514,26 +518,48 @@ export function HrManagerPicker({
       <summary className="cursor-pointer text-sm font-semibold text-zinc-800">
         Người phụ trách nhân sự ({selected.length})
       </summary>
-      <div className="mt-3 flex flex-wrap gap-2">
-        {users.map((user) => {
+      <div className="mt-4 space-y-3">
+        {selected.length > 0 && (
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Người phụ trách đã chọn">
+            {users.filter((user) => selected.includes(user.id)).map((user) => (
+              <button key={user.id} type="button" disabled={pending} onClick={() => toggle(user.id)}
+                aria-label={`Bỏ chọn ${user.name}`}
+                className="inline-flex min-h-9 items-center gap-2 rounded-full border border-brand-400 bg-brand-50 px-3 py-1 text-[13px] font-medium text-brand-800 disabled:opacity-60">
+                {user.name}<X size={13} aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="relative max-w-lg">
+          <Search size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" aria-hidden="true" />
+          <input type="search" aria-label="Tìm người phụ trách nhân sự" placeholder="Tìm theo tên hoặc email…"
+            value={query} onChange={(event) => setQuery(event.target.value)} className="tf-field !pl-10" />
+        </div>
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Lọc người phụ trách">
+          {[{ value: false, label: "Tất cả" }, { value: true, label: `Đã chọn (${selected.length})` }].map((item) => (
+            <button key={item.label} type="button" aria-pressed={onlySelected === item.value} onClick={() => setOnlySelected(item.value)}
+              className={`min-h-9 rounded-full border px-3 py-1 text-[13px] ${onlySelected === item.value ? "border-brand-400 bg-brand-50 text-brand-800" : "border-zinc-200 text-zinc-600 hover:bg-zinc-50"}`}>
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <div className="grid max-h-64 max-w-2xl gap-x-5 overflow-y-auto sm:grid-cols-2">
+        {filtered.map((user) => {
           const active = selected.includes(user.id);
           return (
-            <button
+            <label
               key={user.id}
-              type="button"
-              disabled={pending}
-              aria-pressed={active}
-              onClick={() => toggle(user.id)}
-              className={`rounded-full border px-3 py-1 text-[13px] transition-colors ${
-                active
-                  ? "border-brand-400 bg-brand-100 font-semibold text-brand-800"
-                  : "border-zinc-200 text-zinc-700 hover:border-brand-300"
-              }`}
+              className="flex min-h-12 cursor-pointer items-center gap-3 rounded-[10px] px-2 py-2 text-sm text-zinc-800 hover:bg-zinc-50"
             >
-              {user.name}
-            </button>
+              <input type="checkbox" checked={active} disabled={pending} onChange={() => toggle(user.id)} className="h-4 w-4 shrink-0 accent-brand-500" />
+              <Avatar {...user} className="h-8 w-8 text-xs" />
+              <span className="min-w-0 break-words">{user.name}</span>
+            </label>
           );
         })}
+        </div>
+        {filtered.length === 0 && <p className="py-3 text-sm text-zinc-500">Không tìm thấy đồng nghiệp phù hợp.</p>}
+        <p role="status" className="text-xs text-zinc-500">{pending ? "Đang lưu…" : `${filtered.length} người phù hợp`}</p>
       </div>
     </details>
   );

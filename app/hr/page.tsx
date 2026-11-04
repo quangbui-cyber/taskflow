@@ -95,7 +95,7 @@ export default async function HrPage() {
 
           {isAdmin && (
             <HrManagerPicker
-              users={people.map((person) => ({ id: person.id, name: person.name }))}
+              users={people.map(({ id, name, email, avatarUrl }) => ({ id, name, email, avatarUrl }))}
               selectedIds={people.filter((person) => person.isHrManager).map((person) => person.id)}
             />
           )}

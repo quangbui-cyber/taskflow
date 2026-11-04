@@ -8,15 +8,12 @@ import {
   type RecognitionActionState,
 } from "@/app/actions/recognitions";
 import { useActionFeedback } from "@/components/InteractionProvider";
+import PersonSearchSelect from "@/components/PersonSearchSelect";
+import type { SearchablePerson } from "@/lib/peopleSearch";
 import {
   RECOGNITION_CATEGORIES,
   RECOGNITION_VISIBILITIES,
 } from "@/lib/recognitions";
-
-type Recipient = {
-  id: string;
-  name: string;
-};
 
 const INITIAL_STATE: RecognitionActionState = {};
 
@@ -25,7 +22,7 @@ export default function RecognitionComposer({
   remainingStars,
   weeklyLimit,
 }: {
-  recipients: Recipient[];
+  recipients: SearchablePerson[];
   remainingStars: number;
   weeklyLimit: number;
 }) {
@@ -33,6 +30,7 @@ export default function RecognitionComposer({
   const formRef = useRef<HTMLFormElement>(null);
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
+  const [recipientId, setRecipientId] = useState("");
   const [state, formAction, pending] = useActionState(
     createRecognition,
     INITIAL_STATE
@@ -59,6 +57,7 @@ export default function RecognitionComposer({
     router.refresh();
     const frame = window.requestAnimationFrame(() => {
       setMessage("");
+      setRecipientId("");
       setOpen(false);
     });
     return () => window.cancelAnimationFrame(frame);
@@ -123,28 +122,8 @@ export default function RecognitionComposer({
             </header>
 
             <form ref={formRef} action={formAction} className="space-y-5 px-5 py-5 sm:px-6 sm:py-6">
-              <label className="block">
-                <span className="mb-2 block text-sm font-semibold text-zinc-800">Gửi đến</span>
-                <span className="relative block">
-                  <select
-                    name="recipientId"
-                    className="tf-field appearance-none !pr-12"
-                    required
-                    defaultValue={recipients[0]?.id}
-                  >
-                    {recipients.map((recipient) => (
-                      <option key={recipient.id} value={recipient.id}>
-                        {recipient.name}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown
-                    size={16}
-                    className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500"
-                    aria-hidden="true"
-                  />
-                </span>
-              </label>
+              <input type="hidden" name="recipientId" value={recipientId} />
+              <PersonSearchSelect people={recipients} value={recipientId} onChange={setRecipientId} disabled={pending} />
 
               <label className="block">
                 <span className="mb-2 block text-sm font-semibold text-zinc-800">Lời cảm ơn</span>
@@ -227,7 +206,7 @@ export default function RecognitionComposer({
                 <button
                   type="submit"
                   className="tf-button-primary"
-                  disabled={pending || message.trim().length < 2}
+                  disabled={pending || !recipients.some((person) => person.id === recipientId) || message.trim().length < 2}
                   aria-busy={pending}
                 >
                   {pending ? <span className="tf-spinner" aria-hidden="true" /> : <Star size={17} aria-hidden="true" />}

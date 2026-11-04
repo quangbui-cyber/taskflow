@@ -162,7 +162,7 @@ export default async function RecognitionPage({
   const [people, recognitions, rankingSource, sidebarProjects, sentThisWeek] = await Promise.all([
     prisma.user.findMany({
       where: { isActive: true },
-      select: { id: true, name: true, avatarUrl: true },
+      select: { id: true, name: true, email: true, avatarUrl: true },
       orderBy: { name: "asc" },
     }),
     prisma.recognition.findMany({
@@ -254,7 +254,7 @@ export default async function RecognitionPage({
             <RecognitionComposer
               recipients={people
                 .filter((person) => person.id !== user.id)
-                .map(({ id, name }) => ({ id, name }))}
+                .map(({ id, name, email, avatarUrl }) => ({ id, name, email, avatarUrl }))}
               remainingStars={remainingStars}
               weeklyLimit={RECOGNITION_WEEKLY_STAR_LIMIT}
             />
