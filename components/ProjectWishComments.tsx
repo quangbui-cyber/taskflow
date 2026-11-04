@@ -33,9 +33,9 @@ function WishRetry({ wishId }: { wishId: string }) {
       >
         {pending ? "Đang gửi lại…" : "Gửi lại vào Google Chat"}
       </button>
-      <p role="status" className="text-xs leading-5 text-zinc-600">
-        {state.error || state.warning || state.success}
-      </p>
+      {(state.error || state.warning) && (
+        <p role="status" className="text-xs leading-5 text-zinc-600">{state.error || state.warning}</p>
+      )}
     </div>
   );
 }
@@ -50,11 +50,7 @@ function WishComment({ wish, currentUserId }: { wish: Wish; currentUserId: strin
           <span className="ml-2 text-zinc-500">{wish.time}</span>
         </p>
         <p className="whitespace-pre-wrap break-words text-sm leading-6 text-zinc-600">{wish.body}</p>
-        {wish.author.id === currentUserId && (
-          wish.sent
-            ? <p className="mt-0.5 text-[11px] text-zinc-500">Đã gửi vào Google Chat</p>
-            : <WishRetry wishId={wish.id} />
-        )}
+        {wish.author.id === currentUserId && !wish.sent && <WishRetry wishId={wish.id} />}
       </div>
     </li>
   );
@@ -104,7 +100,6 @@ export default function ProjectWishComments({
               </ul>
             </details>
           )}
-          {count > wishes.length && <p className="mt-2 text-xs text-zinc-500">Hiển thị {wishes.length} lời chúc gần nhất.</p>}
         </div>
       )}
       <details>
@@ -133,7 +128,9 @@ export default function ProjectWishComments({
               <Send size={14} aria-hidden="true" />{pending ? "Đang gửi…" : "Gửi lời chúc"}
             </button>
           </div>
-          <p role="status" className="text-xs leading-5 text-zinc-600">{state.error || state.warning || state.success}</p>
+          {(state.error || state.warning) && (
+            <p role="status" className="text-xs leading-5 text-zinc-600">{state.error || state.warning}</p>
+          )}
         </form>
       </details>
     </div>
