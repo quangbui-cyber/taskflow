@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { canManageMeetingRecap } from "./meetingRecap";
-import { formatMeetingWhen } from "./meetings";
+import { formatMeetingWhen, MEETING_TITLE_MAX } from "./meetings";
 import { DOCX_MIME_TYPE, buildRecapDocx, recapDocxFileName } from "./recapDocx";
 import { publishedRecapExport, readPublishedRecap, type PublishedRecap } from "./recapPublication";
 import { lockRecap } from "./recapWorkflow";
@@ -70,6 +70,33 @@ export async function archivePublishedRecap(db: PrismaClient, meetingId: string,
       where: { projectId_userId: { projectId: meeting.projectId, userId: uploader.id } }, select: { id: true },
     })) return false;
     return archiveRecap(tx, meetingId, uploader, publication, expectedSentAt);
+  });
+}
+
+/** Renaming is independent of the meeting's time slot and preserves the published recap. */
+export async function renameRecapMeeting(db: PrismaClient, meetingId: string, rawTitle: string, viewer: Viewer) {
+  if (typeof meetingId !== "string" || !meetingId || typeof rawTitle !== "string") {
+    return { error: "Tên cuộc họp không hợp lệ." };
+  }
+  const title = rawTitle.trim();
+  if (title.length < 2) return { error: "Tên cuộc họp cần có ít nhất 2 ký tự." };
+  if (title.length > MEETING_TITLE_MAX) return { error: `Tên cuộc họp không được dài quá ${MEETING_TITLE_MAX} ký tự.` };
+
+  return db.$transaction(async (tx) => {
+    await lockMeeting(tx, meetingId);
+    const meeting = await tx.meeting.findUnique({
+      where: { id: meetingId },
+      select: { title: true, organizerId: true, recorderId: true, projectId: true },
+    });
+    if (!meeting || !canManageMeetingRecap(meeting, viewer)) {
+      return { error: "Chỉ người tổ chức, người ghi biên bản hoặc quản trị viên mới được đổi tên cuộc họp." };
+    }
+    if (meeting.title === title) return { projectId: meeting.projectId, archived: false, changed: false };
+    await tx.meeting.update({ where: { id: meetingId }, data: { title } });
+    // A standalone Drive document also needs its title refreshed without re-sending the recap.
+    await tx.meetingRecap.updateMany({ where: { meetingId }, data: { driveSyncedSentAt: null } });
+    const archived = await archiveRecap(tx, meetingId, viewer);
+    return { projectId: meeting.projectId, archived, changed: true };
   });
 }
 

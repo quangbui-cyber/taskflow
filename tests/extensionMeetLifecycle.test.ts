@@ -14,6 +14,7 @@ const EXTENSION_DIR = path.join(process.cwd(), "extension");
 const ESM_DIR = mkdtempSync(path.join(tmpdir(), "mycreative-ext-"));
 writeFileSync(path.join(ESM_DIR, "package.json"), '{"type":"module"}');
 copyFileSync(path.join(EXTENSION_DIR, "api.js"), path.join(ESM_DIR, "api.js"));
+copyFileSync(path.join(EXTENSION_DIR, "meeting-link.js"), path.join(ESM_DIR, "meeting-link.js"));
 let moduleCounter = 0;
 function importFreshBackground() {
   const file = path.join(ESM_DIR, `background-${moduleCounter++}.js`);
@@ -230,6 +231,41 @@ describe("extension background: kết thúc cuộc họp tự động", () => {
     assert.equal(stopCount(fake), 1);
     assert.equal(fake.session.current_recording_session.endReason, "navigated");
   });
+
+  for (const [original, redirected, other] of [
+    ["https://us02web.zoom.us/j/12345678901?pwd=secret", "https://app.zoom.us/wc/12345678901/join?from=browser", "https://app.zoom.us/wc/98765432101/join"],
+    ["https://teams.microsoft.com/l/meetup-join/19%3ameeting_Test%40thread.v2/0?context=x", "https://teams.cloud.microsoft/v2/#/meet/19%3ameeting_Test%40thread.v2?anon=true", "https://teams.microsoft.com/meet/123456789012"],
+  ]) {
+    it(`keeps recording across same-room redirects, stops on another room: ${original}`, async () => {
+      Object.assign(fake.session.current_recording_session, { meetingUrl: original, meetCode: null });
+      await fake.emit("tabs.onUpdated", 7, { url: redirected });
+      assert.equal(stopCount(fake), 0);
+      await fake.emit("tabs.onUpdated", 7, { url: other });
+      assert.equal(stopCount(fake), 1);
+    });
+
+    it(`shortcut creates a quick meeting and records the supported tab: ${original}`, async (t) => {
+      delete fake.session.current_recording_session;
+      fake.state.offscreenMessages.length = 0;
+      t.mock.method(fake.chrome.tabs, "query", async () => [{ id: 7, url: original }]);
+      const requests: string[] = [];
+      t.mock.method(globalThis, "fetch", async (url: string, init?: RequestInit) => {
+        requests.push(url);
+        if (url.includes("/lookup?")) {
+          assert.equal(new URL(url).searchParams.get("url"), original);
+          return Response.json({ meeting: null });
+        }
+        assert.ok(url.endsWith("/quick"));
+        assert.equal(JSON.parse(String(init?.body)).meetingUrl, original);
+        return Response.json({ meeting: { id: "quick", title: "Quick", meetingUrl: original } });
+      });
+      await fake.emit("commands.onCommand", "toggle-recording");
+      assert.equal(requests.length, 2);
+      assert.equal(fake.session.current_recording_session.phase, "recording");
+      assert.equal(fake.session.current_recording_session.meetingUrl, original);
+      assert.equal(fake.state.offscreenMessages[0].type, "START");
+    });
+  }
 
   it("offscreen tự dừng (tab capture kết thúc) thì sau đó đóng tab không dừng lần hai", async () => {
     await sendMessage(fake, { type: "RECORDING_STOPPED", reason: "tab-capture-ended", meetingId: "m1" });

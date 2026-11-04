@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Check, Copy, Laptop, Plus, ShieldCheck, Trash2, X } from "lucide-react";
 import { useInteraction } from "@/components/InteractionProvider";
+import ExtensionDownload from "@/components/ExtensionDownload";
 
 type TokenItem = {
   id: string;
@@ -127,7 +128,7 @@ export default function ExtensionTokensCard({
             Chrome Extension ghi biên bản
           </h2>
           <p className="mt-1 text-xs text-zinc-500">
-            Kết nối Extension myCreative Recorder để ghi biên bản 1 click trên Google Meet.
+            Kết nối Extension myCreative Recorder để ghi biên bản 1 click trên Google Meet, Microsoft Teams và Zoom trong trình duyệt.
           </p>
         </div>
         {!showCreateForm && (
@@ -141,6 +142,8 @@ export default function ExtensionTokensCard({
           </button>
         )}
       </div>
+
+      <ExtensionDownload />
 
       {/* Thông báo token vừa tạo (chỉ hiện một lần) */}
       {createdToken && (

@@ -1,6 +1,6 @@
+import { parseMeetingLink, meetingLinkTitle } from "@/extension/meeting-link.js";
 import { verifyExtensionToken } from "@/lib/extensionAuth";
 import { handleCorsPreflight, jsonWithCors } from "@/lib/extensionCors";
-import { parseMeetCode } from "@/lib/meetLink";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -29,10 +29,10 @@ export async function POST(request: Request) {
   const now = new Date();
   const startAt = new Date(Math.floor(now.getTime() / (30 * 60 * 1000)) * (30 * 60 * 1000));
   const endAt = new Date(startAt.getTime() + 60 * 60 * 1000);
-  const meetCode = parseMeetCode(meetingUrl);
-
-  const fallbackTitle = meetCode
-    ? `Họp Google Meet (${meetCode})`
+  const link = parseMeetingLink(meetingUrl);
+  const meetCode = link?.provider === "google" ? link.id : null;
+  const fallbackTitle = link
+    ? meetingLinkTitle(link)
     : `Cuộc họp nhanh ${new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }).format(now)}`;
 
   const meeting = await prisma.meeting.create({

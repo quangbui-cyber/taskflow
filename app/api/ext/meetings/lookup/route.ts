@@ -1,3 +1,4 @@
+import { parseMeetingLink } from "@/extension/meeting-link.js";
 import { verifyExtensionToken } from "@/lib/extensionAuth";
 import { handleCorsPreflight, jsonWithCors } from "@/lib/extensionCors";
 import { parseMeetCode } from "@/lib/meetLink";
@@ -9,7 +10,7 @@ export async function OPTIONS(request: Request) {
   return handleCorsPreflight(request);
 }
 
-/** Tìm cuộc họp khớp mã phòng Google Meet trong khung giờ ±3 tiếng */
+/** Match supported meeting rooms within ±3 hours, limited to this user’s meetings. */
 export async function GET(request: Request) {
   const user = await verifyExtensionToken(request.headers.get("authorization"));
   if (!user) {
@@ -17,20 +18,21 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const rawCode = searchParams.get("code") ?? searchParams.get("url") ?? "";
-  const meetCode = parseMeetCode(rawCode);
+  const rawUrl = searchParams.get("url");
+  const meetCode = rawUrl ? null : parseMeetCode(searchParams.get("code"));
+  const link = parseMeetingLink(rawUrl || (meetCode ? `https://meet.google.com/${meetCode}` : ""));
 
-  if (!meetCode) {
-    return jsonWithCors({ meeting: null, reason: "Mã phòng không hợp lệ." }, { status: 200 }, request);
+  if (!link) {
+    return jsonWithCors({ meeting: null, reason: "Link hoặc mã phòng không hợp lệ." }, { status: 200 }, request);
   }
 
   const now = new Date();
   const windowStart = new Date(now.getTime() - 3 * 60 * 60 * 1000);
   const windowEnd = new Date(now.getTime() + 3 * 60 * 60 * 1000);
 
-  const meeting = await prisma.meeting.findFirst({
+  const candidates = await prisma.meeting.findMany({
     where: {
-      meetCode,
+      ...(link.provider === "google" ? { meetCode: link.id } : { meetingUrl: { not: null } }),
       status: "SCHEDULED",
       startAt: { lte: windowEnd },
       endAt: { gte: windowStart },
@@ -53,6 +55,10 @@ export async function GET(request: Request) {
     },
     orderBy: { startAt: "asc" },
   });
+
+  const meeting = candidates.find((candidate) => link.provider === "google"
+    ? candidate.meetCode === link.id
+    : parseMeetingLink(candidate.meetingUrl)?.key === link.key);
 
   if (!meeting) {
     return jsonWithCors({ meeting: null }, { status: 200 }, request);

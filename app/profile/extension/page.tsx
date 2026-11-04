@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { Laptop, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import ExtensionConnectButton from "./ExtensionConnectButton";
+import ExtensionDownload from "@/components/ExtensionDownload";
 
 export default async function ExtensionConnectPage() {
   const user = await getCurrentUser();
@@ -28,9 +29,11 @@ export default async function ExtensionConnectPage() {
             Đang đăng nhập: <strong className="text-zinc-900">{user.name}</strong> ({user.email})
           </p>
           <p className="text-zinc-500 text-[11px]">
-            Cấp quyền để Extension tự nhận diện cuộc họp trên Google Meet và tải bản ghi âm lên tài khoản của bạn để AI chép lời và tạo biên bản.
+            Cấp quyền để Extension tự nhận diện cuộc họp trên Google Meet, Microsoft Teams, Zoom trong trình duyệt và tải bản ghi âm lên tài khoản của bạn để myCreative chép lời và soạn biên bản cho bạn.
           </p>
         </div>
+
+        <ExtensionDownload />
 
         <ExtensionConnectButton userName={user.name} />
 

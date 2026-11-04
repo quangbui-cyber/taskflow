@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ArrowLeft, DoorOpen, FileText, FolderKanban, Users } from "lucide-react";
 import MeetingRecapPanel from "@/components/MeetingRecapPanel";
 import MeetingProjectLink from "@/components/MeetingProjectLink";
+import MeetingTitleEditor from "@/components/MeetingTitleEditor";
 import RecapActionItems, { type RecapActionItemView } from "@/components/RecapActionItems";
 import Sidebar from "@/components/Sidebar";
 import { requireUser } from "@/lib/auth";
@@ -140,9 +141,9 @@ export default async function MeetingRecapPage({
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] bg-brand-50 text-brand-700">
                 <FileText size={20} aria-hidden="true" />
               </span>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Biên bản họp</p>
-                <h1 className="tf-page-title !mt-0 break-words">{meeting.title}</h1>
+                <MeetingTitleEditor meetingId={meeting.id} title={meeting.title} canEdit={canManage} />
               </div>
             </div>
             <dl className="mt-3 grid gap-1.5 text-sm text-zinc-600">

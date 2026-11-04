@@ -1,3 +1,4 @@
+import { parseMeetingLink, meetingLinkTitle, MEETING_TAB_PATTERNS } from "./meeting-link.js";
 /**
  * myCreative Recorder - Service Worker (Background Script)
  *
@@ -119,7 +120,7 @@ function showNotification(id, title, message) {
  * Bắt đầu ghi một tab. `streamId` do nơi gọi lấy (popup hoặc phím tắt) vì chỉ có hiệu lực ngắn
  * sau thao tác của người dùng.
  */
-export async function startRecordingSession({ tabId, streamId, meeting, meetCode }) {
+export async function startRecordingSession({ tabId, streamId, meeting, meetCode, meetingUrl }) {
   const current = await getSession();
   if (current?.phase === "recording") throw new Error("Đang có một phiên ghi âm khác đang chạy.");
   if (current?.phase === "uploading") {
@@ -149,6 +150,7 @@ export async function startRecordingSession({ tabId, streamId, meeting, meetCode
     meeting,
     meetCode: meetCode || meeting.meetCode || null,
     startedAt,
+    meetingUrl: meetingUrl || meeting.meetingUrl || null,
   };
   await setSession(session);
   // Ghi lại ngay từ lúc bắt đầu: nếu trình duyệt tắt đột ngột, lần sau vẫn tải lại được từ IndexedDB
@@ -219,7 +221,7 @@ async function completeSession() {
   showNotification(
     `recap-ok:${meetingId || ""}`,
     "Đã gửi bản ghi cuộc họp",
-    `${session?.meeting?.title || "Cuộc họp"} (${END_REASON_LABEL[session?.endReason] || "đã kết thúc"}). AI đang chép lời và viết biên bản, bấm để mở.`
+    `${session?.meeting?.title || "Cuộc họp"} (${END_REASON_LABEL[session?.endReason] || "đã kết thúc"}). myCreative đang chép lời và soạn biên bản cho bạn. Bấm để mở.`
   );
   setTimeout(() => closeOffscreenDocument().catch(() => undefined), 1500);
 }
@@ -294,24 +296,18 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
 });
 
 // 2. Tab chuyển sang trang khác (không còn ở phòng họp này)
-function isSameMeeting(url, meetCode) {
-  let parsed;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return true;
-  }
-  if (parsed.hostname !== "meet.google.com") return false;
-  if (!meetCode) return true;
-  const letters = (s) => s.toLowerCase().replace(/[^a-z]/g, "");
-  return letters(parsed.pathname).includes(letters(meetCode));
+function isSameMeeting(url, session) {
+  const current = parseMeetingLink(url);
+  const original = parseMeetingLink(session.meetingUrl || session.meeting?.meetingUrl)
+    || (session.meetCode ? parseMeetingLink(`https://meet.google.com/${session.meetCode}`) : null);
+  return Boolean(current && original && current.key === original.key);
 }
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
   if (!changeInfo.url) return;
   const session = await getSession();
   if (session?.phase !== "recording" || session.tabId !== tabId) return;
-  if (!isSameMeeting(changeInfo.url, session.meetCode)) {
+  if (!isSameMeeting(changeInfo.url, session)) {
     await endSession("navigated").catch(console.error);
   }
 });
@@ -388,25 +384,21 @@ chrome.commands.onCommand.addListener(async (command) => {
   }
   if (!tab || !tab.id) return;
 
-  const textToScan = (tab.url || "") + " " + (tab.title || "");
-  const match = textToScan.match(/\b([a-zA-Z]{3}-[a-zA-Z]{4}-[a-zA-Z]{3})\b/);
-  if (!match) {
-    return;
-  }
-
-  const meetCode = match[1].toLowerCase();
+  const link = parseMeetingLink(tab.url);
+  if (!link) return;
+  const meetCode = link.provider === "google" ? link.id : null;
   try {
-    let meeting = await lookupMeeting(meetCode);
+    let meeting = await lookupMeeting(link.url);
     if (!meeting) {
       // Tự động tạo cuộc họp nhanh nếu chưa có trên lịch
       const { createQuickMeeting } = await import("./api.js");
       meeting = await createQuickMeeting({
-        title: `Họp Google Meet (${meetCode})`,
-        meetingUrl: tab.url || `https://meet.google.com/${meetCode}`,
+        title: meetingLinkTitle(link),
+        meetingUrl: link.url,
       });
     }
     if (meeting) {
-      await startRecordingSession({ tabId: tab.id, meeting, meetCode });
+      await startRecordingSession({ tabId: tab.id, meeting, meetCode, meetingUrl: link.url });
     }
   } catch (err) {
     console.error("Lỗi khi tự động kích hoạt ghi âm qua phím tắt:", err);
@@ -538,10 +530,10 @@ chrome.runtime.onStartup.addListener(async () => {
 // Tab Meet đã mở trước khi cài / cập nhật extension chưa có content script: nạp bổ sung
 chrome.runtime.onInstalled.addListener(async () => {
   try {
-    const tabs = await chrome.tabs.query({ url: "https://meet.google.com/*" });
+    const tabs = await chrome.tabs.query({ url: MEETING_TAB_PATTERNS });
     for (const tab of tabs) {
       chrome.scripting
-        .executeScript({ target: { tabId: tab.id }, files: ["content-meet.js"] })
+        .executeScript({ target: { tabId: tab.id }, files: [tab.url?.startsWith("https://meet.google.com/") ? "content-meet.js" : "content-conference.js"] })
         .catch(() => undefined);
     }
   } catch {

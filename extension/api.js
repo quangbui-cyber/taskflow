@@ -115,7 +115,7 @@ export async function checkAuth() {
 }
 
 export async function lookupMeeting(code) {
-  const res = await apiRequest(`/api/ext/meetings/lookup?code=${encodeURIComponent(code)}`);
+  const res = await apiRequest(`/api/ext/meetings/lookup?${code.startsWith("https://") ? "url" : "code"}=${encodeURIComponent(code)}`);
   return res?.meeting ?? null;
 }
 

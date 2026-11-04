@@ -20,5 +20,6 @@
       "path": "/api/cron/creative-drop",
       "schedule": "0 0 * * 1-5"
     }
-  ]
+  ],
+  "buildCommand": "npm run build:app"
 }

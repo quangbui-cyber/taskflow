@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { getMembership, requireUser } from "@/lib/auth";
 import { emailAppUrl } from "@/lib/email";
-import { MEETING_RECAPS_DISABLED_MESSAGE, meetingRecapsEnabled } from "@/lib/features";
+import { MEETING_RECAPS_DISABLED_MESSAGE, MEETINGS_DISABLED_MESSAGE, meetingRecapsEnabled, meetingsEnabled } from "@/lib/features";
 import {
   RECAP_ACTION_ITEMS_MAX,
   RECAP_ACTION_TITLE_MAX,
@@ -30,7 +30,7 @@ import { notify } from "@/lib/notify";
 import { prisma } from "@/lib/prisma";
 import { createLinkedRecapTask, lockRecap, publishRecap, resolveRecapSuggestion } from "@/lib/recapWorkflow";
 import { readPublishedRecap } from "@/lib/recapPublication";
-import { attachMeetingProject } from "@/lib/recapProject";
+import { attachMeetingProject, renameRecapMeeting } from "@/lib/recapProject";
 import { queueDrivePush } from "@/lib/driveStorage";
 import { pushMeetingRecapToDriveSafe } from "@/lib/recapDrive";
 
@@ -48,6 +48,20 @@ async function loadManaged(meetingId: string) {
 function refresh(meetingId: string) {
   revalidatePath(`/meetings/${meetingId}/recap`);
   revalidatePath("/meetings");
+}
+
+export async function renameMeetingTitle(meetingId: string, title: string): Promise<MeetingRecapActionState> {
+  if (!meetingsEnabled()) return { error: MEETINGS_DISABLED_MESSAGE };
+  const user = await requireUser();
+  const result = await renameRecapMeeting(prisma, meetingId, title, user);
+  if ("error" in result) return { error: result.error };
+  if (result.changed) {
+    if (result.archived && result.projectId) queueDrivePush(result.projectId);
+    after(() => pushMeetingRecapToDriveSafe(meetingId));
+    if (result.projectId) revalidatePath(`/projects/${result.projectId}`);
+  }
+  refresh(meetingId);
+  return { success: "Đã đổi tên cuộc họp." };
 }
 
 export async function attachProjectToMeeting(meetingId: string, projectId: string): Promise<MeetingRecapActionState> {

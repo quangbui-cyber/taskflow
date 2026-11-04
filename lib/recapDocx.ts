@@ -262,7 +262,7 @@ export function buildRecapDocumentXml(input: RecapDocxInput): string {
 
   parts.push(
     paragraph(
-      [{ text: `Biên bản do AI viết từ file ghi âm, người tổ chức đã đọc lại và gửi lúc ${sent}.`, size: 18, color: "71717A" }],
+      [{ text: `Biên bản được myCreative soạn, người tổ chức đã đọc lại và gửi lúc ${sent}.`, size: 18, color: "71717A" }],
       { before: 360 }
     )
   );

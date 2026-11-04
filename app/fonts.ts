@@ -1,4 +1,4 @@
-import { Dancing_Script, Montserrat } from "next/font/google";
+import { Dancing_Script, Literata, Montserrat } from "next/font/google";
 
 // Chữ viết tay cho lời chào trên trang chủ. next/font tải font lúc build và tự
 // phục vụ từ domain của app (CSP chỉ cho font-src 'self').
@@ -15,5 +15,11 @@ export const creativeHeading = Montserrat({
   display: "swap",
 });
 
-// Chữ nội dung bài viết dùng font mặc định của app (không tải thêm font từ Google lúc build).
-export const serifBody = { className: "font-sans" };
+// Font nội dung Góc Đọc, hỗ trợ tiếng Việt cùng chữ đậm và nghiêng.
+export const serifBody = Literata({
+  subsets: ["latin", "vietnamese"],
+  weight: ["400", "700"],
+  style: ["normal", "italic"],
+  display: "swap",
+  fallback: ["Georgia", "serif"],
+});

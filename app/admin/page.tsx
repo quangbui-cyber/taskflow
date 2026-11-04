@@ -326,7 +326,10 @@ export default async function AdminPage({
             aria-label="Các mục cài đặt"
           >
             {SETTINGS_TABS.filter(
-              (tab) => (tab.key !== "rooms" && tab.key !== "glossary") || meetingsEnabled()
+              (tab) =>
+                tab.key !== "glossary" &&
+                tab.key !== "storage" &&
+                (tab.key !== "rooms" || meetingsEnabled())
             ).map((tab) => (
               <Link
                 key={tab.key}

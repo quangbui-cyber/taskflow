@@ -58,3 +58,11 @@
 
 * **Trạng thái rỗng (Empty States):** Khi không có việc gấp, thay vì hiện một dòng chữ khô khan, hãy đưa ra phản hồi tích cực và lời khen nhẹ nhàng (ví dụ: *"Bạn không có việc gấp hôm nay, cứ thong thả nhé"* kèm icon nảy nhẹ).
 * Giao diện phục vụ con người làm việc sáng tạo, phải tạo cảm hứng tích cực thay vì cảm giác bị giám sát.
+
+## 5. Giọng nói sản phẩm: myCreative đồng hành cùng người dùng
+
+- Viết đúng tên **myCreative** trong giao diện, thông báo, email, biên bản và extension.
+- Gọi các tính năng hỗ trợ tự động là **myCreative** trong nội dung hướng tới người dùng. Ví dụ: “myCreative đang soạn biên bản cho bạn…” và “myCreative gợi ý thêm công việc”.
+- Giọng văn gần gũi, rõ ràng, giúp người dùng biết bước tiếp theo để triển khai dự án và hoàn thành công việc. Nêu đúng khả năng, không hứa bảo đảm kết quả.
+- Lời ghi chú biên bản: “Biên bản được myCreative soạn và đã được người tổ chức đọc lại.” Không thêm cụm “từ file ghi âm”. Bản xuất có thể bổ sung thời điểm gửi.
+- Giữ nguyên nội dung người dùng nhập, trích dẫn và bài viết tham khảo; không thay tên công nghệ trong nội dung gốc bằng tên sản phẩm.

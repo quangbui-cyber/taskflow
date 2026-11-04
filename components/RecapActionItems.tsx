@@ -356,7 +356,7 @@ export default function RecapActionItems({
 
       {canManage && suggestions.length > 0 && (
         <div className="mt-4 rounded-[8px] border border-amber-200 bg-amber-50/50 p-3">
-          <h3 className="text-sm font-semibold text-zinc-900">AI đề xuất bổ sung</h3>
+          <h3 className="text-sm font-semibold text-zinc-900">myCreative gợi ý thêm công việc</h3>
           <ul className="mt-2 divide-y divide-amber-100">
             {suggestions.map((suggestion) => (
               <li key={suggestion.id} className="flex flex-wrap items-start gap-2 py-2">

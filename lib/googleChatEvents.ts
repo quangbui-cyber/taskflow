@@ -45,7 +45,7 @@ export async function verifyChatEventRequest(authorization: string | null, endpo
 }
 
 const HELP_TEXT =
-  "Chào bạn, mình là MyCreative, mình sẽ đồng hành cùng team để triển khai dự án thành công nhé!";
+  "Chào bạn, mình là myCreative. Mình sẽ đồng hành cùng bạn và team để triển khai dự án, hoàn thành công việc mỗi ngày nhé!";
 
 /** Loại sự kiện, đọc được cả kiểu Chat app thường lẫn kiểu Workspace add-on. */
 export function chatEventKind(body: unknown): "added" | "message" | "other" {

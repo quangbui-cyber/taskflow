@@ -89,7 +89,7 @@ export default function ExtensionConnectButton({ userName }: { userName: string 
           <CheckCircle2 size={18} /> Đã kết nối Extension
         </div>
         <p className="text-xs text-emerald-700">
-          Bạn có thể đóng tab này, mở một cuộc họp Google Meet rồi bấm icon myCreative Recorder để ghi biên bản.
+          Bạn có thể đóng tab này, mở một cuộc họp Google Meet, Microsoft Teams hoặc Zoom trong trình duyệt rồi bấm icon myCreative Recorder để ghi biên bản.
         </p>
       </div>
     );

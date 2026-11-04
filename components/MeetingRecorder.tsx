@@ -696,7 +696,7 @@ export default function MeetingRecorder({
       });
       await clearRecording(meetingId);
       setSaved(null);
-      notify({ message: "Đã tải bản ghi lên. AI đang chép lời và viết biên bản…", tone: "success" });
+      notify({ message: "Đã nhận bản ghi. myCreative đang chép lời và soạn biên bản cho bạn…", tone: "success" });
       onUploaded();
     } catch (err) {
       setError(friendlyUploadError(err));

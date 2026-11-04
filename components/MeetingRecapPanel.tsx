@@ -124,7 +124,7 @@ function AudioUploader({
     setProgress(0);
     try {
       await uploadRecapAudio({ meetingId, file, durationSeconds: null, maxAudioMinutes, onProgress: setProgress });
-      notify({ message: "Đã tải lên. AI đang chép lời và viết biên bản…", tone: "success" });
+      notify({ message: "Đã nhận bản ghi. myCreative đang chép lời và soạn biên bản cho bạn…", tone: "success" });
       setFile(null);
       if (inputRef.current) inputRef.current.value = "";
       onDone();
@@ -356,7 +356,7 @@ export default function MeetingRecapPanel({
           <span className="tf-spinner mt-0.5 shrink-0" aria-hidden="true" />
           <div>
             <p className="font-medium text-zinc-900">
-              {recap?.stage === "SUMMARIZING" ? "AI đang viết biên bản…" : "Đang chép lời file ghi âm…"}
+              {recap?.stage === "SUMMARIZING" ? "myCreative đang soạn biên bản cho bạn…" : "myCreative đang chép lời bản ghi…"}
             </p>
           </div>
         </section>
@@ -450,7 +450,7 @@ export default function MeetingRecapPanel({
                       onClick={() => {
                         if (
                           window.confirm(
-                            "Viết lại nội dung biên bản bằng AI? Phần nội dung bạn sửa tay sẽ được viết lại. Danh sách công việc và task được giữ nguyên. Người tham dự tiếp tục xem bản đã gửi cho tới khi bạn gửi lại."
+                            "Nhờ myCreative soạn lại nội dung biên bản? Phần nội dung bạn sửa tay sẽ được viết lại. Danh sách công việc và task được giữ nguyên. Người tham dự tiếp tục xem bản đã gửi cho tới khi bạn gửi lại."
                           )
                         ) {
                           run(() => regenerateMeetingRecap(meetingId));
