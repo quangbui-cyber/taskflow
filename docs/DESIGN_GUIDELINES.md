@@ -58,3 +58,11 @@
 
 * **Trạng thái rỗng (Empty States):** Khi không có việc gấp, thay vì hiện một dòng chữ khô khan, hãy đưa ra phản hồi tích cực và lời khen nhẹ nhàng (ví dụ: *"Bạn không có việc gấp hôm nay, cứ thong thả nhé"* kèm icon nảy nhẹ).
 * Giao diện phục vụ con người làm việc sáng tạo, phải tạo cảm hứng tích cực thay vì cảm giác bị giám sát.
+
+## 5. Giao diện tự hướng dẫn — yêu cầu xuyên suốt của chủ sản phẩm
+
+* Áp dụng cho **toàn bộ app và mọi lần thiết kế, chỉnh sửa giao diện sau này**.
+* Bố cục, nhãn, nút bấm và trạng thái tương tác phải tự giúp người dùng hiểu và hoàn thành thao tác.
+* **Không thêm dòng note nhỏ, lưu ý, hướng dẫn sử dụng, mô tả cơ chế hệ thống hoặc helper text thừa** dưới form và nút bấm. Ví dụ cần tránh: “Lời chúc hiện trên trang chủ và được gửi vào nhóm Google Chat của dự án.”
+* Nếu phải dùng một đoạn giải thích để người dùng hiểu thao tác, hãy sửa luồng tương tác và cách đặt nhãn.
+* Phản hồi sau thao tác phải ngắn, đúng ngữ cảnh và chỉ xuất hiện khi cần báo kết quả, lỗi hoặc một quyết định của người dùng.

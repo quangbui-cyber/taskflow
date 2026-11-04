@@ -27,3 +27,8 @@ All UI design and front-end code in this repo MUST adhere to `docs/DESIGN_GUIDEL
    - No infinite looping animations on static elements.
    - Zero-reflow: only animate `transform` and `opacity`. Always support `prefers-reduced-motion`.
 
+4. **Self-explanatory Interfaces — persistent user preference:**
+   - Apply to every future design and UI change in this app: let layout, labels, controls, and interaction states guide the user.
+   - Do not add small explanatory notes, usage instructions, implementation details, or redundant helper text beneath forms and actions (e.g. “Lời chúc hiện trên trang chủ và được gửi vào nhóm Google Chat…”).
+   - If a flow needs such a note to be understood, improve the flow and labels. Show concise contextual feedback only when an action succeeds, fails, or requires a decision.
+

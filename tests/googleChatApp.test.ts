@@ -61,6 +61,26 @@ test("projects with a Chat space post as the Chat app; projects without one send
   assert.equal(fake.calls.length, 0, "a project without a Chat space makes no request");
 });
 
+test("Chat retries include the stable request ID in the API URL", async (t) => {
+  const previous = process.env.GOOGLE_CHAT_SERVICE_ACCOUNT;
+  process.env.GOOGLE_CHAT_SERVICE_ACCOUNT = account;
+  const fake = withFetch((url) => url.startsWith("https://oauth2.googleapis.com/token")
+    ? Response.json({ access_token: "app-token", expires_in: 3600 })
+    : Response.json({ name: "spaces/AAA/messages/one" }));
+  t.after(() => {
+    fake.restore();
+    if (previous === undefined) delete process.env.GOOGLE_CHAT_SERVICE_ACCOUNT;
+    else process.env.GOOGLE_CHAT_SERVICE_ACCOUNT = previous;
+  });
+  const requestId = "48a9a654-1f1a-4057-a997-f58b4c96c651";
+  await sendChatAppMessage("spaces/AAA", "Chúc team thành công", requestId);
+  await sendChatAppMessage("spaces/AAA", "Chúc team thành công", requestId);
+  const requests = fake.calls.filter((call) => call.url.startsWith("https://chat.googleapis.com"));
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].url, `https://chat.googleapis.com/v1/spaces/AAA/messages?requestId=${requestId}`);
+  assert.equal(requests[1].url, requests[0].url);
+});
+
 test("a Chat app that is not in the space gets a clear message", async (t) => {
   const previous = process.env.GOOGLE_CHAT_SERVICE_ACCOUNT;
   process.env.GOOGLE_CHAT_SERVICE_ACCOUNT = account;
