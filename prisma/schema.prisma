@@ -45,6 +45,7 @@ model User {
   recognitionsSent         Recognition[]            @relation("RecognitionSender")
   recognitionsReceived     Recognition[]            @relation("RecognitionRecipient")
   recognitionComments      RecognitionComment[]
+  projectWishes            ProjectWish[]
   organizedMeetings        Meeting[]                @relation("MeetingOrganizer")
   recordedMeetings         Meeting[]                @relation("MeetingRecorder")
   meetingInvites           MeetingAttendee[]
@@ -137,6 +138,7 @@ model Project {
   acApproverId        String?
   acApprover          User?           @relation("ProjectAcApprover", fields: [acApproverId], references: [id], onDelete: SetNull)
   members             ProjectMember[]
+  wishes              ProjectWish[]
   tasks               Task[]
   files               ProjectFile[]
   meetings            Meeting[]
@@ -153,6 +155,21 @@ model Project {
   @@index([icApproverId])
   @@index([googleChatSpaceById])
   @@index([acApproverId])
+}
+
+model ProjectWish {
+  id            String    @id @default(uuid())
+  projectId     String
+  authorId      String
+  body          String
+  chatSpaceName String?
+  chatSentAt    DateTime?
+  createdAt     DateTime  @default(now())
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author        User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+  @@index([authorId])
 }
 
 // Danh bạ nhà cung cấp dùng chung cho IC, AC và phiếu đề nghị chi.

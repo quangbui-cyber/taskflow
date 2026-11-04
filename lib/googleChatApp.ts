@@ -132,12 +132,14 @@ async function chatAppAccessToken(): Promise<string> {
 }
 
 /** Gửi một tin (chữ hoặc thẻ) vào nhóm. Lỗi Chat không làm hỏng thao tác chính. */
-export async function sendChatAppMessage(spaceName: string, message: string | GoogleChatMessage): Promise<GoogleChatResult> {
+export async function sendChatAppMessage(spaceName: string, message: string | GoogleChatMessage, requestId?: string): Promise<GoogleChatResult> {
   if (!/^spaces\/[A-Za-z0-9_-]{1,100}$/.test(spaceName)) return { ok: false, error: "Nhóm Google Chat không hợp lệ." };
   try {
     const token = await chatAppAccessToken();
     const payload = typeof message === "string" ? { text: message } : message;
-    const response = await fetch(`${CHAT_API}/${spaceName}/messages`, {
+    // Google Chat trả lại tin đã tạo khi gửi lại cùng requestId.
+    const query = requestId ? `?${new URLSearchParams({ requestId })}` : "";
+    const response = await fetch(`${CHAT_API}/${spaceName}/messages${query}`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json; charset=UTF-8" },
       body: JSON.stringify(payload),

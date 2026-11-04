@@ -66,3 +66,13 @@
 - Giọng văn gần gũi, rõ ràng, giúp người dùng biết bước tiếp theo để triển khai dự án và hoàn thành công việc. Nêu đúng khả năng, không hứa bảo đảm kết quả.
 - Lời ghi chú biên bản: “Biên bản được myCreative soạn và đã được người tổ chức đọc lại.” Không thêm cụm “từ file ghi âm”. Bản xuất có thể bổ sung thời điểm gửi.
 - Giữ nguyên nội dung người dùng nhập, trích dẫn và bài viết tham khảo; không thay tên công nghệ trong nội dung gốc bằng tên sản phẩm.
+
+---
+
+## 6. Giao diện tự hướng dẫn — yêu cầu xuyên suốt của chủ sản phẩm
+
+* Áp dụng cho **toàn bộ app và mọi lần thiết kế, chỉnh sửa giao diện sau này**.
+* Bố cục, nhãn, nút bấm và trạng thái tương tác phải tự giúp người dùng hiểu và hoàn thành thao tác.
+* **Không thêm dòng note nhỏ, lưu ý, hướng dẫn sử dụng, mô tả cơ chế hệ thống hoặc helper text thừa** dưới form và nút bấm. Ví dụ cần tránh: “Lời chúc hiện trên trang chủ và được gửi vào nhóm Google Chat của dự án.”
+* Nếu phải dùng một đoạn giải thích để người dùng hiểu thao tác, hãy sửa luồng tương tác và cách đặt nhãn.
+* Phản hồi sau thao tác phải ngắn, đúng ngữ cảnh và chỉ xuất hiện khi cần báo kết quả, lỗi hoặc một quyết định của người dùng.
