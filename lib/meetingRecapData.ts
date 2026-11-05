@@ -17,6 +17,7 @@ export function findRecapMeeting(meetingId: string) {
       organizerId: true,
       recorderId: true,
       attendees: { select: { userId: true } },
+      recapRecipients: { select: { userId: true } },
       recap: {
         select: {
           id: true,
@@ -25,6 +26,7 @@ export function findRecapMeeting(meetingId: string) {
           audioPathname: true,
           transcript: true,
           content: true,
+          glossarySuggestions: true,
           sentAt: true,
         },
       },

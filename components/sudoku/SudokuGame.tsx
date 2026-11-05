@@ -39,6 +39,7 @@ import {
   type Grid,
   type SudokuDifficulty,
 } from "@/lib/sudoku";
+import { cageProgress, clearKillerPeerNotes, generateKillerPuzzle, isKillerCages, isSudokuVariant, VARIANT_LABEL, type KillerCage, type SudokuVariant } from "@/lib/killerSudoku";
 import { caroSound as sound } from "@/lib/caroSound";
 import SudokuBoard from "./SudokuBoard";
 import GameLeaderboard from "@/components/GameLeaderboard";
@@ -57,6 +58,8 @@ type Mode = "solo" | "online";
 type SoloStatus = "idle" | "playing" | "won" | "lost";
 
 type SoloGame = {
+  variant: SudokuVariant;
+  cages: KillerCage[];
   difficulty: SudokuDifficulty;
   puzzle: Grid;
   solution: Grid;
@@ -97,17 +100,19 @@ function writeStorage(key: string, value: unknown) {
   }
 }
 
-function newSoloGame(difficulty: SudokuDifficulty, elapsed = 0): SoloGame {
-  const { puzzle, solution } = generatePuzzle(difficulty);
+function newSoloGame(difficulty: SudokuDifficulty, variant: SudokuVariant): SoloGame {
+  const { puzzle, solution, cages } = variant === "killer" ? generateKillerPuzzle(difficulty) : { ...generatePuzzle(difficulty), cages: [] };
   return {
     difficulty,
+    variant,
+    cages,
     puzzle,
     solution,
     values: [...puzzle],
     notes: new Array(CELLS).fill(0),
     mistakes: 0,
     hintsLeft: MAX_HINTS,
-    elapsed,
+    elapsed: 0,
     timerBase: 0,
     status: "playing",
     lostReason: null,
@@ -115,7 +120,7 @@ function newSoloGame(difficulty: SudokuDifficulty, elapsed = 0): SoloGame {
 }
 
 /** Bỏ ghi chú số `n` ở các ô cùng hàng, cột, khối sau khi điền đúng. */
-function clearPeerNotes(notes: number[], index: number, n: number): number[] {
+function clearPeerNotes(notes: number[], index: number, n: number, cages: KillerCage[] = []): number[] {
   const next = [...notes];
   const bit = 1 << n;
   for (let j = 0; j < CELLS; j++) {
@@ -129,7 +134,7 @@ function clearPeerNotes(notes: number[], index: number, n: number): number[] {
     }
   }
   next[index] = 0;
-  return next;
+  return clearKillerPeerNotes(next, index, n, cages);
 }
 
 interface SudokuGameProps {
@@ -138,13 +143,14 @@ interface SudokuGameProps {
 
 export default function SudokuGame({ initialRoomCode = null }: SudokuGameProps) {
   const [mode, setMode] = useState<Mode>(initialRoomCode ? "online" : "solo");
+  const [variant, setVariant] = useState<SudokuVariant>("classic");
   const [difficulty, setDifficulty] = useState<SudokuDifficulty>("medium");
   const [timerEnabled, setTimerEnabled] = useState(true);
   const [soundOn, setSoundOn] = useState(true);
   const [noteMode, setNoteMode] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [best, setBest] = useState<Partial<Record<SudokuDifficulty, number>>>({});
+  const [best, setBest] = useState<Partial<Record<string, number>>>({});
 
   // --- Chơi một mình ---
   const [solo, setSolo] = useState<SoloGame | null>(null);
@@ -171,7 +177,11 @@ export default function SudokuGame({ initialRoomCode = null }: SudokuGameProps) 
     setBest(readStorage(STORAGE_BEST) ?? {});
     const saved = readStorage<SoloGame>(STORAGE_GAME);
     if (saved && saved.status === "playing" && Array.isArray(saved.puzzle) && isDifficulty(saved.difficulty)) {
-      setSolo(saved);
+      const restoredVariant = saved.variant ?? "classic";
+      if (!isSudokuVariant(restoredVariant) || (restoredVariant === "killer" && !isKillerCages(saved.cages)) ||
+          saved.puzzle.length !== CELLS || saved.values?.length !== CELLS || saved.solution?.length !== CELLS || saved.notes?.length !== CELLS) return;
+      setSolo({ ...saved, variant: restoredVariant, cages: restoredVariant === "killer" ? saved.cages : [] });
+      setVariant(restoredVariant);
       setDifficulty(saved.difficulty);
     }
   }, []);
@@ -183,13 +193,13 @@ export default function SudokuGame({ initialRoomCode = null }: SudokuGameProps) 
   // ================= CHƠI MỘT MÌNH =================
 
   const startSolo = useCallback(
-    (level: SudokuDifficulty = difficulty) => {
-      setSolo(newSoloGame(level));
+    (level: SudokuDifficulty = difficulty, kind: SudokuVariant = variant) => {
+      setSolo(newSoloGame(level, kind));
       setSelected(null);
       setHistory([]);
       setNoteMode(false);
     },
-    [difficulty]
+    [difficulty, variant]
   );
 
   // Đồng hồ: chỉ chạy khi đang chơi và tab đang mở.
@@ -215,10 +225,12 @@ export default function SudokuGame({ initialRoomCode = null }: SudokuGameProps) 
 
   const soloRemaining = solo ? TIME_LIMIT_SEC[solo.difficulty] - (solo.elapsed - solo.timerBase) : 0;
 
-  const recordBest = (level: SudokuDifficulty, seconds: number) => {
+  const bestKey = (level: SudokuDifficulty, kind: SudokuVariant) => kind === "classic" ? level : `killer:${level}`;
+  const recordBest = (level: SudokuDifficulty, seconds: number, kind: SudokuVariant) => {
+    const key = bestKey(level, kind);
     setBest((prev) => {
-      if (prev[level] !== undefined && prev[level]! <= seconds) return prev;
-      const next = { ...prev, [level]: seconds };
+      if (prev[key] !== undefined && prev[key]! <= seconds) return prev;
+      const next = { ...prev, [key]: seconds };
       writeStorage(STORAGE_BEST, next);
       return next;
     });
@@ -244,10 +256,10 @@ export default function SudokuGame({ initialRoomCode = null }: SudokuGameProps) 
 
     if (n === solo.solution[i]) {
       sound.playStone();
-      const notes = clearPeerNotes(solo.notes, i, n);
+      const notes = clearPeerNotes(solo.notes, i, n, solo.cages);
       if (isSolved(values, solo.solution)) {
         sound.playWin();
-        recordBest(solo.difficulty, solo.elapsed);
+        recordBest(solo.difficulty, solo.elapsed, solo.variant);
         setSolo({ ...solo, values, notes, status: "won" });
       } else {
         setSolo({ ...solo, values, notes });
@@ -305,7 +317,7 @@ export default function SudokuGame({ initialRoomCode = null }: SudokuGameProps) 
     const n = solo.solution[i];
     const values = [...solo.values];
     values[i] = n;
-    const notes = clearPeerNotes(solo.notes, i, n);
+    const notes = clearPeerNotes(solo.notes, i, n, solo.cages);
     sound.playStone();
     setSelected(i);
     if (isSolved(values, solo.solution)) {
@@ -341,7 +353,7 @@ export default function SudokuGame({ initialRoomCode = null }: SudokuGameProps) 
   const handleCreateRoom = async () => {
     setBusy(true);
     setOnlineError(null);
-    const res = await createSudokuRoom(difficulty, timerEnabled);
+    const res = await createSudokuRoom(difficulty, timerEnabled, variant);
     setBusy(false);
     if (res.success && res.game) {
       setRoomCode(res.game.code);
@@ -457,7 +469,7 @@ export default function SudokuGame({ initialRoomCode = null }: SudokuGameProps) 
     }
     if (res.correct) {
       sound.playStone();
-      setOnlineNotes((prev) => clearPeerNotes(prev, i, n));
+      setOnlineNotes((prev) => clearPeerNotes(prev, i, n, room.cages));
       setLocalEntries((prev) => {
         const next = { ...prev };
         delete next[i];
@@ -552,15 +564,29 @@ export default function SudokuGame({ initialRoomCode = null }: SudokuGameProps) 
       return;
     }
     if (canEditRoom && roomCode) {
-      const res = await updateSudokuRoomSettings(roomCode, level, room.timerEnabled);
+      const res = await updateSudokuRoomSettings(roomCode, level, room.timerEnabled, room.variant);
       if (res.success && res.game) applyRoom(res.game);
     }
+  };
+
+  const changeVariant = async (kind: SudokuVariant) => {
+    if (mode === "online" && room) {
+      if (!canEditRoom || !roomCode) return;
+      const res = await updateSudokuRoomSettings(roomCode, room.difficulty, room.timerEnabled, kind);
+      if (res.success && res.game) applyRoom(res.game);
+      else setOnlineError(res.error || "Không thể đổi chế độ.");
+      return;
+    }
+    if (kind === variant) return;
+    if (mode === "solo" && solo?.status === "playing" && !window.confirm("Đổi chế độ sẽ bắt đầu ván mới. Tiếp tục?")) return;
+    setVariant(kind);
+    if (mode === "solo" && solo) startSolo(difficulty, kind);
   };
 
   const toggleTimer = async () => {
     if (mode === "online") {
       if (!canEditRoom || !roomCode) return;
-      const res = await updateSudokuRoomSettings(roomCode, room.difficulty, !room.timerEnabled);
+      const res = await updateSudokuRoomSettings(roomCode, room.difficulty, !room.timerEnabled, room.variant);
       if (res.success && res.game) applyRoom(res.game);
       return;
     }
@@ -583,6 +609,9 @@ export default function SudokuGame({ initialRoomCode = null }: SudokuGameProps) 
   // ================= HIỂN THỊ =================
 
   const isOnline = mode === "online";
+  const activeVariant = isOnline && room ? room.variant : solo && !isOnline ? solo.variant : variant;
+  const cages = isOnline ? room?.cages ?? [] : solo?.cages ?? [];
+  const selectedCage = selected === null ? undefined : cages.find((c) => c.cells.includes(selected));
   const showOnlineBoard = isOnline && !!room;
   const activeTimer = isOnline ? !!room?.timerEnabled : timerEnabled;
   const activeDifficulty = isOnline && room ? room.difficulty : solo?.difficulty ?? difficulty;
@@ -668,7 +697,7 @@ export default function SudokuGame({ initialRoomCode = null }: SudokuGameProps) 
     resultTitle = resultWin ? "Giải xong rồi!" : solo.lostReason === "timeout" ? "Hết giờ" : "Sai quá 3 lần";
     resultText = resultWin
       ? `Bạn giải đề ${DIFFICULTY_LABEL[solo.difficulty]} trong ${formatClock(solo.elapsed)}${
-          best[solo.difficulty] === solo.elapsed ? " · Kỷ lục mới của bạn" : ""
+          best[bestKey(solo.difficulty, solo.variant)] === solo.elapsed ? " · Kỷ lục mới của bạn" : ""
         }.`
       : "Đừng nản, thử một đề mới nhé.";
   }
@@ -746,7 +775,18 @@ export default function SudokuGame({ initialRoomCode = null }: SudokuGameProps) 
           <Sparkles size={13} className="text-brand-700" />
           <span>Góc Giải Trí Creative</span>
         </div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-zinc-950 sm:text-3xl">Sudoku 9x9</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight text-zinc-950 sm:text-3xl">{VARIANT_LABEL[activeVariant]}</h1>
+        <div className="mt-3 flex justify-center gap-2" role="group" aria-label="Loại Sudoku">
+          {(["classic", "killer"] as const).map((kind) => (
+            <button key={kind} type="button" aria-pressed={activeVariant === kind}
+              disabled={isOnline && !!room && !canEditRoom}
+              onClick={() => changeVariant(kind)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-semibold disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-brand-600 ${activeVariant === kind ? "border-brand-300 bg-brand-50 text-brand-900" : "border-zinc-200 bg-white text-zinc-600"}`}>
+              {VARIANT_LABEL[kind]}
+            </button>
+          ))}
+        </div>
+        {activeVariant === "killer" && <p className="mx-auto mt-3 max-w-md text-xs leading-relaxed text-zinc-500">Mỗi vùng nét đứt có tổng bằng số nhỏ ở góc. Các số trong cùng vùng không lặp lại; vẫn áp dụng luật hàng, cột và khối 3×3.</p>}
 
         <div className="mt-4 inline-flex rounded-full border border-zinc-200 bg-zinc-100/80 p-1 shadow-xs">
           {(
@@ -843,7 +883,7 @@ export default function SudokuGame({ initialRoomCode = null }: SudokuGameProps) 
               <span className="text-zinc-500">Mã phòng: </span>
               <strong className="text-sm font-bold tracking-wide text-zinc-950">{room.code}</strong>
               <span className="ml-2 text-zinc-500">
-                {DIFFICULTY_LABEL[room.difficulty]} ·{" "}
+                {VARIANT_LABEL[room.variant]} · {DIFFICULTY_LABEL[room.difficulty]} ·{" "}
                 {room.timerEnabled ? `${room.timeLimitSec / 60} phút` : "không giới hạn giờ"}
               </span>
             </div>
@@ -946,6 +986,7 @@ export default function SudokuGame({ initialRoomCode = null }: SudokuGameProps) 
           {/* Bàn cờ */}
           <div className="relative w-full max-w-[460px]">
             <SudokuBoard
+              cages={cages}
               puzzle={puzzle}
               values={values}
               wrong={wrong}
@@ -1026,7 +1067,7 @@ export default function SudokuGame({ initialRoomCode = null }: SudokuGameProps) 
                         </OverlayButton>
                       )
                     ) : (
-                      <OverlayButton onClick={() => startSolo(solo!.difficulty)} icon={<RotateCcw size={14} />}>
+                      <OverlayButton onClick={() => startSolo(solo!.difficulty, solo!.variant)} icon={<RotateCcw size={14} />}>
                         Ván mới
                       </OverlayButton>
                     )}
@@ -1046,6 +1087,15 @@ export default function SudokuGame({ initialRoomCode = null }: SudokuGameProps) 
 
           {/* Bảng điều khiển */}
           <div className="flex w-full max-w-[460px] flex-col gap-3 lg:w-[260px]">
+            {activeVariant === "killer" && (
+              <div className="rounded-[14px] bg-zinc-50 p-3 text-xs text-zinc-600" aria-live="polite">
+                {selectedCage ? (() => {
+                  const progress = cageProgress(selectedCage, values);
+                  return <><strong className="text-zinc-900">Tổng vùng: {selectedCage.sum}</strong>
+                    <p className={`mt-1 ${progress.invalid ? "text-red-600" : ""}`}>{progress.invalid ? "Các số đã điền chưa phù hợp với tổng vùng." : progress.empty ? `Đã điền ${progress.sum} · Còn ${progress.remaining} cho ${progress.empty} ô` : "Đã đủ tổng vùng."}</p></>;
+                })() : "Chọn một ô để xem tổng và số ô còn trống trong vùng."}
+              </div>
+            )}
             <div className="grid grid-cols-3 gap-2">
               <Stat label={activeTimer ? "Còn lại" : "Thời gian"} value={clockText} danger={lowTime} />
               <Stat label="Lỗi sai" value={`${mistakes}/${MAX_MISTAKES}`} danger={mistakes >= MAX_MISTAKES - 1 && !!playing} />
@@ -1101,7 +1151,7 @@ export default function SudokuGame({ initialRoomCode = null }: SudokuGameProps) 
                 className="inline-flex items-center justify-center gap-1.5 rounded-[10px] bg-brand-400 px-3.5 py-2 text-xs font-semibold text-zinc-950 shadow-xs transition-all duration-150 hover:-translate-y-0.5 hover:bg-brand-500"
               >
                 <RotateCcw size={14} />
-                <span>Ván mới · {DIFFICULTY_LABEL[difficulty]}</span>
+                <span>Ván mới · {VARIANT_LABEL[variant]} · {DIFFICULTY_LABEL[difficulty]}</span>
               </button>
             )}
 
@@ -1120,8 +1170,8 @@ export default function SudokuGame({ initialRoomCode = null }: SudokuGameProps) 
                     }`}
                   >
                     {DIFFICULTY_LABEL[level]}
-                    {best[level] !== undefined && (
-                      <span className="ml-1 text-zinc-400">· {formatClock(best[level]!)}</span>
+                    {best[bestKey(level, variant)] !== undefined && (
+                      <span className="ml-1 text-zinc-400">· {formatClock(best[bestKey(level, variant)]!)}</span>
                     )}
                   </button>
                 ))}

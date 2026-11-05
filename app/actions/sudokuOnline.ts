@@ -13,6 +13,7 @@ import {
   type Grid,
   type SudokuDifficulty,
 } from "@/lib/sudoku";
+import { generateKillerPuzzle, isSudokuVariant, isKillerCages, type KillerCage, type SudokuVariant } from "@/lib/killerSudoku";
 import { loadLeaderboard } from "@/lib/gameLeaderboardData";
 import type { GameLeaderboard } from "@/lib/gameLeaderboard";
 
@@ -26,6 +27,8 @@ export type SudokuOnlineState = {
   hostName: string;
   guestName: string | null;
   difficulty: SudokuDifficulty;
+  variant: SudokuVariant;
+  cages: KillerCage[];
   timerEnabled: boolean;
   timeLimitSec: number;
   status: SudokuStatus;
@@ -74,6 +77,8 @@ function toState(game: Row, userId: string): SudokuOnlineState {
     hostName: game.hostName,
     guestName: game.guestName,
     difficulty: isDifficulty(game.difficulty) ? game.difficulty : "medium",
+    variant: isSudokuVariant(game.variant) ? game.variant : "classic",
+    cages: game.variant === "killer" && isKillerCages(game.cages) ? game.cages : [],
     timerEnabled: game.timerEnabled,
     timeLimitSec: game.timeLimitSec,
     status: game.status as SudokuStatus,
@@ -157,7 +162,7 @@ async function loadGame(code: string): Promise<Row | null> {
 const LOGIN_ERROR = "Bạn cần đăng nhập để chơi online.";
 
 /** Tạo phòng mới. Chủ phòng chọn độ khó và có bật đếm giờ hay không. */
-export async function createSudokuRoom(difficulty: SudokuDifficulty, timerEnabled: boolean): Promise<Result> {
+export async function createSudokuRoom(difficulty: SudokuDifficulty, timerEnabled: boolean, variant: SudokuVariant = "classic"): Promise<Result> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: LOGIN_ERROR };
   try {
@@ -172,6 +177,7 @@ export async function createSudokuRoom(difficulty: SudokuDifficulty, timerEnable
         hostUserId: user.id,
         hostName: (user.name || "Người chơi 1").slice(0, 30),
         difficulty: level,
+        variant: isSudokuVariant(variant) ? variant : "classic",
         timerEnabled: Boolean(timerEnabled),
         timeLimitSec: TIME_LIMIT_SEC[level],
       },
@@ -221,7 +227,8 @@ export async function getSudokuRoom(code: string): Promise<Result> {
 export async function updateSudokuRoomSettings(
   code: string,
   difficulty: SudokuDifficulty,
-  timerEnabled: boolean
+  timerEnabled: boolean,
+  variant?: SudokuVariant
 ): Promise<Result> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: LOGIN_ERROR };
@@ -230,10 +237,12 @@ export async function updateSudokuRoomSettings(
   if (game.hostUserId !== user.id) return { success: false, error: "Chỉ chủ phòng được đổi cài đặt." };
   if (game.status === "PLAYING") return { success: false, error: "Không thể đổi cài đặt khi đang thi đấu." };
   const level = isDifficulty(difficulty) ? difficulty : "medium";
-  const updated = await prisma.sudokuGame.update({
-    where: { id: game.id },
-    data: { difficulty: level, timerEnabled: Boolean(timerEnabled), timeLimitSec: TIME_LIMIT_SEC[level] },
+  await prisma.sudokuGame.updateMany({
+    where: { id: game.id, status: { not: "PLAYING" }, updatedAt: game.updatedAt },
+    data: { difficulty: level, timerEnabled: Boolean(timerEnabled), timeLimitSec: TIME_LIMIT_SEC[level],
+      ...(isSudokuVariant(variant) ? { variant } : {}) },
   });
+  const updated = (await prisma.sudokuGame.findUnique({ where: { id: game.id } }))!;
   return { success: true, game: toState(updated, user.id) };
 }
 
@@ -249,12 +258,14 @@ export async function startSudokuRound(code: string): Promise<Result> {
     if (game.status === "PLAYING") return { success: true, game: toState(game, user.id) };
 
     const level = isDifficulty(game.difficulty) ? game.difficulty : "medium";
-    const { puzzle, solution } = generatePuzzle(level);
+    const generated = game.variant === "killer" ? generateKillerPuzzle(level) : { ...generatePuzzle(level), cages: [] };
+    const { puzzle, solution, cages } = generated;
     await prisma.sudokuGame.updateMany({
-      where: { id: game.id, status: { not: "PLAYING" } },
+      where: { id: game.id, status: { not: "PLAYING" }, updatedAt: game.updatedAt },
       data: {
         puzzle,
         solution,
+        cages,
         hostValues: puzzle,
         guestValues: puzzle,
         hostMistakes: 0,
