@@ -26,7 +26,14 @@ const nextConfig: NextConfig = {
   // Vercel's Next.js builder expects the standard .next artifact directory.
   // Keep the non-synced directory only for local macOS development/builds.
   distDir: process.env.VERCEL === "1" ? ".next" : ".next.nosync",
-  serverExternalPackages: ["pdf-parse", "nodemailer", "exceljs"],
+  serverExternalPackages: ["pdf-parse", "nodemailer", "exceljs", "@resvg/resvg-js"],
+  // Cron gửi thư sinh nhật đọc phông và logo từ đĩa; phải kèm vào bản build của route.
+  outputFileTracingIncludes: {
+    "/api/cron/birthday-email": [
+      "./assets/fonts/DancingScript.ttf",
+      "./public/brand/creative-station-logo-email.png",
+    ],
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: "4.2mb",

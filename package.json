@@ -19,6 +19,7 @@
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
     "@prisma/client": "^6.19.3",
+    "@resvg/resvg-js": "^2.6.2",
     "@vercel/blob": "^2.8.2",
     "bcryptjs": "^3.0.3",
     "exceljs": "4.4.0",

@@ -3,9 +3,12 @@ import { FileDown, IdCard } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canManageHr, toDateInput } from "@/lib/employeeRecords";
+import { BIRTHDAY_TEST_EMAIL } from "@/lib/birthdayEmail";
 import Sidebar from "@/components/Sidebar";
 import HubTabs from "@/components/HubTabs";
 import {
+  BirthdayTestButton,
+  CreateEmployeeButton,
   EmployeeRecordTable,
   HrImportButton,
   HrManagerPicker,
@@ -89,7 +92,9 @@ export default async function HrPage() {
                 <FileDown size={17} aria-hidden="true" />
                 Tải file Excel hiện tại
               </a>
+              {user.email.toLowerCase() === BIRTHDAY_TEST_EMAIL && <BirthdayTestButton />}
               <HrImportButton />
+              <CreateEmployeeButton />
             </div>
           </div>
 

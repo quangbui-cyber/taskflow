@@ -1,16 +1,19 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
+import { useActionState, useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { FileDown, FileUp, Pencil, Plus, Search, TriangleAlert, X } from "lucide-react";
+import { Cake, Dices, FileDown, FileUp, Pencil, Plus, Search, TriangleAlert, UserPlus, X } from "lucide-react";
 import {
+  createEmployee,
   saveEmployeeRecord,
+  sendBirthdayTestEmail,
   setHrManagers,
   type EmployeeRecordState,
 } from "@/app/actions/employeeRecords";
 import Avatar from "@/components/Avatar";
 import { useActionFeedback, useInteraction } from "@/components/InteractionProvider";
+import { MIN_PASSWORD_LENGTH } from "@/lib/password";
 import {
   GENDERS,
   genderLabel,
@@ -210,11 +213,162 @@ function EditDialog({ row, onClose }: { row: EmployeeRow; onClose: () => void })
   );
 }
 
+function randomPassword() {
+  const alphabet = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  const bytes = new Uint32Array(10);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (value) => alphabet[value % alphabet.length]).join("");
+}
+
+/** HR/Admin tạo nhân sự mới: tài khoản đăng nhập kèm hồ sơ. */
+function CreateEmployeeDialog({ onClose }: { onClose: () => void }) {
+  const router = useRouter();
+  const [state, formAction, pending] = useActionState<EmployeeRecordState, FormData>(
+    createEmployee,
+    {}
+  );
+  const [password, setPassword] = useState("");
+  useActionFeedback(state);
+
+  useEffect(() => {
+    if (!state.success) return;
+    router.refresh();
+    onClose();
+  }, [onClose, router, state]);
+
+  return (
+    <Dialog title="Tạo mới" labelledBy="hr-create" onClose={onClose} busy={pending}>
+      <form action={formAction} className="grid gap-4 px-5 py-5 sm:grid-cols-2">
+        <label className="block">
+          <span className="tf-label">Họ tên</span>
+          <input name="fullName" required maxLength={120} autoFocus className="tf-field" />
+        </label>
+        <label className="block">
+          <span className="tf-label">Email đăng nhập</span>
+          <input
+            name="email"
+            type="email"
+            required
+            maxLength={200}
+            autoComplete="off"
+            placeholder="ten@creativestation.vn"
+            className="tf-field"
+          />
+        </label>
+        <div className="sm:col-span-2">
+          <span className="tf-label">Mật khẩu tạm</span>
+          <div className="flex gap-2">
+            <input
+              name="password"
+              required
+              minLength={MIN_PASSWORD_LENGTH}
+              autoComplete="new-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              className="tf-field"
+            />
+            <button
+              type="button"
+              className="tf-button-secondary shrink-0"
+              onClick={() => setPassword(randomPassword())}
+            >
+              <Dices size={16} aria-hidden="true" />
+              Tạo ngẫu nhiên
+            </button>
+          </div>
+        </div>
+
+        <div className="border-t border-zinc-100 sm:col-span-2" />
+
+        <label className="block">
+          <span className="tf-label">Ngày sinh</span>
+          <input type="date" name="dateOfBirth" className="tf-field" />
+        </label>
+        <label className="block">
+          <span className="tf-label">Giới tính</span>
+          <select name="gender" defaultValue="" className="tf-field">
+            <option value="">Chưa chọn</option>
+            {GENDERS.map((gender) => (
+              <option key={gender.key} value={gender.key}>
+                {gender.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="tf-label">Số CCCD</span>
+          <input name="idNumber" inputMode="numeric" maxLength={20} autoComplete="off" className="tf-field" />
+        </label>
+        <label className="block">
+          <span className="tf-label">Số điện thoại</span>
+          <input name="phone" type="tel" maxLength={20} autoComplete="off" className="tf-field" />
+        </label>
+        <label className="block sm:col-span-2">
+          <span className="tf-label">Địa chỉ</span>
+          <textarea name="address" maxLength={300} rows={2} className="tf-field resize-y leading-6" />
+        </label>
+        <label className="block">
+          <span className="tf-label">Ngày bắt đầu làm việc</span>
+          <input type="date" name="startDate" className="tf-field" />
+        </label>
+        <div className="flex items-end justify-end gap-2.5 sm:col-span-2">
+          <button type="button" className="tf-button-secondary" onClick={onClose} disabled={pending}>
+            Đóng
+          </button>
+          <button type="submit" className="tf-button-primary" disabled={pending} aria-busy={pending}>
+            {pending ? <span className="tf-spinner" aria-hidden="true" /> : null}
+            {pending ? "Đang tạo…" : "Tạo mới"}
+          </button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+export function CreateEmployeeButton() {
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  return (
+    <>
+      <button type="button" className="tf-button-primary !min-h-10 text-sm" onClick={() => setOpen(true)}>
+        <UserPlus size={17} aria-hidden="true" />
+        Tạo mới
+      </button>
+      {open && <CreateEmployeeDialog onClose={close} />}
+    </>
+  );
+}
+
 const OUTCOME_LABEL: Record<HrImportPreviewRow["outcome"], string> = {
   match: "Sẽ cập nhật",
   "no-account": "Chưa có tài khoản",
   left: "Đã nghỉ việc",
 };
+
+export function BirthdayTestButton() {
+  const { notify } = useInteraction();
+  const [pending, startTransition] = useTransition();
+  return (
+    <button
+      type="button"
+      className="tf-button-secondary !min-h-10 text-sm"
+      disabled={pending}
+      aria-busy={pending}
+      onClick={() =>
+        startTransition(async () => {
+          const result = await sendBirthdayTestEmail();
+          notify({
+            message: result.error ?? result.success ?? "Đã gửi.",
+            tone: result.error ? "error" : "success",
+          });
+        })
+      }
+    >
+      {pending ? <span className="tf-spinner" aria-hidden="true" /> : <Cake size={17} aria-hidden="true" />}
+      Gửi thử thư sinh nhật
+    </button>
+  );
+}
 
 export function HrImportButton() {
   const router = useRouter();

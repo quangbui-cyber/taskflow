@@ -17,6 +17,10 @@
       "schedule": "0 19 * * *"
     },
     {
+      "path": "/api/cron/birthday-email",
+      "schedule": "0 2 * * *"
+    },
+    {
       "path": "/api/cron/creative-drop",
       "schedule": "0 0 * * 1-5"
     }

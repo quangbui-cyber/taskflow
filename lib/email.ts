@@ -16,6 +16,8 @@ export type EmailMessage = {
   html: string;
   /** Đính kèm lời mời lịch (.ics) để Gmail/Outlook hiện nút thêm vào lịch */
   calendar?: { method: "REQUEST" | "CANCEL"; content: string };
+  /** Ảnh nhúng trong thư (tham chiếu bằng cid trong html), hiện ngay không cần "tải ảnh". */
+  inlineImages?: { cid: string; filename: string; content: Buffer; contentType: string }[];
 };
 
 let cachedTransport: Transporter | null = null;
@@ -93,6 +95,13 @@ export async function sendEmail(message: EmailMessage): Promise<EmailResult> {
       subject: message.subject,
       text: message.text,
       html: message.html,
+      attachments: message.inlineImages?.map((image) => ({
+        filename: image.filename,
+        content: image.content,
+        contentType: image.contentType,
+        cid: image.cid,
+        contentDisposition: "inline" as const,
+      })),
       icalEvent: message.calendar
         ? {
             method: message.calendar.method,

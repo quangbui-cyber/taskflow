@@ -5,6 +5,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   CalendarCheck,
+  Cake,
   CalendarClock,
   CalendarDays,
   CalendarX2,
@@ -63,6 +64,7 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   LEAVE_DECISION: CalendarDays,
   FINANCE_APPROVAL_REQUEST: FileText,
   FINANCE_APPROVAL_DECISION: FileText,
+  BIRTHDAY_GREETING: Cake,
 };
 
 function timeAgo(value: string): string {
