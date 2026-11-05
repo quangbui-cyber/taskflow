@@ -15,5 +15,6 @@ export const creativeHeading = Montserrat({
   display: "swap",
 });
 
-// Chữ nội dung bài viết dùng font mặc định của app (không tải thêm font từ Google lúc build).
-export const serifBody = { className: "font-sans" };
+// Chữ nội dung bài viết Góc Đọc: Literata. Font tự host (xem @font-face trong globals.css)
+// nên build không phải tải gì từ Google Fonts.
+export const serifBody = { className: "font-literata" };
