@@ -21,7 +21,7 @@ type InlineImage = NonNullable<EmailMessage["inlineImages"]>[number];
 export function buildBirthdayEmail(name: string, recipient: string): EmailMessage {
   const logo = emailLogo();
   const title = renderHandwriting(
-    [{ text: "Chúc mừng sinh nhật", size: 100, color: INK, bold: true }],
+    [{ text: "Chúc mừng sinh nhật", size: 84, color: INK, bold: true }],
     "middle"
   );
   const swash = renderSwash(INK, LIME, GREEN);
@@ -31,8 +31,8 @@ export function buildBirthdayEmail(name: string, recipient: string): EmailMessag
   );
   const signature = renderHandwriting(
     [
-      { text: "Thương mến,", size: 32, color: "#18181b", bold: true },
-      { text: "Cả nhà Ga", size: 44, color: GREEN, bold: true },
+      { text: "Thương mến,", size: 24, color: "#18181b", bold: true },
+      { text: "Cả nhà Ga", size: 32, color: GREEN, bold: true },
     ],
     "end"
   );
@@ -44,14 +44,14 @@ export function buildBirthdayEmail(name: string, recipient: string): EmailMessag
     { cid: "greeting@ga", filename: "greeting.png", ...greeting, contentType: "image/png", alt: `${name} thân mến,` },
     { cid: "sign@ga", filename: "sign.png", ...signature, contentType: "image/png", alt: "Thương mến, Cả nhà Ga" },
   ];
-  const img = (cid: string, maxWidth?: number) => {
+  const img = (cid: string, maxWidth?: number, margin = "0 auto") => {
     const image = images.find((item) => item.cid === cid)!;
     const width = maxWidth ? Math.min(image.width, maxWidth) : image.width;
-    return `<img src="cid:${cid}" alt="${escapeHtml(image.alt)}" width="${width}" style="display:block;margin:0 auto;border:0;width:${width}px;max-width:100%;height:auto">`;
+    return `<img src="cid:${cid}" alt="${escapeHtml(image.alt)}" width="${width}" style="display:block;margin:${margin};border:0;width:${width}px;max-width:100%;height:auto">`;
   };
 
   const paragraphs = [
-    "Chúc mừng sinh nhật bạn. Hôm nay, cả nhà Ga muốn gửi đến bạn những lời chúc ấm áp nhất.",
+    "Chúc mừng sinh nhật bạn.\nHôm nay, cả nhà Ga muốn gửi đến bạn những lời chúc ấm áp nhất.",
     "Cảm ơn bạn vì đã mang đến cho Ga sự tận tâm, những tiếng cười và cả sự tử tế trong từng ngày. Có bạn ở đây, Ga ấm áp hơn rất nhiều.",
     "Hôm nay, hãy cho phép mình chậm lại một chút, ăn một bữa thật ngon và ở bên những người bạn thương. Chúc bạn một tuổi mới thật nhiều sức khỏe, bình an và hạnh phúc.",
   ];
@@ -61,13 +61,13 @@ export function buildBirthdayEmail(name: string, recipient: string): EmailMessag
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5"><tr><td align="center" style="padding:16px 8px">
 <table role="presentation" width="580" cellpadding="0" cellspacing="0" style="width:100%;max-width:580px;background:#fffdf8;border-radius:16px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;color:#27272a">
 <tr><td align="center" style="padding:22px 28px 0">${img("logo@ga")}</td></tr>
-<tr><td align="center" style="padding:10px 20px 0">${img("title@ga", 420)}</td></tr>
+<tr><td align="center" style="padding:10px 20px 0">${img("title@ga", 360)}</td></tr>
 <tr><td align="center" style="padding:0 20px 0">${img("swash@ga", 360)}</td></tr>
-<tr><td align="center" style="padding:8px 28px 0">${img("greeting@ga", 240)}</td></tr>
-<tr><td align="center" style="padding:4px 28px 0;font-size:14px;line-height:23px;color:${TEXT}">
-${paragraphs.map((text) => `<p style="margin:9px 0">${escapeHtml(text)}</p>`).join("\n")}
+<tr><td align="left" style="padding:10px 40px 0">${img("greeting@ga", 240, "0 0 0 -8px")}</td></tr>
+<tr><td align="left" style="padding:4px 40px 0;font-size:14px;line-height:23px;color:${TEXT}">
+${paragraphs.map((text) => `<p style="margin:9px 0">${escapeHtml(text).replace(/\n/g, "<br>")}</p>`).join("\n")}
 </td></tr>
-<tr><td align="right" style="padding:6px 40px 16px"><div style="display:inline-block">${img("sign@ga", 170)}</div></td></tr>
+<tr><td align="right" style="padding:6px 40px 16px"><div style="display:inline-block">${img("sign@ga", 130)}</div></td></tr>
 <tr><td height="8" style="height:8px;line-height:8px;font-size:0;background:${LIME}">&nbsp;</td></tr>
 </table></td></tr></table></body></html>`;
 
@@ -81,7 +81,7 @@ ${paragraphs.map((text) => `<p style="margin:9px 0">${escapeHtml(text)}</p>`).jo
 
   return {
     to: [recipient],
-    subject: `Chúc mừng sinh nhật ${name} · Cả nhà Ga gửi bạn`,
+    subject: `Ga chúc mừng sinh nhật ${name}`,
     text,
     html,
     inlineImages: images.map(({ cid, filename, content, contentType }) => ({
