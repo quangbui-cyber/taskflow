@@ -703,10 +703,14 @@ model Meeting {
   recap         MeetingRecap?
   projectId     String? // họp tạo từ trang dự án: biên bản được lưu vào tài liệu dự án
   project       Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  // Họp lặp lại: các buổi cùng chuỗi chung seriesId; mỗi buổi vẫn là một cuộc họp riêng.
+  seriesId        String?
+  seriesFrequency String? // "daily" | "weekly" | "biweekly" | "monthly"
   cancelledAt   DateTime?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
+  @@index([seriesId, startAt])
   @@index([status, startAt])
   @@index([roomId, status, startAt])
   @@index([organizerId, startAt])

@@ -20,6 +20,12 @@ import GoogleMeetLinkButton from "@/components/GoogleMeetLinkButton";
 import { useActionFeedback } from "@/components/InteractionProvider";
 import PeoplePicker, { type PeoplePickerAvailability } from "@/components/PeoplePicker";
 import { ScheduleField } from "@/components/TemporalFields";
+import MeetingRecurrenceField, {
+  NO_RECURRENCE,
+  previewRecurrence,
+  seriesSubmitCount,
+  type RecurrenceValues,
+} from "@/components/MeetingRecurrenceField";
 import { formatHour, toDateInputVN } from "@/lib/dates";
 import {
   MEETING_DESCRIPTION_MAX,
@@ -198,6 +204,7 @@ export default function MeetingComposer({
       ? valuesFromMeeting(meeting)
       : { ...defaultValues(presetAttendeeIds), ...initialSlot }
   );
+  const [recurrence, setRecurrence] = useState<RecurrenceValues>(NO_RECURRENCE);
   const action = useMemo(
     () => (meeting ? updateMeeting.bind(null, meeting.id) : createMeeting),
     [meeting]
@@ -331,17 +338,28 @@ export default function MeetingComposer({
     if (!state.success) return;
     router.refresh();
     const frame = window.requestAnimationFrame(() => {
-      if (!meeting) setValues(defaultValues(presetRef.current));
+      if (!meeting) {
+        setValues(defaultValues(presetRef.current));
+        setRecurrence(NO_RECURRENCE);
+      }
       setOpen(false);
       onCloseRef.current?.();
     });
     return () => window.cancelAnimationFrame(frame);
   }, [meeting, router, state]);
 
+  const repeating = !meeting && recurrence.repeat !== "none";
+  const recurrencePreview = repeating ? previewRecurrence(values.date, recurrence) : null;
+  const recurrenceValid = !repeating || (recurrencePreview !== null && !("error" in recurrencePreview));
+  const seriesCount = repeating
+    ? seriesSubmitCount(values.date, recurrence, values.startTime, values.endTime, values.roomId, bookings)
+    : null;
+  // Chuỗi lặp lại tự bỏ qua buổi phòng bận, nên chỉ chặn khi buổi đầu là phòng bận ở lịch không lặp.
   const canSubmit =
     values.title.trim().length >= 2 &&
     timeValid &&
-    !selectedRoomClash;
+    recurrenceValid &&
+    (repeating ? (seriesCount ?? 0) > 0 : !selectedRoomClash);
   const dialogTitleId = meeting ? `meeting-dialog-${meeting.id}` : "meeting-dialog-new";
 
   return (
@@ -430,6 +448,18 @@ export default function MeetingComposer({
                     }))
                   }
                 />
+
+                {!meeting && (
+                  <MeetingRecurrenceField
+                    values={recurrence}
+                    onChange={setRecurrence}
+                    date={values.date}
+                    startTime={values.startTime}
+                    endTime={values.endTime}
+                    roomId={values.roomId}
+                    bookings={bookings}
+                  />
+                )}
 
                 <fieldset>
                   <legend className="tf-label">Phòng họp</legend>
@@ -660,7 +690,9 @@ export default function MeetingComposer({
                     ? "Đang lưu…"
                     : meeting
                       ? "Lưu thay đổi"
-                      : values.attendeeIds.length
+                      : repeating && seriesCount
+                        ? `Đặt ${seriesCount} buổi họp`
+                        : values.attendeeIds.length
                         ? "Đặt lịch và gửi lời mời"
                         : "Đặt lịch"}
                 </button>

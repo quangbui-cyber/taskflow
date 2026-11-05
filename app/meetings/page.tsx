@@ -1,10 +1,11 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
-import { CalendarClock, DoorOpen, FileText, NotebookPen, Video } from "lucide-react";
+import { CalendarClock, DoorOpen, FileText, NotebookPen, Repeat, Video } from "lucide-react";
 import Avatar from "@/components/Avatar";
 import {
   CancelMeetingButton,
   MeetingResponseButtons,
+  type SeriesOccurrence,
 } from "@/components/MeetingActions";
 import MeetingComposer from "@/components/MeetingComposer";
 import RoomCalendar, { type CalendarMeeting } from "@/components/RoomCalendar";
@@ -15,6 +16,7 @@ import { requireUser } from "@/lib/auth";
 import { meetingRecapsEnabled, meetingsEnabled } from "@/lib/features";
 import { formatHour, toDateInputVN } from "@/lib/dates";
 import { formatMeetingDay, meetingResponseLabel } from "@/lib/meetings";
+import { recurrenceLabel } from "@/lib/meetingRecurrence";
 import { calendarWeekRange, resolveCalendarWeek } from "@/lib/meetingCalendar";
 import { canManageMeetingRecap, meetingRecorderId } from "@/lib/meetingRecap";
 import { loadMeetingComposerData, type MeetingComposerData } from "@/lib/meetingComposerData";
@@ -71,6 +73,7 @@ function MeetingCard({
   now,
   composerProps,
   recapsEnabled,
+  seriesOccurrences,
 }: {
   meeting: MeetingRow;
   viewer: { id: string; role: string };
@@ -78,6 +81,7 @@ function MeetingCard({
   now: Date;
   composerProps: MeetingComposerData;
   recapsEnabled: boolean;
+  seriesOccurrences: SeriesOccurrence[];
 }) {
   const isOrganizer = meeting.organizerId === viewer.id;
   const myInvite = meeting.attendees.find((attendee) => attendee.userId === viewer.id);
@@ -128,6 +132,12 @@ function MeetingCard({
           }`}
         >
           {meeting.title}
+          {meeting.seriesFrequency && (
+            <span className="tf-badge ml-2 inline-flex items-center gap-1 bg-blue-50 align-middle text-blue-700">
+              <Repeat size={11} aria-hidden="true" />
+              {recurrenceLabel(meeting.seriesFrequency)}
+            </span>
+          )}
         </h3>
 
         <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-zinc-500">
@@ -248,6 +258,9 @@ function MeetingCard({
                 meetingId={meeting.id}
                 title={meeting.title}
                 roomName={meeting.room?.name ?? null}
+                startAt={meeting.startAt.toISOString()}
+                seriesFrequency={meeting.seriesFrequency}
+                occurrences={seriesOccurrences}
               />
             )}
           </div>
@@ -370,6 +383,29 @@ export default async function MeetingsPage({
     else days.push({ key, label: formatMeetingDay(meeting.startAt, now), meetings: [meeting] });
   }
 
+  // Các buổi của mỗi chuỗi lặp lại đang hiện, để hộp thoại huỷ cho thấy buổi nào bị ảnh hưởng.
+  const seriesIds = [
+    ...new Set(meetings.flatMap((meeting) => (meeting.seriesId ? [meeting.seriesId] : []))),
+  ];
+  const seriesRows = seriesIds.length
+    ? await prisma.meeting.findMany({
+        where: { seriesId: { in: seriesIds } },
+        orderBy: { startAt: "asc" },
+        select: { id: true, seriesId: true, startAt: true, endAt: true, status: true },
+      })
+    : [];
+  const seriesByMeeting = new Map<string, SeriesOccurrence[]>();
+  for (const row of seriesRows) {
+    const list = seriesByMeeting.get(row.seriesId!) ?? [];
+    list.push({
+      id: row.id,
+      startAt: row.startAt.toISOString(),
+      endAt: row.endAt.toISOString(),
+      status: row.status,
+    });
+    seriesByMeeting.set(row.seriesId!, list);
+  }
+
   const recapsEnabled = meetingRecapsEnabled();
   const calendarMeetings: CalendarMeeting[] = weekMeetings.map((meeting) => {
     const isMine =
@@ -476,6 +512,9 @@ export default async function MeetingsPage({
                         now={now}
                         composerProps={composerProps}
                         recapsEnabled={recapsEnabled}
+                        seriesOccurrences={
+                          meeting.seriesId ? (seriesByMeeting.get(meeting.seriesId) ?? []) : []
+                        }
                       />
                     ))}
                   </div>

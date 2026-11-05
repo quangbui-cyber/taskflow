@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { requireAdmin, requireUser } from "@/lib/auth";
@@ -14,6 +15,7 @@ import {
   isMeetingTimeSlot,
   vnDateTimeToUtc,
 } from "@/lib/meetings";
+import { expandRecurrence, parseRecurrenceForm, recurrenceLabel } from "@/lib/meetingRecurrence";
 import { notify } from "@/lib/notify";
 import { prisma } from "@/lib/prisma";
 import { parseMeetCode } from "@/lib/meetLink";
@@ -243,6 +245,28 @@ export async function createMeeting(
   const input = parseMeetingForm(formData, user.id);
   if ("error" in input) return input;
 
+  const rule = parseRecurrenceForm(
+    (name) => String(formData.get(name) ?? ""),
+    (name) => formData.getAll(name).map(String)
+  );
+  let occurrences = [{ startAt: input.startAt, endAt: input.endAt }];
+  if (rule && "error" in rule) return { error: rule.error };
+  if (rule) {
+    const expanded = expandRecurrence(String(formData.get("date") ?? ""), rule);
+    if ("error" in expanded) return { error: expanded.error };
+    const startTime = String(formData.get("startTime") ?? "");
+    const endTime = String(formData.get("endTime") ?? "");
+    occurrences = expanded.dates.flatMap((date) => {
+      const startAt = vnDateTimeToUtc(date, startTime);
+      const endAt = vnDateTimeToUtc(date, endTime);
+      return startAt && endAt ? [{ startAt, endAt }] : [];
+    });
+    if (occurrences[0].startAt.getTime() < Date.now()) {
+      return { error: "Không thể đặt lịch họp trong quá khứ." };
+    }
+  }
+  const seriesId = rule ? randomUUID() : null;
+
   // Họp tạo từ trang dự án: gắn vào dự án (người tạo phải là thành viên hoặc admin).
   const requestedProjectId = String(formData.get("projectId") ?? "").trim();
   let projectId: string | null = null;
@@ -271,42 +295,73 @@ export async function createMeeting(
     return { error: "Có người tham dự không còn hoạt động. Hãy chọn lại." };
   }
 
-  let meetingId: string;
+  const createdIds: string[] = [];
+  const skippedStarts: Date[] = [];
   try {
-    meetingId = await prisma.$transaction(async (tx) => {
-      if (input.roomId) await assertRoomFree(tx, { ...input, roomId: input.roomId });
-      const meeting = await tx.meeting.create({
-        data: {
-          title: input.title,
-          description: input.description,
-          startAt: input.startAt,
-          endAt: input.endAt,
-          roomId: input.roomId,
-          meetingUrl: input.meetingUrl,
-          meetCode: parseMeetCode(input.meetingUrl),
-          organizerId: user.id,
-          recorderId: input.recorderId,
-          projectId,
-          attendees: {
-            create: attendees.map((attendee) => ({ userId: attendee.id })),
-          },
-        },
-        select: { id: true },
-      });
-      return meeting.id;
-    });
+    await prisma.$transaction(
+      async (tx) => {
+        for (const occurrence of occurrences) {
+          if (input.roomId) {
+            try {
+              await assertRoomFree(tx, { ...occurrence, roomId: input.roomId });
+            } catch (error) {
+              // Lịch lặp lại: buổi nào phòng đã bận thì bỏ qua, các buổi còn lại vẫn đặt.
+              if (error instanceof MeetingConflictError && rule) {
+                skippedStarts.push(occurrence.startAt);
+                continue;
+              }
+              throw error;
+            }
+          }
+          const meeting = await tx.meeting.create({
+            data: {
+              title: input.title,
+              description: input.description,
+              startAt: occurrence.startAt,
+              endAt: occurrence.endAt,
+              roomId: input.roomId,
+              meetingUrl: input.meetingUrl,
+              meetCode: parseMeetCode(input.meetingUrl),
+              organizerId: user.id,
+              recorderId: input.recorderId,
+              projectId,
+              seriesId,
+              seriesFrequency: rule?.frequency ?? null,
+              attendees: {
+                create: attendees.map((attendee) => ({ userId: attendee.id })),
+              },
+            },
+            select: { id: true },
+          });
+          createdIds.push(meeting.id);
+        }
+        if (createdIds.length === 0) {
+          throw new MeetingConflictError(
+            "Phòng đã có lịch ở mọi buổi trong chuỗi. Hãy chọn phòng hoặc giờ khác."
+          );
+        }
+      },
+      { timeout: 30_000, maxWait: 10_000 }
+    );
   } catch (error) {
     if (error instanceof MeetingConflictError) return { error: error.message };
     throw error;
   }
+  const meetingId = createdIds[0];
+  const firstStart = occurrences.find(
+    (occurrence) => !skippedStarts.some((skipped) => skipped.getTime() === occurrence.startAt.getTime())
+  )!;
 
-  const when = formatMeetingWhen(input.startAt, input.endAt);
+  const when = formatMeetingWhen(firstStart.startAt, firstStart.endAt);
   const where = roomResult.room ? ` tại ${roomResult.room.name}` : "";
+  const seriesNote = rule
+    ? ` (họp ${recurrenceLabel(rule.frequency)?.toLowerCase()}, ${createdIds.length} buổi, buổi đầu)`
+    : "";
   await notify(
     attendees.map((attendee) => attendee.id),
     {
       type: "MEETING_INVITED",
-      message: `${user.name} mời bạn họp “${input.title}” lúc ${when}${where}`,
+      message: `${user.name} mời bạn họp “${input.title}”${seriesNote} lúc ${when}${where}`,
       meetingId,
     }
   );
@@ -317,15 +372,24 @@ export async function createMeeting(
       meetingId,
     });
   }
+  // Chuỗi lặp lại chỉ gửi một email mời (buổi đầu) để không làm ngập hộp thư.
   queueMeetingEmail(meetingId, "INVITED");
 
   const busy = await busyPeopleNames(
     attendees.map((attendee) => attendee.id),
-    input.startAt,
-    input.endAt,
+    firstStart.startAt,
+    firstStart.endAt,
     meetingId
   );
   revalidateMeetings();
+  if (rule) {
+    const skippedNote = skippedStarts.length
+      ? ` Bỏ qua ${skippedStarts.length} buổi vì phòng đã bận.`
+      : "";
+    return {
+      success: `Đã đặt ${createdIds.length} buổi họp${attendees.length ? " và gửi lời mời" : ""}.${skippedNote}${busyWarning(busy)}`,
+    };
+  }
   return {
     success: attendees.length
       ? `Đã đặt lịch họp và gửi lời mời.${busyWarning(busy)}`
@@ -541,6 +605,76 @@ export async function cancelMeeting(meetingId: string): Promise<MeetingActionSta
     success: meeting.room
       ? `Đã huỷ cuộc họp. ${meeting.room.name} đã trống trở lại.`
       : "Đã huỷ cuộc họp.",
+  };
+}
+
+export async function cancelMeetingSeries(
+  meetingId: string,
+  scope: "following" | "all"
+): Promise<MeetingActionState> {
+  if (!meetingsEnabled()) return { error: MEETINGS_DISABLED_MESSAGE };
+  const user = await requireUser();
+  const meeting = await prisma.meeting.findUnique({
+    where: { id: meetingId },
+    select: { title: true, seriesId: true, organizerId: true, startAt: true },
+  });
+  if (!meeting) return { error: "Không tìm thấy cuộc họp." };
+  if (meeting.organizerId !== user.id && user.role !== "ADMIN") {
+    return { error: "Chỉ người tổ chức mới được huỷ cuộc họp này." };
+  }
+  if (!meeting.seriesId) return cancelMeeting(meetingId);
+
+  const now = new Date();
+  // Chỉ huỷ các buổi chưa diễn ra; buổi đã họp giữ nguyên.
+  const targets = await prisma.meeting.findMany({
+    where: {
+      seriesId: meeting.seriesId,
+      status: "SCHEDULED",
+      endAt: { gte: now },
+      ...(scope === "following" ? { startAt: { gte: meeting.startAt } } : {}),
+    },
+    orderBy: { startAt: "asc" },
+    select: {
+      id: true,
+      attendees: { select: { userId: true } },
+      room: { select: { name: true } },
+    },
+  });
+  if (targets.length === 0) return { success: "Các buổi này đã được huỷ trước đó." };
+
+  const cancelled = await prisma.meeting.updateMany({
+    where: { id: { in: targets.map((target) => target.id) }, status: "SCHEDULED" },
+    data: { status: "CANCELLED", cancelledAt: now, sequence: { increment: 1 } },
+  });
+  if (cancelled.count === 0) return { success: "Các buổi này đã được huỷ trước đó." };
+
+  const recipientIds = new Set<string>([meeting.organizerId]);
+  for (const target of targets) {
+    for (const attendee of target.attendees) recipientIds.add(attendee.userId);
+  }
+  recipientIds.delete(user.id);
+  await notify([...recipientIds], {
+    type: "MEETING_CANCELLED",
+    message: `${user.name} đã huỷ ${cancelled.count} buổi của cuộc họp định kỳ “${meeting.title}”`,
+    meetingId: targets[0].id,
+  });
+
+  // Email mời chỉ gửi cho buổi đầu của chuỗi, nên chỉ buổi đó cần email huỷ.
+  const firstOfSeries = await prisma.meeting.findFirst({
+    where: { seriesId: meeting.seriesId },
+    orderBy: { startAt: "asc" },
+    select: { id: true },
+  });
+  if (firstOfSeries && targets.some((target) => target.id === firstOfSeries.id)) {
+    queueMeetingEmail(firstOfSeries.id, "CANCELLED");
+  }
+
+  revalidateMeetings();
+  const roomName = targets.find((target) => target.room)?.room?.name;
+  return {
+    success: roomName
+      ? `Đã huỷ ${cancelled.count} buổi họp. ${roomName} đã trống trở lại.`
+      : `Đã huỷ ${cancelled.count} buổi họp.`,
   };
 }
 

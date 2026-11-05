@@ -126,3 +126,65 @@ test("project members are preselected only when active, without the organizer or
   );
   assert.deepEqual(presetMeetingAttendees([], active, "organizer"), []);
 });
+
+import { expandRecurrence } from "../lib/meetingRecurrence";
+
+test("weekly series lists every matching weekday from the start date", () => {
+  const result = expandRecurrence("2026-11-09", {
+    frequency: "weekly",
+    weekdays: [0],
+    end: { type: "count", count: 4 },
+  });
+  assert.deepEqual("dates" in result && result.dates, [
+    "2026-11-09",
+    "2026-11-16",
+    "2026-11-23",
+    "2026-11-30",
+  ]);
+});
+
+test("daily series skips weekends and biweekly skips alternate weeks", () => {
+  const daily = expandRecurrence("2026-11-06", {
+    frequency: "daily",
+    weekdays: [],
+    end: { type: "count", count: 3 },
+  });
+  assert.deepEqual("dates" in daily && daily.dates, ["2026-11-06", "2026-11-09", "2026-11-10"]);
+
+  const biweekly = expandRecurrence("2026-11-09", {
+    frequency: "biweekly",
+    weekdays: [0],
+    end: { type: "date", until: "2026-12-07" },
+  });
+  assert.deepEqual("dates" in biweekly && biweekly.dates, ["2026-11-09", "2026-11-23", "2026-12-07"]);
+});
+
+test("monthly series keeps the day of month and skips months without it", () => {
+  const result = expandRecurrence("2026-01-31", {
+    frequency: "monthly",
+    weekdays: [],
+    end: { type: "count", count: 3 },
+  });
+  assert.deepEqual("dates" in result && result.dates, ["2026-01-31", "2026-03-31", "2026-05-31"]);
+});
+
+test("recurrence limits are enforced with Vietnamese errors", () => {
+  const tooMany = expandRecurrence("2026-11-09", {
+    frequency: "weekly",
+    weekdays: [0],
+    end: { type: "count", count: 99 },
+  });
+  assert.ok("error" in tooMany);
+  const tooLong = expandRecurrence("2026-11-09", {
+    frequency: "weekly",
+    weekdays: [0],
+    end: { type: "date", until: "2028-01-01" },
+  });
+  assert.ok("error" in tooLong);
+  const single = expandRecurrence("2026-11-09", {
+    frequency: "weekly",
+    weekdays: [0],
+    end: { type: "date", until: "2026-11-10" },
+  });
+  assert.ok("error" in single);
+});
