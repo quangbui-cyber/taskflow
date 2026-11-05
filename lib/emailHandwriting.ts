@@ -80,5 +80,5 @@ export function emailLogo() {
   cachedLogo ??= readFileSync(
     path.join(process.cwd(), "public", "brand", "creative-station-logo-email.png")
   );
-  return { content: cachedLogo, width: 190, height: 52 };
+  return { content: cachedLogo, width: 150, height: 41 };
 }

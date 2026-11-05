@@ -21,21 +21,18 @@ type InlineImage = NonNullable<EmailMessage["inlineImages"]>[number];
 export function buildBirthdayEmail(name: string, recipient: string): EmailMessage {
   const logo = emailLogo();
   const title = renderHandwriting(
-    [
-      { text: "Chúc mừng", size: 120, color: INK, bold: true },
-      { text: "sinh nhật", size: 120, color: INK, bold: true },
-    ],
+    [{ text: "Chúc mừng sinh nhật", size: 100, color: INK, bold: true }],
     "middle"
   );
   const swash = renderSwash(INK, LIME, GREEN);
   const greeting = renderHandwriting(
-    [{ text: `${name} thân mến,`, size: 42, color: "#18181b", bold: true }],
+    [{ text: `${name} thân mến,`, size: 38, color: "#18181b", bold: true }],
     "middle"
   );
   const signature = renderHandwriting(
     [
-      { text: "Thương mến,", size: 38, color: "#18181b", bold: true },
-      { text: "Cả nhà Ga", size: 52, color: GREEN, bold: true },
+      { text: "Thương mến,", size: 32, color: "#18181b", bold: true },
+      { text: "Cả nhà Ga", size: 44, color: GREEN, bold: true },
     ],
     "end"
   );
@@ -61,16 +58,16 @@ export function buildBirthdayEmail(name: string, recipient: string): EmailMessag
 
   const html = `<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f4f4f5">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5"><tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5"><tr><td align="center" style="padding:16px 8px">
 <table role="presentation" width="580" cellpadding="0" cellspacing="0" style="width:100%;max-width:580px;background:#fffdf8;border-radius:16px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;color:#27272a">
-<tr><td align="center" style="padding:34px 28px 0">${img("logo@ga")}</td></tr>
-<tr><td align="center" style="padding:26px 20px 0">${img("title@ga", 400)}</td></tr>
-<tr><td align="center" style="padding:2px 20px 0">${img("swash@ga", 420)}</td></tr>
-<tr><td align="center" style="padding:14px 28px 0">${img("greeting@ga", 320)}</td></tr>
-<tr><td align="center" style="padding:10px 46px 4px;font-size:15px;line-height:30px;color:${TEXT}">
-${paragraphs.map((text) => `<p style="margin:12px 0">${escapeHtml(text)}</p>`).join("\n")}
+<tr><td align="center" style="padding:22px 28px 0">${img("logo@ga")}</td></tr>
+<tr><td align="center" style="padding:10px 20px 0">${img("title@ga", 420)}</td></tr>
+<tr><td align="center" style="padding:0 20px 0">${img("swash@ga", 360)}</td></tr>
+<tr><td align="center" style="padding:8px 28px 0">${img("greeting@ga", 240)}</td></tr>
+<tr><td align="center" style="padding:4px 28px 0;font-size:14px;line-height:23px;color:${TEXT}">
+${paragraphs.map((text) => `<p style="margin:9px 0">${escapeHtml(text)}</p>`).join("\n")}
 </td></tr>
-<tr><td align="right" style="padding:16px 40px 30px"><div style="display:inline-block">${img("sign@ga", 240)}</div></td></tr>
+<tr><td align="right" style="padding:6px 40px 16px"><div style="display:inline-block">${img("sign@ga", 170)}</div></td></tr>
 <tr><td height="8" style="height:8px;line-height:8px;font-size:0;background:${LIME}">&nbsp;</td></tr>
 </table></td></tr></table></body></html>`;
 
