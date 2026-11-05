@@ -30,6 +30,10 @@ const SETTINGS_TABS = [
 
 type SettingsTab = (typeof SETTINGS_TABS)[number]["key"];
 
+// Không hiện trên thanh tab; vẫn mở được bằng đường dẫn nên kết nối Google Drive (và các
+// đường dẫn quay về sau khi cấp quyền) vẫn hoạt động.
+const HIDDEN_TABS: readonly SettingsTab[] = ["glossary", "storage"];
+
 function isSettingsTab(value: string | undefined): value is SettingsTab {
   return SETTINGS_TABS.some((tab) => tab.key === value);
 }
@@ -329,7 +333,9 @@ export default async function AdminPage({
             aria-label="Các mục cài đặt"
           >
             {SETTINGS_TABS.filter(
-              (tab) => (tab.key !== "rooms" && tab.key !== "glossary") || meetingsEnabled()
+              (tab) =>
+                !HIDDEN_TABS.includes(tab.key) &&
+                ((tab.key !== "rooms" && tab.key !== "glossary") || meetingsEnabled())
             ).map((tab) => (
               <Link
                 key={tab.key}
