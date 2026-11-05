@@ -333,7 +333,10 @@ export default function SudokuGame({ initialRoomCode = null }: SudokuGameProps) 
   const roomRound = useRef<string | null>(null);
   const roomStatus = useRef<string | null>(null);
   const applyRoom = useCallback((next: SudokuOnlineState) => {
-    setClockOffset(new Date(next.serverNow).getTime() - Date.now());
+    // Cập nhật `now` cùng lúc với độ lệch, nếu không đồng hồ nhảy lùi tới 0,5s mỗi lần đồng bộ.
+    const clientNow = Date.now();
+    setClockOffset(new Date(next.serverNow).getTime() - clientNow);
+    setNow(clientNow);
     if (next.startedAt !== roomRound.current) {
       // Ván mới: xoá ghi chú và ô sai của ván trước.
       roomRound.current = next.startedAt;
