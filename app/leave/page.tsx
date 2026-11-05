@@ -26,6 +26,7 @@ import {
   todayInVietnam,
 } from "@/lib/leave";
 import { loadLeaveManagers } from "@/lib/leaveData";
+import { canManageHr } from "@/lib/employeeRecords";
 
 
 type LeaveRow = {
@@ -123,6 +124,7 @@ export default async function LeavePage({
   );
   // Quản lý nghỉ phép và Admin xem được đơn của toàn công ty.
   const seesEveryone = isLeaveManager || isAdmin;
+  const seesUpcomingForEveryone = seesEveryone || canManageHr(user);
   // Thiết lập chỉ Admin thấy; báo cáo dành cho người xem được toàn công ty.
   const view =
     params.view === "settings" && isAdmin
@@ -585,13 +587,14 @@ export default async function LeavePage({
       include: { user: { select: { name: true } } },
       orderBy: { startDate: "asc" },
     }),
-    // Lịch nghỉ đã duyệt sắp tới: người xem toàn công ty thấy mọi người, quản lý thấy nhân viên mình.
+    // Lịch nghỉ đã duyệt sắp tới: chỉ nhân sự (HR, quản lý nghỉ phép, Admin) thấy
+    // mọi người; còn lại chỉ quản lý trực tiếp thấy nhân viên của mình.
     prisma.leaveRequest.findMany({
       where: {
         status: "APPROVED",
         endDate: { gte: today },
         userId: { not: user.id },
-        ...(seesEveryone ? {} : { user: { managerId: user.id } }),
+        ...(seesUpcomingForEveryone ? {} : { user: { managerId: user.id } }),
       },
       include: { user: { select: { name: true } } },
       orderBy: { startDate: "asc" },
