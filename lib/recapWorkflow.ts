@@ -4,6 +4,8 @@ import { newRecapSuggestions, readRecapSuggestions, toRecapActionView } from "./
 import { ownerOrNull, ownerData, ownerWhere, type WorkOwner } from "./workOwner";
 import { assertOwnerAccess, isValidAssignee } from "./taskAccess";
 import { canManageMeetingRecap } from "./meetingRecap";
+import { crmEnabled } from "./features";
+import { produceMeetingDrafts } from "./crm/touchpoints";
 
 export const recapActionViewInclude = {
   owner: { select: { id: true, name: true, avatarUrl: true } },
@@ -16,7 +18,7 @@ export async function lockRecap(tx: Prisma.TransactionClient, recapId: string) {
 }
 
 export async function publishRecap(db: PrismaClient, recapId: string, sentAt: Date) {
-  return db.$transaction(async (tx) => {
+  const publication = await db.$transaction(async (tx) => {
     await lockRecap(tx, recapId);
     const recap = await tx.meetingRecap.findUnique({
       where: { id: recapId },
@@ -25,8 +27,14 @@ export async function publishRecap(db: PrismaClient, recapId: string, sentAt: Da
     if (!recap || recap.status !== "READY" || !recap.content?.trim()) return null;
     const snapshot = { content: recap.content, actionItems: recap.actionItems.map(toRecapActionView) };
     await tx.meetingRecap.update({ where: { id: recapId }, data: { sentAt, publishedSnapshot: snapshot } });
-    return snapshot;
+    return { snapshot, meetingId: recap.meetingId };
   });
+  if (!publication) return null;
+  if (crmEnabled()) {
+    try { await produceMeetingDrafts(db, publication.meetingId, "RECAP"); }
+    catch { console.warn("CRM meeting draft could not be created after recap publication."); }
+  }
+  return publication.snapshot;
 }
 
 /** Commit one AI result without touching existing action rows or the published version. */
