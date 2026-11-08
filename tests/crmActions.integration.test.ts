@@ -4,6 +4,8 @@ import { test } from "node:test";
 import { updateClientProfile, changeClientPicOrTeam, saveBuyingUnit, scorePotential, confirmImportedClient } from "../lib/crm/clientService";
 import { createCrmTestDb, crmTestDatabaseUrl, seedCrmFixture, cleanupCrmFixture } from "./helpers/crmTestDb";
 import type { CrmActor } from "../lib/crm/policy";
+import { loadClientRevenue24m, loadClientList, loadClientProfile, CLIENT_PAGE_SIZE } from "../lib/crm/clientData";
+import { getCrmSettings } from "../lib/crm/settings";
 
 test("Client mutations enforce PIC/manager permissions, versions and client boundaries", { skip: !crmTestDatabaseUrl() }, async (t) => {
   const db = createCrmTestDb();
@@ -104,6 +106,64 @@ test("Client mutations enforce PIC/manager permissions, versions and client boun
     });
   } finally {
     await db.crmSetting.update({ where: { key: original.key }, data: { value: original.value as object, version: original.version, updatedById: original.updatedById } });
+    try { await cleanupCrmFixture(db, prefix); } finally { await db.$disconnect(); }
+  }
+});
+
+test("Client loaders aggregate recognized revenue, task owners, touchpoints and profile data", { skip: !crmTestDatabaseUrl() }, async () => {
+  const db = createCrmTestDb();
+  const prefix = randomUUID();
+  const now = new Date("2026-11-10T03:00:00Z");
+  try {
+    const f = await seedCrmFixture(db, prefix);
+    const noNext = await db.client.create({ data: { name: `${prefix} A no next`, picAccountId: f.picAccount.id, importStatus: "PENDING_PIC_CONFIRM" } });
+    const overdue = await db.client.create({ data: { name: `${prefix} Z overdue`, responsibleTeamId: f.team.id } });
+    await db.client.update({ where: { id: f.client.id }, data: { picAccountId: f.picAccount.id, potentialLevel: "HIGH", potentialScoredById: f.manager.id } });
+    const project = { name: `${prefix} Revenue`, category: "CLIENT" as const, ownerId: f.pic.id, clientId: f.client.id, accountId: f.picAccount.id, status: "DONE", type: "MICE", revenue: 100, onProcessAt: new Date("2026-09-01T03:00:00Z"), executionStartAt: new Date("2026-09-10T03:00:00Z") };
+    await db.project.create({ data: project });
+    await db.project.create({ data: { ...project, name: `${prefix} Old`, revenue: 900, onProcessAt: new Date("2023-01-01T00:00:00Z") } });
+    await db.project.create({ data: { ...project, name: `${prefix} Pending`, revenue: 800, status: "PENDING" } });
+    await db.project.create({ data: { ...project, name: `${prefix} Boundary excluded`, revenue: 700, onProcessAt: now } });
+    const next = await db.task.create({ data: { title: "Opportunity next step", creatorId: f.pic.id, assigneeId: f.assignee.id, opportunityId: f.opportunity.id, dueDate: new Date("2026-11-11T03:00:00Z") } });
+    await db.task.create({ data: { title: "Later direct task", creatorId: f.pic.id, clientId: f.client.id, dueDate: new Date("2026-11-12T03:00:00Z") } });
+    await db.task.create({ data: { title: "Cancelled earlier task", creatorId: f.pic.id, clientId: f.client.id, status: "CANCELLED", dueDate: new Date("2026-11-01T03:00:00Z") } });
+    await db.task.create({ data: { title: "Overdue task", creatorId: f.pic.id, clientId: overdue.id, dueDate: new Date("2026-11-09T03:00:00Z") } });
+    const confirmed = await db.touchpoint.create({ data: { clientId: f.client.id, kind: "CALL", occurredAt: new Date("2026-11-08T03:00:00Z"), status: "CONFIRMED", outcomeLevel: 2 } });
+    await db.touchpoint.create({ data: { clientId: f.client.id, kind: "MEETING", occurredAt: now, status: "DRAFT", outcomeLevel: 4 } });
+    const settings = await getCrmSettings(db);
+    settings.potentialScale = [{ key: "HIGH", label: "Cao" }];
+    settings.tierMatrix = { revenueBands: [{ key: "all", label: "All", minPercentile: 0 }], cells: { all: { HIGH: "A" } } };
+    assert.equal(CLIENT_PAGE_SIZE, 50);
+    assert.equal((await loadClientRevenue24m(db, now)).get(f.client.id), 100);
+    assert.equal((await loadClientRevenue24m(db, now, [noNext.id])).has(f.client.id), false);
+    const list = await loadClientList(db, { q: prefix }, settings, now);
+    assert.deepEqual(list.rows.map((client) => client.id), [noNext.id, overdue.id, f.client.id]);
+    const client = list.rows.find((row) => row.id === f.client.id)!;
+    assert.equal(client.tier, "A");
+    assert.equal(client.revenue24m, 100);
+    assert.equal(client.nextStep?.id, next.id);
+    assert.equal(client.lastTouchpoint?.id, confirmed.id);
+    assert.equal(client.openOpportunityCount, 1);
+    assert.equal(client.team?.id, f.team.id, "Team falls back to PIC's team");
+    assert.deepEqual((await loadClientList(db, { q: prefix, status: "OVERDUE" }, settings, now)).rows.map((row) => row.id), [overdue.id]);
+    assert.deepEqual((await loadClientList(db, { q: prefix, status: "NO_NEXT_STEP" }, settings, now)).rows.map((row) => row.id), [noNext.id]);
+    assert.deepEqual((await loadClientList(db, { q: prefix, status: "PENDING_PIC_CONFIRM", teamId: f.team.id }, settings, now)).rows.map((row) => row.id), [noNext.id]);
+    const page = await loadClientList(db, { q: prefix, take: 1, skip: 1 }, settings, now);
+    assert.equal(page.rows[0].id, overdue.id);
+    assert.equal(page.total, 3);
+    assert.equal(page.hasMore, true);
+    const profile = await loadClientProfile(db, f.client.id, settings, now);
+    assert.ok(profile);
+    assert.equal(profile.tier, "A");
+    assert.equal(profile.cadenceWeeks, 4);
+    assert.equal(profile.potentialScoredBy?.id, f.manager.id);
+    assert.equal(profile.opportunities[0].nextStep?.id, next.id);
+    assert.equal(profile.touchpoints[0].draft, true);
+    assert.equal(profile.persona.enoughData, true);
+    assert.equal(profile.persona.programHistory[0].code, "MICE");
+    assert.equal(profile.tasks.length, 2);
+    assert.equal(await loadClientProfile(db, "missing-client", settings, now), null);
+  } finally {
     try { await cleanupCrmFixture(db, prefix); } finally { await db.$disconnect(); }
   }
 });
