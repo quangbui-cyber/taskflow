@@ -49,7 +49,13 @@ export async function seedCrmFixture(db: PrismaClient, prefix: string) {
     const otherAccount = await tx.account.create({ data: { name: `${prefix} Other`, userId: manager.id, teamId: team.id } });
     await tx.salesTeam.update({ where: { id: team.id }, data: { leaderId: otherAccount.id } });
     const client = await tx.client.create({ data: { name: `${prefix} Client` } });
-    return { admin, manager, pic, assignee, outsider, team, picAccount, otherAccount, client };
+    const opportunity = await tx.opportunity.create({ data: {
+      name: `${prefix} Opportunity`, clientId: client.id, stage: "BIDDING", programTypeCode: "MICE",
+      expectedYear: 2026, demandSignal: "test", source: "OTHER", picAccountId: picAccount.id,
+      responsibleTeamId: team.id,
+    } });
+    const crmTeamManager = await tx.crmTeamManager.create({ data: { teamId: team.id, userId: manager.id } });
+    return { admin, manager, pic, assignee, outsider, team, picAccount, otherAccount, client, opportunity, crmTeamManager };
   });
 }
 
@@ -62,6 +68,14 @@ export async function cleanupCrmFixture(db: PrismaClient, prefix: string): Promi
     const projectIds = projects.map(({ id }) => id);
     await tx.projectMember.deleteMany({ where: { projectId: { in: projectIds } } });
     await tx.project.deleteMany({ where: { id: { in: projectIds } } });
+    const clients = await tx.client.findMany({ where: { name: { startsWith: `${prefix} ` } }, select: { id: true } });
+    const clientIds = clients.map(({ id }) => id);
+    await tx.meeting.deleteMany({ where: { OR: [{ organizerId: { in: userIds } }, { clientId: { in: clientIds } }] } });
+    await tx.task.deleteMany({ where: { OR: [{ creatorId: { in: userIds } }, { clientId: { in: clientIds } }] } });
+    await tx.projectFile.deleteMany({ where: { clientId: { in: clientIds } } });
+    await tx.touchpoint.deleteMany({ where: { clientId: { in: clientIds } } });
+    await tx.opportunity.deleteMany({ where: { clientId: { in: clientIds } } });
+    await tx.expectedEvent.deleteMany({ where: { clientId: { in: clientIds } } });
     await tx.client.deleteMany({ where: { name: { startsWith: `${prefix} ` } } });
     await tx.salesTeam.updateMany({ where: { name: `${prefix} Team` }, data: { leaderId: null } });
     await tx.account.deleteMany({ where: { team: { name: `${prefix} Team` } } });
