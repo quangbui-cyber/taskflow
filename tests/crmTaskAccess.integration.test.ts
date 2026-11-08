@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { assertOwnerAccess, assertTaskAccess, ownerParticipants, isValidAssignee } from "../lib/taskAccess";
+import { loadCrmOwnerTargets } from "../lib/crm/ownerTargets";
+import type { CrmActor } from "../lib/crm/policy";
 import { createCrmTestDb, crmTestDatabaseUrl, seedCrmFixture, cleanupCrmFixture } from "./helpers/crmTestDb";
 test("task owner access preserves membership and enforces CRM assignment", { skip: !crmTestDatabaseUrl() }, async () => {
   const db = createCrmTestDb(); const prefix = randomUUID();
@@ -29,4 +31,30 @@ test("task owner access preserves membership and enforces CRM assignment", { ski
     await db.opportunity.update({ where: { id: f.opportunity.id }, data: { outcome: "CS_DECLINED", closedAt: new Date() } });
     assert.ok("error" in await assertTaskAccess(db, f.pic, ot.id, "EDIT"));
   } finally { try { await cleanupCrmFixture(db, prefix); } finally { await db.$disconnect(); } }
+});
+
+test("CRM owner targets include only ASSIGN-authorized resources and disappear with flag off", { skip: !crmTestDatabaseUrl() }, async () => {
+  const db = createCrmTestDb(); const prefix = randomUUID();
+  const previousFlag = process.env.CRM_ENABLED;
+  try {
+    process.env.CRM_ENABLED = "true";
+    const f = await seedCrmFixture(db, prefix);
+    await db.client.update({ where: { id: f.client.id }, data: { picAccountId: f.picAccount.id } });
+    const base: CrmActor = { id: f.pic.id, role: f.pic.role, accountId: f.picAccount.id, managedTeamIds: [], isDataSteward: false };
+    const targets = await loadCrmOwnerTargets(db, base);
+    assert.ok(targets.clients.some((client) => client.id === f.client.id));
+    assert.ok(targets.opportunities.some((opportunity) => opportunity.id === f.opportunity.id));
+    const outsider = await loadCrmOwnerTargets(db, { ...base, id: f.outsider.id, accountId: null });
+    assert.equal(outsider.clients.some((client) => client.id === f.client.id), false);
+    assert.equal(outsider.opportunities.some((opportunity) => opportunity.id === f.opportunity.id), false);
+    const manager = await loadCrmOwnerTargets(db, { ...base, id: f.manager.id, managedTeamIds: [f.team.id] });
+    assert.ok(manager.clients.some((client) => client.id === f.client.id), "PIC team fallback matches policy");
+    await db.opportunity.update({ where: { id: f.opportunity.id }, data: { outcome: "CS_DECLINED" } });
+    assert.equal((await loadCrmOwnerTargets(db, base)).opportunities.some((opportunity) => opportunity.id === f.opportunity.id), false);
+    process.env.CRM_ENABLED = "false";
+    assert.deepEqual(await loadCrmOwnerTargets(db, base), { opportunities: [], clients: [] });
+  } finally {
+    if (previousFlag === undefined) delete process.env.CRM_ENABLED; else process.env.CRM_ENABLED = previousFlag;
+    try { await cleanupCrmFixture(db, prefix); } finally { await db.$disconnect(); }
+  }
 });
