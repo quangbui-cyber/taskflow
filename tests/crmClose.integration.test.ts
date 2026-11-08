@@ -81,6 +81,31 @@ test("Opportunity lifecycle is authorized, transactional, audited and terminal",
       assert.equal(await db.opportunityStageEvent.count({ where: { opportunityId, outcome: "CUSTOMER_CANCELLED" } }), 1);
     });
 
+    await t.test("Brief preserves a consolidated task still serving another active event", async () => {
+      const events = await Promise.all([3, 4].map((month) => db.expectedEvent.create({ data: { clientId: f.client.id, programTypeCode: "MICE", precision: "MONTH", year: 2027, month, source: "CLIENT_CONFIRMED" } })));
+      const shared = await db.task.create({ data: { title: "Consolidated reminder", creatorId: f.pic.id, clientId: f.client.id, crmKind: "EVENT_REMINDER" } });
+      for (const event of events) await db.reminderStep.create({ data: { expectedEventId: event.id, revision: 0, kind: "OFFSET", offsetDays: 30, dueDate: new Date("2027-02-01"), status: "OPEN", taskId: shared.id } });
+      const opportunityId = await open({ expectedEventId: events[0].id });
+      assert.ok("ok" in await advanceStage(db, pic, { opportunityId, expectedVersion: 0, to: "BRIEF", briefReceivedAt: new Date() }, effects));
+      assert.equal((await db.task.findUniqueOrThrow({ where: { id: shared.id } })).status, "TODO");
+      assert.equal(await db.reminderStep.count({ where: { expectedEventId: events[1].id, status: "OPEN" } }), 1);
+    });
+
+    await t.test("one event cannot acquire two Opportunities and invalid follow-up cannot partially close", async () => {
+      const event = await db.expectedEvent.create({ data: { clientId: f.client.id, programTypeCode: "MICE", precision: "MONTH", year: 2027, month: 5, source: "CLIENT_CONFIRMED" } });
+      const results = await Promise.all([1, 2].map(() => openOpportunity(db, pic, { ...openInput, expectedEventId: event.id })));
+      assert.equal(results.filter((result) => "ok" in result).length, 1);
+      assert.equal(await db.opportunity.count({ where: { expectedEventId: event.id } }), 1);
+      const opportunityId = await open();
+      const reason = await db.crmReason.findFirstOrThrow({ where: { group: "CANCELLED", requiresNote: false, active: true } });
+      await db.user.update({ where: { id: f.outsider.id }, data: { isActive: false } });
+      assert.ok("error" in await closeOpportunity(db, pic, { opportunityId, expectedVersion: 0, outcome: "CUSTOMER_CANCELLED", reasonId: reason.id, followUp: { title: "Follow up", assigneeId: f.outsider.id, dueDate: new Date() } }));
+      const row = await db.opportunity.findUniqueOrThrow({ where: { id: opportunityId } });
+      assert.equal(row.outcome, null);
+      assert.equal(row.version, 0);
+      assert.ok("error" in await closeOpportunity(db, outsider, { opportunityId, expectedVersion: 0, outcome: "CUSTOMER_CANCELLED", reasonId: reason.id }));
+    });
+
     await t.test("foreign owners/units/events and outsiders cannot mutate the lifecycle", async () => {
       assert.ok("error" in await openOpportunity(db, outsider, openInput));
       const otherClient = await db.client.create({ data: { name: `${prefix} Foreign client` } });
