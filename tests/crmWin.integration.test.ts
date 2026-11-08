@@ -45,6 +45,25 @@ test("win is atomic, preserves work and membership, and recognizes only the cont
     assert.equal(steps.length, 2); assert.ok(steps.every((step) => step.status === "CLOSED" && step.closedReason === "OPPORTUNITY_WON"));
     const again = await winOpportunity(db, actor, input);
     assert.ok("ok" in again); assert.equal(again.projectId, project.id); assert.equal(again.alreadyWon, true);
+    assert.ok("error" in await winOpportunity(db, { ...actor, id: f.outsider.id, role: "USER", accountId: null }, input));
+  } finally { await cleanupCrmFixture(db, prefix); await db.$disconnect(); }
+});
+
+test("a failure after Project creation rolls back the outcome, members and moved tasks", { skip: !crmTestDatabaseUrl() }, async () => {
+  const db = createCrmTestDb(); const prefix = `win-rollback-${randomUUID()}`;
+  try {
+    const f = await seedCrmFixture(db, prefix);
+    const actor = { id: f.pic.id, name: f.pic.name, role: f.pic.role, accountId: f.picAccount.id, managedTeamIds: [], isDataSteward: false };
+    const task = await db.task.create({ data: { title: `${prefix} Work`, creatorId: f.pic.id, opportunityId: f.opportunity.id } });
+    const faultDb = db.$extends({ query: { projectFile: { updateMany() { throw new Error("Injected handover failure"); } } } }) as unknown as typeof db;
+    const result = await winOpportunity(faultDb, actor, { opportunityId: f.opportunity.id, expectedVersion: 0, contractValue: 100, wonAt: new Date("2026-10-15T00:00:00+07:00"), projectName: `${prefix} Project` });
+    assert.ok("error" in result);
+    assert.equal(await db.project.count({ where: { sourceOpportunityId: f.opportunity.id } }), 0);
+    const opportunity = await db.opportunity.findUniqueOrThrow({ where: { id: f.opportunity.id } });
+    assert.equal(opportunity.outcome, null); assert.equal(opportunity.version, 0); assert.equal(opportunity.contractValue, null);
+    const unchanged = await db.task.findUniqueOrThrow({ where: { id: task.id } });
+    assert.equal(unchanged.opportunityId, f.opportunity.id); assert.equal(unchanged.projectId, null);
+    assert.equal(await db.opportunityStageEvent.count({ where: { opportunityId: f.opportunity.id } }), 0);
   } finally { await cleanupCrmFixture(db, prefix); await db.$disconnect(); }
 });
 
