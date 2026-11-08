@@ -1,4 +1,5 @@
 import { ECDH } from "node:crypto";
+import { ownerHref } from "./workOwner";
 
 export type PushRegistration = {
   endpoint: string;
@@ -37,7 +38,7 @@ export function parsePushRegistration(value: unknown): PushRegistration | null {
   }
 }
 
-export function notificationDestination(data: { type?: string; projectId?: string; taskId?: string; recognitionId?: string; meetingId?: string }) {
+export function notificationDestination(data: { type?: string; projectId?: string; taskId?: string; recognitionId?: string; meetingId?: string; clientId?: string; opportunityId?: string }) {
   if (data.type?.startsWith("LEAVE_")) return "/leave";
   if (data.type?.startsWith("FINANCE_") && data.projectId) {
     return `/projects/${encodeURIComponent(data.projectId)}?tab=finance`;
@@ -46,6 +47,8 @@ export function notificationDestination(data: { type?: string; projectId?: strin
   if (data.meetingId && data.type === "MEETING_RECAP_PROMPT") return `/meetings/${encodeURIComponent(data.meetingId)}/recap?record=1`;
   if (data.meetingId && data.type?.startsWith("MEETING_RECAP_")) return `/meetings/${encodeURIComponent(data.meetingId)}/recap`;
   if (data.meetingId) return `/meetings?focus=${encodeURIComponent(data.meetingId)}#meeting-${encodeURIComponent(data.meetingId)}`;
-  if (data.projectId) return `/projects/${encodeURIComponent(data.projectId)}${data.taskId ? `?task=${encodeURIComponent(data.taskId)}` : ""}`;
+  if (data.opportunityId) return ownerHref({ kind: "OPPORTUNITY", id: data.opportunityId }, data.taskId);
+  if (data.clientId) return ownerHref({ kind: "CLIENT", id: data.clientId }, data.taskId);
+  if (data.projectId) return ownerHref({ kind: "PROJECT", id: data.projectId }, data.taskId);
   return "/notifications";
 }
