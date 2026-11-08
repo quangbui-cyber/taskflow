@@ -29,12 +29,12 @@ async function findAccessibleFile(
     },
   });
 
-  if (!file) return null;
+  if (!file?.project) return null;
   const canAccess =
     userRole === "ADMIN" ||
     file.project.ownerId === userId ||
     file.project.members.length > 0;
-  return canAccess ? file : null;
+  return canAccess ? { ...file, project: file.project } : null;
 }
 
 export async function GET(

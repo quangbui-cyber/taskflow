@@ -26,6 +26,9 @@ import MeetingRecurrenceField, {
   seriesSubmitCount,
   type RecurrenceValues,
 } from "@/components/MeetingRecurrenceField";
+import MeetingOwnerPicker from "@/components/MeetingOwnerPicker";
+import type { PickerProject, PickerCrmTargets } from "@/lib/projectPickerGroups";
+import type { WorkOwner } from "@/lib/workOwner";
 import { formatHour, toDateInputVN } from "@/lib/dates";
 import {
   MEETING_DESCRIPTION_MAX,
@@ -149,6 +152,10 @@ export default function MeetingComposer({
   meeting,
   initialAttendeeIds,
   projectId,
+  owner,
+  ownerProjects = [],
+  crmTargets,
+  crmOn = false,
   triggerLabel = "Đặt lịch họp",
   triggerClassName = "tf-button-primary min-h-11 px-4",
   initialSlot,
@@ -170,6 +177,10 @@ export default function MeetingComposer({
   initialAttendeeIds?: string[];
   /** Tạo từ trang dự án: cuộc họp gắn với dự án, biên bản được lưu vào tài liệu dự án */
   projectId?: string;
+  owner?: WorkOwner;
+  ownerProjects?: PickerProject[];
+  crmTargets?: PickerCrmTargets;
+  crmOn?: boolean;
   /** Chữ trên nút mở form tạo mới */
   triggerLabel?: string;
   triggerClassName?: string;
@@ -182,6 +193,9 @@ export default function MeetingComposer({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(defaultOpen);
+  const fixedOwnerId = owner?.id ?? projectId;
+  const fixedOwnerKind = owner?.kind ?? "PROJECT";
+  const [meetingOwner, setMeetingOwner] = useState<WorkOwner | null>(() => fixedOwnerId ? { kind: fixedOwnerKind, id: fixedOwnerId } : null);
   // Chỉ chọn sẵn người mời được: đang hoạt động và không phải người tổ chức.
   const presetAttendeeIds = useMemo(
     () =>
@@ -341,12 +355,13 @@ export default function MeetingComposer({
       if (!meeting) {
         setValues(defaultValues(presetRef.current));
         setRecurrence(NO_RECURRENCE);
+        setMeetingOwner(fixedOwnerId ? { kind: fixedOwnerKind, id: fixedOwnerId } : null);
       }
       setOpen(false);
       onCloseRef.current?.();
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [meeting, router, state]);
+  }, [meeting, router, state, fixedOwnerId, fixedOwnerKind]);
 
   const repeating = !meeting && recurrence.repeat !== "none";
   const recurrencePreview = repeating ? previewRecurrence(values.date, recurrence) : null;
@@ -449,6 +464,8 @@ export default function MeetingComposer({
                   }
                 />
 
+                {!meeting && !fixedOwnerId && <MeetingOwnerPicker projects={ownerProjects} targets={crmTargets} crmOn={crmOn} value={meetingOwner} onChange={setMeetingOwner} disabled={pending} allowEmpty />}
+
                 {!meeting && (
                   <MeetingRecurrenceField
                     values={recurrence}
@@ -464,7 +481,11 @@ export default function MeetingComposer({
                 <fieldset>
                   <legend className="tf-label">Phòng họp</legend>
                   <input type="hidden" name="roomId" value={values.roomId} />
-                  {projectId && !meeting && <input type="hidden" name="projectId" value={projectId} />}
+                  {!meeting && meetingOwner && <>
+                    <input type="hidden" name="ownerKind" value={meetingOwner.kind} />
+                    <input type="hidden" name="ownerId" value={meetingOwner.id} />
+                    {meetingOwner.kind === "PROJECT" && <input type="hidden" name="projectId" value={meetingOwner.id} />}
+                  </>}
                   <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Phòng họp">
                     {[{ id: "", name: "Không dùng phòng", capacity: null }, ...rooms].map((room) => {
                       const clash = room.id ? roomClashes.get(room.id) : undefined;

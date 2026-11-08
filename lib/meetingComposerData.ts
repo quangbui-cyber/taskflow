@@ -7,6 +7,10 @@ import type {
 } from "@/components/MeetingComposer";
 import { isEmailConfigured } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
+import { crmEnabled } from "./features";
+import { loadCrmActor } from "./crm/actor";
+import { loadCrmOwnerTargets } from "./crm/ownerTargets";
+import type { PickerProject, PickerCrmTargets } from "./projectPickerGroups";
 
 export type MeetingComposerData = {
   people: MeetingPerson[];
@@ -15,14 +19,21 @@ export type MeetingComposerData = {
   bookings: RoomBooking[];
   schedules: PersonSchedule[];
   emailEnabled: boolean;
+  ownerProjects?: PickerProject[];
+  crmTargets?: PickerCrmTargets;
+  crmOn?: boolean;
 };
 
 /**
  * Dữ liệu cho form đặt lịch họp: người mời được, phòng, nhóm, phòng đã bị giữ
  * và lịch bận của từng người. Dùng chung cho trang Lịch họp và trang dự án.
  */
-export async function loadMeetingComposerData(now = new Date()) {
-  const [people, rooms, groups, upcomingMeetings] = await Promise.all([
+export async function loadMeetingComposerData(now = new Date(), user?: { id: string; role: string }) {
+  const ownerOptions = user ? Promise.all([
+    prisma.project.findMany({ where: user.role === "ADMIN" ? {} : { members: { some: { userId: user.id } } }, select: { id: true, name: true, status: true }, orderBy: { name: "asc" } }),
+    crmEnabled() ? loadCrmActor(user).then((actor) => loadCrmOwnerTargets(prisma, actor)) : Promise.resolve({ opportunities: [], clients: [] }),
+  ]).then(([ownerProjects, crmTargets]) => ({ ownerProjects, crmTargets, crmOn: crmEnabled() })) : Promise.resolve({ ownerProjects: [], crmTargets: { opportunities: [], clients: [] }, crmOn: false });
+  const [people, rooms, groups, upcomingMeetings, ownership] = await Promise.all([
     prisma.user.findMany({
       where: { isActive: true },
       select: { id: true, name: true, email: true, avatarUrl: true },
@@ -54,10 +65,12 @@ export async function loadMeetingComposerData(now = new Date()) {
       orderBy: { startAt: "asc" },
       take: 500,
     }),
+    ownerOptions,
   ]);
 
   const roomBookings = upcomingMeetings.filter((meeting) => meeting.roomId !== null);
   const composerProps: MeetingComposerData = {
+    ...ownership,
     people,
     rooms,
     groups: groups.map((group) => ({

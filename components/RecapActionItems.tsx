@@ -17,6 +17,7 @@ import { DateField } from "@/components/TemporalFields";
 import { useInteraction } from "@/components/InteractionProvider";
 import { STATUSES } from "@/lib/types";
 import { toDateInputVN } from "@/lib/dates";
+import { ownerHref, type WorkOwner } from "@/lib/workOwner";
 
 import type { RecapPerson, RecapActionItemView, RecapSuggestion } from "@/lib/recapPublication";
 export type { RecapActionItemView } from "@/lib/recapPublication";
@@ -108,6 +109,8 @@ export default function RecapActionItems({
   people,
   projects,
   defaultProjectId,
+  defaultOwner,
+  canCreateTasks = true,
   viewerId,
   canManage,
   editable,
@@ -118,6 +121,8 @@ export default function RecapActionItems({
   people: RecapPerson[];
   projects: { id: string; name: string }[];
   defaultProjectId: string | null;
+  defaultOwner?: WorkOwner;
+  canCreateTasks?: boolean;
   viewerId: string;
   canManage: boolean;
   editable: boolean;
@@ -159,7 +164,7 @@ export default function RecapActionItems({
     });
   }
 
-  function createTask(item: RecapActionItemView, target: string) {
+  function createTask(item: RecapActionItemView, target: string | WorkOwner) {
     run(() => createTaskFromRecapActionItem(item.id, target), () => setPickingFor(null));
   }
 
@@ -256,7 +261,7 @@ export default function RecapActionItems({
                   </span>
                   {item.task && (
                     <Link
-                      href={`/projects/${item.task.projectId}?task=${item.task.id}`}
+                      href={item.task.ownerKind && item.task.ownerId ? ownerHref({ kind: item.task.ownerKind, id: item.task.ownerId }, item.task.id) : item.task.projectId ? ownerHref({ kind: "PROJECT", id: item.task.projectId }, item.task.id) : "/tasks"}
                       className="inline-flex items-center gap-1 font-medium text-brand-700 hover:underline"
                     >
                       <SquareArrowOutUpRight size={13} aria-hidden="true" />
@@ -303,11 +308,11 @@ export default function RecapActionItems({
                   {!item.task && pickingFor !== item.id && (
                     <button
                       type="button"
-                      disabled={pending || projects.length === 0}
-                      title={projects.length === 0 ? "Bạn chưa thuộc dự án nào để tạo task" : "Tạo task trong dự án"}
+                      disabled={pending || !canCreateTasks || (!defaultOwner && projects.length === 0)}
+                      title={canCreateTasks ? "Tạo task tại nơi gắn cuộc họp" : "Bạn chưa có quyền tạo task tại nơi này"}
                       aria-label={`Tạo task: ${item.title}`}
                       onClick={() =>
-                        defaultProjectId ? createTask(item, defaultProjectId) : setPickingFor(item.id)
+                        defaultOwner ? createTask(item, defaultOwner) : defaultProjectId ? createTask(item, defaultProjectId) : setPickingFor(item.id)
                       }
                       className="tf-button-secondary !min-h-8 !px-2.5 text-xs"
                     >

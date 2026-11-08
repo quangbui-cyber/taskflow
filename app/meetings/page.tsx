@@ -358,7 +358,7 @@ export default async function MeetingsPage({
           take: 500,
         })
       : Promise.resolve([]),
-    loadMeetingComposerData(now),
+    loadMeetingComposerData(now, user),
     prisma.project.findMany({
       where: { members: { some: { userId: user.id } } },
       select: {

@@ -6,7 +6,10 @@ import MeetingProjectLink from "@/components/MeetingProjectLink";
 import RecapActionItems, { type RecapActionItemView } from "@/components/RecapActionItems";
 import Sidebar from "@/components/Sidebar";
 import { requireUser } from "@/lib/auth";
-import { meetingRecapsEnabled, meetingsEnabled } from "@/lib/features";
+import { meetingRecapsEnabled, meetingsEnabled, crmEnabled } from "@/lib/features";
+import { loadCrmOwnerTargets } from "@/lib/crm/ownerTargets";
+import { loadCrmActor } from "@/lib/crm/actor";
+import { ownerOrNull, ownerHref } from "@/lib/workOwner";
 import {
   canManageMeetingRecap,
   meetingRecorderId,
@@ -43,6 +46,8 @@ export default async function MeetingRecapPage({
     include: {
       room: { select: { name: true } },
       project: { select: { id: true, name: true } },
+      opportunity: { select: { id: true, name: true } },
+      client: { select: { id: true, name: true } },
       organizer: { select: { id: true, name: true, avatarUrl: true } },
       attendees: {
         select: { userId: true, user: { select: { id: true, name: true, avatarUrl: true } } },
@@ -55,7 +60,7 @@ export default async function MeetingRecapPage({
             orderBy: recapActionOrder,
             include: {
               owner: { select: { id: true, name: true, avatarUrl: true } },
-              task: { select: { id: true, status: true, projectId: true, project: { select: { name: true } } } },
+              task: { select: { id: true, status: true, projectId: true, opportunityId: true, clientId: true, project: { select: { name: true } }, opportunity: { select: { name: true } }, client: { select: { name: true } } } },
             },
           },
         },
@@ -81,6 +86,12 @@ export default async function MeetingRecapPage({
 
   const now = new Date();
   const canManage = canManageMeetingRecap(meeting, user);
+  const owner = ownerOrNull(meeting);
+  const ownerName = meeting.project?.name ?? meeting.opportunity?.name ?? meeting.client?.name;
+  const ownerLabel = owner?.kind === "CLIENT" ? "Khách hàng" : owner?.kind === "OPPORTUNITY" ? "Cơ hội" : "Dự án";
+  const crmOn = crmEnabled();
+  const crmTargets = canManage && crmOn ? await loadCrmOwnerTargets(prisma, await loadCrmActor(user)) : { opportunities: [], clients: [] };
+  const canCreateOwnerTask = !owner || (owner.kind === "PROJECT" ? user.role === "ADMIN" || sidebarProjects.some((project) => project.id === owner.id) : owner.kind === "CLIENT" ? crmTargets.clients.some((client) => client.id === owner.id) : crmTargets.opportunities.some((opportunity) => opportunity.id === owner.id));
   const recap = meeting.recap;
   const readable = canReadMeetingRecap(meeting, recap, user);
   const startBlock = recapStartBlockReason(meeting, user, now);
@@ -116,7 +127,7 @@ export default async function MeetingRecapPage({
       ]
     : [];
   const showContent = Boolean(readable && visibleContent?.trim());
-  const linkableProjects = canManage && !meeting.projectId
+  const linkableProjects = canManage && !owner
     ? user.role === "ADMIN"
       ? await prisma.project.findMany({ select: { id: true, name: true, status: true }, orderBy: { name: "asc" } })
       : sidebarProjects.map(({ id, name, status }) => ({ id, name, status }))
@@ -157,16 +168,15 @@ export default async function MeetingRecapPage({
                   {recorderName ? ` · ${recorderName} ghi biên bản` : ""}
                 </dd>
               </div>
-              {meeting.project && (
+              {owner && ownerName && (
                 <div className="flex items-center gap-2">
                   <FolderKanban size={15} className="shrink-0 text-zinc-400" aria-hidden="true" />
-                  <dt className="sr-only">Dự án</dt>
+                  <dt className="sr-only">{ownerLabel}</dt>
                   <dd>
-                    Dự án{" "}
-                    <Link href={`/projects/${meeting.project.id}`} className="font-medium text-brand-700 hover:underline">
-                      {meeting.project.name}
+                    {ownerLabel}{" "}
+                    <Link href={ownerHref(owner)} className="font-semibold text-brand-700 hover:underline">
+                      {ownerName}
                     </Link>{" "}
-                    · biên bản được lưu vào tài liệu dự án khi gửi
                   </dd>
                 </div>
               )}
@@ -178,8 +188,8 @@ export default async function MeetingRecapPage({
             </dl>
           </header>
 
-          {canManage && !meeting.projectId && (
-            <MeetingProjectLink meetingId={meeting.id} projects={linkableProjects} />
+          {canManage && !owner && (
+            <MeetingProjectLink meetingId={meeting.id} projects={linkableProjects} crmTargets={crmTargets} crmOn={crmOn} />
           )}
 
           <MeetingRecapPanel
@@ -212,6 +222,8 @@ export default async function MeetingRecapPage({
                   people={people}
                   projects={taskProjects}
                   defaultProjectId={meeting.project?.id ?? null}
+                  defaultOwner={owner ?? undefined}
+                  canCreateTasks={canCreateOwnerTask}
                   viewerId={user.id}
                   canManage={canManage}
                   editable={canManage && recap?.status === "READY"}
