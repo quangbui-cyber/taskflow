@@ -4,6 +4,7 @@ import test from "node:test";
 import { prisma } from "../lib/prisma";
 import { winOpportunity } from "../lib/crm/opportunityWin";
 import { handOverOpportunityDrive, retryOpportunityDriveHandovers } from "../lib/crm/opportunityDrive";
+import { GET as driveSync } from "../app/api/cron/drive-sync/route";
 import { cleanupCrmFixture, createCrmTestDb, crmTestDatabaseUrl, seedCrmFixture } from "./helpers/crmTestDb";
 
 test("offline win rekeys the same Drive folders idempotently; cron recovers unstarted handovers and leaves open Opportunities alone", { skip: !crmTestDatabaseUrl() }, async (t) => {
@@ -12,6 +13,7 @@ test("offline win rekeys the same Drive folders idempotently; cron recovers unst
   const db = createCrmTestDb(); const prefix = `win-drive-${randomUUID()}`;
   const folderIds = Array.from({ length: 9 }, (_, i) => `${prefix}-F${i}`);
   const network = t.mock.method(globalThis, "fetch", async () => { throw new Error("No provider requests allowed in offline Drive tests"); });
+  const oldFlag = process.env.CRM_ENABLED; const oldSecret = process.env.CRON_SECRET;
   try {
     assert.equal(await db.googleDriveConnection.count(), 0, "isolated DB must not have Drive credentials");
     const f = await seedCrmFixture(db, prefix);
@@ -39,8 +41,26 @@ test("offline win rekeys the same Drive folders idempotently; cron recovers unst
     assert.equal(retried.length, 3); assert.deepEqual(retried.map((row) => row.folderId).sort(), folderIds.slice(3, 6).sort());
     assert.equal(await db.driveFolder.count({ where: { key: { startsWith: `opportunity:${pending.id}` } } }), 0);
     assert.equal(await db.driveFolder.count({ where: { key: { startsWith: `opportunity:${open.id}` } } }), 3);
+    // Verify the real cron route's authorization and feature flag before its offline retry.
+    for (const [index, suffix] of ["", ":docs", ":tasks"].entries()) await db.driveFolder.update({ where: { folderId: folderIds[3 + index] }, data: { key: `opportunity:${pending.id}${suffix}` } });
+    process.env.CRON_SECRET = randomUUID(); process.env.CRM_ENABLED = "true";
+    assert.equal((await driveSync(new Request("http://localhost/api/cron/drive-sync"))).status, 401);
+    assert.equal(await db.driveFolder.count({ where: { key: { startsWith: `opportunity:${pending.id}` } } }), 3);
+    const request = () => new Request("http://localhost/api/cron/drive-sync", { headers: { authorization: `Bearer ${process.env.CRON_SECRET}` } });
+    process.env.CRM_ENABLED = "false";
+    const off = await driveSync(request()); assert.equal(off.status, 200);
+    assert.deepEqual((await off.json()).opportunityHandovers, { retried: 0 });
+    assert.equal(await db.driveFolder.count({ where: { key: { startsWith: `opportunity:${pending.id}` } } }), 3);
+    process.env.CRM_ENABLED = "true";
+    const on = await driveSync(request()); assert.equal(on.status, 200);
+    const response = await on.json(); assert.equal(response.skipped, true); assert.equal(response.recaps, null);
+    assert.ok(response.opportunityHandovers.retried >= 1);
+    assert.equal(await db.driveFolder.count({ where: { key: { startsWith: `opportunity:${pending.id}` } } }), 0);
+    assert.equal(await db.driveFolder.count({ where: { key: { startsWith: `opportunity:${open.id}` } } }), 3);
     assert.equal(network.mock.callCount(), 0);
   } finally {
+    if (oldFlag === undefined) delete process.env.CRM_ENABLED; else process.env.CRM_ENABLED = oldFlag;
+    if (oldSecret === undefined) delete process.env.CRON_SECRET; else process.env.CRON_SECRET = oldSecret;
     await db.driveFolder.deleteMany({ where: { folderId: { in: folderIds } } });
     await cleanupCrmFixture(db, prefix); await db.$disconnect(); await prisma.$disconnect();
   }

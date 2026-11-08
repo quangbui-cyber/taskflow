@@ -1,5 +1,7 @@
 import { nightlyDriveSync } from "@/lib/driveStorage";
 import { pushPendingMeetingRecaps } from "@/lib/recapDrive";
+import { crmEnabled } from "@/lib/features";
+import { retryOpportunityDriveHandovers } from "@/lib/crm/opportunityDrive";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,9 +15,14 @@ export async function GET(request: Request) {
   }
   try {
     const deadline = Date.now() + 270_000;
+    let opportunityHandovers = { retried: 0 };
+    if (crmEnabled()) {
+      try { opportunityHandovers = await retryOpportunityDriveHandovers(deadline - 120_000); }
+      catch { console.warn("CRM Drive handover retry failed."); }
+    }
     const result = await nightlyDriveSync(deadline - 60_000);
     const recaps = result.skipped ? null : await pushPendingMeetingRecaps(deadline);
-    return Response.json({ ...result, recaps });
+    return Response.json({ ...result, recaps, opportunityHandovers });
   } catch (error) {
     console.error("Drive nightly sync failed", error);
     return Response.json({ error: "Drive sync failed" }, { status: 500 });

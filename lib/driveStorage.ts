@@ -100,13 +100,17 @@ async function ensureFolder(key: string, name: string, parentId: string): Promis
   }
 }
 
+export async function projectYearFolder(createdAt: Date) {
+  const year = projectYear(createdAt);
+  return ensureFolder(driveFolderKeys.year(year), String(year), sharedDriveId());
+}
+
 async function projectFolder(projectId: string) {
   const project = await prisma.project.findUniqueOrThrow({
     where: { id: projectId },
     select: { id: true, name: true, createdAt: true },
   });
-  const year = projectYear(project.createdAt);
-  const yearId = await ensureFolder(driveFolderKeys.year(year), String(year), sharedDriveId());
+  const yearId = await projectYearFolder(project.createdAt);
   const folderId = await ensureFolder(driveFolderKeys.project(project.id), project.name, yearId);
   return folderId;
 }
