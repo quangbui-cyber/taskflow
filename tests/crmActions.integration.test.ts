@@ -144,6 +144,8 @@ test("Client loaders aggregate recognized revenue, task owners, touchpoints and 
     assert.equal(client.nextStep?.id, next.id);
     assert.equal(client.lastTouchpoint?.id, confirmed.id);
     assert.equal(client.openOpportunityCount, 1);
+    const tierFiltered = await loadClientList(db, { q: prefix, tier: "A" }, settings, now);
+    assert.equal(tierFiltered.inCareCount, 1, "Care subtitle follows the filtered result set");
     assert.equal(client.team?.id, f.team.id, "Team falls back to PIC's team");
     assert.deepEqual((await loadClientList(db, { q: prefix, status: "OVERDUE" }, settings, now)).rows.map((row) => row.id), [overdue.id]);
     assert.deepEqual((await loadClientList(db, { q: prefix, status: "NO_NEXT_STEP" }, settings, now)).rows.map((row) => row.id), [noNext.id]);

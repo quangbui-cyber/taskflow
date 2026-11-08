@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Building2, Plus, X } from "lucide-react";
 import { createProjectClient } from "@/app/actions/catalog";
 import { CLIENT_NAME_MAX_LENGTH } from "@/lib/clientCatalog";
@@ -11,12 +12,19 @@ export default function QuickClientCreator({
   suggestedName = "",
   disabled = false,
   onCreated,
+  openProfileOnCreate = false,
+  triggerLabel,
+  triggerClassName,
 }: {
   suggestedName?: string;
   disabled?: boolean;
-  onCreated: (client: ClientOption) => void;
+  onCreated?: (client: ClientOption) => void;
+  openProfileOnCreate?: boolean;
+  triggerLabel?: string;
+  triggerClassName?: string;
 }) {
   const { notify } = useInteraction();
+  const router = useRouter();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
@@ -57,7 +65,11 @@ export default function QuickClientCreator({
           return;
         }
 
-        onCreated(result.client);
+        onCreated?.(result.client);
+        if (openProfileOnCreate) {
+          router.push(`/crm/clients/${encodeURIComponent(result.client.id)}`);
+          router.refresh();
+        }
         notify({
           message: result.success ?? `Đã chọn Client "${result.client.name}".`,
           tone: "success",
@@ -79,10 +91,10 @@ export default function QuickClientCreator({
         type="button"
         disabled={disabled}
         onClick={openModal}
-        className="mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-[7px] px-2 text-xs font-medium text-brand-800 transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-50"
+        className={triggerClassName ?? "mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-[7px] px-2 text-xs font-medium text-brand-800 transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-50"}
       >
         <Plus size={14} aria-hidden="true" />
-        Tạo khách hàng mới
+        {triggerLabel ?? "Tạo khách hàng mới"}
       </button>
 
       {open && (
@@ -104,7 +116,7 @@ export default function QuickClientCreator({
             role="dialog"
             aria-modal="true"
             aria-labelledby="quick-client-title"
-            aria-describedby="quick-client-description"
+            aria-describedby={openProfileOnCreate ? undefined : "quick-client-description"}
             onClick={(event) => event.stopPropagation()}
             className="tf-modal-enter my-auto w-full max-w-md space-y-5 rounded-[10px] border border-zinc-200 bg-white p-5 shadow-xl sm:p-6"
           >
@@ -117,9 +129,9 @@ export default function QuickClientCreator({
                   <h2 id="quick-client-title" className="font-semibold text-zinc-900">
                     Tạo khách hàng mới
                   </h2>
-                  <p id="quick-client-description" className="mt-1 text-xs leading-5 text-zinc-500">
+                  {!openProfileOnCreate && <p id="quick-client-description" className="mt-1 text-xs leading-5 text-zinc-500">
                     Client mới sẽ được thêm vào danh mục và tự động chọn cho dự án này.
-                  </p>
+                  </p>}
                 </div>
               </div>
               <button

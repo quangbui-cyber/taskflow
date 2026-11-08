@@ -98,7 +98,7 @@ export async function loadClientList(db: Db, filters: ClientListFilters, setting
   }).sort((a, b) => Number(!!a.nextStep) - Number(!!b.nextStep) || (a.nextStep?.dueDate?.getTime() ?? Infinity) - (b.nextStep?.dueDate?.getTime() ?? Infinity) || a.name.localeCompare(b.name, "vi") || a.id.localeCompare(b.id));
   const skip = Number.isSafeInteger(filters.skip) ? Math.max(0, filters.skip!) : 0;
   const take = Number.isSafeInteger(filters.take) ? Math.max(1, filters.take!) : CLIENT_PAGE_SIZE;
-  return { rows: rows.slice(skip, skip + take), total: rows.length, inCareCount: allRows.filter((client) => client.picAccountId || client.openOpportunityCount || client.activeEventCount || client.importStatus).length, hasMore: skip + take < rows.length };
+  return { rows: rows.slice(skip, skip + take), total: rows.length, inCareCount: rows.filter((client) => client.picAccountId || client.openOpportunityCount || client.activeEventCount || client.importStatus).length, hasMore: skip + take < rows.length };
 }
 
 export async function loadClientProfile(db: Db, clientId: string, settings: CrmSettings, now: Date) {
