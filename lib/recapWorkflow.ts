@@ -103,7 +103,7 @@ export async function createLinkedRecapTask(
     const created = await tx.task.create({
       data: { title: item.title, description, ...ownerData(owner), creatorId, status: "TODO", priority: "MEDIUM",
         dueDate: item.dueDate, assigneeId, order: (last?.order ?? 0) + 1 },
-      select: { id: true, title: true, status: true, dueDate: true, assigneeId: true, assignee: { select: { name: true } } },
+      select: { id: true, title: true, status: true, dueDate: true, assigneeId: true, projectId: true, opportunityId: true, clientId: true, assignee: { select: { name: true } } },
     });
     await tx.meetingRecapActionItem.update({ where: { id: item.id }, data: { taskId: created.id } });
     return created;

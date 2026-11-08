@@ -2,9 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
-import { getMembership, requireUser } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { emailAppUrl } from "@/lib/email";
-import { MEETING_RECAPS_DISABLED_MESSAGE, meetingRecapsEnabled } from "@/lib/features";
+import { MEETING_RECAPS_DISABLED_MESSAGE, meetingRecapsEnabled, crmEnabled, CRM_DISABLED_MESSAGE } from "@/lib/features";
 import {
   RECAP_ACTION_ITEMS_MAX,
   RECAP_ACTION_TITLE_MAX,
@@ -30,9 +30,11 @@ import { notify } from "@/lib/notify";
 import { prisma } from "@/lib/prisma";
 import { createLinkedRecapTask, lockRecap, publishRecap, resolveRecapSuggestion } from "@/lib/recapWorkflow";
 import { readPublishedRecap } from "@/lib/recapPublication";
-import { attachMeetingProject } from "@/lib/recapProject";
-import { queueDrivePush } from "@/lib/driveStorage";
+import { attachMeetingOwner } from "@/lib/recapProject";
+import { queueOwnerDrivePush } from "@/lib/driveStorage";
 import { pushMeetingRecapToDriveSafe } from "@/lib/recapDrive";
+import { ownerOrNull, ownerOf, ownerNotificationFields, ownerRevalidatePaths, parseOwnerInput, type WorkOwner } from "@/lib/workOwner";
+import { assertOwnerAccess } from "@/lib/taskAccess";
 
 export type MeetingRecapActionState = { error?: string; success?: string };
 
@@ -51,20 +53,25 @@ function refresh(meetingId: string) {
 }
 
 export async function attachProjectToMeeting(meetingId: string, projectId: string): Promise<MeetingRecapActionState> {
+  return attachOwnerToMeeting(meetingId, "PROJECT", projectId);
+}
+
+export async function attachOwnerToMeeting(meetingId: string, ownerKind: string, ownerId: string): Promise<MeetingRecapActionState> {
   const user = await requireUser();
-  if (typeof meetingId !== "string" || typeof projectId !== "string" || !meetingId || !projectId) {
-    return { error: "Hãy chọn dự án để lưu trữ biên bản." };
-  }
-  const result = await attachMeetingProject(prisma, meetingId, projectId, user);
+  const owner = parseOwnerInput(ownerKind, ownerId);
+  if (typeof meetingId !== "string" || !meetingId || meetingId.length > 64 || !owner) return { error: "Hãy chọn nơi gắn cuộc họp." };
+  if (owner.kind !== "PROJECT" && !crmEnabled()) return { error: CRM_DISABLED_MESSAGE };
+  const result = await attachMeetingOwner(prisma, meetingId, owner, user);
   if ("error" in result) return { error: result.error };
-  if (result.archived) queueDrivePush(result.projectId);
-  // Biên bản đã vào tài liệu dự án: bỏ bản trong thư mục "Biên bản họp" (nếu có).
-  after(() => pushMeetingRecapToDriveSafe(meetingId));
+  if (result.archived) {
+    queueOwnerDrivePush(owner);
+    after(() => pushMeetingRecapToDriveSafe(meetingId));
+  }
   refresh(meetingId);
-  revalidatePath(`/projects/${result.projectId}`);
+  for (const path of ownerRevalidatePaths(owner)) revalidatePath(path);
   return { success: result.archived
-    ? `Đã gắn vào “${result.projectName}” và lưu biên bản vào tài liệu dự án.`
-    : `Đã gắn vào “${result.projectName}”. Biên bản sẽ được lưu khi bạn bấm gửi.` };
+    ? `Đã gắn vào “${result.ownerName}” và lưu biên bản.`
+    : `Đã gắn cuộc họp vào “${result.ownerName}”.` };
 }
 
 /** Viết lại biên bản từ bản chép lời đã có (không chép lời lại). */
@@ -226,6 +233,9 @@ function loadActionItem(itemId: string) {
               title: true,
               startAt: true,
               endAt: true,
+              projectId: true,
+              opportunityId: true,
+              clientId: true,
               organizerId: true,
               recorderId: true,
               attendees: { select: { userId: true } },
@@ -349,7 +359,7 @@ export async function deleteRecapActionItem(itemId: string): Promise<MeetingReca
  */
 export async function createTaskFromRecapActionItem(
   itemId: string,
-  projectId: string
+  target?: string | WorkOwner
 ): Promise<MeetingRecapActionState> {
   const user = await requireUser();
   const item = await loadActionItem(itemId);
@@ -361,36 +371,38 @@ export async function createTaskFromRecapActionItem(
   if (item.recap.status !== "READY") return { error: "Biên bản chưa sẵn sàng." };
   if (item.taskId) return { error: "Việc này đã có task rồi." };
 
-  const project = await prisma.project.findUnique({
-    where: { id: String(projectId ?? "") },
-    select: { id: true, name: true, googleChatSpaceName: true },
-  });
-  if (!project) return { error: "Hãy chọn dự án để tạo task." };
-  if (user.role !== "ADMIN" && !(await getMembership(project.id, user.id))) {
-    return { error: "Bạn không thuộc dự án này nên không tạo task ở đây được." };
-  }
+  const requested = typeof target === "string" ? parseOwnerInput("PROJECT", target) : target && typeof target === "object" ? parseOwnerInput(target.kind, target.id) : null;
+  const owner = ownerOrNull(meeting) ?? requested;
+  if (!owner) return { error: "Hãy chọn nơi tạo task." };
+  if (owner.kind !== "PROJECT" && !crmEnabled()) return { error: CRM_DISABLED_MESSAGE };
+  const access = await assertOwnerAccess(prisma, user, owner, "CREATE_TASK");
+  if ("error" in access) return access;
   let task: Awaited<ReturnType<typeof createLinkedRecapTask>>;
   try {
     task = await createLinkedRecapTask(
-      prisma, item.recap.id, item.id, project.id, user.id,
+      prisma, item.recap.id, item.id, owner, user.id,
       `Việc giao trong cuộc họp “${meeting.title}” (${formatMeetingWhen(meeting.startAt, meeting.endAt)}).`,
     );
   } catch (error) {
     if (error instanceof Error && error.message === "RECAP_BUSY") return { error: "Biên bản đang được xử lý. Hãy tải lại trang." };
     if (error instanceof Error && error.message === "ALREADY_LINKED") return { error: "Việc này đã có task rồi." };
+    if (error instanceof Error && error.message === "RECAP_FORBIDDEN") return { error: "Bạn không có quyền tạo task ở nơi này." };
     throw error;
   }
 
+  const actualOwner = ownerOf(task);
+  const project = actualOwner.kind === "PROJECT" ? await prisma.project.findUnique({ where: { id: actualOwner.id }, select: { id: true, name: true, googleChatSpaceName: true } }) : null;
+  const ownerName = project?.name ?? (actualOwner.kind === "OPPORTUNITY" ? (await prisma.opportunity.findUnique({ where: { id: actualOwner.id }, select: { name: true } }))?.name : actualOwner.kind === "CLIENT" ? (await prisma.client.findUnique({ where: { id: actualOwner.id }, select: { name: true } }))?.name : null) ?? "nơi đã chọn";
   const assigneeId = task.assigneeId;
   if (assigneeId && assigneeId !== user.id) {
     await notify([assigneeId], {
       type: "TASK_ASSIGNED",
       message: `${user.name} đã giao cho bạn task “${task.title}” (từ biên bản họp “${meeting.title}”)`,
       taskId: task.id,
-      projectId: project.id,
+      ...ownerNotificationFields(actualOwner),
     });
   }
-  if (hasProjectChat(project)) {
+  if (project && hasProjectChat(project)) {
     const base = emailAppUrl();
     await sendProjectChat(
       project,
@@ -405,13 +417,13 @@ export async function createTaskFromRecapActionItem(
   }
 
   refresh(meeting.id);
-  revalidatePath(`/projects/${project.id}`);
+  for (const path of ownerRevalidatePaths(actualOwner)) revalidatePath(path);
   revalidatePath("/");
   return {
     success:
       item.ownerId && !assigneeId
-        ? `Đã tạo task trong “${project.name}”. Người phụ trách không thuộc dự án nên task chưa giao cho ai.`
-        : `Đã tạo task trong “${project.name}”.`,
+        ? `Đã tạo task trong “${ownerName}”. Người phụ trách không còn phù hợp nên task chưa giao cho ai.`
+        : `Đã tạo task trong “${ownerName}”.`,
   };
 }
 

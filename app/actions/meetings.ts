@@ -4,7 +4,9 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { requireAdmin, requireUser } from "@/lib/auth";
-import { MEETINGS_DISABLED_MESSAGE, meetingsEnabled } from "@/lib/features";
+import { MEETINGS_DISABLED_MESSAGE, meetingsEnabled, crmEnabled, CRM_DISABLED_MESSAGE } from "@/lib/features";
+import { ownerData, ownerRevalidatePaths, parseOwnerInput, type WorkOwner } from "@/lib/workOwner";
+import { assertOwnerAccess } from "@/lib/taskAccess";
 import { sendMeetingEmail, type MeetingMailKind } from "@/lib/meetingMail";
 import {
   MEETING_DESCRIPTION_MAX,
@@ -267,23 +269,20 @@ export async function createMeeting(
   }
   const seriesId = rule ? randomUUID() : null;
 
-  // Họp tạo từ trang dự án: gắn vào dự án (người tạo phải là thành viên hoặc admin).
+  // Explicit owner fields take precedence; legacy Project forms remain supported.
   const requestedProjectId = String(formData.get("projectId") ?? "").trim();
-  let projectId: string | null = null;
-  if (requestedProjectId) {
-    const canUseProject =
-      user.role === "ADMIN" ||
-      Boolean(
-        await prisma.projectMember.findFirst({
-          where: { projectId: requestedProjectId, userId: user.id },
-          select: { id: true },
-        })
-      );
-    const project = canUseProject
-      ? await prisma.project.findUnique({ where: { id: requestedProjectId }, select: { id: true } })
-      : null;
-    if (!project) return { error: "Bạn không có quyền tạo cuộc họp cho dự án này." };
-    projectId = project.id;
+  let owner: WorkOwner | null = null;
+  if (formData.has("ownerKind") || formData.has("ownerId")) {
+    owner = parseOwnerInput(formData.get("ownerKind"), formData.get("ownerId"));
+    if (!owner) return { error: "Chọn nơi gắn cuộc họp hợp lệ." };
+  } else if (requestedProjectId) {
+    owner = parseOwnerInput("PROJECT", requestedProjectId);
+    if (!owner) return { error: "Chọn dự án hợp lệ." };
+  }
+  if (owner) {
+    if (owner.kind !== "PROJECT" && !crmEnabled()) return { error: CRM_DISABLED_MESSAGE };
+    const access = await assertOwnerAccess(prisma, user, owner, "CREATE_TASK");
+    if ("error" in access) return access;
   }
 
   const [roomResult, attendees] = await Promise.all([
@@ -300,6 +299,10 @@ export async function createMeeting(
   try {
     await prisma.$transaction(
       async (tx) => {
+        if (owner) {
+          const access = await assertOwnerAccess(tx, user, owner, "CREATE_TASK");
+          if ("error" in access) throw new MeetingConflictError(access.error);
+        }
         for (const occurrence of occurrences) {
           if (input.roomId) {
             try {
@@ -324,7 +327,7 @@ export async function createMeeting(
               meetCode: parseMeetCode(input.meetingUrl),
               organizerId: user.id,
               recorderId: input.recorderId,
-              projectId,
+              ...(owner ? ownerData(owner) : {}),
               seriesId,
               seriesFrequency: rule?.frequency ?? null,
               attendees: {
@@ -374,6 +377,7 @@ export async function createMeeting(
   }
   // Chuỗi lặp lại chỉ gửi một email mời (buổi đầu) để không làm ngập hộp thư.
   queueMeetingEmail(meetingId, "INVITED");
+  if (owner) for (const path of ownerRevalidatePaths(owner)) revalidatePath(path);
 
   const busy = await busyPeopleNames(
     attendees.map((attendee) => attendee.id),
