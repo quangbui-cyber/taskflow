@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { ArrowRight, CalendarDays } from "lucide-react";
-import { projectStatusColor, STATUSES } from "@/lib/types";
+import { ArrowRight, CalendarDays, Building2, Target } from "lucide-react";
+import { taskStatusLabel, isClosedTaskStatus } from "@/lib/types";
+import type { TaskOwnerDisplay } from "@/lib/taskQueries";
+import { ownerHref } from "@/lib/workOwner";
 import { formatDue, isOverdue } from "@/lib/dates";
 
 const STATUS_BADGE: Record<string, string> = {
@@ -15,46 +17,45 @@ export type TaskListItemData = {
   status: string;
   priority: string;
   dueDate: Date | null;
-  project: { id: string; name: string; status: string };
+  owner: TaskOwnerDisplay;
   personLabel?: string;
 };
 
 export default function TaskListItem({ task }: { task: TaskListItemData }) {
-  const statusLabel =
-    STATUSES.find((status) => status.key === task.status)?.label ?? task.status;
+  const statusLabel = taskStatusLabel(task.status);
   const overdue =
-    task.dueDate && task.status !== "DONE" && isOverdue(task.dueDate);
+    task.dueDate && !isClosedTaskStatus(task.status) && isOverdue(task.dueDate);
 
   return (
     <Link
-      href={`/projects/${task.project.id}?task=${task.id}`}
-      aria-label={`Xem công việc ${task.title} trong dự án ${task.project.name}`}
+      href={ownerHref(task.owner, task.id)}
+      aria-label={`Xem công việc ${task.title} · ${task.owner.name}`}
       title="Mở chi tiết công việc"
       className="group grid min-h-[72px] grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-zinc-200 px-1 py-3 transition-colors last:border-b-0 hover:bg-zinc-50/80 focus-visible:rounded-[7px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/40 sm:px-3 xl:grid-cols-[minmax(0,1fr)_auto_auto]"
     >
       <div className="flex min-w-0 items-center gap-3">
-        <span
+        {task.owner.kind === "CLIENT" ? <Building2 size={14} className="shrink-0 text-zinc-500" aria-hidden="true" /> : task.owner.kind === "OPPORTUNITY" ? <Target size={14} className="shrink-0 text-zinc-500" aria-hidden="true" /> : <span
           className="h-2.5 w-2.5 shrink-0 rounded-full"
           style={{
             backgroundColor: overdue
               ? "#ef4444"
-              : projectStatusColor(task.project.status),
+              : task.owner.color ?? "#71717a",
           }}
           aria-hidden="true"
-        />
+        />}
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-zinc-800 group-hover:text-brand-700">
             {task.title}
           </p>
           <p className="mt-1 truncate text-xs text-zinc-400">
-            {task.project.name}
+            {task.owner.kind === "OPPORTUNITY" ? "Cơ hội · " : ""}{task.owner.name}
             {task.personLabel ? ` · ${task.personLabel}` : ""}
           </p>
           <div className="mt-1.5 flex min-w-0 items-center gap-2 xl:hidden">
             {task.dueDate && (
               <span
                 className={`inline-flex min-w-0 items-center gap-1 text-[11px] ${
-                  overdue ? "font-medium text-red-600" : "text-zinc-500"
+                  overdue ? "font-normal text-red-600" : "text-zinc-500"
                 }`}
               >
                 <CalendarDays size={13} strokeWidth={1.8} aria-hidden="true" />
@@ -76,7 +77,7 @@ export default function TaskListItem({ task }: { task: TaskListItemData }) {
         {task.dueDate && (
           <span
             className={`inline-flex items-center gap-1.5 text-xs ${
-              overdue ? "font-medium text-red-600" : "text-zinc-500"
+              overdue ? "font-normal text-red-600" : "text-zinc-500"
             }`}
           >
             <CalendarDays size={15} strokeWidth={1.8} aria-hidden="true" />
@@ -88,7 +89,7 @@ export default function TaskListItem({ task }: { task: TaskListItemData }) {
         </span>
       </div>
 
-      <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-zinc-400 transition-colors group-hover:text-brand-700">
+      <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-normal text-zinc-400 transition-colors group-hover:text-brand-700">
         <span className="hidden whitespace-nowrap sm:inline">Xem công việc</span>
         <ArrowRight
           size={16}

@@ -17,8 +17,10 @@ import TaskListItem, { type TaskListItemData } from "@/components/TaskListItem";
 import DashboardSort from "@/components/DashboardSort";
 import PerformanceBar from "@/components/PerformanceBar";
 import { computePerf } from "@/lib/performance";
+import { myOpenTasksWhere, assignedByMeOpenWhere, openTaskOwnerScope, taskOwnerSelect, toTaskOwnerDisplay, type TaskOwnerRow } from "@/lib/taskQueries";
 import {
-  ARCHIVED_PROJECT_STATUS_KEYS,
+  OPEN_TASK_STATUS_FILTER,
+  isClosedTaskStatus,
   formatVND,
   isArchivedProjectStatus,
 } from "@/lib/types";
@@ -77,7 +79,9 @@ export default async function DashboardPage({
       : "overview";
 
   const taskInclude = {
-    project: { select: { id: true, name: true, color: true, status: true } },
+    project: taskOwnerSelect.project,
+    opportunity: taskOwnerSelect.opportunity,
+    client: taskOwnerSelect.client,
     assignee: { select: { name: true } },
     creator: { select: { name: true } },
   } as const;
@@ -95,39 +99,20 @@ export default async function DashboardPage({
       orderBy: { createdAt: "desc" },
     }),
     prisma.task.findMany({
-      where: {
-        assigneeId: user.id,
-        status: { not: "DONE" },
-        project: {
-          status: { notIn: [...ARCHIVED_PROJECT_STATUS_KEYS] },
-          members: { some: { userId: user.id } },
-        },
-      },
+      where: myOpenTasksWhere(user.id),
       include: taskInclude,
       orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }],
     }),
     prisma.task.findMany({
-      where: {
-        creatorId: user.id,
-        status: { not: "DONE" },
-        assigneeId: { not: null },
-        NOT: { assigneeId: user.id },
-        project: {
-          status: { notIn: [...ARCHIVED_PROJECT_STATUS_KEYS] },
-          members: { some: { userId: user.id } },
-        },
-      },
+      where: assignedByMeOpenWhere(user.id),
       include: taskInclude,
       orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }],
     }),
     prisma.task.findMany({
       where: {
         followers: { some: { userId: user.id } },
-        status: { not: "DONE" },
-        project: {
-          status: { notIn: [...ARCHIVED_PROJECT_STATUS_KEYS] },
-          members: { some: { userId: user.id } },
-        },
+        status: OPEN_TASK_STATUS_FILTER,
+        AND: [openTaskOwnerScope(user.id)],
       },
       include: taskInclude,
       orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }],
@@ -141,9 +126,8 @@ export default async function DashboardPage({
         avatarUrl: true,
         assignedTasks: {
           where: {
-            project: {
-              status: { notIn: [...ARCHIVED_PROJECT_STATUS_KEYS] },
-            },
+            AND: [openTaskOwnerScope(user.id)],
+            status: { not: "CANCELLED" },
           },
           include: taskInclude,
           orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }],
@@ -169,12 +153,12 @@ export default async function DashboardPage({
         ]
       : DASHBOARD_VIEWS;
 
-  const sortTasks = <T extends { project: { name: string }; dueDate: Date | null }>(
+  const sortTasks = <T extends TaskOwnerRow & { dueDate: Date | null }>(
     tasks: T[]
   ) =>
     [...tasks].sort((a, b) => {
       if (sort === "project") {
-        return a.project.name.localeCompare(b.project.name, "vi");
+        return toTaskOwnerDisplay(a).name.localeCompare(toTaskOwnerDisplay(b).name, "vi");
       }
       if (!a.dueDate) return 1;
       if (!b.dueDate) return -1;
@@ -193,7 +177,7 @@ export default async function DashboardPage({
   const visibleReports = directReports
     .map((report) => {
       const tasks = sortTasks(report.assignedTasks);
-      const openTasks = tasks.filter((task) => task.status !== "DONE");
+      const openTasks = tasks.filter((task) => !isClosedTaskStatus(task.status));
       const completedTasks = tasks.filter((task) => task.status === "DONE");
       return {
         ...report,
@@ -255,7 +239,7 @@ export default async function DashboardPage({
     status: task.status,
     priority: task.priority,
     dueDate: task.dueDate,
-    project: task.project,
+    owner: toTaskOwnerDisplay(task),
     personLabel: person,
   });
 
