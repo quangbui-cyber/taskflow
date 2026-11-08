@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { assertTaskAccess } from "./taskAccess";
 
 export const TASK_FILE_KINDS = ["BRIEF", "RESULT"] as const;
 
@@ -15,29 +16,7 @@ export async function findAccessibleTask(
   taskId: string,
   user: { id: string; role: string }
 ) {
-  const task = await prisma.task.findUnique({
-    where: { id: taskId },
-    select: {
-      id: true,
-      title: true,
-      projectId: true,
-      creatorId: true,
-      assigneeId: true,
-      project: {
-        select: {
-          name: true,
-          ownerId: true,
-          members: {
-            where: { userId: user.id },
-            select: { id: true },
-            take: 1,
-          },
-        },
-      },
-    },
-  });
-  if (!task) return null;
-  const canAccess = user.role === "ADMIN" || task.project.members.length > 0;
-  return canAccess ? task : null;
+  const access = await assertTaskAccess(prisma, user, taskId, "VIEW");
+  return "task" in access ? access.task : null;
 }
 

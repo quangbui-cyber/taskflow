@@ -3,13 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { getMembership, requireUser } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
+import { assertOwnerAccess, assertTaskAccess, isValidAssignee, ownerParticipants } from "@/lib/taskAccess";
+import { ownerOf, ownerWhere, ownerData, ownerHref, ownerNotificationFields, ownerRevalidatePaths, parseOwnerInput, type WorkOwner } from "@/lib/workOwner";
 import { followerIds, notify } from "@/lib/notify";
 import { parseCommentMentions } from "@/lib/commentMentions";
 import { hasProjectChat, sendProjectChat } from "@/lib/projectChatMessage";
 import { taskCommentChatMessage, taskGoogleChatMessage, type TaskChatInput } from "@/lib/taskGoogleChat";
 import type { GoogleChatMessage } from "@/lib/googleChat";
-import { PRIORITIES, STATUSES } from "@/lib/types";
+import { PRIORITIES, STATUSES, TASK_CANCELLED } from "@/lib/types";
 import { readTaskCreationFiles } from "@/lib/taskCreationFiles";
 import { driveFolderKeys, queueDrivePush, renameDriveFolderSafe, trashTaskFolderSafe } from "@/lib/driveStorage";
 import { after } from "next/server";
@@ -49,7 +51,7 @@ async function taskLink(projectId: string, taskId: string) {
     (host.startsWith("localhost") || host.startsWith("127.0.0.1")
       ? "http"
       : "https");
-  return `${protocol}://${host}/projects/${projectId}?task=${taskId}`;
+  return `${protocol}://${host}${ownerHref({ kind: "PROJECT", id: projectId }, taskId)}`;
 }
 
 async function sendTaskChat(
@@ -77,17 +79,15 @@ const PRIORITY_KEYS: ReadonlySet<string> = new Set(
   PRIORITIES.map((p) => p.key)
 );
 
-async function assertMember(projectId: string) {
+async function taskActor(taskId: string, action: "EDIT" | "DELETE" | "COMMENT" | "FOLLOW") {
   const user = await requireUser();
-  const membership = await getMembership(projectId, user.id);
-  if (!membership && user.role !== "ADMIN") {
-    throw new Error("Bạn không thuộc project này.");
-  }
+  const access = await assertTaskAccess(prisma, user, taskId, action);
+  if ("error" in access) throw new Error(access.error);
   return user;
 }
 
-async function isProjectMember(projectId: string, userId: string) {
-  return Boolean(await getMembership(projectId, userId));
+function revalidateOwner(owner: WorkOwner) {
+  for (const path of ownerRevalidatePaths(owner)) revalidatePath(path);
 }
 
 function parseDueDate(raw: string | null): Date | null | undefined {
@@ -112,6 +112,10 @@ export async function createTask(
   formData: FormData
 ): Promise<ActionState> {
   const projectId = String(formData.get("projectId") ?? "");
+  const owner = formData.has("ownerKind") || formData.has("ownerId")
+    ? parseOwnerInput(formData.get("ownerKind"), formData.get("ownerId"))
+    : parseOwnerInput("PROJECT", projectId);
+  if (!owner) return { error: "Nơi sở hữu công việc không hợp lệ." };
   const title = String(formData.get("title") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
   const result = String(formData.get("result") ?? "").trim();
@@ -135,8 +139,10 @@ export async function createTask(
     return { error: "Giờ kết thúc phải sau giờ bắt đầu trong cùng ngày." };
   }
 
-  const user = await assertMember(projectId);
-  if (assigneeId && !(await isProjectMember(projectId, assigneeId))) {
+  const user = await requireUser();
+  const access = await assertOwnerAccess(prisma, user, owner, "CREATE_TASK");
+  if ("error" in access) return access;
+  if (assigneeId && !(await isValidAssignee(prisma, owner, assigneeId))) {
     return { error: "Người được giao không thuộc project này." };
   }
 
@@ -150,7 +156,7 @@ export async function createTask(
   }
 
   const last = await prisma.task.findFirst({
-    where: { projectId, status },
+    where: { ...ownerWhere(owner), status },
     orderBy: { order: "desc" },
   });
 
@@ -159,7 +165,7 @@ export async function createTask(
       title,
       description: description || null,
       result: result || null,
-      projectId,
+      ...ownerData(owner),
       status,
       priority,
       startDate,
@@ -185,18 +191,18 @@ export async function createTask(
       type: "TASK_ASSIGNED",
       message: `${user.name} đã giao cho bạn task “${title}”`,
       taskId: task.id,
-      projectId,
+      ...ownerNotificationFields(owner),
     });
   }
 
-  await sendTaskChat(projectId, task.id, {
+  if (owner.kind === "PROJECT") await sendTaskChat(owner.id, task.id, {
     event: "created", title, status,
     assigneeName: task.assignee?.name ?? null,
     actorName: user.name, dueDate: task.dueDate,
   });
 
-  if (attachments.length > 0) queueDrivePush(projectId);
-  revalidatePath(`/projects/${projectId}`);
+  if (attachments.length > 0 && owner.kind === "PROJECT") queueDrivePush(owner.id);
+  revalidateOwner(owner);
   return {};
 }
 
@@ -215,7 +221,13 @@ export async function updateTask(
 ): Promise<ActionState> {
   const task = await prisma.task.findUnique({ where: { id: taskId } });
   if (!task) return { error: "Task không tồn tại." };
-  const actor = await assertMember(task.projectId);
+  const actor = await taskActor(taskId, "EDIT");
+  const owner = ownerOf(task);
+  if (task.status === TASK_CANCELLED) return { error: "Việc đã đóng tự động, không đổi trạng thái được." };
+  if (owner.kind !== "PROJECT" && data.assigneeId !== undefined && data.assigneeId !== task.assigneeId) {
+    const assignment = await assertOwnerAccess(prisma, actor, owner, "CREATE_TASK");
+    if ("error" in assignment) return assignment;
+  }
   if (data.title !== undefined && !data.title.trim()) {
     return { error: "Tiêu đề task không được để trống." };
   }
@@ -228,7 +240,7 @@ export async function updateTask(
   if (
     data.assigneeId !== undefined &&
     data.assigneeId !== null &&
-    !(await isProjectMember(task.projectId, data.assigneeId))
+    !(await isValidAssignee(prisma, owner, data.assigneeId))
   ) {
     return { error: "Người được giao không thuộc project này." };
   }
@@ -303,7 +315,7 @@ export async function updateTask(
       type: "TASK_ASSIGNED",
       message: `${actor.name} đã giao cho bạn task “${title}”`,
       taskId,
-      projectId: task.projectId,
+      ...ownerNotificationFields(owner),
     });
   }
 
@@ -319,7 +331,7 @@ export async function updateTask(
         type: "TASK_COMPLETED",
         message: `${actor.name} đã hoàn thành task “${title}”`,
         taskId,
-        projectId: task.projectId,
+        ...ownerNotificationFields(owner),
       }
     );
   } else if (hasFollowerUpdate) {
@@ -345,13 +357,13 @@ export async function updateTask(
         type: "TASK_UPDATED",
         message: `${actor.name} đã cập nhật task “${title}”: ${changes.join(" · ")}`,
         taskId,
-        projectId: task.projectId,
+        ...ownerNotificationFields(owner),
       }
     );
   }
 
   if (data.status !== undefined && data.status !== task.status) {
-    await sendTaskChat(task.projectId, taskId, {
+    if (owner.kind === "PROJECT") await sendTaskChat(owner.id, taskId, {
       event: "status_changed", title: updatedTask.title,
       previousStatus: task.status, status: updatedTask.status,
       assigneeName: updatedTask.assignee?.name ?? null,
@@ -361,17 +373,17 @@ export async function updateTask(
     data.assigneeId !== undefined &&
     data.assigneeId !== task.assigneeId
   ) {
-    await sendTaskChat(task.projectId, taskId, {
+    if (owner.kind === "PROJECT") await sendTaskChat(owner.id, taskId, {
       event: "assignee_changed", title: updatedTask.title, status: updatedTask.status,
       assigneeName: updatedTask.assignee?.name ?? null,
       actorName: actor.name, dueDate: updatedTask.dueDate,
     });
   }
 
-  if (data.title !== undefined && data.title !== task.title) {
+  if (owner.kind === "PROJECT" && data.title !== undefined && data.title !== task.title) {
     after(() => renameDriveFolderSafe(driveFolderKeys.task(taskId), updatedTask.title));
   }
-  revalidatePath(`/projects/${task.projectId}`);
+  revalidateOwner(owner);
   revalidatePath("/");
   return {};
 }
@@ -384,7 +396,9 @@ export async function moveTask(
 ) {
   const task = await prisma.task.findUnique({ where: { id: taskId } });
   if (!task) return;
-  const actor = await assertMember(task.projectId);
+  const actor = await taskActor(taskId, "EDIT");
+  const owner = ownerOf(task);
+  if (task.status === TASK_CANCELLED) return;
   if (!STATUS_KEYS.has(status) || !Number.isFinite(order)) return;
 
   const updatedTask = await prisma.task.update({
@@ -413,7 +427,7 @@ export async function moveTask(
           type: "TASK_COMPLETED",
           message: `${actor.name} đã hoàn thành task “${task.title}”`,
           taskId,
-          projectId: task.projectId,
+          ...ownerNotificationFields(owner),
         }
       );
     } else {
@@ -423,14 +437,14 @@ export async function moveTask(
           type: "TASK_UPDATED",
           message: `${actor.name} đã cập nhật task “${task.title}”: trạng thái ${statusLabel(task.status)} → ${statusLabel(updatedTask.status)}`,
           taskId,
-          projectId: task.projectId,
+          ...ownerNotificationFields(owner),
         }
       );
     }
   }
 
   if (status !== task.status) {
-    await sendTaskChat(task.projectId, taskId, {
+    if (owner.kind === "PROJECT") await sendTaskChat(owner.id, taskId, {
       event: "status_changed", title: updatedTask.title,
       previousStatus: task.status, status: updatedTask.status,
       assigneeName: updatedTask.assignee?.name ?? null,
@@ -438,18 +452,19 @@ export async function moveTask(
     });
   }
 
-  revalidatePath(`/projects/${task.projectId}`);
+  revalidateOwner(owner);
   revalidatePath("/");
 }
 
 export async function deleteTask(taskId: string) {
   const task = await prisma.task.findUnique({ where: { id: taskId } });
   if (!task) return;
-  await assertMember(task.projectId);
+  await taskActor(taskId, "DELETE");
+  const owner = ownerOf(task);
 
   await prisma.task.delete({ where: { id: taskId } });
-  after(() => trashTaskFolderSafe(taskId));
-  revalidatePath(`/projects/${task.projectId}`);
+  if (owner.kind === "PROJECT") after(() => trashTaskFolderSafe(taskId));
+  revalidateOwner(owner);
   revalidatePath("/");
 }
 
@@ -477,18 +492,20 @@ export async function addComment(
     include: { assignee: { select: { name: true } } },
   });
   if (!task) return { error: "Task không tồn tại." };
-  const user = await assertMember(task.projectId);
+  const user = await taskActor(taskId, "COMMENT");
+  const owner = ownerOf(task);
 
   const mentionedIds = [...new Set(mentions.map((mention) => mention.userId))];
   if (mentionedIds.length) {
-    const members = await prisma.projectMember.findMany({
-      where: { projectId: task.projectId, userId: { in: mentionedIds }, user: { isActive: true } },
-      select: { userId: true, user: { select: { name: true } } },
+    const allowed = new Set(await ownerParticipants(prisma, owner));
+    const members = await prisma.user.findMany({
+      where: { id: { in: mentionedIds.filter((id) => allowed.has(id)) }, isActive: true },
+      select: { id: true, name: true },
     });
     if (members.length !== mentionedIds.length) {
       return { error: "Người được nhắc phải là thành viên đang hoạt động của dự án. Hãy chọn lại từ danh sách @." };
     }
-    const names = new Map(members.map((member) => [member.userId, member.user.name]));
+    const names = new Map(members.map((member) => [member.id, member.name]));
     if (mentions.some((mention) => names.get(mention.userId) !== mention.name)) {
       return { error: "Tên người được nhắc đã thay đổi. Hãy chọn lại từ danh sách @." };
     }
@@ -509,7 +526,7 @@ export async function addComment(
       type: "COMMENT",
       message: `${user.name} đã bình luận vào task “${task.title}”: ${snippet}`,
       taskId,
-      projectId: task.projectId,
+      ...ownerNotificationFields(owner),
     }
   );
 
@@ -517,10 +534,10 @@ export async function addComment(
     type: "COMMENT_MENTION",
     message: `${user.name} đã nhắc đến bạn trong bình luận task “${task.title}”: ${snippet}`,
     taskId,
-    projectId: task.projectId,
+    ...ownerNotificationFields(owner),
   });
 
-  await sendTaskChat(task.projectId, taskId, ({ projectName, url }) =>
+  if (owner.kind === "PROJECT") await sendTaskChat(owner.id, taskId, ({ projectName, url }) =>
     taskCommentChatMessage({
       taskId, projectName, url,
       title: task.title,
@@ -530,7 +547,7 @@ export async function addComment(
     })
   );
 
-  revalidatePath(`/projects/${task.projectId}`);
+  revalidateOwner(owner);
   revalidatePath("/notifications");
   return { success: "Đã gửi bình luận." };
 }
@@ -540,9 +557,11 @@ export async function addComment(
 export async function addFollower(taskId: string, userId: string) {
   const task = await prisma.task.findUnique({ where: { id: taskId } });
   if (!task) return;
-  const actor = await assertMember(task.projectId);
+  const actor = await taskActor(taskId, "FOLLOW");
+  const owner = ownerOf(task);
+  if (task.status === TASK_CANCELLED) return;
 
-  const membership = await getMembership(task.projectId, userId);
+  const membership = await isValidAssignee(prisma, owner, userId);
   if (!membership) return; // chỉ thêm được thành viên của project
 
   await prisma.taskFollower.upsert({
@@ -557,23 +576,24 @@ export async function addFollower(taskId: string, userId: string) {
       type: "TASK_FOLLOW",
       message: `${actor.name} đã thêm bạn theo dõi task “${task.title}”`,
       taskId,
-      projectId: task.projectId,
+      ...ownerNotificationFields(owner),
     });
   }
 
-  revalidatePath(`/projects/${task.projectId}`);
+  revalidateOwner(owner);
   revalidatePath("/");
 }
 
 export async function removeFollower(taskId: string, userId: string) {
   const task = await prisma.task.findUnique({ where: { id: taskId } });
   if (!task) return;
-  await assertMember(task.projectId);
+  await taskActor(taskId, "FOLLOW");
+  const owner = ownerOf(task);
 
   await prisma.taskFollower.deleteMany({
     where: { taskId, userId },
   });
-  revalidatePath(`/projects/${task.projectId}`);
+  revalidateOwner(owner);
   revalidatePath("/");
 }
 

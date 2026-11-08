@@ -10,7 +10,7 @@ import { Prisma } from "@prisma/client";
 import { createSession } from "@/lib/session";
 import { parseLoginEmail } from "@/lib/loginEmail";
 import { passwordLengthError } from "@/lib/password";
-import { OPEN_PROJECT_STATUSES } from "@/lib/types";
+import { OPEN_PROJECT_STATUSES, OPEN_TASK_STATUS_FILTER } from "@/lib/types";
 import { canHoldAccountProfile, isUserRole } from "@/lib/roles";
 
 export type AdminState = { error?: string; success?: string };
@@ -87,18 +87,18 @@ export async function deleteUser(
       select: { id: true },
     }),
     prisma.task.findMany({
-      where: { assigneeId: userId, status: { not: "DONE" }, project: openProject },
+      where: { assigneeId: userId, status: OPEN_TASK_STATUS_FILTER, OR: [{ project: openProject }, { opportunity: { outcome: null } }, { clientId: { not: null } }] },
       select: { id: true, projectId: true },
     }),
   ]);
   const ownedProjectIds = ownedProjects.map((project) => project.id);
   const openTaskIds = openTasks.map((task) => task.id);
   const handoverProjectIds = [
-    ...new Set([...ownedProjectIds, ...openTasks.map((task) => task.projectId)]),
+    ...new Set([...ownedProjectIds, ...openTasks.map((task) => task.projectId).filter((id): id is string => id !== null)]),
   ];
 
   let recipient: { id: string; name: string } | null = null;
-  if (handoverProjectIds.length > 0) {
+  if (handoverProjectIds.length > 0 || openTaskIds.length > 0) {
     if (!recipientId) {
       return { error: "Hãy chọn người nhận bàn giao dự án và task đang chạy." };
     }
