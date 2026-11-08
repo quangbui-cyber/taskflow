@@ -15,6 +15,11 @@ test("touchpoint input requires an outcome and a complete next step or wait", ()
   assert.ok("errors" in missingWait && missingWait.errors.next === "Nhập lý do chờ và ngày xem lại.");
   assert.ok("errors" in validateTouchpointInput({ ...input, notes: "x".repeat(2001) }));
   assert.ok("errors" in validateTouchpointInput({ ...input, occurredAt: "not-a-date" }));
+  assert.ok("errors" in validateTouchpointInput({ ...input, outcomeLevel: "2" }));
+  assert.ok("errors" in validateTouchpointInput({ ...input, completeTaskId: [] }));
+  assert.ok("errors" in validateTouchpointInput({ ...input, notes: {} }));
+  assert.ok("errors" in validateTouchpointInput({ ...input, next: { ...input.next, title: " " } }));
+  assert.ok("errors" in validateTouchpointInput({ ...input, openOpportunity: { programTypeCode: "MICE" } }));
   assert.ok("ok" in validateTouchpointInput({ ...input, occurredAt: "2026-11-08", next: { ...input.next, dueDate: "2026-11-09" } }));
 });
 
@@ -28,7 +33,7 @@ test("touchpoints are authorized, atomic, idempotent and draft-safe", { skip: !c
     const pic = actor(f.pic);
     const input = () => ({ clientRequestId: randomUUID(), clientId: f.client.id, opportunityId: null, kind: "CALL", occurredAt: new Date("2026-11-08T03:00:00Z"), outcomeLevel: 2, notes: "Meaningful reply", next: { mode: "NEXT_STEP", title: "Follow up", assigneeId: f.assignee.id, dueDate: new Date("2026-11-10T17:00:00Z") } });
 
-    await t.test("Client next step and assignment notification are committed together", async () => {
+    await t.test("Client next step persists and assignment is notified after commit", async () => {
       const result = await logTouchpoint(db, pic, input());
       assert.ok("ok" in result);
       const row = await db.touchpoint.findUniqueOrThrow({ where: { id: result.touchpointId } });
@@ -84,6 +89,11 @@ test("touchpoints are authorized, atomic, idempotent and draft-safe", { skip: !c
       assert.ok(stored.completedAt);
       const foreign = await db.client.create({ data: { name: `${prefix} Foreign client` } });
       assert.ok("error" in await logTouchpoint(db, actor(f.assignee), { ...input(), clientId: foreign.id, completeTaskId: task.id }));
+      const opportunityTask = await db.task.create({ data: { title: "Owned Opportunity task", creatorId: f.pic.id, assigneeId: f.assignee.id, opportunityId: f.opportunity.id } });
+      assert.ok("error" in await logTouchpoint(db, actor(f.assignee), { ...input(), completeTaskId: opportunityTask.id }));
+      assert.ok("ok" in await logTouchpoint(db, actor(f.assignee), { ...input(), opportunityId: f.opportunity.id, completeTaskId: opportunityTask.id }));
+      assert.equal((await db.task.findUniqueOrThrow({ where: { id: opportunityTask.id } })).status, "DONE");
+      assert.ok("error" in await logTouchpoint(db, actor(f.assignee), { ...input(), completeTaskId: task.id }));
     });
 
     await t.test("WAIT creates a dated Client task and invalid targets do not partially save", async () => {
@@ -96,6 +106,14 @@ test("touchpoints are authorized, atomic, idempotent and draft-safe", { skip: !c
       assert.ok("error" in await logTouchpoint(db, pic, bad));
       assert.equal(await db.touchpoint.count({ where: { clientRequestId: bad.clientRequestId } }), 0);
       assert.ok("error" in await logTouchpoint(db, pic, { ...input(), opportunityId: "missing-opportunity" }));
+      const invalidOpen = { ...input(), outcomeLevel: 4, openOpportunity: { programTypeCode: "UNKNOWN", expectedYear: 2027, expectedMonth: 2, demandSignal: "Confirmed" } };
+      assert.ok("error" in await logTouchpoint(db, pic, invalidOpen));
+      assert.equal(await db.touchpoint.count({ where: { clientRequestId: invalidOpen.clientRequestId } }), 0);
+      const beforeClosed = await db.task.count({ where: { opportunityId: f.opportunity.id } });
+      await db.opportunity.update({ where: { id: f.opportunity.id }, data: { outcome: "WON" } });
+      assert.ok("error" in await logTouchpoint(db, pic, { ...input(), opportunityId: f.opportunity.id }));
+      assert.equal(await db.task.count({ where: { opportunityId: f.opportunity.id } }), beforeClosed);
+      await db.opportunity.update({ where: { id: f.opportunity.id }, data: { outcome: null } });
     });
 
     await t.test("meeting drafts contain metadata only and are never recreated after dismissal", async () => {
@@ -112,6 +130,7 @@ test("touchpoints are authorized, atomic, idempotent and draft-safe", { skip: !c
       assert.ok("error" in await dismissDraft(db, actor(f.outsider), draft.id));
       assert.ok("ok" in await dismissDraft(db, pic, draft.id));
       await produceMeetingDrafts(db, meeting.id, "RECAP");
+      await produceMeetingDrafts(db, meeting.id, "MEETING");
       assert.equal((await db.touchpoint.findUniqueOrThrow({ where: { id: draft.id } })).status, "DISMISSED");
       assert.equal(await db.touchpoint.count({ where: { sourceId: meeting.id } }), 1);
     });
@@ -120,11 +139,21 @@ test("touchpoints are authorized, atomic, idempotent and draft-safe", { skip: !c
       const meeting = await db.meeting.create({ data: { title: "Opportunity meeting", organizerId: f.pic.id, opportunityId: f.opportunity.id, startAt: new Date(), endAt: new Date(Date.now() + 3_600_000) } });
       await produceMeetingDrafts(db, meeting.id, "MEETING");
       const draft = await db.touchpoint.findFirstOrThrow({ where: { sourceId: meeting.id } });
+      const foreignPayload = { ...input(), confirmDraftId: draft.id };
+      assert.ok("error" in await logTouchpoint(db, pic, foreignPayload));
+      assert.equal(await db.touchpoint.count({ where: { clientRequestId: foreignPayload.clientRequestId } }), 0);
       const payload = { ...input(), opportunityId: f.opportunity.id, confirmDraftId: draft.id };
-      const result = await logTouchpoint(db, pic, payload);
+      const before = await db.task.count({ where: { opportunityId: f.opportunity.id } });
+      const results = await Promise.all([logTouchpoint(db, pic, payload), logTouchpoint(db, pic, { ...payload, clientRequestId: randomUUID() })]);
+      assert.equal(results.filter((result) => "ok" in result).length, 1);
+      const result = results.find((result) => "ok" in result)!;
       assert.ok("ok" in result && result.touchpointId === draft.id);
-      assert.ok("ok" in await logTouchpoint(db, pic, payload));
+      assert.equal(await db.task.count({ where: { opportunityId: f.opportunity.id } }), before + 1);
+      const confirmed = await db.touchpoint.findUniqueOrThrow({ where: { id: draft.id } });
+      const replay = { ...payload, clientRequestId: confirmed.clientRequestId! };
+      assert.ok("ok" in await logTouchpoint(db, pic, replay));
       assert.ok("error" in await logTouchpoint(db, pic, { ...payload, clientRequestId: randomUUID() }));
+      assert.ok("error" in await dismissDraft(db, pic, draft.id));
       const row = await db.touchpoint.findUniqueOrThrow({ where: { id: draft.id } });
       assert.equal(row.status, "CONFIRMED");
       assert.equal(row.confirmedById, f.pic.id);
