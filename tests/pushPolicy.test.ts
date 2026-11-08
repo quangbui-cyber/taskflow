@@ -8,6 +8,13 @@ function registration() {
   return { endpoint: "https://fcm.googleapis.com/fcm/send/test", keys: { p256dh: curve.generateKeys().toString("base64url"), auth: randomBytes(16).toString("base64url") } };
 }
 
+test("CRM destinations choose opportunity before client and encode task links", () => {
+  assert.equal(notificationDestination({ opportunityId: "o1", taskId: "t1" }), "/crm/opportunities/o1?task=t1");
+  assert.equal(notificationDestination({ clientId: "c1" }), "/crm/clients/c1");
+  assert.equal(notificationDestination({ clientId: "c1", opportunityId: "o1" }), "/crm/opportunities/o1");
+  assert.equal(notificationDestination({ opportunityId: "o ?", taskId: "t&x" }), "/crm/opportunities/o%20%3F?task=t%26x");
+});
+
 test("push subscriptions accept real browser keys and known HTTPS push providers", () => {
   const sub = registration();
   assert.deepEqual(parsePushRegistration(sub), sub);
