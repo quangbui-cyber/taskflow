@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   Bell,
+  Handshake,
   BriefcaseBusiness,
   ChartColumn,
   CheckCircle2,
@@ -15,7 +16,7 @@ import Brand from "@/components/Brand";
 import Avatar from "@/components/Avatar";
 import MobileSidebarMenu from "@/components/MobileSidebarMenu";
 import { canViewRevenue } from "@/lib/auth";
-import { creativeEnabled, financeEnabled, meetingsEnabled } from "@/lib/features";
+import { creativeEnabled, financeEnabled, meetingsEnabled, crmEnabled } from "@/lib/features";
 import {
   HUBS,
   hubForSection,
@@ -41,6 +42,7 @@ type ProjectItem = {
 const HUB_ICONS: Record<HubKey, LucideIcon> = {
   home: House,
   work: CheckCircle2,
+  crm: Handshake,
   projects: BriefcaseBusiness,
   performance: ChartColumn,
   people: UsersRound,
@@ -137,6 +139,7 @@ export default async function Sidebar({
     where: { userId: user.id, read: false },
   });
   const flags = {
+    showCrm: crmEnabled(),
     showMeetings: meetingsEnabled(),
     showRevenue: canViewRevenue(user.role ?? ""),
     showSuppliers: financeEnabled(),
@@ -153,7 +156,7 @@ export default async function Sidebar({
       <PushDeviceSync userId={user.id} />
       <aside className="sticky top-0 hidden h-screen w-[84px] shrink-0 flex-col border-r border-zinc-200 bg-white px-2 py-3 md:flex">
         <nav className="flex flex-col gap-1.5" aria-label="Khu vực chính">
-          {HUBS.map((hub) => (
+          {HUBS.filter((hub) => hub.visible?.(flags) ?? true).map((hub) => (
             <RailLink
               key={hub.key}
               href={hub.href}
@@ -234,7 +237,7 @@ export default async function Sidebar({
           </Link>
           <MobileSidebarMenu>
             <div className="absolute right-0 top-12 z-50 max-h-[calc(100vh-80px)] w-[min(88vw,320px)] overflow-y-auto rounded-[8px] border border-zinc-200 bg-white p-3 shadow-xl">
-              {HUBS.map((hub) => {
+              {HUBS.filter((hub) => hub.visible?.(flags) ?? true).map((hub) => {
                 const sections = visibleSections(hub, flags);
                 return (
                   <div key={hub.key} className="border-b border-zinc-100 py-2 first:pt-0 last:border-b-0">

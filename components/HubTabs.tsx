@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { canViewRevenue } from "@/lib/auth";
-import { creativeEnabled, financeEnabled, meetingsEnabled } from "@/lib/features";
+import { creativeEnabled, financeEnabled, meetingsEnabled, crmEnabled } from "@/lib/features";
 import { canManageHr } from "@/lib/employeeRecords";
 import { hubForSection, visibleSections, type ActiveSection } from "@/lib/navigation";
 
@@ -17,6 +17,7 @@ export default function HubTabs({
   const hub = hubForSection(section);
   if (!hub) return null;
   const sections = visibleSections(hub, {
+    showCrm: crmEnabled(),
     showMeetings: meetingsEnabled(),
     showRevenue: canViewRevenue(role ?? ""),
     showSuppliers: financeEnabled(),

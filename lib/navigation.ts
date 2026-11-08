@@ -1,9 +1,10 @@
-// Điều hướng chính: 5 khu vực trên thanh icon bên trái, mỗi khu vực có các mục
+// Điều hướng chính: 6 khu vực trên thanh icon bên trái, mỗi khu vực có các mục
 // con hiện thành tab ở đầu trang (HubTabs). Thông báo và cài đặt
 // nằm ở góc dưới thanh icon nên không thuộc khu vực nào; Hồ sơ của tôi thuộc Đội ngũ.
 
 export type ActiveSection =
   | "home"
+  | "crm" | "crmClients" | "crmOpportunities" | "crmPipeline" | "crmImport"
   | "tasks"
   | "meetings"
   | "documents"
@@ -22,9 +23,10 @@ export type ActiveSection =
   | "hr"
   | "admin";
 
-export type HubKey = "home" | "work" | "projects" | "performance" | "people";
+export type HubKey = "home" | "work" | "crm" | "projects" | "performance" | "people";
 
 export type NavFlags = {
+  showCrm?: boolean;
   showMeetings: boolean;
   showRevenue: boolean;
   showSuppliers: boolean;
@@ -45,6 +47,7 @@ export type Hub = {
   label: string;
   href: string;
   sections: HubSection[];
+  visible?: (flags: NavFlags) => boolean;
 };
 
 export const HUBS: Hub[] = [
@@ -61,6 +64,15 @@ export const HUBS: Hub[] = [
         href: "/meetings",
         visible: (flags) => flags.showMeetings,
       },
+    ],
+  },
+  {
+    key: "crm", label: "Khách hàng", href: "/crm", visible: (f) => !!f.showCrm,
+    sections: [
+      { key: "crm", label: "Review tuần", href: "/crm" },
+      { key: "crmClients", label: "Khách hàng", href: "/crm/clients" },
+      { key: "crmOpportunities", label: "Cơ hội", href: "/crm/opportunities" },
+      { key: "crmPipeline", label: "Pipeline và hiệu quả", href: "/crm/pipeline" },
     ],
   },
   {
@@ -115,10 +127,12 @@ export const HUBS: Hub[] = [
 ];
 
 export function visibleSections(hub: Hub, flags: NavFlags) {
+  if (hub.visible && !hub.visible(flags)) return [];
   return hub.sections.filter((section) => section.visible?.(flags) ?? true);
 }
 
 export function hubForSection(section: ActiveSection): Hub | null {
+  if (section.startsWith("crm")) return HUBS.find((hub) => hub.key === "crm") ?? null;
   if (section === "home") return HUBS[0];
   return HUBS.find((hub) => hub.sections.some((item) => item.key === section)) ?? null;
 }
