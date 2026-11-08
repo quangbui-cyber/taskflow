@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { googleDocName, projectYear, sharingChanges } from "../lib/driveStorage";
+import { googleDocName, projectYear, sharingChanges, ownerFolderKeys, rekeyPlan } from "../lib/driveStorage";
 import { parseUploadRequest } from "../lib/driveUpload";
 import { GOOGLE_DOC_MIME_TYPE, driveFolderName, driveViewUrl, needsReaderShare } from "../lib/googleDrive";
 import { MAX_DRIVE_FILE_SIZE, MAX_PROJECT_FILE_SIZE, validateUploadMeta } from "../lib/projectFiles";
 import { downloadName, storedFileDriveUrl } from "../lib/storedFileResponse";
+test("owner folder keys preserve Project keys and rekey three stable folders", () => {
+  assert.deepEqual(ownerFolderKeys({ kind: "OPPORTUNITY", id: "o1" }), { root: "opportunity:o1", docs: "opportunity:o1:docs", tasks: "opportunity:o1:tasks" });
+  assert.equal(ownerFolderKeys({ kind: "CLIENT", id: "c1" }).tasks, "client:c1:tasks");
+  assert.deepEqual(rekeyPlan({ kind: "OPPORTUNITY", id: "o1" }, { kind: "PROJECT", id: "p1" }), [
+    { from: "opportunity:o1", to: "project:p1" }, { from: "opportunity:o1:docs", to: "project:p1:docs" }, { from: "opportunity:o1:tasks", to: "project:p1:tasks" },
+  ]);
+});
 
 test("sharing adds missing members and removes people who left, but never touches inherited or owner access", () => {
   const changes = sharingChanges(
