@@ -83,10 +83,21 @@ test("tracker review preserves evidence and applies atomically once", { skip: !c
     await t.test("invalid PIC and unresolved date roll back row without marking applied", async () => {
       const invalid = await row("Brief", 12, "OK", { clientName: `${prefix} Invalid`, picAccountId: "missing" });
       const result = await applyImportRun(db, steward, run.id);
-      assert.ok("ok" in result && result.errors.some((e) => e.rowId === invalid.id));
+      assert.ok(result.errors?.some((e) => e.rowId === invalid.id));
       assert.equal(await db.client.count({ where: { name: `${prefix} Invalid` } }), 0);
       assert.equal((await db.trackerImportRow.findUniqueOrThrow({ where: { id: invalid.id } })).proposed && ((await db.trackerImportRow.findUniqueOrThrow({ where: { id: invalid.id } })).proposed as Record<string, unknown>).applied, undefined);
       assert.ok("error" in await resolveImportRow(db, steward, { rowId: invalid.id, action: "EDIT", proposedPatch: { period: { kind: "TEXT", raw: "sau Tết" } } }));
+    });
+    await t.test("CREATE_NEW requires a distinct reviewed name; textual dates can be corrected beside original", async () => {
+      const fresh = await row("CSKH", 15, "DUPLICATE", { clientName: f.client.name, matchedClientId: f.client.id }, { "Ngày thực tế": "sau Tết" });
+      assert.ok("ok" in await resolveImportRow(db, steward, { rowId: fresh.id, action: "CREATE_NEW" }));
+      const collision = await applyImportRun(db, steward, run.id);
+      assert.ok(collision.errors?.some((e) => e.rowId === fresh.id));
+      assert.ok("ok" in await resolveImportRow(db, steward, { rowId: fresh.id, action: "EDIT", proposedPatch: { clientName: `${prefix} Distinct`, occurredAt: "2027-02-15T17:00:00Z" } }));
+      await Promise.all([applyImportRun(db, steward, run.id), applyImportRun(db, steward, run.id)]);
+      assert.equal(await db.client.count({ where: { name: `${prefix} Distinct` } }), 1);
+      assert.equal(await db.touchpoint.count({ where: { sourceId: fresh.id } }), 1);
+      assert.deepEqual((await db.trackerImportRow.findUniqueOrThrow({ where: { id: fresh.id } })).raw, { "Ngày thực tế": "sau Tết" });
     });
   } finally {
     if (runId) await db.trackerImportRun.delete({ where: { id: runId } });
