@@ -1,10 +1,13 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { RECAP_ACTION_ITEMS_MAX, type RecapActionItemRow } from "./meetingRecap";
 import { newRecapSuggestions, readRecapSuggestions, toRecapActionView } from "./recapPublication";
+import { ownerOrNull, ownerData, ownerWhere, type WorkOwner } from "./workOwner";
+import { assertOwnerAccess, isValidAssignee } from "./taskAccess";
+import { canManageMeetingRecap } from "./meetingRecap";
 
 export const recapActionViewInclude = {
   owner: { select: { id: true, name: true, avatarUrl: true } },
-  task: { select: { id: true, status: true, projectId: true, project: { select: { name: true } } } },
+  task: { select: { id: true, status: true, projectId: true, opportunityId: true, clientId: true, project: { select: { name: true } }, opportunity: { select: { name: true } }, client: { select: { name: true } } } },
 } satisfies Prisma.MeetingRecapActionItemInclude;
 
 /** All draft writers and publication take this lock before reading mutable state. */
@@ -84,21 +87,22 @@ export async function resolveRecapSuggestion(db: PrismaClient, recapId: string, 
 
 /** Read the reviewed row under the lock, so edits and double clicks cannot create stale/duplicate tasks. */
 export async function createLinkedRecapTask(
-  db: PrismaClient, recapId: string, itemId: string, projectId: string, creatorId: string, description: string,
+  db: PrismaClient, recapId: string, itemId: string, target: string | WorkOwner, creatorId: string, description: string,
 ) {
   return db.$transaction(async (tx) => {
     await lockRecap(tx, recapId);
-    const recap = await tx.meetingRecap.findUnique({ where: { id: recapId }, select: { status: true } });
+    const recap = await tx.meetingRecap.findUnique({ where: { id: recapId }, select: { status: true, meeting: { select: { organizerId: true, recorderId: true, projectId: true, opportunityId: true, clientId: true } } } });
     if (recap?.status !== "READY") throw new Error("RECAP_BUSY");
+    const actor = await tx.user.findUniqueOrThrow({ where: { id: creatorId }, select: { id: true, role: true } });
+    const owner = ownerOrNull(recap.meeting) ?? (typeof target === "string" ? { kind: "PROJECT" as const, id: target } : target);
+    if (!canManageMeetingRecap(recap.meeting, actor) || "error" in await assertOwnerAccess(tx, actor, owner, "CREATE_TASK")) throw new Error("RECAP_FORBIDDEN");
     const item = await tx.meetingRecapActionItem.findFirst({ where: { id: itemId, recapId } });
     if (!item || item.taskId) throw new Error("ALREADY_LINKED");
-    const membership = item.ownerId ? await tx.projectMember.findUnique({
-      where: { projectId_userId: { projectId, userId: item.ownerId } }, select: { userId: true },
-    }) : null;
-    const last = await tx.task.findFirst({ where: { projectId, status: "TODO" }, orderBy: { order: "desc" }, select: { order: true } });
+    const assigneeId = item.ownerId && await isValidAssignee(tx, owner, item.ownerId) ? item.ownerId : null;
+    const last = await tx.task.findFirst({ where: { ...ownerWhere(owner), status: "TODO" }, orderBy: { order: "desc" }, select: { order: true } });
     const created = await tx.task.create({
-      data: { title: item.title, description, projectId, creatorId, status: "TODO", priority: "MEDIUM",
-        dueDate: item.dueDate, assigneeId: membership?.userId ?? null, order: (last?.order ?? 0) + 1 },
+      data: { title: item.title, description, ...ownerData(owner), creatorId, status: "TODO", priority: "MEDIUM",
+        dueDate: item.dueDate, assigneeId, order: (last?.order ?? 0) + 1 },
       select: { id: true, title: true, status: true, dueDate: true, assigneeId: true, assignee: { select: { name: true } } },
     });
     await tx.meetingRecapActionItem.update({ where: { id: item.id }, data: { taskId: created.id } });
