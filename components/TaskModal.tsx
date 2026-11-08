@@ -29,11 +29,15 @@ export default function TaskModal({
   members,
   currentUserId,
   onClose,
+  canDelete = true,
+  canAssign = true,
 }: {
   task: TaskDTO;
   members: MemberDTO[];
   currentUserId: string;
   onClose: () => void;
+  canDelete?: boolean;
+  canAssign?: boolean;
 }) {
   const { notify } = useInteraction();
   const [title, setTitle] = useState(task.title);
@@ -123,18 +127,22 @@ export default function TaskModal({
     if (!title.trim()) return;
     startSaving(async () => {
       try {
-        await updateTask(task.id, {
+        const saved = await updateTask(task.id, {
           title: title.trim(),
           description: description.trim() || null,
           result: result.trim() || null,
           status,
           priority,
-          assigneeId: assigneeId || null,
+          ...(canAssign ? { assigneeId: assigneeId || null } : {}),
           // Gửi thời điểm tuyệt đối (ISO) tính theo múi giờ trình duyệt,
           // để server (chạy UTC trên Vercel) lưu đúng, không lệch giờ.
           startDate: startDate ? new Date(startDate).toISOString() : null,
           dueDate: dueDate ? new Date(dueDate).toISOString() : null,
         });
+        if (saved.error) {
+          notify({ message: saved.error, tone: "error" });
+          return;
+        }
         notify({ message: "Đã lưu thay đổi task.", tone: "success" });
         onClose();
       } catch {
@@ -144,6 +152,7 @@ export default function TaskModal({
   }
 
   function remove() {
+    if (!canDelete) return;
     if (!confirm("Xoá task này?")) return;
     startSaving(async () => {
       try {
@@ -394,6 +403,7 @@ export default function TaskModal({
                 placeholder="Chọn người làm"
                 emptyLabel="— Chưa gán —"
                 ariaLabel="Người làm"
+                disabled={!canAssign}
                 className="mt-1"
                 controlClassName="!h-12 !min-h-12 !py-1.5"
               />
@@ -451,14 +461,14 @@ export default function TaskModal({
           </div>
 
           <div className="flex items-center justify-between">
-            <button
+            {canDelete && <button
               onClick={remove}
               disabled={saving}
               className="tf-button-danger"
             >
               <Trash2 size={16} aria-hidden="true" />
               Xoá task
-            </button>
+            </button>}
             <div className="flex gap-2">
               <button
                 onClick={onClose}

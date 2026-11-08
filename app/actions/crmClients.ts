@@ -9,7 +9,6 @@ import { updateClientProfile, changeClientPicOrTeam, saveBuyingUnit, scorePotent
 import { getCrmSettings } from "@/lib/crm/settings";
 import { loadClientRevenue24m } from "@/lib/crm/clientData";
 import { computeTier, revenueBandFor, revenuePercentiles } from "@/lib/crm/tier";
-import { TIER_LABELS } from "@/lib/crm/labels";
 
 const INVALID = "Thông tin khách hàng không hợp lệ.";
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
@@ -69,7 +68,7 @@ export async function scorePotentialAction(raw: unknown) {
   const band = revenueBandFor(revenuePercentiles(revenue).get(raw.clientId) ?? null, settings.tierMatrix.revenueBands);
   const { tier } = computeTier({ potentialLevel: client?.potentialLevel ?? null, revenueBand: band?.key ?? null, matrix: settings.tierMatrix, scale: settings.potentialScale });
   refresh(raw.clientId);
-  return { success: `Đã xếp hạng ${TIER_LABELS[tier]}.`, version: result.version };
+  return { success: tier === "UNRATED" ? "Đã lưu tiềm năng." : `Đã xếp hạng ${tier}.`, version: result.version };
 }
 
 export async function confirmImportedClientAction(raw: unknown) {

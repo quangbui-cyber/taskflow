@@ -189,7 +189,7 @@ export default function QuickClientCreator({
                 aria-busy={pending}
               >
                 {pending ? <span className="tf-spinner" aria-hidden="true" /> : <Plus size={16} aria-hidden="true" />}
-                {pending ? "Đang tạo..." : "Tạo và chọn"}
+                {pending ? "Đang tạo..." : openProfileOnCreate ? "Tạo khách hàng" : "Tạo và chọn"}
               </button>
             </div>
           </section>

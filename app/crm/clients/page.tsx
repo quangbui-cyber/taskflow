@@ -21,10 +21,11 @@ function compactRevenue(amount: number) {
   const number = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 });
   return amount >= 1e9 ? `${number.format(amount / 1e9)} tỷ` : amount >= 1e6 ? `${number.format(amount / 1e6)} triệu` : `${number.format(amount)} ₫`;
 }
-export default async function ClientsPage({ searchParams }: { searchParams: Promise<{ q?: string; tier?: string; pic?: string; team?: string; status?: string; page?: string }> }) {
+export default async function ClientsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const user = await requireUser();
   if (!crmEnabled()) notFound();
-  const params = await searchParams;
+  const raw = await searchParams;
+  const params = Object.fromEntries(["q", "tier", "pic", "team", "status", "page"].map((key) => [key, typeof raw[key] === "string" ? raw[key] : undefined])) as Record<"q" | "tier" | "pic" | "team" | "status" | "page", string | undefined>;
   const now = new Date();
   const page = /^\d{1,5}$/.test(params.page ?? "") ? Math.max(1, Number(params.page)) : 1;
   const filters: ClientListFilters = {
