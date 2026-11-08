@@ -1,5 +1,6 @@
 import { DOCX_MIME, DriveNotConnectedError, GOOGLE_DOC_MIME_TYPE, driveConnected, uploadDriveFile } from "@/lib/googleDrive";
-import { googleDocName, meetingRecapsFolder, projectYear, trashDriveFileSafe } from "@/lib/driveStorage";
+import { googleDocName, meetingRecapsFolder, projectYear, trashDriveFileSafe, ownerDocsFolder } from "@/lib/driveStorage";
+import { ownerOrNull } from "./workOwner";
 import { prisma } from "@/lib/prisma";
 import { recapDocxFileName } from "@/lib/recapDocx";
 import { publishedRecapDocx } from "@/lib/recapProject";
@@ -24,7 +25,8 @@ export async function pushMeetingRecapToDrive(meetingId: string): Promise<boolea
   const recap = meeting?.recap;
   if (!meeting || !recap) return false;
 
-  if (meeting.projectId) {
+  const owner = ownerOrNull(meeting);
+  if (owner && owner.kind !== "CLIENT") {
     if (!recap.driveFileId) return false;
     await trashDriveFileSafe(recap.driveFileId);
     await prisma.meetingRecap.updateMany({
@@ -44,7 +46,7 @@ export async function pushMeetingRecapToDrive(meetingId: string): Promise<boolea
     mimeType: DOCX_MIME,
     data,
     fileId: recap.driveFileId ?? undefined,
-    parentId: recap.driveFileId ? undefined : await meetingRecapsFolder(projectYear(meeting.startAt)),
+    parentId: recap.driveFileId ? undefined : owner && owner.kind !== "CLIENT" ? await ownerDocsFolder(owner) : await meetingRecapsFolder(projectYear(meeting.startAt)),
     convertTo: GOOGLE_DOC_MIME_TYPE,
   });
   // Chỉ đánh dấu đúng lần gửi đã đẩy; nếu vừa có lần gửi mới thì lượt sau đẩy tiếp.
@@ -73,12 +75,12 @@ export async function pushPendingMeetingRecaps(deadline: number): Promise<{ push
       sentAt: { not: null },
       OR: [{ meeting: { projectId: null } }, { driveFileId: { not: null } }],
     },
-    select: { meetingId: true, sentAt: true, driveSyncedSentAt: true, driveFileId: true, meeting: { select: { projectId: true } } },
+    select: { meetingId: true, sentAt: true, driveSyncedSentAt: true, driveFileId: true, meeting: { select: { projectId: true, opportunityId: true } } },
     orderBy: { sentAt: "desc" },
     take: 500,
   });
   const pending = candidates.filter((row) =>
-    row.meeting.projectId ? Boolean(row.driveFileId) : row.driveSyncedSentAt?.getTime() !== row.sentAt?.getTime()
+    row.meeting.projectId || row.meeting.opportunityId ? Boolean(row.driveFileId) : row.driveSyncedSentAt?.getTime() !== row.sentAt?.getTime()
   );
   let pushed = 0;
   let failed = 0;

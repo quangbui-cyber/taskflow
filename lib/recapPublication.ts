@@ -10,7 +10,7 @@ export type RecapActionItemView = {
   dueDate: string | null;
   dueText: string | null;
   done: boolean;
-  task: { id: string; status: string; projectId: string; projectName: string } | null;
+  task: { id: string; status: string; projectId: string | null; projectName: string; ownerName?: string; ownerKind?: "PROJECT" | "OPPORTUNITY" | "CLIENT"; ownerId?: string } | null;
 };
 export type RecapSuggestion = {
   id: string;
@@ -25,15 +25,17 @@ export type PublishedRecap = { content: string; actionItems: RecapActionItemView
 type ActionRow = {
   id: string; title: string; owner: RecapPerson | null; ownerName: string | null;
   dueDate: Date | null; dueText: string | null; doneAt: Date | null;
-  task: { id: string; status: string; projectId: string; project: { name: string } } | null;
+  task: { id: string; status: string; projectId: string | null; opportunityId?: string | null; clientId?: string | null; project: { name: string } | null; opportunity?: { name: string } | null; client?: { name: string } | null } | null;
 };
 
 export function toRecapActionView(item: ActionRow): RecapActionItemView {
+  const task = item.task;
+  const ownerName = task?.project?.name ?? task?.opportunity?.name ?? task?.client?.name ?? "";
   return {
     id: item.id, title: item.title, owner: item.owner, ownerName: item.ownerName,
     dueDate: item.dueDate ? toDateInputVN(item.dueDate) : null, dueText: item.dueText,
     done: isRecapActionDone(item),
-    task: item.task ? { id: item.task.id, status: item.task.status, projectId: item.task.projectId, projectName: item.task.project.name } : null,
+    task: task ? { id: task.id, status: task.status, projectId: task.projectId, projectName: ownerName, ownerName, ownerKind: task.projectId ? "PROJECT" : task.opportunityId ? "OPPORTUNITY" : "CLIENT", ownerId: task.projectId ?? task.opportunityId ?? task.clientId ?? undefined } : null,
   };
 }
 
