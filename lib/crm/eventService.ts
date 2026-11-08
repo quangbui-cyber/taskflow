@@ -15,7 +15,7 @@ const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v ===
 const id = (v: unknown): v is string => typeof v === "string" && !!v.trim() && v.length <= 64;
 
 export function validateExpectedEventInput(raw: unknown): { value: EventInput } | Failure {
-  if (!record(raw) || !id(raw.clientId) || typeof raw.programTypeCode !== "string" || !/^[A-Z][A-Z0-9_]{1,31}$/.test(raw.programTypeCode) || !Number.isInteger(raw.year) || Number(raw.year) < 2000 || Number(raw.year) > 2100 || !["CLIENT_CONFIRMED", "HISTORY", "INDUSTRY_SEASON"].includes(String(raw.source))) return { error: INVALID };
+  if (!record(raw) || !id(raw.clientId) || typeof raw.programTypeCode !== "string" || !/^[A-Z][A-Z0-9_]{1,31}$/.test(raw.programTypeCode) || !Number.isInteger(raw.year) || Number(raw.year) < 2000 || Number(raw.year) > 2100 || typeof raw.source !== "string" || !["CLIENT_CONFIRMED", "HISTORY", "INDUSTRY_SEASON"].includes(raw.source)) return { error: INVALID };
   if ((raw.buyingUnitId != null && !id(raw.buyingUnitId)) || (raw.note != null && (typeof raw.note !== "string" || raw.note.length > 2000))) return { error: INVALID };
   let date: Date | null = null; let month: number | null = null; let quarter: number | null = null;
   if (raw.precision === "DAY") {

@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
-import { createExpectedEvent, updateExpectedEvent, cancelExpectedEvent } from "../lib/crm/eventService";
+import { createExpectedEvent, updateExpectedEvent, cancelExpectedEvent, validateExpectedEventInput } from "../lib/crm/eventService";
 import { assignCrmTask, postponeCrmTask, escalateCrmTask } from "../lib/crm/reviewActions";
 import { createCrmTestDb, crmTestDatabaseUrl, seedCrmFixture, cleanupCrmFixture } from "./helpers/crmTestDb";
+
+test("event input rejects malformed precision, rolled dates and non-string provenance", () => {
+  const input = { clientId: "client", programTypeCode: "MICE", year: 2027, precision: "DAY", date: "2027-02-28", source: "HISTORY" };
+  assert.ok("value" in validateExpectedEventInput(input));
+  for (const extra of [{ date: "2027-02-30" }, { source: ["HISTORY"] }, { year: "2027" }, { precision: "MONTH", month: 2 }, { date: null }, { note: {} }]) assert.ok("error" in validateExpectedEventInput({ ...input, ...extra }));
+});
 
 test("expected events reschedule unfinished reminders and review actions enforce owner permissions", { skip: !crmTestDatabaseUrl() }, async (t) => {
   const db = createCrmTestDb(); const prefix = `reminders-${randomUUID()}`;
