@@ -23,9 +23,9 @@ export function formatCrmWeekLabel(mondayKey: string): string {
   const thursday = new Date(`${addDaysToKey(mondayKey, 3)}T00:00:00Z`);
   const yearStart = Date.UTC(thursday.getUTCFullYear(), 0, 1);
   const week = Math.ceil(((thursday.getTime() - yearStart) / DAY + 1) / 7);
-  const [year, month, day] = mondayKey.split("-");
+  const [, month, day] = mondayKey.split("-");
   const [endYear, endMonth, endDay] = addDaysToKey(mondayKey, 6).split("-");
-  const start = year === endYear ? `${day}/${month}` : `${day}/${month}`;
+  const start = `${day}/${month}`;
   return `Tuần ${week} · ${start} - ${endDay}/${endMonth}/${endYear}`;
 }
 export function formatCrmDate(date: Date, now: Date): string {

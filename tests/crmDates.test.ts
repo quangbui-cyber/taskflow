@@ -25,7 +25,7 @@ test("configuration parsers reject malformed or incomplete inputs", () => {
   assert.deepEqual(parseReminderOffsets({ MICE: [30, 90, 30, 60] }), { MICE: [90, 60, 30] });
   assert.equal(parseReviewPriority(["TIER", "TIER", "APPOINTMENT", "PLAN_CLOSE"]), null);
   assert.deepEqual(parseReviewPriority(["TIER", "APPOINTMENT", "PLAN_CLOSE", "ESCALATED"]), ["TIER", "APPOINTMENT", "PLAN_CLOSE", "ESCALATED"]);
-  const matrix = { revenueBands: [{ key: "low", label: "Low", minPercentile: 0 }], cells: { low: { high: "A" } } };
+  const matrix = { revenueBands: [{ key: "low", label: "Low", minPercentile: 0 }], cells: { low: { high: "A" as const } } };
   assert.deepEqual(parseTierMatrix(matrix), matrix);
   assert.equal(isTierConfigured(matrix, [{ key: "high", label: "High" }]), true);
   assert.equal(isTierConfigured(matrix, [{ key: "missing", label: "Missing" }]), false);
