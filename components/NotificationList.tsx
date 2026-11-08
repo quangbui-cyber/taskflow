@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { ownerHref } from "@/lib/workOwner";
 import {
   CalendarCheck,
+  Handshake,
   Cake,
   CalendarClock,
   CalendarDays,
@@ -34,6 +36,8 @@ export type NotificationItem = {
   type: string;
   message: string;
   projectId: string | null;
+  clientId?: string | null;
+  opportunityId?: string | null;
   taskId: string | null;
   recognitionId: string | null;
   meetingId: string | null;
@@ -42,6 +46,8 @@ export type NotificationItem = {
 };
 
 const TYPE_ICON: Record<string, LucideIcon> = {
+  CRM_DUE: Handshake, CRM_OVERDUE: Handshake, CRM_PIC_ASSIGNED: Handshake,
+  CRM_TASK_ASSIGNED: Handshake, CRM_DRAFT: Handshake, CRM_STAGE: Handshake,
   TASK_ASSIGNED: Inbox,
   TASK_COMPLETED: CheckCircle2,
   TASK_UPDATED: RefreshCw,
@@ -155,6 +161,10 @@ export default function NotificationList({
       ? `/meetings/${notification.meetingId}/recap`
       : notification.meetingId
       ? `/meetings?focus=${notification.meetingId}#meeting-${notification.meetingId}`
+      : notification.opportunityId
+      ? ownerHref({ kind: "OPPORTUNITY", id: notification.opportunityId }, notification.taskId ?? undefined)
+      : notification.clientId
+      ? ownerHref({ kind: "CLIENT", id: notification.clientId }, notification.taskId ?? undefined)
       : notification.projectId
         ? `/projects/${notification.projectId}${
             notification.taskId ? `?task=${notification.taskId}` : ""

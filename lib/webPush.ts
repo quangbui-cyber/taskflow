@@ -3,6 +3,7 @@ import "server-only";
 import webpush from "web-push";
 import { prisma } from "@/lib/prisma";
 import { isPushEndpoint, notificationDestination } from "@/lib/pushPolicy";
+import { crmEnabled } from "./features";
 
 export function pushConfiguration() {
   const publicKey = process.env.VAPID_PUBLIC_KEY;
@@ -15,6 +16,8 @@ type PushMessage = {
   type: string;
   message: string;
   projectId?: string;
+  clientId?: string;
+  opportunityId?: string;
   taskId?: string;
   recognitionId?: string;
   meetingId?: string;
@@ -22,6 +25,7 @@ type PushMessage = {
 
 /** Failure to deliver push never reverses the user's task or saved bell notification. */
 export async function deliverPush(userIds: string[], data: PushMessage, endpoint?: string) {
+  if (!data.projectId && (data.clientId || data.opportunityId) && !crmEnabled()) return { sent: 0, failed: 0 };
   const config = pushConfiguration();
   if (!config || userIds.length === 0) return { sent: 0, failed: 0 };
   const subscriptions = await prisma.pushSubscription.findMany({

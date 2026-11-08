@@ -1,12 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { after } from "next/server";
 import { deliverPush } from "@/lib/webPush";
+import { crmEnabled } from "./features";
 
 /** Tạo thông báo cho nhiều người nhận (tự loại trùng và loại bỏ id rỗng) */
 export async function notify(
   userIds: (string | null | undefined)[],
   data: {
     type:
+      | "CRM_DUE" | "CRM_OVERDUE" | "CRM_PIC_ASSIGNED" | "CRM_TASK_ASSIGNED" | "CRM_DRAFT" | "CRM_STAGE"
       | "TASK_ASSIGNED"
       | "TASK_COMPLETED"
       | "TASK_UPDATED"
@@ -32,6 +34,8 @@ export async function notify(
     message: string;
     taskId?: string;
     projectId?: string;
+    clientId?: string;
+    opportunityId?: string;
     recognitionId?: string;
     meetingId?: string;
   }
@@ -51,6 +55,11 @@ export async function notify(
     const memberIds = new Set(members.map((m) => m.userId));
     unique = unique.filter((userId) => memberIds.has(userId));
     if (unique.length === 0) return;
+  } else if (data.clientId || data.opportunityId) {
+    if (!crmEnabled()) return;
+    const active = await prisma.user.findMany({ where: { id: { in: unique }, isActive: true }, select: { id: true } });
+    unique = active.map(({ id }) => id);
+    if (!unique.length) return;
   }
 
   await prisma.notification.createMany({
