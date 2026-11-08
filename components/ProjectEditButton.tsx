@@ -13,12 +13,12 @@ import { DateRangeField } from "@/components/TemporalFields";
 import { useInteraction } from "@/components/InteractionProvider";
 import {
   PROJECT_CATEGORIES,
-  PROJECT_TYPES,
   type ProjectCategory,
 } from "@/lib/types";
 
 export default function ProjectEditButton({
   project,
+  programTypes,
   clients,
   accounts,
   responsibilityOptions,
@@ -27,6 +27,7 @@ export default function ProjectEditButton({
   canEditRevenue,
   canEditApprovers,
 }: {
+  programTypes: { code: string; label: string }[];
   project: ProjectResponsibility & {
     id: string;
     name: string;
@@ -186,8 +187,8 @@ export default function ProjectEditButton({
                     defaultValue={project.type}
                     className="tf-field mt-1"
                   >
-                    {PROJECT_TYPES.map((t) => (
-                      <option key={t.key} value={t.key}>
+                    {programTypes.map((t) => (
+                      <option key={t.code} value={t.code}>
                         {t.label}
                       </option>
                     ))}

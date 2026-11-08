@@ -21,7 +21,7 @@ import QuickClientCreator from "@/components/QuickClientCreator";
 import ProjectAccountSelect, { preventMissingProjectAccount, type ProjectAccountOption } from "@/components/ProjectAccountSelect";
 import { DateRangeField } from "@/components/TemporalFields";
 import { useActionFeedback, useInteraction } from "@/components/InteractionProvider";
-import { PROJECT_TYPES, type ProjectCategory } from "@/lib/types";
+import { type ProjectCategory } from "@/lib/types";
 import type { PurchaseOrderDraft } from "@/lib/purchaseOrder";
 
 type ImportResult = {
@@ -52,6 +52,7 @@ function matchClientId(clientName: string, clients: ClientOption[]) {
 }
 
 type NewProjectFormProps = {
+  programTypes: { code: string; label: string }[];
   clients: ClientOption[];
   accounts: ProjectAccountOption[];
   canEditRevenue: boolean;
@@ -138,6 +139,7 @@ export default function NewProjectForm(props: NewProjectFormProps) {
 }
 
 function ProjectDetailsForm({
+  programTypes,
   clients,
   accounts,
   canEditRevenue,
@@ -370,8 +372,8 @@ function ProjectDetailsForm({
           <label className="block">
             <span className="text-xs font-medium text-zinc-500">Loại hình</span>
             <select name="type" defaultValue="OTHER" className="tf-field mt-1">
-              {PROJECT_TYPES.map((t) => (
-                <option key={t.key} value={t.key}>
+              {programTypes.map((t) => (
+                <option key={t.code} value={t.code}>
                   {t.label}
                 </option>
               ))}

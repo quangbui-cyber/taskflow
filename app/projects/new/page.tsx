@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { loadProgramTypes } from "@/lib/programTypes";
 import { canViewRevenue, requireUser } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
 import NewProjectForm from "@/components/NewProjectForm";
@@ -6,6 +7,7 @@ import { canCreateClient } from "@/lib/clientCatalog";
 
 export default async function NewProjectPage() {
   const user = await requireUser();
+  const programTypes = await loadProgramTypes(prisma, { activeOnly: true });
 
   const [sidebarProjects, clients, accounts, teams, groups] = await Promise.all([
     prisma.project.findMany({
@@ -49,6 +51,7 @@ export default async function NewProjectPage() {
             <h1 className="tf-page-title">Tạo dự án mới</h1>
           </div>
           <NewProjectForm
+            programTypes={programTypes}
             canEditRevenue={canViewRevenue(user.role)}
             canCreateClient={canCreateClient(user.role)}
             clients={clients}

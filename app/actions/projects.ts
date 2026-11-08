@@ -20,6 +20,7 @@ import { readProjectResponsibility, type ProjectResponsibility } from "@/lib/pro
 import { readProjectUpload } from "@/lib/projectFiles";
 import { parsePurchaseOrderPdf } from "@/lib/purchaseOrderPdf";
 import { projectStatusColor, type ProjectCategory } from "@/lib/types";
+import { loadProgramTypes, isActiveProgramType } from "@/lib/programTypes";
 
 export type ActionState = { error?: string; success?: string };
 
@@ -32,14 +33,6 @@ const PROJECT_STATUS_KEYS = [
   "FAIL",
 ];
 
-const PROJECT_TYPE_KEYS = [
-  "TEAMBUILDING",
-  "MICE",
-  "ACTIVATION",
-  "EVENT",
-  "PUR",
-  "OTHER",
-];
 
 /** "yyyy-MM-dd" → nửa đêm giờ VN; "" → null; sai định dạng → undefined */
 function parseExecutionDate(raw: string): Date | null | undefined {
@@ -49,12 +42,12 @@ function parseExecutionDate(raw: string): Date | null | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
-function parseExecutionFields(formData: FormData, category: ProjectCategory):
+async function parseExecutionFields(formData: FormData, category: ProjectCategory, existingType?: string): Promise<
   | { error: string }
-  | { type: string; executionStartAt: Date | null; executionEndAt: Date | null } {
+  | { type: string; executionStartAt: Date | null; executionEndAt: Date | null }> {
   const type = category === "INTERNAL" ? "OTHER" : String(formData.get("type") ?? "OTHER");
-  if (!PROJECT_TYPE_KEYS.includes(type)) {
-    return { error: "Loại hình dự án không hợp lệ." };
+  if (type !== existingType && !isActiveProgramType(await loadProgramTypes(prisma, { activeOnly: true }), type)) {
+    return { error: "Loại chương trình không hợp lệ." };
   }
   const executionStartAt = parseExecutionDate(
     String(formData.get("executionStartAt") ?? "")
@@ -145,7 +138,7 @@ export async function createProject(
   if ("error" in assignment) return assignment;
   const assignmentError = await validateResponsibility(assignment);
   if (assignmentError) return assignmentError;
-  const execution = parseExecutionFields(formData, category);
+  const execution = await parseExecutionFields(formData, category);
   if ("error" in execution) return execution;
   try {
     projectFile = category === "CLIENT"
@@ -292,7 +285,7 @@ export async function updateProject(
   ) {
     return { error: "Người duyệt IC/AC phải là Admin hoặc Account đang hoạt động." };
   }
-  const execution = parseExecutionFields(formData, category);
+  const execution = await parseExecutionFields(formData, category, project.type);
   if ("error" in execution) return execution;
   const [account, client] = await Promise.all([
     findValidAccount(accountId),
