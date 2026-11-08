@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ownerOf, ownerOrNull, ownerData, ownerWhere, ownerHref, ownerRevalidatePaths, ownerNotificationFields, parseOwnerInput } from "../lib/workOwner";
+import { isClosedTaskStatus, taskStatusLabel, STATUSES, OPEN_TASK_STATUS_FILTER } from "../lib/types";
+
+test("system closed status never appears in user pickers", () => {
+  assert.equal(isClosedTaskStatus("CANCELLED"), true);
+  assert.equal(isClosedTaskStatus("DONE"), true);
+  assert.equal(isClosedTaskStatus("TODO"), false);
+  assert.equal(taskStatusLabel("CANCELLED"), "Đã đóng");
+  assert.deepEqual(STATUSES.map(({ key }) => key), ["TODO", "IN_PROGRESS", "DONE"]);
+  assert.deepEqual(OPEN_TASK_STATUS_FILTER, { notIn: ["DONE", "CANCELLED"] });
+});
 
 test("each of the three owners resolves and round-trips", () => {
   for (const kind of ["PROJECT", "OPPORTUNITY", "CLIENT"] as const) {

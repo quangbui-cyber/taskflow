@@ -54,6 +54,17 @@ export const STATUSES = [
   { key: "DONE", label: "Hoàn thành" },
 ] as const;
 
+// Hệ thống đóng việc khi Cơ hội kết thúc không thắng; không đưa vào bộ chọn trạng thái.
+export const TASK_CANCELLED = "CANCELLED";
+export const CLOSED_TASK_STATUSES = ["DONE", "CANCELLED"] as const;
+export const OPEN_TASK_STATUS_FILTER = { notIn: ["DONE", "CANCELLED"] };
+export function isClosedTaskStatus(status: string): boolean {
+  return CLOSED_TASK_STATUSES.some((value) => value === status);
+}
+export function taskStatusLabel(status: string): string {
+  return status === TASK_CANCELLED ? "Đã đóng" : STATUSES.find(({ key }) => key === status)?.label ?? status;
+}
+
 export const PROJECT_STATUSES = [
   { key: "BIDDING", label: "Bidding", color: "#f59e0b", className: "bg-amber-100 text-amber-700" },
   { key: "ON_PROCESS", label: "On Process", color: "#2563eb", className: "bg-blue-100 text-blue-700" },
