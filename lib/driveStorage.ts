@@ -511,6 +511,13 @@ export async function nightlyDriveSync(deadline: number) {
       console.error("Drive nightly sharing failed", project.id, error);
     }
   }
+  const crmFolders = await prisma.driveFolder.findMany({ where: { OR: [{ key: { startsWith: "opportunity:" } }, { key: { startsWith: "client:" } }] }, select: { key: true } });
+  for (const folder of crmFolders) {
+    if (Date.now() > deadline) break;
+    const [kind, id, suffix] = folder.key.split(":");
+    if (suffix || !id) continue;
+    await syncOwnerSharingSafe({ kind: kind === "opportunity" ? "OPPORTUNITY" : "CLIENT", id });
+  }
   return { skipped: false, ...push, synced };
 }
 

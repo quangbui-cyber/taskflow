@@ -1,10 +1,11 @@
 import { revalidatePath } from "next/cache";
-import { after } from "next/server";
-import { pushPendingFiles } from "@/lib/driveStorage";
+import { queueOwnerDrivePush } from "@/lib/driveStorage";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { readProjectUpload } from "@/lib/projectFiles";
-import { findAccessibleTask, isTaskFileKind } from "@/lib/taskFiles";
+import { isTaskFileKind } from "@/lib/taskFiles";
+import { assertTaskAccess } from "@/lib/taskAccess";
+import { ownerRevalidatePaths } from "@/lib/workOwner";
 import { notifyTaskFileAdded } from "@/lib/taskFileNotify";
 
 export const runtime = "nodejs";
@@ -22,13 +23,14 @@ export async function POST(
   }
 
   const { taskId } = await params;
-  const task = await findAccessibleTask(taskId, user);
-  if (!task) {
+  const access = await assertTaskAccess(prisma, user, taskId, "EDIT");
+  if (!("task" in access)) {
     return Response.json(
       { error: "Bạn không có quyền tải tệp lên task này." },
       { status: 403 }
     );
   }
+  const task = access.task;
 
   try {
     const formData = await request.formData();
@@ -63,9 +65,9 @@ export async function POST(
     });
 
     await notifyTaskFileAdded(task, user, kind, upload.name);
-    after(() => pushPendingFiles({ projectId: task.projectId }));
+    queueOwnerDrivePush(task.owner);
 
-    revalidatePath(`/projects/${task.projectId}`);
+    for (const path of ownerRevalidatePaths(task.owner)) revalidatePath(path);
     return Response.json({ file: { ...file, driveUrl: null } });
   } catch (error) {
     return Response.json(

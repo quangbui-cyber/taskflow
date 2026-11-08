@@ -13,7 +13,7 @@ import { taskCommentChatMessage, taskGoogleChatMessage, type TaskChatInput } fro
 import type { GoogleChatMessage } from "@/lib/googleChat";
 import { PRIORITIES, STATUSES, TASK_CANCELLED } from "@/lib/types";
 import { readTaskCreationFiles } from "@/lib/taskCreationFiles";
-import { driveFolderKeys, queueDrivePush, renameDriveFolderSafe, trashTaskFolderSafe } from "@/lib/driveStorage";
+import { driveFolderKeys, queueOwnerDrivePush, renameDriveFolderSafe, trashTaskFolderSafe } from "@/lib/driveStorage";
 import { after } from "next/server";
 import { validTaskTimeRange } from "@/lib/taskTimeRange";
 
@@ -201,7 +201,7 @@ export async function createTask(
     actorName: user.name, dueDate: task.dueDate,
   });
 
-  if (attachments.length > 0 && owner.kind === "PROJECT") queueDrivePush(owner.id);
+  if (attachments.length > 0) queueOwnerDrivePush(owner);
   revalidateOwner(owner);
   return {};
 }

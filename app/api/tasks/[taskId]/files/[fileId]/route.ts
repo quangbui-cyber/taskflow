@@ -5,6 +5,8 @@ import { trashDriveFileSafe } from "@/lib/driveStorage";
 import { openStoredFileResponse, storedFileResponse } from "@/lib/storedFileResponse";
 import { prisma } from "@/lib/prisma";
 import { findAccessibleTask } from "@/lib/taskFiles";
+import { assertTaskAccess } from "@/lib/taskAccess";
+import { ownerRevalidatePaths } from "@/lib/workOwner";
 
 export const runtime = "nodejs";
 
@@ -53,11 +55,12 @@ export async function DELETE(_request: Request, context: Context) {
   if ("error" in result) return result.error;
   const { user, task, file } = result;
 
-  const canDelete =
+  const crmAccess = task.owner.kind !== "PROJECT" ? await assertTaskAccess(prisma, user, task.id, "EDIT") : null;
+  const canDelete = task.owner.kind !== "PROJECT" ? crmAccess !== null && "task" in crmAccess :
     user.role === "ADMIN" ||
     file.uploaderId === user.id ||
     task.creatorId === user.id ||
-    task.project.ownerId === user.id;
+    task.project?.ownerId === user.id;
   if (!canDelete) {
     return Response.json(
       { error: "Bạn chỉ có thể xoá tệp do mình tải lên." },
@@ -67,6 +70,6 @@ export async function DELETE(_request: Request, context: Context) {
 
   await prisma.taskFile.delete({ where: { id: file.id } });
   after(() => trashDriveFileSafe(file.driveFileId));
-  revalidatePath(`/projects/${task.projectId}`);
+  for (const path of ownerRevalidatePaths(task.owner)) revalidatePath(path);
   return Response.json({ success: true });
 }

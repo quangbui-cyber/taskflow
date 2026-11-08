@@ -1,6 +1,6 @@
 import { getCurrentUser } from "@/lib/auth";
 import { parseUploadRequest, signUploadTicket, uploadAccess } from "@/lib/driveUpload";
-import { projectDocsFolder, taskFolder } from "@/lib/driveStorage";
+import { ownerDocsFolder, taskFolder } from "@/lib/driveStorage";
 import { DriveNotConnectedError, createResumableUpload, driveConnected } from "@/lib/googleDrive";
 
 export const runtime = "nodejs";
@@ -27,17 +27,18 @@ export async function POST(request: Request) {
   const origin = request.headers.get("origin") ?? new URL(request.url).origin;
   try {
     const folderId =
-      parsed.target.type === "project" ? await projectDocsFolder(access.projectId) : await taskFolder(parsed.target.taskId);
+      parsed.target.type === "task" ? await taskFolder(parsed.target.taskId) : await ownerDocsFolder(access.owner);
     const uploadUrl = await createResumableUpload({
       ...parsed.meta,
       parentId: folderId,
       origin,
-      appProperties: { app: "mycreative", projectId: access.projectId },
+      appProperties: { app: "mycreative", ownerKind: access.owner.kind, ownerId: access.owner.id },
     });
     const ticket = await signUploadTicket({
       ...parsed.meta,
       target: parsed.target,
-      projectId: access.projectId,
+      ownerKind: access.owner.kind,
+      ownerId: access.owner.id,
       folderId,
       userId: user.id,
     });

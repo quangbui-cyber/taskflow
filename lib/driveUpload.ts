@@ -1,7 +1,10 @@
 import { jwtVerify, SignJWT } from "jose";
 import { prisma } from "@/lib/prisma";
 import { MAX_DRIVE_FILE_SIZE, validateUploadMeta, type UploadMeta } from "@/lib/projectFiles";
-import { findAccessibleTask, isTaskFileKind } from "@/lib/taskFiles";
+import { isTaskFileKind } from "@/lib/taskFiles";
+import { assertTaskAccess, assertOwnerAccess } from "./taskAccess";
+import { parseOwnerInput, type WorkOwnerKind } from "./workOwner";
+import { crmEnabled } from "./features";
 
 /**
  * Tải file thẳng từ trình duyệt lên Drive:
@@ -15,11 +18,14 @@ const TICKET_MAX_AGE = 2 * 60 * 60;
 
 export type UploadTarget =
   | { type: "project"; projectId: string }
+  | { type: "opportunity" | "client"; id: string }
   | { type: "task"; taskId: string; kind: "BRIEF" | "RESULT" };
 
 export type UploadTicket = UploadMeta & {
   target: UploadTarget;
-  projectId: string;
+  projectId?: string;
+  ownerKind?: WorkOwnerKind;
+  ownerId?: string;
   folderId: string;
   userId: string;
 };
@@ -46,6 +52,10 @@ export async function verifyUploadTicket(token: string): Promise<UploadTicket> {
   if (!ticket || typeof ticket.folderId !== "string" || typeof ticket.userId !== "string") {
     throw new Error("Invalid upload ticket.");
   }
+  const owner = parseOwnerInput(ticket.ownerKind ?? "PROJECT", ticket.ownerId ?? ticket.projectId);
+  if (!owner) throw new Error("Invalid upload owner.");
+  ticket.ownerKind = owner.kind;
+  ticket.ownerId = owner.id;
   return ticket;
 }
 
@@ -59,6 +69,11 @@ export function parseUploadRequest(body: unknown): { target: UploadTarget; meta:
   if (input.target === "project" && typeof input.projectId === "string") {
     return { target: { type: "project", projectId: input.projectId }, meta };
   }
+  const kind = input.target ?? input.kind;
+  if (kind === "opportunity" || kind === "client") {
+    const id = input.id ?? (kind === "opportunity" ? input.opportunityId : input.clientId);
+    if (parseOwnerInput(kind.toUpperCase(), id)) return { target: { type: kind, id: id as string }, meta };
+  }
   if (input.target === "task" && typeof input.taskId === "string" && isTaskFileKind(input.kind)) {
     return { target: { type: "task", taskId: input.taskId, kind: input.kind }, meta };
   }
@@ -67,13 +82,13 @@ export function parseUploadRequest(body: unknown): { target: UploadTarget; meta:
 
 /** Người dùng có được tải file vào dự án / task này không; trả về dự án và task (nếu có). */
 export async function uploadAccess(target: UploadTarget, user: { id: string; role: string }) {
-  if (target.type === "project") {
-    const project = await prisma.project.findFirst({
-      where: user.role === "ADMIN" ? { id: target.projectId } : { id: target.projectId, members: { some: { userId: user.id } } },
-      select: { id: true },
-    });
-    return project ? { projectId: project.id, task: null } : null;
+  if (target.type === "task") {
+    const access = await assertTaskAccess(prisma, user, target.taskId, "EDIT");
+    if (!("task" in access) || (access.task.owner.kind !== "PROJECT" && !crmEnabled())) return null;
+    return { owner: access.task.owner, projectId: access.task.projectId, task: access.task };
   }
-  const task = await findAccessibleTask(target.taskId, user);
-  return task ? { projectId: task.projectId, task } : null;
+  const owner = target.type === "project" ? parseOwnerInput("PROJECT", target.projectId) : parseOwnerInput(target.type.toUpperCase(), target.id);
+  if (!owner || (owner.kind !== "PROJECT" && !crmEnabled())) return null;
+  const access = await assertOwnerAccess(prisma, user, owner, "CREATE_TASK");
+  return "ok" in access ? { owner, projectId: owner.kind === "PROJECT" ? owner.id : null, task: null } : null;
 }

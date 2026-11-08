@@ -2,7 +2,8 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { uploadAccess, verifyUploadTicket } from "@/lib/driveUpload";
-import { syncProjectSharingSafe, trashDriveFileSafe } from "@/lib/driveStorage";
+import { syncOwnerSharingSafe, trashDriveFileSafe } from "@/lib/driveStorage";
+import { ownerData, ownerRevalidatePaths } from "@/lib/workOwner";
 import { driveFileMeta, driveViewUrl } from "@/lib/googleDrive";
 import { prisma } from "@/lib/prisma";
 import { notifyTaskFileAdded } from "@/lib/taskFileNotify";
@@ -23,7 +24,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Phiên tải lên đã hết hạn. Hãy tải lại tệp." }, { status: 400 });
   }
   const access = await uploadAccess(ticket.target, user);
-  if (!access || access.projectId !== ticket.projectId) {
+  if (!access || access.owner.kind !== ticket.ownerKind || access.owner.id !== ticket.ownerId) {
     return Response.json({ error: "Bạn không có quyền tải tệp lên đây." }, { status: 403 });
   }
 
@@ -40,10 +41,10 @@ export async function POST(request: Request) {
   if (already.some(Boolean)) return Response.json({ error: "Tệp này đã được lưu." }, { status: 409 });
 
   try {
-    if (ticket.target.type === "project") {
+    if (ticket.target.type !== "task") {
       const file = await prisma.projectFile.create({
         data: {
-          projectId: access.projectId,
+          ...ownerData(access.owner),
           uploaderId: user.id,
           name: ticket.name,
           mimeType: ticket.mimeType,
@@ -55,8 +56,8 @@ export async function POST(request: Request) {
           uploader: { select: { id: true, name: true, avatarUrl: true } },
         },
       });
-      after(() => syncProjectSharingSafe(access.projectId));
-      revalidatePath(`/projects/${access.projectId}`);
+      after(() => syncOwnerSharingSafe(access.owner));
+      for (const path of ownerRevalidatePaths(access.owner)) revalidatePath(path);
       return Response.json({ file: { ...file, driveUrl: driveViewUrl(driveFileId, file.mimeType) } });
     }
 
@@ -76,8 +77,8 @@ export async function POST(request: Request) {
       },
     });
     if (access.task) await notifyTaskFileAdded(access.task, user, ticket.target.kind, ticket.name);
-    after(() => syncProjectSharingSafe(access.projectId));
-    revalidatePath(`/projects/${access.projectId}`);
+    after(() => syncOwnerSharingSafe(access.owner));
+    for (const path of ownerRevalidatePaths(access.owner)) revalidatePath(path);
     return Response.json({ file: { ...file, driveUrl: driveViewUrl(driveFileId, file.mimeType) } });
   } catch (error) {
     console.error("Saving Drive upload failed", error);
