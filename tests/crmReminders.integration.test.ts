@@ -79,5 +79,26 @@ test("expected events reschedule unfinished reminders and review actions enforce
       assert.ok(rows.filter(row => row.taskId).every(row => row.task?.status === "CANCELLED" && row.task.closedReason === "Sự kiện dự kiến đã hủy"));
       assert.ok("error" in await updateExpectedEvent(db, pic, { ...input, eventId }));
     });
+    await t.test("a shared reminder task survives one event cancellation; closed/moved tasks deny review edits", async () => {
+      const a = await createExpectedEvent(db, pic, input); const b = await createExpectedEvent(db, pic, input);
+      assert.ok("ok" in a && "ok" in b);
+      const shared = await db.task.create({ data: { title: `${prefix} Shared`, creatorId: f.pic.id, assigneeId: f.assignee.id, clientId: f.client.id } });
+      for (const expectedEventId of [a.eventId, b.eventId]) {
+        const step = await db.reminderStep.findFirstOrThrow({ where: { expectedEventId } });
+        await db.reminderStep.update({ where: { id: step.id }, data: { status: "OPEN", taskId: shared.id } });
+      }
+      assert.ok("ok" in await cancelExpectedEvent(db, pic, a.eventId));
+      assert.equal((await db.task.findUniqueOrThrow({ where: { id: shared.id } })).status, "TODO");
+      assert.ok("ok" in await cancelExpectedEvent(db, pic, b.eventId));
+      assert.equal((await db.task.findUniqueOrThrow({ where: { id: shared.id } })).status, "CANCELLED");
+      assert.ok("error" in await escalateCrmTask(db, assignee, shared.id));
+      const opportunityTask = await db.task.create({ data: { title: `${prefix} Opportunity task`, creatorId: f.pic.id, assigneeId: f.assignee.id, opportunityId: f.opportunity.id } });
+      assert.ok("ok" in await assignCrmTask(db, pic, { taskId: opportunityTask.id, assigneeId: f.assignee.id, dueDate: day }));
+      assert.equal(await db.notification.count({ where: { taskId: opportunityTask.id, opportunityId: f.opportunity.id, clientId: f.client.id } }), 1);
+      await db.opportunity.update({ where: { id: f.opportunity.id }, data: { outcome: "WON" } });
+      assert.ok("error" in await escalateCrmTask(db, assignee, opportunityTask.id));
+      assert.ok("error" in await postponeCrmTask(db, pic, { taskId: opportunityTask.id, reason: "Wait", reviewDate: day }));
+      assert.ok("error" in await assignCrmTask(db, pic, { taskId: opportunityTask.id, assigneeId: f.assignee.id, dueDate: day }));
+    });
   } finally { try { await cleanupCrmFixture(db, prefix); } finally { await db.$disconnect(); } }
 });
