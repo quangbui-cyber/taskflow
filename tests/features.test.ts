@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { creativeEnabled, financeEnabled, meetingsEnabled } from "../lib/features";
+import { creativeEnabled, financeEnabled, meetingsEnabled, crmEnabled } from "../lib/features";
 
 const env = (values: Record<string, string>) => values as unknown as NodeJS.ProcessEnv;
+
+test("CRM is off unless explicitly enabled", () => {
+  for (const flag of [undefined, "", "false", "0", "yes"]) assert.equal(crmEnabled({ CRM_ENABLED: flag }), false);
+  for (const flag of ["true", " TRUE ", " 1 "]) assert.equal(crmEnabled({ CRM_ENABLED: flag }), true);
+  assert.equal(crmEnabled({}), false);
+});
 
 test("meeting booking is on by default everywhere, including Vercel production", () => {
   assert.equal(meetingsEnabled(env({})), true);

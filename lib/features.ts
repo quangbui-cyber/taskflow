@@ -51,3 +51,11 @@ export function creativeEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
 
 export const CREATIVE_DISABLED_MESSAGE = "Góc Đọc & Cảm Hứng đang tạm ẩn.";
 
+/** Khu vực Khách hàng tắt mặc định; chỉ bật khi CRM_ENABLED là true hoặc 1. */
+export function crmEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const flag = env.CRM_ENABLED?.trim().toLowerCase();
+  return flag === "true" || flag === "1";
+}
+
+export const CRM_DISABLED_MESSAGE = "Khu vực Khách hàng đang tắt.";
+
