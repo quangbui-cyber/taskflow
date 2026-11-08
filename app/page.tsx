@@ -24,6 +24,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { myOpenTasksWhere, assignedByMeOpenWhere, taskOwnerSelect, toTaskOwnerDisplay } from "@/lib/taskQueries";
 import { buildLeaderboard, monthKeyOf, monthRange } from "@/lib/gameLeaderboard";
 import { canCreateProjects, requireUser } from "@/lib/auth";
 import { daysUntil, isOverdue } from "@/lib/dates";
@@ -251,12 +252,10 @@ export default async function HomePage({
   const showMeetings = meetingsEnabled();
   const month = recognitionMonthRange();
   const gameMonth = monthRange(monthKeyOf(now));
-  const openTaskProject = {
-    status: { notIn: [...ARCHIVED_PROJECT_STATUS_KEYS] },
-    members: { some: { userId: user.id } },
-  };
   const taskInclude = {
-    project: { select: { id: true, name: true, status: true } },
+    project: taskOwnerSelect.project,
+    opportunity: taskOwnerSelect.opportunity,
+    client: taskOwnerSelect.client,
     assignee: { select: { name: true } },
     creator: { select: { name: true } },
   } as const;
@@ -299,18 +298,14 @@ export default async function HomePage({
       },
     }),
     prisma.task.findMany({
-      where: { assigneeId: user.id, status: { not: "DONE" }, project: openTaskProject },
+      where: myOpenTasksWhere(user.id),
       include: taskInclude,
       orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }],
     }),
     prisma.task.findMany({
       where: {
-        creatorId: user.id,
-        status: { not: "DONE" },
-        assigneeId: { not: null },
-        NOT: { assigneeId: user.id },
+        ...assignedByMeOpenWhere(user.id),
         dueDate: { not: null, lt: new Date(dayStart.getTime() + 4 * DAY_MS) },
-        project: openTaskProject,
       },
       include: taskInclude,
       orderBy: [{ dueDate: "asc" }],
@@ -806,7 +801,7 @@ export default async function HomePage({
                     {urgentTasks.slice(0, 5).map((task) => (
                       <TaskListItem
                         key={task.id}
-                        task={{ ...task, personLabel: `${task.creator.name} giao` }}
+                        task={{ ...task, owner: toTaskOwnerDisplay(task), personLabel: `${task.creator.name} giao` }}
                       />
                     ))}
                   </div>
@@ -828,6 +823,7 @@ export default async function HomePage({
                         key={task.id}
                         task={{
                           ...task,
+                          owner: toTaskOwnerDisplay(task),
                           personLabel: task.assignee ? `${task.assignee.name} làm` : undefined,
                         }}
                       />

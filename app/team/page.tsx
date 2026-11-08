@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { teamMemberOpenTasksWhere, taskOwnerSelect, toTaskOwnerDisplay } from "@/lib/taskQueries";
+import { crmEnabled } from "@/lib/features";
 import { activeDirectReportsWhere } from "@/lib/directReports";
 import { requireUser } from "@/lib/auth";
 import {
@@ -26,11 +28,13 @@ import {
 } from "lucide-react";
 import {
   ARCHIVED_PROJECT_STATUS_KEYS,
-  isArchivedProjectStatus,
+  OPEN_TASK_STATUS_FILTER,
 } from "@/lib/types";
 
 const taskInclude = {
-  project: { select: { id: true, name: true, color: true, status: true } },
+  project: taskOwnerSelect.project,
+  opportunity: { select: { id: true, name: true, outcome: true } },
+  client: taskOwnerSelect.client,
   assignee: { select: { id: true, name: true } },
   creator: { select: { id: true, name: true } },
 } as const;
@@ -128,9 +132,13 @@ export default async function TeamPage({
   const isAdmin = user.role === "ADMIN";
   const { period: periodParam } = await searchParams;
   const period = getPerformancePeriod(periodParam);
+  const crmOn = crmEnabled();
+  const allowedOwners: Prisma.TaskWhereInput = { OR: [{ projectId: { not: null } }, ...(crmOn ? [{ clientId: { not: null } }, { opportunityId: { not: null } }] : [])] };
+  const activeOwners: Prisma.TaskWhereInput = { OR: [{ project: { status: { notIn: [...ARCHIVED_PROJECT_STATUS_KEYS] } } }, ...(crmOn ? [{ clientId: { not: null } }, { opportunity: { outcome: null } }] : [])] };
   const performanceTaskWhere: Prisma.TaskWhereInput = {
+    AND: [allowedOwners],
     OR: [
-      { status: { not: "DONE" } },
+      { status: OPEN_TASK_STATUS_FILTER, AND: [activeOwners] },
       {
         status: "DONE",
         completedAt: { gte: period.start, lt: period.end },
@@ -152,7 +160,7 @@ export default async function TeamPage({
             orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }],
           },
           createdTasks: {
-            where: { status: { not: "DONE" } },
+            where: { status: OPEN_TASK_STATUS_FILTER, AND: [activeOwners] },
             include: taskInclude,
             orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }],
           },
@@ -169,7 +177,7 @@ export default async function TeamPage({
         orderBy: { name: "asc" },
       }),
       prisma.task.findMany({
-        where: { assigneeId: user.id, ...performanceTaskWhere },
+        where: { assigneeId: user.id, OR: [teamMemberOpenTasksWhere(user.id), { status: "DONE", completedAt: { gte: period.start, lt: period.end }, AND: [allowedOwners] }] },
         select: {
           status: true,
           dueDate: true,
@@ -195,8 +203,8 @@ export default async function TeamPage({
       isAdmin
         ? prisma.task.findMany({
             where: {
-              status: { not: "DONE" },
-              project: { status: { notIn: [...ARCHIVED_PROJECT_STATUS_KEYS] } },
+              status: OPEN_TASK_STATUS_FILTER,
+              AND: [activeOwners],
             },
             select: { status: true, dueDate: true },
           })
@@ -205,11 +213,11 @@ export default async function TeamPage({
         ? prisma.task.findMany({
             where: {
               assigneeId: null,
-              status: { not: "DONE" },
-              project: { status: { notIn: [...ARCHIVED_PROJECT_STATUS_KEYS] } },
+              status: OPEN_TASK_STATUS_FILTER,
+              AND: [activeOwners],
             },
             include: {
-              project: { select: { id: true, name: true, color: true, status: true } },
+              ...taskInclude,
             },
             orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }],
           })
@@ -221,7 +229,7 @@ export default async function TeamPage({
     myTasks.filter(
       (task) =>
         task.status !== "DONE" &&
-        !isArchivedProjectStatus(task.project.status)
+        (!task.project || !ARCHIVED_PROJECT_STATUS_KEYS.some((s) => s === task.project!.status))
     )
   );
   const myPerf = combinePeriodResultsWithActiveWork(
@@ -233,10 +241,10 @@ export default async function TeamPage({
     .map((m) => {
       const periodPerf = computePerf(m.assignedTasks);
       const openAssigned = m.assignedTasks.filter(
-        (t) => t.status !== "DONE" && !isArchivedProjectStatus(t.project.status)
+        (t) => t.status !== "DONE" && (!t.project || !ARCHIVED_PROJECT_STATUS_KEYS.some((s) => s === t.project!.status))
       );
       const activeAssigned = m.assignedTasks.filter(
-        (t) => !isArchivedProjectStatus(t.project.status)
+        (t) => !t.project || !ARCHIVED_PROJECT_STATUS_KEYS.some((s) => s === t.project!.status)
       );
       const activePerf = computePerf(activeAssigned);
       const perf = combinePeriodResultsWithActiveWork(periodPerf, activePerf);
@@ -245,7 +253,7 @@ export default async function TeamPage({
           t.assigneeId &&
           t.assigneeId !== m.id &&
           t.status !== "DONE" &&
-          !isArchivedProjectStatus(t.project.status)
+          (!t.project || !ARCHIVED_PROJECT_STATUS_KEYS.some((s) => s === t.project!.status))
       );
       const rate =
         periodPerf.done > 0
@@ -519,7 +527,7 @@ export default async function TeamPage({
                                   status: t.status,
                                   priority: t.priority,
                                   dueDate: t.dueDate,
-                                  project: t.project,
+                                  owner: toTaskOwnerDisplay(t),
                                   personLabel: `${t.creator.name} giao`,
                                 }}
                               />
@@ -545,7 +553,7 @@ export default async function TeamPage({
                                   status: t.status,
                                   priority: t.priority,
                                   dueDate: t.dueDate,
-                                  project: t.project,
+                                  owner: toTaskOwnerDisplay(t),
                                   personLabel: t.assignee
                                     ? `${t.assignee.name} làm`
                                     : undefined,
@@ -586,7 +594,7 @@ export default async function TeamPage({
                       status: t.status,
                       priority: t.priority,
                       dueDate: t.dueDate,
-                      project: t.project,
+                      owner: toTaskOwnerDisplay(t),
                     }}
                   />
                 ))}

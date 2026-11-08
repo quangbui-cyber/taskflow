@@ -99,6 +99,7 @@ export function computePerf(
   let todo = 0;
 
   for (const t of tasks) {
+    if (t.status === "CANCELLED") continue;
     if (t.status === "DONE") {
       // Không có thời điểm hoàn thành thì không thể xếp task vào một kỳ đánh giá.
       if (!t.completedAt) continue;

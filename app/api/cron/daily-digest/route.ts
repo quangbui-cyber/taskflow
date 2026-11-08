@@ -9,7 +9,9 @@ import { daysUntil, formatDue, isOverdue } from "@/lib/dates";
 import { meetingsEnabled } from "@/lib/features";
 import { cleanupMeetingRecaps } from "@/lib/meetingRecapJob";
 import { formatMeetingTime, vnDayRange } from "@/lib/meetings";
-import { ARCHIVED_PROJECT_STATUS_KEYS } from "@/lib/types";
+import { ARCHIVED_PROJECT_STATUS_KEYS, OPEN_TASK_STATUS_FILTER } from "@/lib/types";
+import { digestCrmTasksWhere, taskOwnerSelect, toTaskOwnerDisplay } from "@/lib/taskQueries";
+import { ownerNotificationFields } from "@/lib/workOwner";
 
 // Đọc/ghi database nên phải chạy trên Node runtime, không dùng edge.
 export const runtime = "nodejs";
@@ -92,7 +94,7 @@ export async function GET(request: Request) {
           name: true,
           googleChatSpaceName: true,
           tasks: {
-            where: { status: { not: "DONE" }, dueDate: { not: null } },
+            where: { status: OPEN_TASK_STATUS_FILTER, dueDate: { not: null } },
             select: {
               id: true,
               title: true,
@@ -204,6 +206,22 @@ export async function GET(request: Request) {
       const result = await sendProjectChat(project, message);
       if (result?.ok) sent += 1;
       else failed += 1;
+    }
+
+    // Việc chăm sóc chỉ nhắc đúng người được giao, cùng khóa chống lặp như task dự án.
+    const crmRange = vnDayRange();
+    const crmTasks = await withDatabaseRetry(() => prisma.task.findMany({ where: digestCrmTasksWhere(crmRange), include: { project: taskOwnerSelect.project, opportunity: taskOwnerSelect.opportunity, client: taskOwnerSelect.client } }));
+    const crmRows: Prisma.NotificationCreateManyInput[] = crmTasks.map((task) => {
+      const owner = toTaskOwnerDisplay(task);
+      return { dedupeKey: `deadline:${dateKey}:${task.id}:${task.assigneeId}`, userId: task.assigneeId!, type: "DEADLINE_REMINDER", message: `Nhắc hạn: [${owner.name}] task “${task.title}” ${formatDue(task.dueDate!)}.`, taskId: task.id, ...ownerNotificationFields(owner) };
+    });
+    if (crmRows.length) {
+      const created = await withDatabaseRetry(() => prisma.notification.createManyAndReturn({ data: crmRows, skipDuplicates: true }));
+      reminders += created.length;
+      after(async () => {
+        const results = await Promise.allSettled(created.map((row) => deliverPush([row.userId], { type: row.type, message: row.message, taskId: row.taskId ?? undefined, clientId: row.clientId ?? undefined, opportunityId: row.opportunityId ?? undefined })));
+        if (results.some((r) => r.status === "rejected")) console.warn("Some CRM deadline push notifications could not be sent.");
+      });
     }
 
     // Nhắc mọi người về các cuộc họp diễn ra trong hôm nay (một lần mỗi ngày cho mỗi người).

@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
+import { computePerf } from "../lib/performance";
 import { myOpenTasksWhere, assignedByMeOpenWhere, digestCrmTasksWhere, teamMemberOpenTasksWhere } from "../lib/taskQueries";
 import { createCrmTestDb, crmTestDatabaseUrl, seedCrmFixture, cleanupCrmFixture } from "./helpers/crmTestDb";
+test("automatic cancellation never changes performance counts", () => {
+  assert.deepEqual(computePerf([{ status: "CANCELLED", dueDate: new Date("2020-01-01"), completedAt: new Date() }]), { onTime: 0, late: 0, overdueOpen: 0, inProgress: 0, todo: 0, done: 0, total: 0 });
+});
 test("open tasks include CRM only with flag and exclude closed owners/statuses", { skip: !crmTestDatabaseUrl() }, async () => {
   const db = createCrmTestDb(); const prefix = randomUUID();
   try {
