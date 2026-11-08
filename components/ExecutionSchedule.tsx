@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { CalendarRange, ChevronDown } from "lucide-react";
 import { daysUntil, formatExecutionRange } from "@/lib/dates";
-import { projectTypeInfo } from "@/lib/types";
+import { programTypeDisplay } from "@/lib/programTypes";
+type ProgramType = { code: string; label: string; color: string; active: boolean };
 
 export type ScheduleRow = {
   id: string;
@@ -63,8 +64,8 @@ function countdown(row: Classified): { text: string; className: string } {
   };
 }
 
-function Row({ row }: { row: Classified }) {
-  const typeInfo = projectTypeInfo(row.type);
+function Row({ row, programTypes }: { row: Classified; programTypes: ProgramType[] }) {
+  const typeInfo = programTypeDisplay(programTypes, row.type);
   const chip = countdown(row);
   const statusColor = STATUS_DOT_COLORS[row.status];
 
@@ -95,7 +96,7 @@ function Row({ row }: { row: Classified }) {
 }
 
 /** Lịch thực hiện các dự án đã đặt ngày chạy: đang diễn ra, sắp tới, đã qua */
-export default function ExecutionSchedule({ rows }: { rows: ScheduleRow[] }) {
+export default function ExecutionSchedule({ rows, programTypes }: { rows: ScheduleRow[]; programTypes: ProgramType[] }) {
   const { ongoing, upcoming, past } = classify(rows);
   const recentPast = past.filter((row) => row.endDays >= -30);
 
@@ -122,7 +123,7 @@ export default function ExecutionSchedule({ rows }: { rows: ScheduleRow[] }) {
               </p>
               <div className="divide-y divide-zinc-50">
                 {ongoing.map((row) => (
-                  <Row key={row.id} row={row} />
+                  <Row key={row.id} row={row} programTypes={programTypes} />
                 ))}
               </div>
             </div>
@@ -135,7 +136,7 @@ export default function ExecutionSchedule({ rows }: { rows: ScheduleRow[] }) {
               </p>
               <div className="divide-y divide-zinc-50">
                 {upcoming.map((row) => (
-                  <Row key={row.id} row={row} />
+                  <Row key={row.id} row={row} programTypes={programTypes} />
                 ))}
               </div>
             </div>
@@ -160,7 +161,7 @@ export default function ExecutionSchedule({ rows }: { rows: ScheduleRow[] }) {
               </summary>
               <div className="divide-y divide-zinc-50">
                 {recentPast.map((row) => (
-                  <Row key={row.id} row={row} />
+                  <Row key={row.id} row={row} programTypes={programTypes} />
                 ))}
               </div>
             </details>

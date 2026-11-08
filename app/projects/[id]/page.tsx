@@ -30,12 +30,12 @@ import { loadMeetingComposerData } from "@/lib/meetingComposerData";
 import {
   formatVND,
   projectStatusColor,
-  projectTypeInfo,
   projectCategoryInfo,
   type MemberDTO,
   type TaskDTO,
 } from "@/lib/types";
 import { formatExecutionRange, toDateInputVN } from "@/lib/dates";
+import { loadProgramTypes, programTypeDisplay } from "@/lib/programTypes";
 import { FINANCE_APPROVER_ROLES, canSetFinanceApprovers } from "@/lib/financePolicy";
 import { ROLE_LABELS, isUserRole } from "@/lib/roles";
 import { storedFileDriveUrl } from "@/lib/storedFileResponse";
@@ -280,7 +280,8 @@ export default async function ProjectPage({
   const canViewRevenue = hasRevenueAccess(user.role) && project.category === "CLIENT";
   const categoryInfo = projectCategoryInfo(project.category);
   const projectMetadata = extractProjectMetadata(project.description);
-  const typeInfo = projectTypeInfo(project.type);
+  const programTypes = await loadProgramTypes(prisma, { activeOnly: false });
+  const typeInfo = programTypeDisplay(programTypes, project.type);
   const executionRange = formatExecutionRange(
     project.executionStartAt,
     project.executionEndAt
@@ -369,6 +370,7 @@ export default async function ProjectPage({
                   </span>
                 )}
                 <ProjectEditButton
+                  programTypes={programTypes.filter((t) => t.active || t.code === project.type)}
                   project={{
                     id: project.id,
                     name: project.name,

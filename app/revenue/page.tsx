@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { loadProgramTypes, programTypeDisplay } from "@/lib/programTypes";
 import { requireRevenueViewer } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
 import HubTabs from "@/components/HubTabs";
@@ -16,10 +17,8 @@ import ClientRevenueDonut, {
 import ExecutionSchedule from "@/components/ExecutionSchedule";
 import {
   PROJECT_STATUSES,
-  PROJECT_TYPES,
   formatVND,
   projectStatusColor,
-  projectTypeInfo,
 } from "@/lib/types";
 import {
   ChevronDown,
@@ -231,10 +230,11 @@ export default async function RevenuePage({
   const byClient = [...clientMap.values()].sort((a, b) => b.earned - a.earned);
   const byAccount = groupRevenue((p) => p.account);
   const byTeam = groupRevenue((p) => p.account?.team ?? null);
-  const typeSlices = PROJECT_TYPES.map((t) => {
-    const group = projects.filter((p) => projectTypeInfo(p.type).key === t.key);
+  const programTypes = await loadProgramTypes(prisma, { activeOnly: false });
+  const typeSlices = programTypes.map((t) => {
+    const group = projects.filter((p) => p.type === t.code);
     return {
-      key: t.key,
+      key: t.code,
       label: t.label,
       color: t.color,
       value: group
@@ -357,7 +357,7 @@ export default async function RevenuePage({
             </section>
           </div>
 
-          <ExecutionSchedule rows={scheduleRows} />
+          <ExecutionSchedule rows={scheduleRows} programTypes={programTypes} />
 
           <MonthlyRevenueChart
             data={monthlyRevenue}
@@ -431,9 +431,9 @@ export default async function RevenuePage({
                             {p.name}
                           </span>
                           <span
-                            className={`tf-badge hidden shrink-0 sm:inline-flex ${projectTypeInfo(p.type).className}`}
+                            className={`tf-badge hidden shrink-0 sm:inline-flex ${programTypeDisplay(programTypes, p.type).className}`}
                           >
-                            {projectTypeInfo(p.type).label}
+                            {programTypeDisplay(programTypes, p.type).label}
                           </span>
                           <span className="hidden min-w-0 max-w-[220px] truncate text-xs text-zinc-400 sm:block">
                             {p.account?.name ?? "Chưa gán Account"} ·{" "}
