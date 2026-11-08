@@ -1,4 +1,6 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
+import { ownerOf, ownerWhere, type WorkOwner } from "./workOwner";
+import { loadClientResource, loadOpportunityResource } from "./crm/actor";
 import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import {
@@ -46,6 +48,29 @@ export const driveFolderKeys = {
   meetingRecaps: () => "meeting-recaps",
   meetingRecapsYear: (year: number) => `meeting-recaps:${year}`,
 };
+export function ownerFolderKeys(owner: WorkOwner) {
+  const root = `${owner.kind.toLowerCase()}:${owner.id}`;
+  return { root, docs: `${root}:docs`, tasks: `${root}:tasks` };
+}
+export function rekeyPlan(from: WorkOwner, to: WorkOwner) {
+  const a = ownerFolderKeys(from), b = ownerFolderKeys(to);
+  return (["root", "docs", "tasks"] as const).map((key) => ({ from: a[key], to: b[key] }));
+}
+export async function rekeyOwnerFolders(db: PrismaClient | Prisma.TransactionClient, from: WorkOwner, to: WorkOwner) {
+  let renamed = 0, skipped = 0;
+  for (const pair of rekeyPlan(from, to)) {
+    if (pair.from === pair.to || await db.driveFolder.findUnique({ where: { key: pair.to } })) { skipped++; continue; }
+    try {
+      const changed = await db.driveFolder.updateMany({ where: { key: pair.from }, data: { key: pair.to } });
+      renamed += changed.count;
+      if (!changed.count) skipped++;
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") skipped++;
+      else throw error;
+    }
+  }
+  return { renamed, skipped };
+}
 
 /** Năm của dự án theo giờ Việt Nam (thư mục năm). */
 export function projectYear(createdAt: Date) {
@@ -90,11 +115,30 @@ export async function projectDocsFolder(projectId: string) {
   const root = await projectFolder(projectId);
   return ensureFolder(driveFolderKeys.docs(projectId), DOCS_FOLDER_NAME, root);
 }
+async function ownerRootFolder(owner: WorkOwner): Promise<string> {
+  if (owner.kind === "PROJECT") return projectFolder(owner.id);
+  const row = owner.kind === "OPPORTUNITY" ? await prisma.opportunity.findUniqueOrThrow({ where: { id: owner.id }, select: { name: true, createdAt: true } }) : await prisma.client.findUniqueOrThrow({ where: { id: owner.id }, select: { name: true, createdAt: true } });
+  const category = owner.kind === "OPPORTUNITY" ? "Cơ hội" : "Khách hàng";
+  let parent = await ensureFolder(`crm:${owner.kind.toLowerCase()}`, category, sharedDriveId());
+  if (owner.kind === "OPPORTUNITY") {
+    const year = projectYear(row.createdAt);
+    parent = await ensureFolder(`crm:opportunity:year:${year}`, String(year), parent);
+  }
+  return ensureFolder(ownerFolderKeys(owner).root, row.name, parent);
+}
+export async function ownerDocsFolder(owner: WorkOwner) {
+  if (owner.kind === "PROJECT") return projectDocsFolder(owner.id);
+  const root = await ownerRootFolder(owner);
+  return owner.kind === "CLIENT" ? root : ensureFolder(ownerFolderKeys(owner).docs, DOCS_FOLDER_NAME, root);
+}
+export async function ownerTasksFolder(owner: WorkOwner) {
+  const root = await ownerRootFolder(owner);
+  return ensureFolder(ownerFolderKeys(owner).tasks, TASKS_FOLDER_NAME, root);
+}
 
 export async function taskFolder(taskId: string) {
-  const task = await prisma.task.findUniqueOrThrow({ where: { id: taskId }, select: { id: true, title: true, projectId: true } });
-  const root = await projectFolder(task.projectId);
-  const tasksId = await ensureFolder(driveFolderKeys.tasks(task.projectId), TASKS_FOLDER_NAME, root);
+  const task = await prisma.task.findUniqueOrThrow({ where: { id: taskId }, select: { id: true, title: true, projectId: true, opportunityId: true, clientId: true } });
+  const tasksId = await ownerTasksFolder(ownerOf(task));
   return ensureFolder(driveFolderKeys.task(task.id), task.title, tasksId);
 }
 
@@ -137,7 +181,7 @@ async function pushProjectFile(id: string): Promise<boolean> {
   try {
     const file = await prisma.projectFile.findUniqueOrThrow({
       where: { id },
-      select: { id: true, projectId: true, name: true, mimeType: true, data: true, driveFileId: true },
+      select: { id: true, projectId: true, opportunityId: true, clientId: true, name: true, mimeType: true, data: true, driveFileId: true },
     });
     if (!file.data) {
       await prisma.projectFile.updateMany({ where: { id, driveSyncStartedAt: claimedAt }, data: { driveSyncStartedAt: null } });
@@ -151,7 +195,7 @@ async function pushProjectFile(id: string): Promise<boolean> {
       mimeType: file.mimeType === GOOGLE_DOC_MIME_TYPE ? DOCX_MIME : file.mimeType,
       data: file.data,
       fileId: file.driveFileId ?? undefined,
-      parentId: file.driveFileId ? undefined : await projectDocsFolder(file.projectId),
+      parentId: file.driveFileId ? undefined : await ownerDocsFolder(ownerOf(file)),
       convertTo: asDoc ? GOOGLE_DOC_MIME_TYPE : undefined,
     });
     // Chỉ xoá nội dung khỏi database nếu không ai ghi bản mới trong lúc đang đẩy.
@@ -237,25 +281,26 @@ export async function pushDocumentFile(id: string): Promise<boolean> {
  * Đẩy các file còn nằm trong database lên Drive. Gọi sau mỗi lần tải lên (trong `after`),
  * trong cron hằng đêm và từ nút "Chuyển file cũ" của Admin. Không bao giờ ném lỗi ra ngoài.
  */
-export async function pushPendingFiles(options: { projectId?: string; limit?: number; deadline?: number } = {}): Promise<PushResult> {
+export async function pushPendingFiles(options: { projectId?: string; owner?: WorkOwner; limit?: number; deadline?: number } = {}): Promise<PushResult> {
   const result: PushResult = { pushed: 0, failed: 0, notConnected: false };
   if (!(await driveConnected())) return { ...result, notConnected: true };
   const limit = options.limit ?? 50;
   const deadline = options.deadline ?? Date.now() + 45_000;
+  const scope = options.owner ? ownerWhere(options.owner) : options.projectId ? { projectId: options.projectId } : {};
 
   const projectFiles = await prisma.projectFile.findMany({
-    where: { ...pendingWhere(), ...(options.projectId ? { projectId: options.projectId } : {}) },
-    select: { id: true, projectId: true },
+    where: { ...pendingWhere(), ...scope },
+    select: { id: true, projectId: true, opportunityId: true, clientId: true },
     orderBy: { createdAt: "asc" },
     take: limit,
   });
   const taskFiles = await prisma.taskFile.findMany({
-    where: { ...pendingWhere(), ...(options.projectId ? { task: { projectId: options.projectId } } : {}) },
-    select: { id: true, task: { select: { projectId: true } } },
+    where: { ...pendingWhere(), task: scope },
+    select: { id: true, task: { select: { projectId: true, opportunityId: true, clientId: true } } },
     orderBy: { createdAt: "asc" },
     take: Math.max(0, limit - projectFiles.length),
   });
-  const docFiles = options.projectId
+  const docFiles = options.projectId || options.owner
     ? []
     : await prisma.documentFile.findMany({
         where: pendingWhere(),
@@ -265,19 +310,19 @@ export async function pushPendingFiles(options: { projectId?: string; limit?: nu
       });
 
   const jobs = [
-    ...projectFiles.map((row) => ({ projectId: row.projectId as string | null, run: () => pushProjectFile(row.id) })),
-    ...taskFiles.map((row) => ({ projectId: row.task.projectId as string | null, run: () => pushTaskFile(row.id) })),
-    ...docFiles.map((row) => ({ projectId: null as string | null, run: () => pushDocumentFile(row.id) })),
+    ...projectFiles.map((row) => ({ owner: ownerOf(row), run: () => pushProjectFile(row.id) })),
+    ...taskFiles.map((row) => ({ owner: ownerOf(row.task), run: () => pushTaskFile(row.id) })),
+    ...docFiles.map((row) => ({ owner: null, run: () => pushDocumentFile(row.id) })),
   ];
   // Dự án có file vừa lên Drive (thư mục có thể mới tạo) thì share quyền xem ngay.
-  const touchedProjects = new Set<string>();
+  const touchedOwners = new Map<string, WorkOwner>();
   let lastError: string | null = null;
   for (const job of jobs) {
     if (Date.now() > deadline) break;
     try {
       if (await job.run()) {
         result.pushed += 1;
-        if (job.projectId) touchedProjects.add(job.projectId);
+        if (job.owner) touchedOwners.set(`${job.owner.kind}:${job.owner.id}`, job.owner);
       }
     } catch (error) {
       if (error instanceof DriveNotConnectedError) return { ...result, notConnected: true };
@@ -287,7 +332,7 @@ export async function pushPendingFiles(options: { projectId?: string; limit?: nu
     }
   }
   if (lastError) await recordDriveError(`Không đẩy được ${result.failed} file lên Drive: ${lastError}`);
-  for (const projectId of touchedProjects) await syncProjectSharingSafe(projectId);
+  for (const owner of touchedOwners.values()) await syncOwnerSharingSafe(owner);
   return result;
 }
 
@@ -413,6 +458,26 @@ export async function syncProjectSharingSafe(projectId?: string) {
     if (!(error instanceof DriveNotConnectedError)) console.error("Drive sharing sync failed", error);
   }
 }
+export async function syncOwnerSharingSafe(owner: WorkOwner) {
+  if (owner.kind === "PROJECT") return syncProjectSharingSafe(owner.id);
+  try {
+    if (!await driveConnected()) return;
+    const resource = owner.kind === "CLIENT" ? await loadClientResource(prisma, owner.id) : await loadOpportunityResource(prisma, owner.id);
+    if (!resource) return;
+    const [folder, members, managers, connection] = await Promise.all([
+      prisma.driveFolder.findUnique({ where: { key: ownerFolderKeys(owner).root } }),
+      owner.kind === "OPPORTUNITY" ? prisma.opportunityMember.findMany({ where: { opportunityId: owner.id }, select: { userId: true } }) : [],
+      resource.teamId ? prisma.crmTeamManager.findMany({ where: { teamId: resource.teamId }, select: { userId: true } }) : [],
+      prisma.googleDriveConnection.findUnique({ where: { id: "default" }, select: { email: true } }),
+    ]);
+    if (!folder) return;
+    const ids = [...members.map((m) => m.userId), ...managers.map((m) => m.userId), ...(resource.picUserId ? [resource.picUserId] : [])];
+    const users = await prisma.user.findMany({ where: { id: { in: ids }, isActive: true, deletedAt: null }, select: { email: true } });
+    const changes = sharingChanges(await listDirectPermissions(folder.folderId), users.map((u) => u.email), connection?.email ?? "");
+    for (const email of changes.add) await shareDriveItem(folder.folderId, email);
+    for (const permission of changes.remove) await unshareDriveItem(folder.folderId, permission.id);
+  } catch (error) { if (!(error instanceof DriveNotConnectedError)) console.warn("CRM Drive sharing sync failed."); }
+}
 
 /** Đổi tên dự án/task thì đổi tên thư mục. */
 export async function renameDriveFolderSafe(key: string, name: string) {
@@ -458,4 +523,7 @@ export function queueDrivePush(projectId: string) {
   after(async () => {
     await pushPendingFiles({ projectId });
   });
+}
+export function queueOwnerDrivePush(owner: WorkOwner) {
+  after(async () => { await pushPendingFiles({ owner }); });
 }

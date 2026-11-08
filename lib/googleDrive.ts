@@ -124,6 +124,14 @@ export function driveFolderName(value: string) {
     .slice(0, 120);
   return name || "Không tên";
 }
+export async function moveDriveItem(fileId: string, newParentId: string, newName?: string): Promise<void> {
+  const response = await driveFetch(withAllDrives(`${API}/files/${encodeURIComponent(fileId)}`, { fields: "parents" }));
+  const item = await response.json() as { parents?: string[] };
+  const removeParents = (item.parents ?? []).filter((id) => id !== newParentId).join(",");
+  await driveFetch(withAllDrives(`${API}/files/${encodeURIComponent(fileId)}`, { addParents: newParentId, ...(removeParents ? { removeParents } : {}) }), {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newName ? { name: driveFolderName(newName) } : {}),
+  });
+}
 
 export async function createDriveFolder(name: string, parentId: string): Promise<string> {
   const response = await driveFetch(withAllDrives(`${API}/files`, { fields: "id" }), {
