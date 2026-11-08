@@ -1,0 +1,33 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { crmWeekRange, formatCrmWeekLabel, vnDayStart, vnDayStartFromKey, vnDateKey, addDaysVn, formatCrmDate } from "../lib/crm/dates";
+import { DEFAULT_CADENCE_WEEKS, parseCadenceWeeks, parsePotentialScale, parseTierMatrix, parseReminderOffsets, parseReviewPriority, isTierConfigured } from "../lib/crm/settingsSchema";
+test("Vietnam days and ISO week cross UTC day and year boundaries", () => {
+  const date = new Date("2026-11-08T18:00:00Z");
+  assert.equal(crmWeekRange(date).mondayKey, "2026-11-09");
+  assert.equal(formatCrmWeekLabel("2026-11-09"), "Tuần 46 · 09/11 - 15/11/2026");
+  assert.equal(formatCrmWeekLabel("2020-12-28"), "Tuần 53 · 28/12 - 03/01/2021");
+  assert.equal(vnDayStart(date).toISOString(), "2026-11-08T17:00:00.000Z");
+  assert.equal(vnDateKey(addDaysVn(date, 1)), "2026-11-10");
+  assert.equal(vnDayStartFromKey("2026-11-09").getTime(), vnDayStart(date).getTime());
+  assert.equal(formatCrmDate(date, date), "09/11");
+  assert.equal(formatCrmDate(date, new Date("2027-02-01")), "09/11/2026");
+  assert.throws(() => vnDayStartFromKey("2026-02-31"));
+});
+test("configuration parsers reject malformed or incomplete inputs", () => {
+  assert.equal(DEFAULT_CADENCE_WEEKS.C, 13);
+  assert.deepEqual(parseCadenceWeeks(DEFAULT_CADENCE_WEEKS), DEFAULT_CADENCE_WEEKS);
+  for (const bad of [0, 105, 1.5, "2"]) assert.equal(parseCadenceWeeks({ ...DEFAULT_CADENCE_WEEKS, C: bad }), null);
+  assert.equal(parseCadenceWeeks({}), null);
+  assert.equal(parsePotentialScale([{ key: "x", label: "X" }, { key: "x", label: "Y" }]), null);
+  assert.equal(parsePotentialScale([{ key: "x", label: "X" }])?.length, 1);
+  assert.equal(parseReminderOffsets({ MICE: [0, 366] }), null);
+  assert.deepEqual(parseReminderOffsets({ MICE: [30, 90, 30, 60] }), { MICE: [90, 60, 30] });
+  assert.equal(parseReviewPriority(["TIER", "TIER", "APPOINTMENT", "PLAN_CLOSE"]), null);
+  assert.deepEqual(parseReviewPriority(["TIER", "APPOINTMENT", "PLAN_CLOSE", "ESCALATED"]), ["TIER", "APPOINTMENT", "PLAN_CLOSE", "ESCALATED"]);
+  const matrix = { revenueBands: [{ key: "low", label: "Low", minPercentile: 0 }], cells: { low: { high: "A" } } };
+  assert.deepEqual(parseTierMatrix(matrix), matrix);
+  assert.equal(isTierConfigured(matrix, [{ key: "high", label: "High" }]), true);
+  assert.equal(isTierConfigured(matrix, [{ key: "missing", label: "Missing" }]), false);
+  assert.equal(parseTierMatrix({ ...matrix, cells: { low: { high: "UNRATED" } } }), null);
+});
