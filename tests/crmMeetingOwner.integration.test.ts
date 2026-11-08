@@ -16,7 +16,7 @@ test("meetings attach atomically to one owner and create recap tasks in that own
     assert.equal((await db.meeting.findUniqueOrThrow({ where: { id: meeting.id } })).opportunityId, null);
     assert.ok("owner" in await attachMeetingOwner(db, meeting.id, opportunity, f.pic));
     const second = await attachMeetingOwner(db, meeting.id, client, f.pic);
-    assert.ok("error" in second && second.error.includes("đã được gắn"));
+    assert.ok("error" in second && typeof second.error === "string" && second.error.includes("đã được gắn"));
     const recap = await db.meetingRecap.create({ data: { meetingId: meeting.id, status: "READY", content: "Reviewed" } });
     const item = await db.meetingRecapActionItem.create({ data: { recapId: recap.id, title: "Follow up", ownerId: f.assignee.id } });
     const task = await createLinkedRecapTask(db, recap.id, item.id, opportunity, f.pic.id, "From recap");

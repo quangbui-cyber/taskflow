@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { BarChart3 } from "lucide-react";
-import { meetingsEnabled } from "@/lib/features";
-import { OPEN_PROJECT_STATUSES } from "@/lib/types";
+import { meetingsEnabled, crmEnabled } from "@/lib/features";
+import { OPEN_PROJECT_STATUSES, OPEN_TASK_STATUS_FILTER } from "@/lib/types";
+import { getCrmSettings, listReasons, listProgramTypesForAdmin, listSettingChanges } from "@/lib/crm/settings";
+import CrmSettings from "@/components/crm/CrmSettings";
+import CrmAccessSettings from "@/components/crm/CrmAccessSettings";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
@@ -22,6 +25,7 @@ const SETTINGS_TABS = [
   { key: "users", label: "Quản lý tài khoản" },
   { key: "groups", label: "Phòng ban / Nhóm" },
   { key: "client", label: "Client" },
+  { key: "crm", label: "CRM" },
   { key: "account", label: "Team & Account" },
   { key: "rooms", label: "Phòng họp" },
   { key: "glossary", label: "Từ điển họp" },
@@ -48,6 +52,20 @@ async function SettingsContent({
   driveResult?: string;
 }) {
   if (activeTab === "create-user") return <CreateUserForm />;
+  if (activeTab === "crm" && crmEnabled()) {
+    const [settings, reasons, programTypes, teams, users, history] = await Promise.all([
+      getCrmSettings(prisma), listReasons(prisma, { includeHidden: true }), listProgramTypesForAdmin(prisma),
+      prisma.salesTeam.findMany({ include: { crmManagedTeam: { select: { userId: true } } }, orderBy: { name: "asc" } }),
+      prisma.user.findMany({ where: { isActive: true, deletedAt: null }, select: { id: true, name: true, email: true, avatarUrl: true, isCrmDataSteward: true }, orderBy: { name: "asc" } }),
+      Promise.all(["tier.", "reminder.", "reason.", "programType.", "review.", "teamManagers.", "stewards", "pipeline.mode"].map((key) => listSettingChanges(prisma, key, 20))),
+    ]);
+    const changes = history.flat()
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id))
+      .map((c) => ({ ...c, createdAt: c.createdAt.toISOString() }));
+    return <div className="space-y-6"><CrmSettings initial={settings} reasons={reasons} programTypes={programTypes} changes={changes} />
+      <CrmAccessSettings teams={teams.map((t) => ({ id: t.id, name: t.name, managerIds: t.crmManagedTeam.map((m) => m.userId) }))} users={users} stewardIds={users.filter((u) => u.isCrmDataSteward).map((u) => u.id)} pipelineMode={settings.pipelineMode} version={settings.versions["pipeline.mode"]} changes={changes} />
+    </div>;
+  }
 
   if (activeTab === "storage") {
     const [connection, counts] = await Promise.all([
@@ -95,7 +113,7 @@ async function SettingsContent({
             ownedProjects: { where: { status: { in: OPEN_PROJECT_STATUSES } } },
             assignedTasks: {
               where: {
-                status: { not: "DONE" },
+                status: OPEN_TASK_STATUS_FILTER,
                 project: { status: { in: OPEN_PROJECT_STATUSES } },
               },
             },
@@ -294,7 +312,8 @@ export default async function AdminPage({
   const requestedTab = params.tab === "team" ? "account" : params.tab;
   const activeTab: SettingsTab =
     isSettingsTab(requestedTab) &&
-    ((requestedTab !== "rooms" && requestedTab !== "glossary") || meetingsEnabled())
+    ((requestedTab !== "rooms" && requestedTab !== "glossary") || meetingsEnabled()) &&
+    (requestedTab !== "crm" || crmEnabled())
     ? requestedTab
     : "create-user";
   const sidebarProjects = await prisma.project.findMany({
@@ -335,6 +354,7 @@ export default async function AdminPage({
             {SETTINGS_TABS.filter(
               (tab) =>
                 !HIDDEN_TABS.includes(tab.key) &&
+                (tab.key !== "crm" || crmEnabled()) &&
                 ((tab.key !== "rooms" && tab.key !== "glossary") || meetingsEnabled())
             ).map((tab) => (
               <Link

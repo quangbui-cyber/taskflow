@@ -33,7 +33,7 @@ export async function saveReasonAction(input: unknown) {
   if (!crmCan(actor, "CONFIGURE")) return { error: DENIED };
   if (!record(input) || (input.id !== undefined && (typeof input.id !== "string" || !input.id || input.id.length > 64)) || typeof input.group !== "string" || typeof input.label !== "string" || typeof input.requiresNote !== "boolean" || typeof input.active !== "boolean" || typeof input.order !== "number" || !Number.isSafeInteger(input.order)) return { error: INVALID };
   const result = await saveReason(prisma, { id: input.id as string | undefined, group: input.group, label: input.label, requiresNote: input.requiresNote, active: input.active, order: input.order }, user);
-  return "error" in result ? result : saved();
+  return "error" in result ? result : { ...saved(), id: result.id };
 }
 export async function saveProgramTypeAction(input: unknown) {
   const user = await requireUser();
