@@ -1,0 +1,21 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { parsePipelineMode, officialPipelineSource, isPilotTeam, excludeFromLegacyReport, canCreateClientProjectDirectly, pipelineReportLabels, type PipelineModeSetting } from "../lib/crm/pipelineMode";
+test("reporting mode prevents duplicate pilot sources and preserves PO imports", () => {
+  const fallback: PipelineModeSetting = { mode: "PROJECT_OFFICIAL", pilotTeamIds: ["T"], plannedCutoverDate: null };
+  const official: PipelineModeSetting = { ...fallback, mode: "OPPORTUNITY_OFFICIAL" };
+  assert.deepEqual(parsePipelineMode(fallback), fallback);
+  assert.equal(parsePipelineMode({ ...fallback, mode: "other" }), null);
+  assert.equal(parsePipelineMode({ ...fallback, pilotTeamIds: [2] }), null);
+  assert.equal(parsePipelineMode({ ...fallback, plannedCutoverDate: "2026-02-31" }), null);
+  assert.equal(officialPipelineSource(official), "OPPORTUNITY");
+  assert.equal(officialPipelineSource(fallback), "PROJECT");
+  assert.equal(isPilotTeam(fallback, "T"), true);
+  assert.equal(excludeFromLegacyReport(fallback, { sourceOpportunityTeamId: "T" }), true);
+  assert.equal(excludeFromLegacyReport(official, { sourceOpportunityTeamId: "T" }), false);
+  assert.equal(canCreateClientProjectDirectly(official, { actorTeamId: "T", isPurchaseOrderImport: true }), true);
+  assert.equal(canCreateClientProjectDirectly(official, { actorTeamId: "U", isPurchaseOrderImport: false }), false);
+  assert.equal(canCreateClientProjectDirectly(fallback, { actorTeamId: "T", isPurchaseOrderImport: false }), false);
+  assert.equal(canCreateClientProjectDirectly(fallback, { actorTeamId: "U", isPurchaseOrderImport: false }), true);
+  assert.equal(pipelineReportLabels(fallback).legacyBadge, "Chưa gồm deal của team pilot");
+});
