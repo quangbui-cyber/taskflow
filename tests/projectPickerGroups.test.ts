@@ -30,3 +30,23 @@ test("empty groups are dropped", () => {
   assert.equal(others.length, 0);
   assert.equal(otherCount, 0);
 });
+
+test("CRM owner groups follow project groups and preserve typed identities", () => {
+  const grouped = groupProjectsForPicker(projects, {
+    opportunities: [{ id: "same-id", name: "YEP 2027", clientName: "Bình Minh" }],
+    clients: [{ id: "same-id", name: "Bình Minh" }, { id: "client-2", name: "An Bình" }],
+  });
+  assert.deepEqual(grouped.groups.slice(-2).map((group) => group.label), ["Cơ hội", "Khách hàng"]);
+  assert.deepEqual(grouped.crm.map((group) => group.key), ["opportunities", "clients"]);
+  assert.deepEqual(grouped.crm[0].items, [{ kind: "OPPORTUNITY", id: "same-id", label: "YEP 2027 · Bình Minh" }]);
+  assert.equal(grouped.crm[1].items.length, 2);
+  assert.equal(grouped.primary[0].items[0].kind, "PROJECT");
+  assert.equal(grouped.crm[1].items.find((item) => item.id === "same-id")?.kind, "CLIENT");
+});
+
+test("empty CRM groups are omitted and CRM can be chosen without projects", () => {
+  assert.equal(groupProjectsForPicker(projects).crm.length, 0);
+  const grouped = groupProjectsForPicker([], { clients: [{ id: "client", name: "Client" }] });
+  assert.deepEqual(grouped.groups.map((group) => group.key), ["clients"]);
+  assert.equal(grouped.crm[0].items[0].kind, "CLIENT");
+});
