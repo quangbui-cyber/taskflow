@@ -12,6 +12,10 @@ import { canCreateProjects, canViewRevenue, requireUser } from "@/lib/auth";
 import { daysUntil, isOverdue } from "@/lib/dates";
 import Sidebar from "@/components/Sidebar";
 import HubTabs from "@/components/HubTabs";
+import NewTaskInline from "@/components/NewTaskInline";
+import { loadCrmOwnerTargets } from "@/lib/crm/ownerTargets";
+import { loadCrmActor } from "@/lib/crm/actor";
+import { crmEnabled } from "@/lib/features";
 import Avatar from "@/components/Avatar";
 import TaskListItem, { type TaskListItemData } from "@/components/TaskListItem";
 import DashboardSort from "@/components/DashboardSort";
@@ -86,10 +90,11 @@ export default async function DashboardPage({
     creator: { select: { name: true } },
   } as const;
 
-  const [projects, assignedToMe, delegatedByMe, followedTasks, directReports] = await Promise.all([
+  const [projects, assignedToMe, delegatedByMe, followedTasks, directReports, crmTargets, crmUsers] = await Promise.all([
     prisma.project.findMany({
       where: { members: { some: { userId: user.id } } },
       include: {
+        members: { where: { user: { isActive: true, deletedAt: null } }, select: { userId: true, role: true, user: { select: { id: true, name: true, email: true, avatarUrl: true } } } },
         _count: { select: { tasks: true, members: true } },
         tasks: { where: { status: "DONE" }, select: { id: true } },
         responsibleTeam: { select: { id: true, name: true } },
@@ -135,6 +140,8 @@ export default async function DashboardPage({
       },
       orderBy: { name: "asc" },
     }),
+    crmEnabled() ? loadCrmActor(user).then((actor) => loadCrmOwnerTargets(prisma, actor)) : Promise.resolve({ opportunities: [], clients: [] }),
+    crmEnabled() ? prisma.user.findMany({ where: { isActive: true, deletedAt: null }, select: { id: true, name: true, email: true, avatarUrl: true }, orderBy: { name: "asc" } }) : Promise.resolve([]),
   ]);
 
   const activeView: DashboardView =
@@ -303,6 +310,10 @@ export default async function DashboardPage({
                     </Link>
                   )}
                 </div>
+              </div>
+
+              <div className="mt-4">
+                <NewTaskInline status="TODO" triggerLabel="Thêm việc" projects={projects.map(({ id, name, status }) => ({ id, name, status }))} crmTargets={crmTargets} members={crmUsers.map((member) => ({ userId: member.id, role: "MEMBER", user: member }))} projectMembers={Object.fromEntries(projects.map((project) => [project.id, project.members]))} />
               </div>
 
               <nav

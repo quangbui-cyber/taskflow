@@ -21,6 +21,9 @@ import TaskAttributeSelect from "@/components/TaskAttributeSelect";
 import { useInteraction } from "@/components/InteractionProvider";
 import TaskAttachmentPicker from "@/components/TaskAttachmentPicker";
 import DetectedLinks from "@/components/DetectedLinks";
+import GroupedProjectPicker from "@/components/GroupedProjectPicker";
+import type { PickerProject, PickerCrmTargets } from "@/lib/projectPickerGroups";
+import type { WorkOwner } from "@/lib/workOwner";
 import { MAX_TASK_CREATION_FILE_SIZE } from "@/lib/taskCreationFiles";
 import { formatProjectFileSize } from "@/lib/projectFiles";
 
@@ -53,11 +56,21 @@ function useIsDesktop() {
 
 export default function NewTaskInline({
   projectId,
+  owner,
+  projects = [],
+  crmTargets = {},
+  projectMembers,
+  triggerLabel = "Thêm task",
   status,
   members,
   defaultOpen = false,
 }: {
-  projectId: string;
+  projectId?: string;
+  owner?: WorkOwner;
+  projects?: PickerProject[];
+  crmTargets?: PickerCrmTargets;
+  projectMembers?: Record<string, MemberDTO[]>;
+  triggerLabel?: string;
   status: string;
   members: MemberDTO[];
   defaultOpen?: boolean;
@@ -65,6 +78,10 @@ export default function NewTaskInline({
   const { notify } = useInteraction();
   const isDesktop = useIsDesktop();
   const headingId = useId();
+  const ownerLabelId = useId();
+  const fixedKind = owner?.kind ?? "PROJECT";
+  const fixedId = owner?.id ?? projectId;
+  const [selectedOwner, setSelectedOwner] = useState<WorkOwner | null>(() => fixedId ? { kind: fixedKind, id: fixedId } : null);
   const [editing, setEditing] = useState(defaultOpen);
   const inputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -82,6 +99,7 @@ export default function NewTaskInline({
   const [result, setResult] = useState("");
   const [deliverableOpen, setDeliverableOpen] = useState(false);
   const resetDraft = useCallback(() => {
+    setSelectedOwner(fixedId ? { kind: fixedKind, id: fixedId } : null);
     setTitle("");
     setAssigneeId("");
     setTaskStatus(status);
@@ -93,7 +111,7 @@ export default function NewTaskInline({
     setDeliverableOpen(false);
     setBriefFiles([]);
     setResultFiles([]);
-  }, [status]);
+  }, [status, fixedKind, fixedId]);
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     async (prev, formData) => {
       const startDate = String(formData.get("startDate") ?? "");
@@ -131,6 +149,7 @@ export default function NewTaskInline({
   // In the dialog, a stray Escape or backdrop click should not throw away
   // anything already filled in or picked, so those only close an empty draft.
   const hasDraft =
+    Boolean(!fixedId && selectedOwner) ||
     [title, description, result].some((value) => value.trim()) ||
     Boolean(assigneeId) ||
     taskStatus !== status ||
@@ -160,7 +179,8 @@ export default function NewTaskInline({
     if (kind === "BRIEF") setBriefFiles(files);
     else setResultFiles(files);
   }
-  const memberOptions = members.map((member) => ({
+  const selectableMembers = selectedOwner?.kind === "PROJECT" && projectMembers ? projectMembers[selectedOwner.id] ?? [] : members;
+  const memberOptions = selectableMembers.map((member) => ({
     id: member.userId,
     name: member.user.name,
     email: member.user.email,
@@ -212,7 +232,7 @@ export default function NewTaskInline({
         className="flex w-full items-center gap-2 rounded-[7px] px-2 py-2 text-left text-sm text-zinc-500 transition-colors hover:bg-white hover:text-brand-700"
       >
         <Plus size={16} strokeWidth={1.8} aria-hidden="true" />
-        Thêm task
+        {triggerLabel}
       </button>
     );
   }
@@ -220,6 +240,10 @@ export default function NewTaskInline({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending) return;
+    if (!selectedOwner) {
+      notify({ message: "Chọn dự án, Cơ hội hoặc khách hàng.", tone: "error" });
+      return;
+    }
     // Dispatch manually so validation errors do not reset the draft.
     const formData = new FormData(event.currentTarget);
     startTransition(() => formAction(formData));
@@ -227,10 +251,17 @@ export default function NewTaskInline({
 
   const hiddenFields = (
     <>
-      <input type="hidden" name="projectId" value={projectId} />
+      {selectedOwner?.kind === "PROJECT" && <input type="hidden" name="projectId" value={selectedOwner.id} />}
+      <input type="hidden" name="ownerKind" value={selectedOwner?.kind ?? ""} />
+      <input type="hidden" name="ownerId" value={selectedOwner?.id ?? ""} />
       <input type="hidden" name="status" value={taskStatus} />
     </>
   );
+
+  const ownerField = !fixedId && <div>
+    <span id={ownerLabelId} className="text-xs font-semibold text-zinc-500">Nơi sở hữu công việc</span>
+    <div className="mt-1"><GroupedProjectPicker ownerMode projects={projects} opportunities={crmTargets.opportunities} clients={crmTargets.clients} value={selectedOwner} onChange={(next) => { setSelectedOwner(next); setAssigneeId(""); }} disabled={pending} labelId={ownerLabelId} /></div>
+  </div>;
 
   const titleField = (
     <label className="block">
@@ -317,7 +348,7 @@ export default function NewTaskInline({
       label="Đính kèm tệp giao việc"
       files={briefFiles}
       onChange={(files) => selectFiles("BRIEF", files)}
-      disabled={pending}
+      disabled={pending || !selectedOwner}
     />
   );
 
@@ -385,7 +416,7 @@ export default function NewTaskInline({
   const submitButton = (
     <button
       type="submit"
-      disabled={pending}
+      disabled={pending || !selectedOwner}
       className={`tf-button-primary ${isDesktop ? "" : "!min-h-8 !px-3 !py-1 text-xs"}`}
       aria-busy={pending}
     >
@@ -438,6 +469,7 @@ export default function NewTaskInline({
 
             <div className="grid grid-cols-[minmax(0,1fr)_17rem] gap-6 px-6 py-5">
               <div className="min-w-0 space-y-4">
+                {ownerField}
                 {titleField}
                 <div>
                   {descriptionField}
@@ -479,6 +511,7 @@ export default function NewTaskInline({
     >
       <fieldset disabled={pending} className="min-w-0 space-y-3 border-0 p-0">
         {hiddenFields}
+        {ownerField}
         {titleField}
 
         {assigneeField}

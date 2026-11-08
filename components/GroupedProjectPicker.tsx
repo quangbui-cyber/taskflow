@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronRight } from "lucide-react";
-import { groupProjectsForPicker, type PickerGroup, type PickerProject } from "@/lib/projectPickerGroups";
+import { Building2, Check, ChevronDown, ChevronRight, Target } from "lucide-react";
+import { groupProjectsForPicker, type PickerCrmTargets, type PickerOwnerGroup, type PickerOwnerItem, type PickerProject } from "@/lib/projectPickerGroups";
+import type { WorkOwner } from "@/lib/workOwner";
 
 const STATUS_DOT_CLASSES: Record<string, string> = {
   BIDDING: "bg-amber-500",
@@ -13,34 +14,42 @@ const STATUS_DOT_CLASSES: Record<string, string> = {
   FAIL: "bg-red-500",
 };
 
-export default function GroupedProjectPicker({
-  projects,
-  value,
-  onChange,
-  disabled,
-  labelId,
-}: {
+type Props = {
   projects: PickerProject[];
-  value: string;
-  onChange: (projectId: string) => void;
   disabled?: boolean;
   labelId?: string;
-}) {
+} & ({ ownerMode: true; value: WorkOwner | null; onChange: (owner: WorkOwner) => void } & PickerCrmTargets | {
+  ownerMode?: false;
+  value: string;
+  onChange: (projectId: string) => void;
+  opportunities?: never;
+  clients?: never;
+});
+
+export default function GroupedProjectPicker(props: Props) {
+  const { projects, disabled, labelId } = props;
   const [open, setOpen] = useState(false);
   const [showOthers, setShowOthers] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const listId = useId();
-  const { primary, others, otherCount } = useMemo(() => groupProjectsForPicker(projects), [projects]);
-  const selected = projects.find((project) => project.id === value);
-  const selectedIsOther = Boolean(selected && others.some((group) => group.status === selected.status));
+  const { primary, others, otherCount, crm, groups } = useMemo(() => groupProjectsForPicker(projects, { opportunities: props.opportunities, clients: props.clients }), [projects, props.opportunities, props.clients]);
+  const value: WorkOwner | null = props.ownerMode ? props.value : props.value ? { kind: "PROJECT", id: props.value } : null;
+  const selected = groups.flatMap((group) => group.items).find((item) => item.id === value?.id && item.kind === value?.kind);
+  const selectedIsOther = !!selected && selected.kind === "PROJECT" && others.some((group) => group.status === selected.status);
+  const empty = groups.length === 0;
 
   useEffect(() => {
     if (!open) return;
+    const list = rootRef.current?.querySelector('[role="listbox"]');
+    (list?.querySelector('[aria-selected="true"]') ?? list?.querySelector('[role="option"]'))?.scrollIntoView({ block: "nearest" });
     function closeOnOutside(event: PointerEvent) {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     }
     function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        setOpen(false);
+        rootRef.current?.querySelector('button')?.focus();
+      }
     }
     document.addEventListener("pointerdown", closeOnOutside, true);
     document.addEventListener("keydown", closeOnEscape);
@@ -56,31 +65,34 @@ export default function GroupedProjectPicker({
     setOpen((current) => !current);
   }
 
-  function choose(projectId: string) {
-    onChange(projectId);
+  function choose(owner: WorkOwner) {
+    if (props.ownerMode) props.onChange({ kind: owner.kind, id: owner.id });
+    else props.onChange(owner.id);
     setOpen(false);
+    rootRef.current?.querySelector('button')?.focus();
   }
 
-  function renderGroup(group: PickerGroup) {
+  const icon = (item: Pick<PickerOwnerItem, "kind" | "status">) => item.kind === "OPPORTUNITY" ? <Target size={14} aria-hidden="true" className="shrink-0 text-zinc-500" /> : item.kind === "CLIENT" ? <Building2 size={14} aria-hidden="true" className="shrink-0 text-zinc-500" /> : <span className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT_CLASSES[item.status ?? ""] ?? "bg-zinc-400"}`} aria-hidden="true" />;
+  function renderGroup(group: PickerOwnerGroup) {
     return (
-      <div key={group.status} role="group" aria-label={group.label} className="py-1">
+      <div key={group.key} role="group" aria-label={group.label} className="py-1">
         <p className="flex items-center gap-2 px-2.5 pb-1 pt-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-          <span className={`h-2 w-2 rounded-full ${STATUS_DOT_CLASSES[group.status] ?? "bg-zinc-400"}`} aria-hidden="true" />
+          {icon({ kind: group.key === "opportunities" ? "OPPORTUNITY" : group.key === "clients" ? "CLIENT" : "PROJECT", status: group.key })}
           {group.label}
-          <span className="font-normal normal-case text-zinc-400">{group.projects.length}</span>
+          <span className="font-normal normal-case text-zinc-400">{group.items.length}</span>
         </p>
-        {group.projects.map((project) => {
-          const isSelected = project.id === value;
+        {group.items.map((item) => {
+          const isSelected = item.id === value?.id && item.kind === value?.kind;
           return (
             <button
-              key={project.id}
+              key={`${item.kind}:${item.id}`}
               type="button"
               role="option"
               aria-selected={isSelected}
-              onClick={() => choose(project.id)}
-              className={`flex w-full items-center justify-between gap-3 rounded-[6px] px-2.5 py-2 text-left text-sm text-zinc-800 transition-colors hover:bg-zinc-50 ${isSelected ? "bg-zinc-50 font-medium" : ""}`}
+              onClick={() => choose(item)}
+              className={`flex w-full items-center justify-between gap-3 rounded-[6px] px-2.5 py-2 text-left text-sm text-zinc-800 transition-colors hover:bg-zinc-50 ${isSelected ? "bg-zinc-50 font-semibold" : ""}`}
             >
-              <span className="min-w-0 truncate">{project.name}</span>
+              <span className="min-w-0 truncate">{item.label}</span>
               {isSelected && <Check size={15} className="shrink-0 text-zinc-500" aria-hidden="true" />}
             </button>
           );
@@ -94,18 +106,17 @@ export default function GroupedProjectPicker({
       <button
         type="button"
         onClick={toggle}
-        disabled={disabled || projects.length === 0}
+        disabled={disabled || empty}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
         aria-labelledby={labelId}
+        aria-label={labelId ? undefined : props.ownerMode ? "Nơi sở hữu công việc" : "Dự án"}
         className="tf-field flex w-full items-center justify-between gap-2 text-left disabled:cursor-not-allowed disabled:opacity-60"
       >
         <span className={`flex min-w-0 items-center gap-2 ${selected ? "text-zinc-800" : "text-zinc-500"}`}>
-          {selected && (
-            <span className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT_CLASSES[selected.status] ?? "bg-zinc-400"}`} aria-hidden="true" />
-          )}
-          <span className="truncate">{selected?.name ?? "Chọn dự án"}</span>
+          {selected && icon(selected)}
+          <span className="truncate">{selected?.label ?? (empty ? props.ownerMode ? "Không có dự án, Cơ hội hoặc khách để chọn." : "Không có dự án để chọn." : props.ownerMode ? "Chọn dự án, Cơ hội hoặc khách" : "Chọn dự án")}</span>
         </span>
         <ChevronDown size={16} className={`shrink-0 text-zinc-400 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true" />
       </button>
@@ -115,12 +126,10 @@ export default function GroupedProjectPicker({
           id={listId}
           role="listbox"
           aria-labelledby={labelId}
+          aria-label={labelId ? undefined : props.ownerMode ? "Nơi sở hữu công việc" : "Dự án"}
           className="tf-popover-enter absolute left-0 right-0 top-full z-50 mt-1 max-h-80 overflow-y-auto rounded-[8px] border border-zinc-200 bg-white p-1.5 shadow-xl"
         >
           {primary.map(renderGroup)}
-          {primary.length === 0 && (
-            <p className="px-2.5 py-2 text-sm text-zinc-500">Không có dự án đang Bidding hoặc On Process.</p>
-          )}
 
           {otherCount > 0 && (
             <div className="mt-1 border-t border-zinc-100 pt-1">
@@ -137,6 +146,7 @@ export default function GroupedProjectPicker({
               {showOthers && others.map(renderGroup)}
             </div>
           )}
+          {crm.map(renderGroup)}
         </div>
       )}
     </div>
