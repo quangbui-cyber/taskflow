@@ -109,6 +109,12 @@ test("daily CRM job opens, merges and deduplicates reminder work", { skip: !crmT
       assert.ok(steps.some(s => s.expectedEventId === e.id)); assert.ok(steps.every(s => s.taskId));
       assert.equal(await db.task.count({ where: { clientId: f.client.id, crmKind: "EVENT_REMINDER" } }), 1);
       assert.equal(await db.cadenceReminder.count({ where: { clientId: f.client.id, periodKey: "plan-close:2026" } }), 1);
+      await db.expectedEvent.deleteMany({ where: { clientId: f.client.id } });
+      await db.task.deleteMany({ where: { clientId: f.client.id } });
+      await db.client.update({ where: { id: f.client.id }, data: { budgetSeasonMonth: null } });
+      await Promise.all([runCrmReminderJob(db, { now }), runCrmReminderJob(db, { now })]);
+      assert.equal(await db.task.count({ where: { clientId: f.client.id, crmKind: "CADENCE" } }), 1);
+      assert.equal(await db.cadenceReminder.count({ where: { clientId: f.client.id, periodKey: cadencePeriodKey(addDaysVn(today, -7)) } }), 1);
     });
     await scenario("10 only active reach assignees receive due and scheduled overdue notices", async f => {
       const due = await task(f, { crmKind: "EVENT_REMINDER" });
@@ -149,6 +155,14 @@ test("daily CRM job opens, merges and deduplicates reminder work", { skip: !crmT
       await runCrmReminderJob(db, { now });
       const rows = await db.touchpoint.findMany({ where: { sourceId: m.id } });
       assert.equal(rows.length, 1); assert.equal(rows[0].status, "DRAFT"); assert.equal(rows[0].sourceType, "MEETING"); assert.equal(rows[0].notes, null);
+    });
+    await scenario("14 exhausted budget stops before starting a client and work resumes idempotently", async f => {
+      const e = await event(f);
+      const partial = await runCrmReminderJob(db, { now, budgetMs: 0 });
+      assert.equal(partial.partial, true); assert.equal(partial.openedSteps, 0);
+      assert.equal((await db.reminderStep.findUniqueOrThrow({ where: { id: e.expectedEventSteps[0].id } })).status, "PLANNED");
+      await runCrmReminderJob(db, { now });
+      assert.equal((await db.reminderStep.findUniqueOrThrow({ where: { id: e.expectedEventSteps[0].id } })).status, "OPEN");
     });
   } finally {
     try {
