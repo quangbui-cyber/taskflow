@@ -8,7 +8,8 @@ const row = (overrides: Partial<Pick<ReviewRow, "pic" | "taskId" | "can">> = {})
   pic: { accountId: "a", name: "PIC", userId: "u" }, taskId: "k1", can: all, ...overrides,
 });
 test("drafts opens only from a single open value", () => {
-  for (const [params, expected] of [[{}, false], [{ drafts: "open" }, true], [{ drafts: ["open", "open"] }, false], [{ drafts: "x" }, false]] as const) {
+  const cases: [Record<string, string | string[] | undefined>, boolean][] = [[{}, false], [{ drafts: "open" }, true], [{ drafts: ["open", "open"] }, false], [{ drafts: "x" }, false]];
+  for (const [params, expected] of cases) {
     assert.equal(draftsOpenFrom(params), expected);
   }
 });
