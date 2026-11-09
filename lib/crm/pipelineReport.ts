@@ -56,7 +56,8 @@ export function endReasonTables(rows: EndReasonInput[]) {
     const grouped = new Map<string, EndReasonInput[]>();
     for (const row of rows) if (row.outcome === outcome) {
       const label = row.reasonLabel || "Chưa ghi lý do";
-      grouped.set(label, [...(grouped.get(label) ?? []), row]);
+      const items = grouped.get(label);
+      if (items) items.push(row); else grouped.set(label, [row]);
     }
     return [...grouped].map(([reasonLabel, items]) => ({ reasonLabel, items, count: items.length }))
       .sort((a, b) => b.count - a.count || a.reasonLabel.localeCompare(b.reasonLabel, "vi"));
