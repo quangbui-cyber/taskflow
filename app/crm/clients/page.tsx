@@ -5,6 +5,11 @@ import HubTabs from "@/components/HubTabs";
 import QuickClientCreator from "@/components/QuickClientCreator";
 import TierBadge from "@/components/crm/TierBadge";
 import OutcomeDots from "@/components/crm/OutcomeDots";
+import TouchpointDialog from "@/components/crm/TouchpointDialog";
+import PendingPicConfirmButton from "@/components/crm/PendingPicConfirmButton";
+import { loadCrmActor } from "@/lib/crm/actor";
+import { crmCan } from "@/lib/crm/policy";
+import { loadTouchpointDialogOptions } from "@/lib/crm/dialogOptions";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { crmEnabled } from "@/lib/features";
@@ -24,6 +29,7 @@ function compactRevenue(amount: number) {
 export default async function ClientsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const user = await requireUser();
   if (!crmEnabled()) notFound();
+  const actor = await loadCrmActor(user);
   const raw = await searchParams;
   const params = Object.fromEntries(["q", "tier", "pic", "team", "status", "page"].map((key) => [key, typeof raw[key] === "string" ? raw[key] : undefined])) as Record<"q" | "tier" | "pic" | "team" | "status" | "page", string | undefined>;
   const now = new Date();
@@ -43,11 +49,13 @@ export default async function ClientsPage({ searchParams }: { searchParams: Prom
     prisma.project.findMany({ where: { members: { some: { userId: user.id } } }, select: { id: true, name: true, color: true, status: true, category: true, responsibleTeam: { select: { id: true, name: true } }, responsibleGroup: { select: { id: true, name: true } }, account: { select: { team: { select: { id: true, name: true } } } } }, orderBy: { createdAt: "desc" } }),
   ]);
   const data = await loadClientList(prisma, filters, settings, now);
+  const touchpointOptions = await loadTouchpointDialogOptions(prisma, actor, {});
   const filtered = !!(filters.q || filters.tier || filters.picAccountId || filters.teamId || filters.status);
   const more = new URLSearchParams();
   for (const key of ["q", "tier", "pic", "team", "status"] as const) if (params[key]) more.set(key, params[key]!);
   more.set("page", String(page + 1));
   type Row = typeof data.rows[number];
+  const pendingPic = (client: Row) => client.importStatus === "PENDING_PIC_CONFIRM" && <div className="mt-2 space-y-2"><span className="tf-badge border border-dashed border-zinc-300 text-zinc-500">Chờ PIC xác nhận</span>{crmCan(actor, "CONFIRM_IMPORTED_CLIENT", { kind: "CLIENT", picUserId: client.picAccount?.userId ?? null, teamId: client.responsibleTeamId ?? client.picAccount?.teamId ?? null }) && <div><PendingPicConfirmButton clientId={client.id} /></div>}</div>;
   const nextStep = (client: Row) => client.nextStep ? <div className="space-y-1">
     <Link href={ownerHref({ kind: client.nextStep.opportunityId ? "OPPORTUNITY" : "CLIENT", id: client.nextStep.opportunityId ?? client.id }, client.nextStep.id)} className="text-sm hover:underline">{client.nextStep.title}</Link>
     {client.nextStep.dueDate && <p className={`text-xs ${client.overdue ? "text-[#b86a08]" : "text-zinc-500"}`}>{formatCrmDate(client.nextStep.dueDate, now)}</p>}
@@ -57,7 +65,7 @@ export default async function ClientsPage({ searchParams }: { searchParams: Prom
     <main className="tf-main"><HubTabs section="crmClients" role={user.role} />
       <div className="tf-page space-y-6">
         <header className="flex flex-wrap items-start justify-between gap-4"><div><h1 className="tf-page-title">Khách hàng</h1><p className="tf-page-subtitle">{data.total} khách · {data.inCareCount} đang chăm sóc</p></div>
-          {canCreateClient(user.role) && <QuickClientCreator openProfileOnCreate triggerLabel="Thêm khách hàng" triggerClassName="tf-button-primary" />}
+          <div className="flex flex-wrap gap-2"><TouchpointDialog options={touchpointOptions} triggerVariant="secondary" />{canCreateClient(user.role) && <QuickClientCreator openProfileOnCreate triggerLabel="Thêm khách hàng" triggerClassName="tf-button-primary" />}</div>
         </header>
         <form action="/crm/clients" className="grid items-end gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(160px,2fr)_repeat(4,minmax(110px,1fr))_auto]">
           <label className="block text-sm">Tìm khách hàng<input name="q" defaultValue={filters.q ?? ""} maxLength={200} placeholder="Tìm khách hàng" className="tf-field mt-2" /></label>
@@ -69,9 +77,9 @@ export default async function ClientsPage({ searchParams }: { searchParams: Prom
         </form>
         {data.rows.length ? <section className="tf-panel overflow-hidden" aria-label="Danh sách khách hàng">
           <div className="hidden overflow-x-auto md:block"><table className="w-full text-left text-sm"><thead><tr className="border-b border-zinc-200 text-xs text-zinc-500">{["Khách hàng", "Hạng", "PIC", "Bước tiếp theo", "Lần gần nhất", "Cơ hội mở", "Doanh thu 24 tháng"].map((label, index) => <th key={label} scope="col" className={`px-4 py-3 font-semibold ${index === 6 ? "text-right" : ""}`}>{label}</th>)}</tr></thead>
-            <tbody className="divide-y divide-zinc-100">{data.rows.map((client) => <tr key={client.id} className="align-top"><td className="px-4 py-4"><Link href={`/crm/clients/${client.id}`} className="font-semibold hover:underline">{client.name}</Link><p className="mt-1 text-xs text-zinc-500">{client.buyingUnitCount} đơn vị mua</p></td><td className="px-4 py-4"><TierBadge tier={client.tier} /></td><td className="px-4 py-4">{client.picAccount?.name ?? <span className="text-zinc-400">Chưa giao</span>}</td><td className="min-w-40 px-4 py-4">{nextStep(client)}</td><td className="px-4 py-4">{client.lastTouchpoint ? <div className="space-y-1"><p>{formatCrmDate(client.lastTouchpoint.occurredAt, now)}</p><OutcomeDots level={client.lastTouchpoint.outcomeLevel} /></div> : "—"}</td><td className="px-4 py-4 tabular-nums">{client.openOpportunityCount}</td><td className="whitespace-nowrap px-4 py-4 text-right tabular-nums">{compactRevenue(client.revenue24m)}</td></tr>)}</tbody>
+            <tbody className="divide-y divide-zinc-100">{data.rows.map((client) => <tr key={client.id} className="align-top"><td className="px-4 py-4"><Link href={`/crm/clients/${client.id}`} className="font-semibold hover:underline">{client.name}</Link><p className="mt-1 text-xs text-zinc-500">{client.buyingUnitCount} đơn vị mua</p>{pendingPic(client)}</td><td className="px-4 py-4"><TierBadge tier={client.tier} /></td><td className="px-4 py-4">{client.picAccount?.name ?? <span className="text-zinc-400">Chưa giao</span>}</td><td className="min-w-40 px-4 py-4">{nextStep(client)}</td><td className="px-4 py-4">{client.lastTouchpoint ? <div className="space-y-1"><p>{formatCrmDate(client.lastTouchpoint.occurredAt, now)}</p><OutcomeDots level={client.lastTouchpoint.outcomeLevel} /></div> : "—"}</td><td className="px-4 py-4 tabular-nums">{client.openOpportunityCount}</td><td className="whitespace-nowrap px-4 py-4 text-right tabular-nums">{compactRevenue(client.revenue24m)}</td></tr>)}</tbody>
           </table></div>
-          <ul className="divide-y divide-zinc-100 md:hidden">{data.rows.map((client) => <li key={client.id} className="space-y-3 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><Link href={`/crm/clients/${client.id}`} className="text-sm font-semibold hover:underline">{client.name}</Link><TierBadge tier={client.tier} /></div><p className="text-xs text-zinc-500">PIC: {client.picAccount?.name ?? "Chưa giao"}</p>{nextStep(client)}</li>)}</ul>
+          <ul className="divide-y divide-zinc-100 md:hidden">{data.rows.map((client) => <li key={client.id} className="space-y-3 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><Link href={`/crm/clients/${client.id}`} className="text-sm font-semibold hover:underline">{client.name}</Link><TierBadge tier={client.tier} /></div><p className="text-xs text-zinc-500">PIC: {client.picAccount?.name ?? "Chưa giao"}</p>{nextStep(client)}{pendingPic(client)}</li>)}</ul>
         </section> : <section className="tf-panel space-y-4 p-8 text-center"><p className="text-sm text-zinc-500">{filtered ? "Không có kết quả phù hợp bộ lọc." : "Chưa có khách hàng"}</p>{filtered && <Link href="/crm/clients" className="tf-button-secondary">Xóa bộ lọc</Link>}</section>}
         {data.hasMore && <div className="text-center"><Link href={`/crm/clients?${more}`} className="tf-button-secondary">Tải thêm</Link></div>}
       </div>

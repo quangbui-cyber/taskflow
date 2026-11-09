@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { updateClientProfileAction, scorePotentialAction, saveBuyingUnitAction, confirmImportedClientAction } from "@/app/actions/crmClients";
+import { updateClientProfileAction, scorePotentialAction, saveBuyingUnitAction } from "@/app/actions/crmClients";
 import { useInteraction } from "@/components/InteractionProvider";
 import CrmDialog from "./CrmDialog";
 import { useClientEditSession } from "./ClientEditSession";
@@ -14,9 +14,9 @@ type ActionResult = { error?: string; success?: string; version?: number };
 const LABELS: Record<ManualKey, string> = { industry: "Ngành", budgetSeason: "Mùa lập ngân sách", vendorSelection: "Cách chọn nhà cung cấp", valuedMost: "Điều khách coi trọng" };
 const MANUAL = ["budgetSeason", "vendorSelection", "valuedMost"] as const;
 
-export default function ClientProfileEditors({ client, variant, canEdit = false, canScore = false, canConfirm = false, potentialScale = [], buyingUnits = [] }: {
+export default function ClientProfileEditors({ client, variant, canEdit = false, canScore = false, potentialScale = [], buyingUnits = [] }: {
   client: Client; variant: "header" | "persona" | "tier" | "buyingUnits";
-  canEdit?: boolean; canScore?: boolean; canConfirm?: boolean;
+  canEdit?: boolean; canScore?: boolean;
   potentialScale?: { key: string; label: string }[];
   buyingUnits?: { id: string; name: string; active: boolean; programs: string[] }[];
 }) {
@@ -55,7 +55,6 @@ export default function ClientProfileEditors({ client, variant, canEdit = false,
   const field = (key: ManualKey) => <label key={key} className="block text-sm">{LABELS[key]}<textarea className="tf-field mt-2 resize-y" rows={2} maxLength={500} value={fields[key]} onChange={(event) => setFields({ ...fields, [key]: event.target.value })} /></label>;
   const buttons = <div className="flex justify-end gap-2"><button type="button" disabled={pending} className="tf-button-secondary" onClick={() => setEditing(null)}>Hủy</button><button type="submit" disabled={pending} className="tf-button-primary">Lưu</button></div>;
   if (variant === "header") return <>
-    {canConfirm && <button type="button" disabled={pending} className="tf-button-secondary" onClick={() => run(() => confirmImportedClientAction({ clientId: client.id }))}>Xác nhận khách của tôi</button>}
     {canEdit && <button type="button" disabled={pending} className="tf-button-secondary" onClick={() => begin("profile")}>Sửa thông tin</button>}
     <CrmDialog open={editing === "profile"} title="Sửa thông tin" pending={pending} onClose={() => setEditing(null)}><form onSubmit={(event) => { event.preventDefault(); run(() => updateClientProfileAction({ clientId: client.id, expectedVersion, ...fields, budgetSeasonMonth: month ? Number(month) : null })); }}><fieldset disabled={pending} className="min-w-0 space-y-4">{(["industry", ...MANUAL] as const).map(field)}{monthField}{buttons}</fieldset></form></CrmDialog>
   </>;

@@ -56,7 +56,7 @@ function OpenOpportunityBody({ options, prefill, lockClient, onSaved, onClose }:
   const name = form.nameEdited ? form.name : generatedName;
   function set(key: keyof typeof form, value: string | boolean) {
     setForm(s => ({ ...s, [key]: value }));
-    setErrors(e => { const next = { ...e }; delete next[key]; return next; });
+    setErrors(e => { const next = { ...e }; delete next[key]; if (key === "expectedPeriod" || key === "periodMode") delete next.expectedMonth; return next; });
   }
   function a(field: string) {
     return { id: `${uid}-${field}`, "aria-invalid": !!errors[field] || undefined, "aria-describedby": errors[field] ? `${uid}-${field}-error` : undefined, style: errors[field] ? { borderColor: "var(--danger)" } : undefined };

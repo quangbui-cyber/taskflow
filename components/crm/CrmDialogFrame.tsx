@@ -32,6 +32,12 @@ export default function CrmDialogFrame({ open, title, children, dirty, pending, 
     document.addEventListener("focusin", keepFocus);
     return () => { cancelAnimationFrame(raf); document.removeEventListener("focusin", keepFocus); document.body.style.overflow = oldOverflow; if (trigger?.isConnected) trigger.focus(); };
   }, [open]);
+  useEffect(() => {
+    if (!open || pending) return;
+    // Disabling the focused submit button can leave focus on body after a rejected save.
+    const target = document.activeElement as HTMLElement | null;
+    if (target && !section.current?.contains(target) && !target.closest("[data-floating-layer]")) section.current?.focus();
+  }, [open, pending]);
   function requestClose() {
     if (pending) return;
     if (dirty) { setDiscard(true); requestAnimationFrame(() => section.current?.querySelector<HTMLElement>("[data-continue]")?.focus()); }
@@ -41,7 +47,7 @@ export default function CrmDialogFrame({ open, title, children, dirty, pending, 
   return createPortal(
     <div className="tf-overlay-enter fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/35 p-3 backdrop-blur-[2px] sm:p-8" onClick={event => { if (event.target === event.currentTarget) requestClose(); }} onKeyDown={event => {
       if (event.defaultPrevented || event.nativeEvent.isComposing) return;
-      const floating = [...document.querySelectorAll<HTMLElement>("[data-floating-layer]")].filter(node => !section.current?.contains(node) && node.getClientRects().length);
+      const floating = [...document.querySelectorAll<HTMLElement>('[data-floating-layer][role="dialog"],[data-floating-layer][role="listbox"],[data-floating-layer][role="menu"]')].filter(node => !section.current?.contains(node) && node.getClientRects().length);
       if (event.key === "Escape" && !floating.length) { event.preventDefault(); requestClose(); }
       if (event.key === "Enter" && event.ctrlKey && !discard && !floating.length) { event.preventDefault(); if (!pending) onSubmit(); }
       if (event.key === "Tab" && !floating.length) {
@@ -55,7 +61,7 @@ export default function CrmDialogFrame({ open, title, children, dirty, pending, 
         <div className="mb-5 flex items-center justify-between gap-3"><h2 id={titleId} className="text-base font-semibold text-zinc-900">{title}</h2><button type="button" className="tf-icon-button" aria-label="Đóng" disabled={pending} onClick={requestClose}><X size={17} aria-hidden="true" /></button></div>
         <form noValidate onSubmit={event => { event.preventDefault(); if (!pending && !discard) onSubmit(); }}>
           <fieldset disabled={pending} className="min-w-0 space-y-4">{children}</fieldset>
-          {discard ? <div role="group" aria-label="Bỏ nội dung đang ghi?" className="mt-5 space-y-3 rounded-[10px] bg-zinc-50 p-4"><p className="text-sm font-semibold">Bỏ nội dung đang ghi?</p><div className="flex justify-end gap-2"><button type="button" className="tf-button-secondary" onClick={onClose}>Bỏ</button><button data-continue type="button" className="tf-button-primary" onClick={() => setDiscard(false)}>Tiếp tục ghi</button></div></div> : footer ?? <div className="mt-6 flex justify-end gap-2"><button type="button" className="tf-button-secondary" disabled={pending} onClick={requestClose}>Hủy</button><button type="submit" className="tf-button-primary" disabled={pending} aria-busy={pending}>{pending && <span className="tf-spinner" aria-hidden="true" />}{submitLabel}</button></div>}
+          {discard ? <div role="group" aria-label="Bỏ nội dung đang ghi?" className="mt-5 space-y-3 rounded-[10px] bg-zinc-50 p-4"><p className="text-sm font-semibold">Bỏ nội dung đang ghi?</p><div className="flex justify-end gap-2"><button type="button" className="tf-button-secondary" onClick={onClose}>Bỏ</button><button data-continue type="button" className="tf-button-primary" onClick={() => { setDiscard(false); requestAnimationFrame(() => section.current?.querySelector<HTMLElement>(focusable)?.focus()); }}>Tiếp tục ghi</button></div></div> : footer ?? <div className="mt-6 flex justify-end gap-2"><button type="button" className="tf-button-secondary" disabled={pending} onClick={requestClose}>Hủy</button><button type="submit" className="tf-button-primary" disabled={pending} aria-busy={pending}>{pending && <span className="tf-spinner" aria-hidden="true" />}{submitLabel}</button></div>}
         </form>
       </section>
     </div>, document.body,

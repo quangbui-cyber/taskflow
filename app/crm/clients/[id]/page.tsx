@@ -11,6 +11,11 @@ import ChangePicDialog from "@/components/crm/ChangePicDialog";
 import ClientProfileEditors from "@/components/crm/ClientProfileEditors";
 import CrmTaskDialog from "@/components/crm/CrmTaskDialog";
 import ClientEditSession from "@/components/crm/ClientEditSession";
+import TouchpointDialog from "@/components/crm/TouchpointDialog";
+import OpenOpportunityDialog from "@/components/crm/OpenOpportunityDialog";
+import DraftTouchpointActions from "@/components/crm/DraftTouchpointActions";
+import PendingPicConfirmButton from "@/components/crm/PendingPicConfirmButton";
+import { loadTouchpointDialogOptions, loadOpenOpportunityDialogOptions } from "@/lib/crm/dialogOptions";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { crmEnabled } from "@/lib/features";
@@ -37,6 +42,11 @@ export default async function ClientProfilePage({ params, searchParams }: {
   const client = await loadClientProfile(prisma, id, settings, now);
   if (!client) notFound();
   const actor = await loadCrmActor(user);
+  const [touchpointOptions, opportunityOptions] = await Promise.all([
+    loadTouchpointDialogOptions(prisma, actor, { clientId: id }),
+    loadOpenOpportunityDialogOptions(prisma, actor, { clientId: id }),
+  ]);
+  const canLog = touchpointOptions.clients.length > 0;
   const resource: CrmOwnerResource = { kind: "CLIENT", picUserId: client.picAccount?.userId ?? null, teamId: client.responsibleTeamId ?? client.picAccount?.teamId ?? null };
   const canEdit = crmCan(actor, "EDIT", resource);
   const canManage = crmCan(actor, "CHANGE_PIC_OR_TEAM", resource);
@@ -87,7 +97,13 @@ export default async function ClientProfilePage({ params, searchParams }: {
         <Link href="/crm/clients" className="inline-flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-900"><ArrowLeft size={16} aria-hidden="true" />Khách hàng</Link>
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 space-y-3"><h1 className="tf-page-title break-words">{client.name}</h1><p className="text-xs text-zinc-500">{metadata}</p><div className="flex flex-wrap items-center gap-2"><TierBadge tier={client.tier} />{!canEdit && <span className="tf-badge bg-zinc-100 text-zinc-500">Chỉ xem</span>}{client.importStatus === "PENDING_PIC_CONFIRM" && <span className="tf-badge border border-dashed border-zinc-300 text-zinc-500">Chờ PIC xác nhận</span>}</div></div>
-          <div className="flex flex-wrap gap-2"><ClientProfileEditors key={`header-${client.id}`} client={clientFields} variant="header" canEdit={canEdit} canConfirm={canConfirm} />{canManage && <ChangePicDialog key={client.id} clientId={client.id} version={client.version} picAccountId={client.picAccountId} teamId={client.responsibleTeamId} accounts={accounts} teams={teams} />}</div>
+          <div className="flex flex-wrap gap-2">
+            {canLog && <TouchpointDialog options={touchpointOptions} triggerVariant="primary" prefill={{ clientId: id }} lockClient />}
+            {canEdit && <OpenOpportunityDialog options={opportunityOptions} triggerVariant="secondary" prefill={{ clientId: id }} lockClient />}
+            {canConfirm && <PendingPicConfirmButton clientId={id} />}
+            <ClientProfileEditors key={`header-${client.id}`} client={clientFields} variant="header" canEdit={canEdit} />
+            {canManage && <ChangePicDialog key={client.id} clientId={client.id} version={client.version} picAccountId={client.picAccountId} teamId={client.responsibleTeamId} accounts={accounts} teams={teams} />}
+          </div>
         </header>
         <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
           <div className="min-w-0 space-y-6">
@@ -100,7 +116,13 @@ export default async function ClientProfilePage({ params, searchParams }: {
             </section>
             <section className="tf-panel p-5"><h2 className="mb-4 text-base font-semibold">Điểm chạm</h2>
               <nav className="mb-4 flex gap-2" aria-label="Lọc điểm chạm">{[{ key: "all", label: "Tất cả" }, { key: "draft", label: "Nháp" }].map((option) => { const active = (query.touchpoints === "draft" ? "draft" : "all") === option.key; return <Link key={option.key} href={option.key === "all" ? base : `${base}?touchpoints=draft`} aria-current={active ? "page" : undefined} className={`rounded-full border px-3 py-1.5 text-sm ${active ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"}`}>{option.label}</Link>; })}</nav>
-              {touchpoints.length ? <ul className="space-y-5">{touchpoints.map((touchpoint) => <li key={touchpoint.id} className="space-y-2 text-sm"><div className="flex flex-wrap items-center gap-2"><span className="text-xs text-zinc-500">{formatCrmDate(touchpoint.occurredAt, now)} · {TOUCHPOINT_KINDS.find((kind) => kind.key === touchpoint.kind)?.label ?? touchpoint.kind} · {touchpoint.author?.name ?? "Chưa rõ người ghi"}</span>{touchpoint.draft && <span className="tf-badge border border-dashed border-zinc-300 text-zinc-500">Chờ xác nhận</span>}</div><OutcomeDots level={touchpoint.outcomeLevel} />{touchpoint.notes && <p className="whitespace-pre-wrap break-words">{touchpoint.notes}</p>}{touchpoint.opportunity && <Link href={`/crm/opportunities/${touchpoint.opportunity.id}`} className="block text-xs text-brand-700 hover:underline">{touchpoint.opportunity.name}</Link>}</li>)}</ul> : <p className="text-sm text-zinc-500">Chưa có điểm chạm.</p>}
+              {touchpoints.length ? <ul className="space-y-5">{touchpoints.map((touchpoint) => <li key={touchpoint.id} className="space-y-2 text-sm">
+                <div className="flex flex-wrap items-center gap-2"><span className="text-xs text-zinc-500">{formatCrmDate(touchpoint.occurredAt, now)} · {TOUCHPOINT_KINDS.find((kind) => kind.key === touchpoint.kind)?.label ?? touchpoint.kind} · {touchpoint.author?.name ?? "Chưa rõ người ghi"}</span>{touchpoint.draft && <span className="tf-badge border border-dashed border-zinc-300 text-zinc-500">Chờ xác nhận</span>}</div>
+                <OutcomeDots level={touchpoint.outcomeLevel} />
+                {touchpoint.notes && <p className="whitespace-pre-wrap break-words">{touchpoint.notes}</p>}
+                {touchpoint.opportunity && <Link href={`/crm/opportunities/${touchpoint.opportunity.id}`} className="block text-xs text-brand-700 hover:underline">{touchpoint.opportunity.name}</Link>}
+                {touchpoint.draft && canLog && <DraftTouchpointActions draft={{ id: touchpoint.id, clientId: id, opportunityId: touchpoint.opportunityId, occurredAt: touchpoint.occurredAt.toISOString() }} options={touchpointOptions} />}
+              </li>)}</ul> : <div className="space-y-3"><p className="text-sm text-zinc-500">Chưa có điểm chạm.</p>{canLog && <TouchpointDialog options={touchpointOptions} triggerVariant="secondary" prefill={{ clientId: id }} lockClient />}</div>}
             </section>
           </div>
           <aside className="min-w-0 space-y-6">
