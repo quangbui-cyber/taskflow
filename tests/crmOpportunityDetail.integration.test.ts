@@ -11,11 +11,13 @@ test("detail isolates owners, orders next work/history and retains only transfer
   const now = new Date("2026-11-09T10:00:00+07:00");
   try {
     const f = await seedCrmFixture(db, prefix);
+    await db.client.update({ where: { id: f.client.id }, data: { picAccountId: f.picAccount.id } });
     const actor = { id: f.pic.id, name: f.pic.name, role: f.pic.role, accountId: f.picAccount.id, managedTeamIds: [], isDataSteward: false };
     const opened = await openOpportunity(db, actor, { clientId: f.client.id, name: `${prefix} Open`, programTypeCode: "MICE", expectedYear: 2026, expectedMonth: 11, source: "OTHER", demandSignal: "Need", picAccountId: f.picAccount.id, budgetMin: 1000000, budgetMax: 2000000 });
     assert.ok("ok" in opened); const id = opened.opportunityId;
-    assert.ok("ok" in await advanceStage(db, actor, { opportunityId: id, expectedVersion: 0, to: "BRIEF", briefReceivedAt: now }));
-    assert.ok("ok" in await advanceStage(db, actor, { opportunityId: id, expectedVersion: 1, to: "BIDDING" }));
+    const effects = { notify: async () => {} };
+    assert.ok("ok" in await advanceStage(db, actor, { opportunityId: id, expectedVersion: 0, to: "BRIEF", briefReceivedAt: now }, effects));
+    assert.ok("ok" in await advanceStage(db, actor, { opportunityId: id, expectedVersion: 1, to: "BIDDING" }, effects));
     const createTask = (title: string, status: string, dueDate: Date | null) => db.task.create({ data: { opportunityId: id, creatorId: f.pic.id, assigneeId: f.assignee.id, title, status, dueDate, crmKind: "BID_PREP" } });
     const later = await createTask("Later", "TODO", new Date("2026-11-10T00:00:00+07:00"));
     const next = await createTask("Next", "IN_PROGRESS", new Date("2026-11-08T00:00:00+07:00"));
@@ -30,9 +32,9 @@ test("detail isolates owners, orders next work/history and retains only transfer
     await db.meeting.create({ data: { clientId: f.client.id, organizerId: f.pic.id, title: "Client meeting", startAt: now, endAt: now } });
     await db.touchpoint.createMany({ data: [
       { opportunityId: id, clientId: f.client.id, authorId: f.pic.id, occurredAt: now, status: "DRAFT", kind: "CALL" },
-      { opportunityId: id, clientId: f.client.id, authorId: f.pic.id, occurredAt: new Date("2026-11-01T00:00Z"), status: "CONFIRMED", kind: "MESSAGE" },
+      { opportunityId: id, clientId: f.client.id, authorId: f.pic.id, occurredAt: new Date("2026-11-01T00:00Z"), status: "CONFIRMED", kind: "MESSAGE", outcomeLevel: 2 },
       { opportunityId: id, clientId: f.client.id, occurredAt: now, status: "DISMISSED", kind: "CALL" },
-      { clientId: f.client.id, occurredAt: now, status: "CONFIRMED", kind: "CALL" },
+      { clientId: f.client.id, occurredAt: now, status: "CONFIRMED", kind: "CALL", outcomeLevel: 1 },
     ] });
     const detail = await loadOpportunityDetail(db, id, now); assert.ok(detail);
     assert.deepEqual(detail.tasks.map(t => t.id), [next.id, later.id, cancelled.id, done.id]);
