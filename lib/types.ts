@@ -10,6 +10,7 @@ export type CommentDTO = {
 
 export type TaskDTO = {
   id: string;
+  fromOpportunity?: boolean;
   title: string;
   description: string | null;
   result: string | null;

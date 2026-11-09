@@ -13,7 +13,7 @@ import Sidebar from "@/components/Sidebar";
 import HubTabs from "@/components/HubTabs";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
-import { meetingRecapsEnabled, meetingsEnabled } from "@/lib/features";
+import { crmEnabled, meetingRecapsEnabled, meetingsEnabled } from "@/lib/features";
 import { formatHour, toDateInputVN } from "@/lib/dates";
 import { formatMeetingDay, meetingResponseLabel } from "@/lib/meetings";
 import { recurrenceLabel } from "@/lib/meetingRecurrence";
@@ -74,6 +74,7 @@ function MeetingCard({
   composerProps,
   recapsEnabled,
   seriesOccurrences,
+  fromOpportunity,
 }: {
   meeting: MeetingRow;
   viewer: { id: string; role: string };
@@ -82,6 +83,7 @@ function MeetingCard({
   composerProps: MeetingComposerData;
   recapsEnabled: boolean;
   seriesOccurrences: SeriesOccurrence[];
+  fromOpportunity: boolean;
 }) {
   const isOrganizer = meeting.organizerId === viewer.id;
   const myInvite = meeting.attendees.find((attendee) => attendee.userId === viewer.id);
@@ -141,6 +143,7 @@ function MeetingCard({
         </h3>
 
         <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-zinc-500">
+          {fromOpportunity && <span className="tf-badge bg-zinc-100 text-zinc-600">Từ Cơ hội</span>}
           <span className="inline-flex items-center gap-1.5">
             <DoorOpen size={14} aria-hidden="true" />
             {meeting.room?.name ?? "Không dùng phòng"}
@@ -505,6 +508,7 @@ export default async function MeetingsPage({
                   <div className="px-5">
                     {day.meetings.map((meeting) => (
                       <MeetingCard
+                        fromOpportunity={crmEnabled() && Boolean(meeting.projectId && meeting.sourceOpportunityId)}
                         key={meeting.id}
                         meeting={meeting}
                         viewer={user}

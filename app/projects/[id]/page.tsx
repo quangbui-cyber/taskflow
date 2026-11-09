@@ -7,6 +7,7 @@ import {
   CalendarDays,
   FileText,
   ShieldCheck,
+  Target,
   UsersRound,
 } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
@@ -25,7 +26,7 @@ import ProjectFilesPanel from "@/components/ProjectFilesPanel";
 import ProjectFinancePanel from "@/components/ProjectFinancePanel";
 import ProjectStatusSelect from "@/components/ProjectStatusSelect";
 import MeetingComposer from "@/components/MeetingComposer";
-import { financeEnabled, meetingsEnabled } from "@/lib/features";
+import { crmEnabled, financeEnabled, meetingsEnabled } from "@/lib/features";
 import { loadMeetingComposerData } from "@/lib/meetingComposerData";
 import {
   formatVND,
@@ -41,6 +42,7 @@ import { ROLE_LABELS, isUserRole } from "@/lib/roles";
 import { storedFileDriveUrl } from "@/lib/storedFileResponse";
 import { loadProjectCreationContext } from "@/lib/crm/projectCreationContext";
 import { visibleProjectStatusKeys } from "@/lib/crm/projectCreation";
+import { legacyProjectRedirectHref } from "@/lib/crm/legacyRedirect";
 
 function extractProjectMetadata(description: string | null) {
   if (!description) return { poNumber: null, poDate: null };
@@ -65,10 +67,12 @@ export default async function ProjectPage({
   const { id } = await params;
   const { tab, task: requestedTaskId, google: googleResult, chat: chatIntent } = await searchParams;
   const user = await requireUser();
+  const crmOn = crmEnabled();
   const project = await prisma.project.findUnique({
     where: { id },
     include: {
       client: { select: { id: true, name: true } },
+      sourceOpportunity: { select: { id: true, name: true } },
       responsibleTeam: { select: { id: true, name: true } },
       responsibleGroup: { select: { id: true, name: true } },
       account: {
@@ -123,6 +127,7 @@ export default async function ProjectPage({
       files: {
         select: {
           id: true,
+          sourceOpportunityId: true,
           name: true,
           mimeType: true,
           size: true,
@@ -137,7 +142,11 @@ export default async function ProjectPage({
     },
   });
 
-  if (!project) notFound();
+  if (!project) {
+    const legacyHref = crmOn ? await legacyProjectRedirectHref(prisma, id) : null;
+    if (legacyHref) redirect(legacyHref);
+    notFound();
+  }
   const isMember = project.members.some((m) => m.userId === user.id);
   if (!isMember && user.role !== "ADMIN") redirect("/");
   const creationContext = await loadProjectCreationContext(prisma, user.id);
@@ -243,6 +252,7 @@ export default async function ProjectPage({
 
   const tasks: TaskDTO[] = project.tasks.map((t) => ({
     id: t.id,
+    fromOpportunity: crmOn && t.sourceOpportunityId !== null,
     title: t.title,
     description: t.description,
     result: t.result,
@@ -490,10 +500,20 @@ export default async function ProjectPage({
                     : project.responsibleGroup?.name ?? project.responsibleTeam?.name ?? "Chưa gán Team/phòng ban"}
                 </span>
                 {project.client?.name && (
+                  crmOn ? <Link href={`/crm/clients/${project.client.id}`} className="inline-flex items-center gap-1.5 hover:underline">
+                    <Building2 size={14} aria-hidden="true" />
+                    Khách: {project.client.name}
+                  </Link> :
                   <span className="inline-flex items-center gap-1.5">
                     <Building2 size={14} aria-hidden="true" />
                     {project.client.name}
                   </span>
+                )}
+                {crmOn && project.sourceOpportunity && (
+                  <Link href={`/crm/opportunities/${project.sourceOpportunity.id}`} className="inline-flex items-center gap-1.5 hover:underline">
+                    <Target size={14} aria-hidden="true" />
+                    Từ Cơ hội: {project.sourceOpportunity.name}
+                  </Link>
                 )}
                 {projectMetadata.poNumber && (
                   <span className="inline-flex items-center gap-1.5">
@@ -609,8 +629,9 @@ export default async function ProjectPage({
               projectId={project.id}
               currentUserId={user.id}
               canManageAll={isOwner || user.role === "ADMIN"}
-              initialFiles={project.files.map(({ driveFileId, ...file }) => ({
+              initialFiles={project.files.map(({ driveFileId, sourceOpportunityId, ...file }) => ({
                 ...file,
+                fromOpportunity: crmOn && sourceOpportunityId !== null,
                 createdAt: file.createdAt.toISOString(),
                 driveUrl: storedFileDriveUrl({ driveFileId, mimeType: file.mimeType }),
               }))}

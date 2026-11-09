@@ -289,6 +289,7 @@ export default function Board({
                                 </p>
                               </div>
                               <div className="mt-3 flex flex-wrap items-center gap-2">
+                                {task.fromOpportunity && <span className="tf-badge bg-zinc-100 text-zinc-600">Từ Cơ hội</span>}
                                 {priority && (
                                   <span className={`tf-badge ${priority.className}`}>
                                     {priority.label}

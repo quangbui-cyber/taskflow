@@ -22,6 +22,7 @@ import {
 
 export type ProjectFileDTO = {
   id: string;
+  fromOpportunity?: boolean;
   name: string;
   mimeType: string;
   size: number;
@@ -215,6 +216,7 @@ export default function ProjectFilesPanel({
                     {file.name}
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500">
+                    {file.fromOpportunity && <span className="tf-badge bg-zinc-100 text-zinc-600">Từ Cơ hội</span>}
                     <span>{projectFileTypeLabel(file.mimeType)}</span>
                     <span aria-hidden="true">·</span>
                     <span>{formatProjectFileSize(file.size)}</span>
