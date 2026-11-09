@@ -14,7 +14,10 @@ export default function ReviewUnratedSection({ rows: initialRows, potentialScale
   if (!rows.length) return null;
   return <section className="tf-panel !mt-12 overflow-hidden" aria-label="Chưa xếp hạng">
     <header className="px-5 py-3"><h2 className="text-base font-semibold">Chưa xếp hạng</h2></header>
-    {potentialScaleConfigured ? <div className="divide-y divide-zinc-100">{rows.map(row => <PotentialRow key={row.clientId} row={row} potentialScale={potentialScale} />)}</div> : <div className="flex flex-wrap items-center gap-4 px-5 py-4 text-sm text-zinc-500"><span>Chưa có thang tiềm năng</span>{isAdmin && <Link href="/admin?tab=crm" className="tf-button-secondary">Mở cấu hình CRM</Link>}</div>}
+    {potentialScaleConfigured ? <div className="divide-y divide-zinc-100">{rows.map(row => <PotentialRow key={row.clientId} row={row} potentialScale={potentialScale} />)}</div> : <>
+      <div className="flex flex-wrap items-center gap-4 px-5 py-4 text-sm text-zinc-500"><span>Chưa có thang tiềm năng</span>{isAdmin && <Link href="/admin?tab=crm" className="tf-button-secondary">Mở cấu hình CRM</Link>}</div>
+      <div className="divide-y divide-zinc-100">{rows.map(row => <div key={row.clientId} className="px-5 py-4"><Link href={`/crm/clients/${row.clientId}`} className="text-sm font-semibold hover:underline">{row.name}</Link><p className="mt-1 text-xs text-zinc-500">Doanh thu 24 tháng: {row.revenue24m ? formatCompactVnd(row.revenue24m) : "0"}</p></div>)}</div>
+    </>}
   </section>;
 }
 function PotentialRow({ row, potentialScale }: { row: UnratedRow; potentialScale: PotentialLevel[] }) {

@@ -29,7 +29,7 @@ export default function ReviewRow({ row, actions, dialogOptions, accounts, now }
   const [done, setDone] = useState<keyof typeof REVIEW_DONE_LABELS | null>(null);
   const [dialog, setDialog] = useState(false);
   const [panel, setPanel] = useState<Panel | null>(null);
-  const [position, setPosition] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [position, setPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
   const trigger = useRef<HTMLButtonElement | null>(null);
   const popup = useRef<HTMLDivElement>(null);
   const submitting = useRef(false);
@@ -49,17 +49,31 @@ export default function ReviewRow({ row, actions, dialogOptions, accounts, now }
       const rect = trigger.current?.getBoundingClientRect();
       if (!rect) return;
       const width = Math.min(320, window.innerWidth - 24);
-      setPosition({ top: Math.max(12, Math.min(rect.bottom + 8, window.innerHeight - 380)), left: Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12)), width });
+      const top = Math.max(12, Math.min(rect.bottom + 8, window.innerHeight - 380));
+      setPosition({ top, left: Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12)), width, maxHeight: window.innerHeight - top - 12 });
     }
     place();
     function outside(e: PointerEvent) {
       const target = e.target as Element;
       if (!pending && !popup.current?.contains(target) && !trigger.current?.contains(target) && !target.closest("[data-floating-layer]")) closePanel();
     }
+    function escape(e: KeyboardEvent) {
+      if (e.key !== "Escape" || e.defaultPrevented || pending) return;
+      if (popup.current?.querySelector('[data-open="true"]')) return;
+      if (document.querySelector('[data-floating-layer][role="listbox"]')) return;
+      e.preventDefault();
+      closePanel();
+    }
     window.addEventListener("resize", place);
     window.addEventListener("scroll", place, true);
     document.addEventListener("pointerdown", outside);
-    return () => { window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); document.removeEventListener("pointerdown", outside); };
+    document.addEventListener("keydown", escape);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+    };
   }, [panel, pending]);
   useEffect(() => {
     if (!panel) return;
@@ -100,7 +114,7 @@ export default function ReviewRow({ row, actions, dialogOptions, accounts, now }
       {!!actions.menu.length && <button type="button" aria-label="Thao tác khác" aria-expanded={!!panel} aria-controls={`${uid}-panel`} className="tf-icon-button min-h-10 md:!min-h-9" disabled={pending} onClick={e => openPanel("MENU", e.currentTarget)}><MoreHorizontal size={16} aria-hidden="true" /></button>}
     </>}</div>
     <TouchpointDialog options={dialogOptions} triggerVariant="secondary" renderTrigger={false} open={dialog} onOpenChange={setDialog} lockClient prefill={row.prefill} onSaved={() => setDone("LOGGED")} />
-    {panel && position && createPortal(<div ref={popup} id={`${uid}-panel`} role="dialog" aria-label={panel === "MENU" ? "Thao tác khác" : panel === "POSTPONE" ? "Hoãn có lý do" : panel === "ASSIGN_PIC" ? "Giao PIC" : "Giao người và hạn"} data-floating-layer className="tf-scheduling-popover fixed z-40 max-h-[calc(100dvh-24px)] overflow-y-auto rounded-[8px] border border-zinc-200 bg-white p-4" style={position} onKeyDown={e => { if (e.key === "Escape" && !pending && !document.querySelector('[data-floating-layer]:not([role="dialog"])')) { e.preventDefault(); e.stopPropagation(); closePanel(); } }}>
+    {panel && position && createPortal(<div ref={popup} id={`${uid}-panel`} role="dialog" aria-label={panel === "MENU" ? "Thao tác khác" : panel === "POSTPONE" ? "Hoãn có lý do" : panel === "ASSIGN_PIC" ? "Giao PIC" : "Giao người và hạn"} data-floating-layer className="tf-scheduling-popover fixed z-40 max-h-[calc(100dvh-24px)] overflow-y-auto rounded-[8px] border border-zinc-200 bg-white p-4" style={position}>
       <div className="mb-3 flex justify-end"><button type="button" className="tf-icon-button !h-9 !min-h-9 !w-9" disabled={pending} aria-label="Đóng" onClick={closePanel}><X size={14} aria-hidden="true" /></button></div>
       {panel === "MENU" ? <div className="space-y-1">{actions.menu.map(a => <button key={a} type="button" disabled={pending} aria-busy={pending} className="flex min-h-10 w-full items-center gap-2 rounded px-2 text-left text-sm hover:bg-zinc-50" onClick={() => a === "ESCALATE" ? run(() => escalateCrmTaskAction(row.taskId)) : setPanel(a)}>{pending && <span className="tf-spinner" />}{a === "ASSIGN" ? "Giao người và hạn" : a === "POSTPONE" ? "Hoãn có lý do" : "Cần AD/AM"}</button>)}</div> : <form className="space-y-4" aria-busy={pending} onSubmit={e => { e.preventDefault(); submit(); }}>
         {panel === "ASSIGN" && <><UserPicker options={dialogOptions.users} value={assignee} onChange={setAssignee} ariaLabel="Người làm" disabled={pending} /><DeadlineField dateOnly required label="Hạn" value={due} onChange={setDue} /></>}
