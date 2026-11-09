@@ -94,6 +94,15 @@ test("weekly review is scoped, ordered, permission-aware and read-only", { skip:
       assert.equal(rowFor(m, c2.id).can.assignPic, true); assert.equal(rowFor(review, c2.id).can.assignPic, false); assert.equal(rowFor(m, c1.id).can.assignPic, false);
       assert.equal(m.potentialScaleConfigured, true); assert.equal(m.drafts[0].canConfirm, true); assert.equal(o.drafts[0].canConfirm, false);
     });
+    await t.test("filtering by PIC never changes a client's company-wide revenue tier", async () => {
+      await db.client.update({ where: { id: c1.id }, data: { potentialLevel: "HIGH" } });
+      await db.project.create({ data: { name: `${prefix} Other revenue`, ownerId: f.admin.id, clientId: anotherPic.id, accountId: f.otherAccount.id, revenue: 1000, status: "ON_PROCESS", onProcessAt: new Date("2026-10-01") } });
+      await db.crmSetting.update({ where: { key: "tier.matrix" }, data: { value: { revenueBands: [{ key: "LOW", label: "Low", minPercentile: 0 }, { key: "HIGH", label: "High", minPercentile: 90 }], cells: { LOW: { HIGH: "B", LOW: "C" }, HIGH: { HIGH: "S", LOW: "A" } } } } });
+      const full = await loadWeeklyReview(db, pic, { team: "all", pic: "all" }, now);
+      const mine = await loadWeeklyReviewGroups(db, pic, { team: "all", pic: "me" }, now);
+      assert.equal(rowFor(full, c1.id).client.tier, "B"); assert.equal(rowFor(mine, c1.id).client.tier, "B");
+      await db.crmSetting.update({ where: { key: "tier.matrix" }, data: { value: settings["tier.matrix"] } });
+    });
     await t.test("other team and exclusive week end are excluded, empty shape has correct metrics", async () => {
       const team = await db.salesTeam.create({ data: { name: `${prefix} Other Team` } }); extraTeamId = team.id;
       const empty = await loadWeeklyReview(db, pic, { team: team.id }, now); assert.equal(empty.isEmpty, true); assert.deepEqual(empty.metrics, { overdue: 0, dueThisWeek: 0, noNextStep: 0, drafts: 0 });
