@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, requireUser } from "@/lib/auth";
+import { clientHasCrmData } from "@/lib/crm/clientMerge";
 import {
   canCreateClient,
   clientNameError,
@@ -144,8 +145,21 @@ export async function updateClient(
 
 export async function deleteClient(id: string): Promise<CatalogState> {
   await requireAdmin();
-  // onDelete: SetNull ở Project.clientId → project cũ chỉ mất tham chiếu, không bị xoá
-  await prisma.client.delete({ where: { id } });
+  const refusal = "Khách đã có dữ liệu CRM. Dùng Gộp khách để gộp vào khách khác.";
+  try {
+    const deleted = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${id}))`;
+      await tx.$queryRaw`SELECT id FROM "Client" WHERE id = ${id} FOR UPDATE`;
+      // Chặn xóa dữ liệu CRM; khách danh mục thuần vẫn xóa được.
+      if (await clientHasCrmData(tx, id)) return false;
+      await tx.client.delete({ where: { id } });
+      return true;
+    });
+    if (!deleted) return { error: refusal };
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") return { error: refusal };
+    throw error;
+  }
   revalidatePath("/admin");
   revalidatePath("/projects/new");
   return { success: "Đã xoá Client." };
