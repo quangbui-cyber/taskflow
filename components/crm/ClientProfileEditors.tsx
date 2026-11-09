@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useTransition, type ReactNode } from "react";
+import { MoreHorizontal } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { updateClientProfileAction, scorePotentialAction, saveBuyingUnitAction } from "@/app/actions/crmClients";
 import { useInteraction } from "@/components/InteractionProvider";
@@ -14,12 +15,27 @@ type ActionResult = { error?: string; success?: string; version?: number };
 const LABELS: Record<ManualKey, string> = { industry: "Ngành", budgetSeason: "Mùa lập ngân sách", vendorSelection: "Cách chọn nhà cung cấp", valuedMost: "Điều khách coi trọng" };
 const MANUAL = ["budgetSeason", "vendorSelection", "valuedMost"] as const;
 
-export default function ClientProfileEditors({ client, variant, canEdit = false, canScore = false, potentialScale = [], buyingUnits = [] }: {
+export default function ClientProfileEditors({ client, variant, canEdit = false, canScore = false, potentialScale = [], buyingUnits = [], firstHeaderMenuItem }: {
   client: Client; variant: "header" | "persona" | "tier" | "buyingUnits";
   canEdit?: boolean; canScore?: boolean;
   potentialScale?: { key: string; label: string }[];
   buyingUnits?: { id: string; name: string; active: boolean; programs: string[] }[];
+  firstHeaderMenuItem?: ReactNode;
 }) {
+  const [menu, setMenu] = useState(false);
+  const menuRoot = useRef<HTMLDivElement>(null);
+  const menuTrigger = useRef<HTMLButtonElement>(null);
+  const menuId = useId();
+  useEffect(() => {
+    if (!menu) return;
+    const raf = requestAnimationFrame(() => menuRoot.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus());
+    function outside(event: PointerEvent) {
+      const target = event.target as Element;
+      if (!menuRoot.current?.contains(target) && !target.closest('[role="dialog"],[data-floating-layer]')) setMenu(false);
+    }
+    document.addEventListener("pointerdown", outside);
+    return () => { cancelAnimationFrame(raf); document.removeEventListener("pointerdown", outside); };
+  }, [menu]);
   const router = useRouter(); const { notify } = useInteraction();
   const session = useClientEditSession();
   const [editing, setEditing] = useState<Editing>(null);
@@ -55,7 +71,18 @@ export default function ClientProfileEditors({ client, variant, canEdit = false,
   const field = (key: ManualKey) => <label key={key} className="block text-sm">{LABELS[key]}<textarea className="tf-field mt-2 resize-y" rows={2} maxLength={500} value={fields[key]} onChange={(event) => setFields({ ...fields, [key]: event.target.value })} /></label>;
   const buttons = <div className="flex justify-end gap-2"><button type="button" disabled={pending} className="tf-button-secondary" onClick={() => setEditing(null)}>Hủy</button><button type="submit" disabled={pending} className="tf-button-primary">Lưu</button></div>;
   if (variant === "header") return <>
-    {canEdit && <button type="button" disabled={pending} className="tf-button-secondary" onClick={() => begin("profile")}>Sửa thông tin</button>}
+    {canEdit && (firstHeaderMenuItem ? <div ref={menuRoot} className="relative" onKeyDown={event => {
+      if (event.defaultPrevented || (event.target as Element).closest('[role="dialog"]')) return;
+      if (event.key === "Escape" && menu) { event.preventDefault(); setMenu(false); menuTrigger.current?.focus(); }
+      if (menu && ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+        event.preventDefault(); const items = [...(menuRoot.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
+        const index = items.indexOf(document.activeElement as HTMLElement);
+        items[event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : (index + (event.key === "ArrowUp" ? -1 : 1) + items.length) % items.length]?.focus();
+      }
+      if (event.key === "Tab") setMenu(false);
+    }}><button ref={menuTrigger} type="button" disabled={pending} className="tf-icon-button" aria-label="Thao tác khách hàng" aria-haspopup="menu" aria-expanded={menu} aria-controls={menu ? menuId : undefined} onClick={() => setMenu(value => !value)}><MoreHorizontal size={18} aria-hidden="true" /></button>
+      {menu && <div id={menuId} role="menu" aria-label="Thao tác khách hàng" className="absolute right-0 z-20 mt-2 w-64 max-w-[calc(100vw-24px)] rounded-[10px] border border-zinc-200 bg-white p-1 shadow-lg">{firstHeaderMenuItem}<button type="button" role="menuitem" disabled={pending} className="flex min-h-10 w-full items-center rounded-[8px] px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 focus:bg-zinc-100 focus:outline-none" onClick={() => begin("profile")}>Sửa thông tin</button></div>}
+    </div> : <button type="button" disabled={pending} className="tf-button-secondary" onClick={() => begin("profile")}>Sửa thông tin</button>)}
     <CrmDialog open={editing === "profile"} title="Sửa thông tin" pending={pending} onClose={() => setEditing(null)}><form onSubmit={(event) => { event.preventDefault(); run(() => updateClientProfileAction({ clientId: client.id, expectedVersion, ...fields, budgetSeasonMonth: month ? Number(month) : null })); }}><fieldset disabled={pending} className="min-w-0 space-y-4">{(["industry", ...MANUAL] as const).map(field)}{monthField}{buttons}</fieldset></form></CrmDialog>
   </>;
   if (variant === "tier") return <div className="mt-4">

@@ -15,6 +15,11 @@ import TouchpointDialog from "@/components/crm/TouchpointDialog";
 import OpenOpportunityDialog from "@/components/crm/OpenOpportunityDialog";
 import DraftTouchpointActions from "@/components/crm/DraftTouchpointActions";
 import PendingPicConfirmButton from "@/components/crm/PendingPicConfirmButton";
+import SeasonGrid from "@/components/crm/SeasonGrid";
+import ExpectedEventDialog from "@/components/crm/ExpectedEventDialog";
+import { loadSeasonGridInput } from "@/lib/crm/seasonData";
+import { buildSeasonGrid } from "@/lib/crm/seasonGrid";
+import { loadProgramTypes } from "@/lib/programTypes";
 import { loadTouchpointDialogOptions, loadOpenOpportunityDialogOptions } from "@/lib/crm/dialogOptions";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -53,7 +58,7 @@ export default async function ClientProfilePage({ params, searchParams }: {
   const canScore = crmCan(actor, "SCORE_POTENTIAL", resource);
   const canAssign = crmCan(actor, "ASSIGN", resource);
   const canConfirm = client.importStatus === "PENDING_PIC_CONFIRM" && crmCan(actor, "CONFIRM_IMPORTED_CLIENT", resource);
-  const [projects, accounts, teams, users, programs, selectedTask] = await Promise.all([
+  const [projects, accounts, teams, users, programs, selectedTask, seasonInput, activePrograms] = await Promise.all([
     prisma.project.findMany({ where: { members: { some: { userId: user.id } } }, select: { id: true, name: true, color: true, status: true, category: true, responsibleTeam: { select: { id: true, name: true } }, responsibleGroup: { select: { id: true, name: true } }, account: { select: { team: { select: { id: true, name: true } } } } }, orderBy: { createdAt: "desc" } }),
     canManage ? prisma.account.findMany({ where: { OR: [{ userId: null }, { user: { isActive: true, deletedAt: null } }] }, select: { id: true, name: true }, orderBy: { name: "asc" } }) : [],
     canManage ? prisma.salesTeam.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }) : [],
@@ -65,7 +70,11 @@ export default async function ClientProfilePage({ params, searchParams }: {
       followers: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
       files: { select: { id: true, kind: true, name: true, mimeType: true, size: true, createdAt: true, driveFileId: true, uploader: { select: { id: true, name: true } } }, orderBy: { createdAt: "asc" } },
     } }) : null,
+    loadSeasonGridInput(prisma, id, now),
+    loadProgramTypes(prisma, { activeOnly: true }),
   ]);
+  const months = buildSeasonGrid({ ...seasonInput, programTypes: programs, now });
+  const eventDialogOptions = { clientId: id, clientName: client.name, programTypes: activePrograms.map(p => ({ code: p.code, label: p.label })), buyingUnits: client.buyingUnits.filter(u => u.active).map(u => ({ id: u.id, name: u.name })), reminderOffsets: settings.reminderOffsets };
   const clientFields = { id: client.id, version: client.version, industry: client.industry, budgetSeason: client.budgetSeason, budgetSeasonMonth: client.budgetSeasonMonth, vendorSelection: client.vendorSelection, valuedMost: client.valuedMost, potentialLevel: client.potentialLevel };
   const members = users.map((person) => ({ userId: person.id, role: "MEMBER", user: person }));
   const base = `/crm/clients/${client.id}`;
@@ -101,12 +110,13 @@ export default async function ClientProfilePage({ params, searchParams }: {
             {canLog && <TouchpointDialog options={touchpointOptions} triggerVariant="primary" prefill={{ clientId: id }} lockClient />}
             {canEdit && <OpenOpportunityDialog options={opportunityOptions} triggerVariant="secondary" prefill={{ clientId: id }} lockClient />}
             {canConfirm && <PendingPicConfirmButton clientId={id} />}
-            <ClientProfileEditors key={`header-${client.id}`} client={clientFields} variant="header" canEdit={canEdit} />
+            <ClientProfileEditors key={`header-${client.id}`} client={clientFields} variant="header" canEdit={canEdit} firstHeaderMenuItem={canEdit ? <ExpectedEventDialog {...eventDialogOptions} mode={{ kind: "create" }} trigger="menuitem" /> : undefined} />
             {canManage && <ChangePicDialog key={client.id} clientId={client.id} version={client.version} picAccountId={client.picAccountId} teamId={client.responsibleTeamId} accounts={accounts} teams={teams} />}
           </div>
         </header>
         <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
           <div className="min-w-0 space-y-6">
+            <SeasonGrid months={months} canEdit={canEdit} eventDialogOptions={eventDialogOptions} addEventSlot={<ExpectedEventDialog {...eventDialogOptions} mode={{ kind: "create" }} trigger="ghost" />} />
             <section className="tf-panel p-5"><h2 className="mb-4 text-base font-semibold">Cơ hội</h2>
               {client.opportunities.length ? <><ul className="divide-y divide-zinc-100">{client.opportunities.slice(0, 3).map(opportunityRow)}</ul>{client.opportunities.length > 3 && <details className="mt-3"><summary className="cursor-pointer text-sm text-zinc-500">Xem tất cả ({client.opportunities.length})</summary><ul className="divide-y divide-zinc-100">{client.opportunities.slice(3).map(opportunityRow)}</ul></details>}</> : <p className="text-sm text-zinc-500">Chưa có Cơ hội.</p>}
             </section>
