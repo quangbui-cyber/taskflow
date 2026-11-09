@@ -36,6 +36,7 @@ export function parsePipelineFilters(params: Record<string, unknown>): PipelineF
   if (source) query.set("source", source);
   return { period, client, teamId, programTypeCode, source, key: query.toString() };
 }
+/** Báo cáo pilot chỉ dùng team được cấu hình; team ngoài pilot trả phạm vi rỗng. */
 export function pipelineScope(setting: PipelineModeSetting, requestedTeamId: string | null) {
   const pilotOnly = setting.mode === "PROJECT_OFFICIAL" && setting.pilotTeamIds.length > 0;
   const teamIds = pilotOnly
