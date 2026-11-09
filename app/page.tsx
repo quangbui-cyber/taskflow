@@ -14,6 +14,7 @@ import {
   Gamepad2,
   Grid2x2X,
   Grid3x3,
+  Handshake,
   Heart,
   Plane,
   Plus,
@@ -28,7 +29,8 @@ import { myOpenTasksWhere, assignedByMeOpenWhere, taskOwnerSelect, toTaskOwnerDi
 import { buildLeaderboard, monthKeyOf, monthRange } from "@/lib/gameLeaderboard";
 import { canCreateProjects, requireUser } from "@/lib/auth";
 import { daysUntil, isOverdue } from "@/lib/dates";
-import { creativeEnabled, meetingsEnabled } from "@/lib/features";
+import { creativeEnabled, crmEnabled, meetingsEnabled } from "@/lib/features";
+import { loadMyCrmFocus } from "@/lib/crm/homeFocus";
 import { isTextLine, type ArticleLine } from "@/lib/creative";
 import { ensureInitialCreativeArticles } from "@/lib/creativeSeed";
 import { getDailyInspiration } from "@/lib/daily-inspiration";
@@ -275,6 +277,7 @@ export default async function HomePage({
     sudokuMatches,
     caroMatches,
     executionProjects,
+    crmFocus,
   ] = await Promise.all([
     prisma.user.findUniqueOrThrow({
       where: { id: user.id },
@@ -393,6 +396,7 @@ export default async function HomePage({
       },
       orderBy: [{ executionStartAt: "asc" }, { name: "asc" }, { id: "asc" }],
     }),
+    crmEnabled() ? loadMyCrmFocus(prisma, user, now) : null,
   ]);
 
   // Người dẫn đầu từng game trong tháng này (chỉ hiện khi đã có người thắng).
@@ -831,6 +835,34 @@ export default async function HomePage({
                   </>
                 )}
               </Card>
+
+              {crmFocus?.isPic && (
+                <Card
+                  title="Khách cần tiếp cận của tôi"
+                  icon={Handshake}
+                  labelledBy="crm-focus-heading"
+                  delay={240}
+                  action={<CardLink href="/crm?pic=me">Xem tất cả</CardLink>}
+                >
+                  {crmFocus.rows.length > 0 ? (
+                    <ul className="space-y-3 text-sm leading-6">
+                      {crmFocus.rows.map((row) => (
+                        <li key={row.clientId} className="break-words">
+                          <Link href={`/crm/clients/${encodeURIComponent(row.clientId)}`} prefetch={false} className="font-semibold text-zinc-900 hover:underline">
+                            {row.clientName}
+                          </Link>
+                          <span className="text-zinc-600"> · {row.reason}</span>
+                          {row.dueLabel && <span className="text-zinc-500"> · {row.dueLabel}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="rounded-[10px] bg-zinc-50 px-3.5 py-3 text-sm text-zinc-600">
+                      Khách của bạn đều đã có bước tiếp theo.
+                    </p>
+                  )}
+                </Card>
+              )}
 
               <Card
                 title="Kudos Wall"
