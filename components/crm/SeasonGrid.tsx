@@ -4,13 +4,14 @@ import Link from "next/link";
 import { createPortal } from "react-dom";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
-import { SEASON_CHIP_CLASSES, type buildSeasonGrid, type SeasonChip } from "@/lib/crm/seasonGrid";
+import { SEASON_CHIP_CLASSES, type buildSeasonGrid, type SeasonChip, type SeasonEventInput } from "@/lib/crm/seasonGrid";
 import ExpectedEventDialog, { type ExpectedEventDialogOptions } from "./ExpectedEventDialog";
 
 export default function SeasonGrid({ months, canEdit, addEventSlot, eventDialogOptions }: {
   months: ReturnType<typeof buildSeasonGrid>; canEdit: boolean; addEventSlot: ReactNode; eventDialogOptions: ExpectedEventDialogOptions;
 }) {
   const [selected, setSelected] = useState<SeasonChip | null>(null);
+  const [editing, setEditing] = useState<SeasonEventInput | null>(null);
   const [position, setPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const popup = useRef<HTMLDivElement>(null);
@@ -36,9 +37,17 @@ export default function SeasonGrid({ months, canEdit, addEventSlot, eventDialogO
     function escape(e: KeyboardEvent) {
       if (e.key === "Escape" && !e.defaultPrevented && !document.querySelector('[aria-modal="true"]')) { e.preventDefault(); close(); }
     }
-    document.addEventListener("pointerdown", outside); document.addEventListener("keydown", escape);
-    window.addEventListener("resize", place); window.addEventListener("scroll", place, true);
-    return () => { cancelAnimationFrame(raf); document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", escape); window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      cancelAnimationFrame(raf);
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
   }, [selected]);
   return <section className="tf-panel min-w-0" aria-label="Mùa vụ">
     <header className="flex flex-wrap items-center justify-between gap-2 px-5 py-3"><h2 className="text-base font-semibold">Mùa vụ</h2>{canEdit && addEventSlot}</header>
@@ -61,8 +70,11 @@ export default function SeasonGrid({ months, canEdit, addEventSlot, eventDialogO
       {chip.kind === "DONE" ? <Link className="mt-4 block break-words text-brand-700 hover:underline" href={`/projects/${chip.projectId}`}>{chip.projectName}</Link> : <>
         <div className="mt-4"><p className="tf-label">Mốc nhắc</p>{chip.steps.length ? <ul className="mt-2 space-y-2">{chip.steps.map((step, index) => <li key={index} className="break-words text-xs text-zinc-600">{step.label} · {step.dueLabel} · {step.statusLabel}</li>)}</ul> : <p className="mt-2 text-xs text-zinc-500">Không có mốc nhắc</p>}</div>
         {chip.edit?.note && <p className="mt-4 whitespace-pre-wrap break-words">{chip.edit.note}</p>}
-        {canEdit && chip.edit?.status === "ACTIVE" && <div className="mt-4"><ExpectedEventDialog {...eventDialogOptions} mode={{ kind: "edit", event: chip.edit }} trigger="secondary" /></div>}
+        {canEdit && chip.edit?.status === "ACTIVE" && <div className="mt-4"><button type="button" className="tf-button-secondary" onClick={() => {
+          trigger.current?.focus(); setSelected(null); setEditing(chip.edit);
+        }}>Sửa</button></div>}
       </>}
     </div>, document.body)}
+    {canEdit && editing && <ExpectedEventDialog {...eventDialogOptions} mode={{ kind: "edit", event: editing }} trigger="secondary" renderTrigger={false} open onOpenChange={open => { if (!open) setEditing(null); }} />}
   </section>;
 }
