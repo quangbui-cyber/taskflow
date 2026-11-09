@@ -6,12 +6,14 @@ import UserPicker, { type UserPickerOption } from "@/components/UserPicker";
 import { useInteraction } from "@/components/InteractionProvider";
 import { setTeamManagersAction, setCrmDataStewardsAction, saveCrmSettingAction } from "@/app/actions/crmSettings";
 import type { PipelineModeSetting } from "@/lib/crm/pipelineMode";
-import { CrmHistory, type CrmChange } from "./CrmSettings";
+import type { PrepilotSection } from "@/lib/crm/prepilot";
+import { CrmConfigurationBadge, CrmHistory, type CrmChange } from "./CrmSettings";
 type Team = { id: string; name: string; managerIds: string[] };
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
-export default function CrmAccessSettings({ teams, users, stewardIds, pipelineMode, version, changes }: {
+export default function CrmAccessSettings({ teams, users, stewardIds, pipelineMode, version, changes, notConfigured }: {
   teams: Team[]; users: UserPickerOption[]; stewardIds: string[]; pipelineMode: PipelineModeSetting; version: number; changes: CrmChange[];
+  notConfigured: Pick<Record<PrepilotSection, boolean>, "ACCESS" | "SOURCE">;
 }) {
   const [managerIds, setManagers] = useState(Object.fromEntries(teams.map((t) => [t.id, t.managerIds])));
   const [managerBaseline, setManagerBaseline] = useState(managerIds);
@@ -42,7 +44,7 @@ export default function CrmAccessSettings({ teams, users, stewardIds, pipelineMo
   </div>;
   return <fieldset disabled={pending} className="min-w-0 space-y-6">
     <section className="tf-panel p-5">
-      <h2 className="mb-5 text-base font-semibold">Phân quyền CRM</h2>
+      <h2 className="mb-5 flex flex-wrap items-center gap-3 text-base font-semibold">Phân quyền CRM{notConfigured.ACCESS && <CrmConfigurationBadge />}</h2>
       <div className="space-y-6">{teams.map((team) => {
         const dirty = !same(managerIds[team.id], managerBaseline[team.id]);
         return <div key={team.id}><h3 className="mb-3 font-semibold">AD/AM · {team.name}</h3>
@@ -56,7 +58,7 @@ export default function CrmAccessSettings({ teams, users, stewardIds, pipelineMo
       <CrmHistory changes={changes.filter((c) => c.key.startsWith("teamManagers.") || c.key === "stewards")} names={historyNames} />
     </section>
     <section className="tf-panel space-y-4 p-5">
-      <h2 className="text-base font-semibold">Nguồn báo cáo</h2>
+      <h2 className="flex flex-wrap items-center gap-3 text-base font-semibold">Nguồn báo cáo{notConfigured.SOURCE && <CrmConfigurationBadge />}</h2>
       <label className="block text-sm">Báo cáo chính thức<select className="tf-field mt-2 w-full" value={source.mode} onChange={(e) => setSource({ ...source, mode: e.target.value as PipelineModeSetting["mode"] })}>
         <option value="PROJECT_OFFICIAL">Báo cáo chính thức đọc Project</option><option value="OPPORTUNITY_OFFICIAL">Báo cáo chính thức đọc Cơ hội</option>
       </select></label>

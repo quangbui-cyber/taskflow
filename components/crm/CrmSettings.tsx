@@ -6,8 +6,9 @@ import { useRouter } from "next/navigation";
 import { ChevronUp, ChevronDown, Plus } from "lucide-react";
 import { saveCrmSettingAction, saveReasonAction, saveProgramTypeAction } from "@/app/actions/crmSettings";
 import { useInteraction } from "@/components/InteractionProvider";
-import { isTierConfigured, parseCadenceWeeks, parsePotentialScale, parseTierMatrix, parseReminderOffsets, parseReviewPriority, type TierKey, type TierValue } from "@/lib/crm/settingsSchema";
+import { parseCadenceWeeks, parsePotentialScale, parseTierMatrix, parseReminderOffsets, parseReviewPriority, type TierKey, type TierValue } from "@/lib/crm/settingsSchema";
 import type { CrmSettings as Settings, CrmSettingKey } from "@/lib/crm/settings";
+import type { PrepilotSection } from "@/lib/crm/prepilot";
 import { TIER_LABELS, REVIEW_REASON_LABELS, REASON_GROUP_LABELS } from "@/lib/crm/labels";
 
 export type CrmChange = { id: string; key: string; createdAt: string; userName: string; oldValue: unknown; newValue: unknown };
@@ -45,9 +46,13 @@ export function CrmHistory({ changes, names = {} }: { changes: CrmChange[]; name
     </li>)}</ul>
   </details>;
 }
+export function CrmConfigurationBadge() {
+  return <span className="rounded-full bg-[#fff7e6] px-2 py-1 text-xs font-normal text-[#b86a08]">Chưa cấu hình</span>;
+}
+
 function Section({ title, children, changes, warning }: { title: string; children: ReactNode; changes: CrmChange[]; warning?: boolean }) {
   return <section className="tf-panel p-5">
-    <h2 className="mb-4 flex flex-wrap items-center gap-3 text-base font-semibold">{title}{warning && <span className="rounded-full bg-[#fff7e6] px-2 py-1 text-xs font-normal text-[#b86a08]">Chưa cấu hình</span>}</h2>
+    <h2 className="mb-4 flex flex-wrap items-center gap-3 text-base font-semibold">{title}{warning && <CrmConfigurationBadge />}</h2>
     {children}
     <CrmHistory changes={changes} />
   </section>;
@@ -56,7 +61,10 @@ function Save({ label, dirty, pending, onClick }: { label: string; dirty: boolea
   return <button type="button" className={`${dirty ? "tf-button-primary" : "tf-button-secondary"} mt-4`} disabled={!dirty || pending} onClick={onClick}>{label}</button>;
 }
 
-export default function CrmSettings({ initial, reasons, programTypes, changes }: { initial: Settings; reasons: Reason[]; programTypes: Program[]; changes: CrmChange[] }) {
+export default function CrmSettings({ initial, reasons, programTypes, changes, notConfigured }: {
+  initial: Settings; reasons: Reason[]; programTypes: Program[]; changes: CrmChange[];
+  notConfigured: Pick<Record<PrepilotSection, boolean>, "TIER" | "REASONS">;
+}) {
   const [value, setValue] = useState(initial);
   const [baseline, setBaseline] = useState(initial);
   const [pending, startTransition] = useTransition();
@@ -107,7 +115,7 @@ export default function CrmSettings({ initial, reasons, programTypes, changes }:
     setValue({ ...value, reviewPriority: next });
   };
   return <div className="space-y-6"><fieldset disabled={pending} className="min-w-0 space-y-6">
-    <Section title="Hạng khách" changes={history("tier.")} warning={!isTierConfigured(value.tierMatrix, value.potentialScale)}>
+    <Section title="Hạng khách" changes={history("tier.")} warning={notConfigured.TIER}>
       <table className="w-full text-left text-sm"><thead><tr><th className="py-2 font-semibold">Hạng</th><th className="font-semibold">Chu kỳ nhắc (tuần)</th></tr></thead>
         <tbody>{(["S", "A", "B", "C", "UNRATED"] as TierValue[]).map((tier) => <tr key={tier}><td className="py-2">{TIER_LABELS[tier]}</td><td><input aria-label={`Chu kỳ ${TIER_LABELS[tier]}`} type="number" min={1} max={104} className={`${field} !w-24`} value={value.cadenceWeeks[tier]} onChange={(e) => updateCadence(tier, Number(e.target.value))} /></td></tr>)}</tbody>
       </table>
@@ -138,7 +146,7 @@ export default function CrmSettings({ initial, reasons, programTypes, changes }:
       <Save label="Lưu mốc nhắc" dirty={dirty("reminder.offsets")} pending={pending} onClick={() => save("reminder.offsets")} />
     </Section>
   </fieldset>
-    <ReasonEditor initial={reasons} changes={history("reason.")} />
+    <ReasonEditor initial={reasons} changes={history("reason.")} warning={notConfigured.REASONS} />
     <ProgramEditor initial={programTypes} changes={history("programType.")} />
     <fieldset disabled={pending} className="min-w-0">
       <Section title="Ưu tiên trong review" changes={history("review.")}>
@@ -153,7 +161,7 @@ export default function CrmSettings({ initial, reasons, programTypes, changes }:
   </div>;
 }
 
-function ReasonEditor({ initial, changes }: { initial: Reason[]; changes: CrmChange[] }) {
+function ReasonEditor({ initial, changes, warning }: { initial: Reason[]; changes: CrmChange[]; warning: boolean }) {
   const [rows, setRows] = useState(initial);
   const [baseline, setBaseline] = useState(initial);
   const [pending, startTransition] = useTransition();
@@ -179,7 +187,7 @@ function ReasonEditor({ initial, changes }: { initial: Reason[]; changes: CrmCha
       }
     });
   }
-  return <Section title="Lý do kết thúc" changes={changes}><fieldset disabled={pending} className="min-w-0">
+  return <Section title="Lý do kết thúc" changes={changes} warning={warning}><fieldset disabled={pending} className="min-w-0">
     {(["LOST", "CANCELLED", "DECLINED"] as const).map((group) => <div key={group} className="mb-5 space-y-3">
       <h3 className="font-semibold">{REASON_GROUP_LABELS[group]}</h3>
       {rows.map((row, index) => row.group === group && <div key={row.id} className="flex flex-wrap items-center gap-3">
