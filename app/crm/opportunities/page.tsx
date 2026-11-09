@@ -81,11 +81,11 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
           {VIEWS.map(view => <Link key={view.key} href={listHref(params, { view: view.key, page: 1 })} aria-current={params.view === view.key ? "page" : undefined}
             className={`inline-flex min-h-10 items-center rounded-full border px-4 py-2 text-sm ${params.view === view.key ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"}`}>{view.label}</Link>)}
         </div>
-        <form action="/crm/opportunities" className="grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-[repeat(3,minmax(0,1fr))_auto]">
+        <form key={listHref(params)} action="/crm/opportunities" className="grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-[repeat(3,minmax(0,1fr))_auto]">
           <input type="hidden" name="view" value={params.view} />
-          <label className="block text-sm">PIC<select name="pic" defaultValue={params.picAccountId ?? ""} className="tf-field mt-2"><option value="">Tất cả PIC</option>{options.pics.map(pic => <option key={pic.id} value={pic.id}>{pic.name}</option>)}</select></label>
-          <label className="block text-sm">Team<select name="team" defaultValue={params.teamId ?? ""} className="tf-field mt-2"><option value="">Tất cả team</option>{options.teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>
-          <label className="block text-sm">Loại chương trình<select name="program" defaultValue={params.programTypeCode ?? ""} className="tf-field mt-2"><option value="">Tất cả loại chương trình</option>{options.programTypes.map(program => <option key={program.code} value={program.code}>{program.label}</option>)}</select></label>
+          <div><label htmlFor="opportunity-pic" className="block text-sm">PIC</label><select id="opportunity-pic" name="pic" defaultValue={params.picAccountId ?? ""} className="tf-field mt-2"><option value="">Tất cả PIC</option>{options.pics.map(pic => <option key={pic.id} value={pic.id}>{pic.name}</option>)}</select></div>
+          <div><label htmlFor="opportunity-team" className="block text-sm">Team</label><select id="opportunity-team" name="team" defaultValue={params.teamId ?? ""} className="tf-field mt-2"><option value="">Tất cả team</option>{options.teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}</select></div>
+          <div><label htmlFor="opportunity-program" className="block text-sm">Loại chương trình</label><select id="opportunity-program" name="program" defaultValue={params.programTypeCode ?? ""} className="tf-field mt-2"><option value="">Tất cả loại chương trình</option>{options.programTypes.map(program => <option key={program.code} value={program.code}>{program.label}</option>)}</select></div>
           <button type="submit" className="tf-button-secondary">Lọc</button>
         </form>
         {hasRows ? <section className="tf-panel overflow-hidden" aria-label="Danh sách Cơ hội">

@@ -68,6 +68,22 @@ test("Opportunity list preserves company visibility, lifecycle data and global p
       assert.ok((await loadOpportunityList(db, parseOpportunityListParams({ team: f.team.id }), now)).openRows?.some(r => r.id === a.id));
       await db.opportunity.update({ where: { id: a.id }, data: { picAccountId: f.picAccount.id } });
       assert.equal((await loadOpportunityList(db, params({ pic: f.otherAccount.id }), now)).total, 0);
+      const otherTeam = await db.salesTeam.create({ data: { name: `${prefix} Alternate` } });
+      const otherPic = await db.account.create({ data: { name: `${prefix} Alternate PIC`, teamId: otherTeam.id } });
+      try {
+        await db.opportunity.update({ where: { id: b.id }, data: { responsibleTeamId: otherTeam.id } });
+        assert.equal((await loadOpportunityList(db, params({ team: f.team.id }), now)).total, 2);
+        assert.deepEqual((await loadOpportunityList(db, params({ team: otherTeam.id }), now)).openRows?.map(r => r.id), [b.id]);
+        await db.opportunity.update({ where: { id: a.id }, data: { picAccountId: otherPic.id } });
+        // A present PIC team must take precedence over the client's team.
+        const rows = (await loadOpportunityList(db, parseOpportunityListParams({ team: f.team.id }), now)).openRows!;
+        assert.equal(rows.some(r => r.id === a.id || r.id === b.id), false);
+      } finally {
+        await db.opportunity.update({ where: { id: a.id }, data: { picAccountId: f.picAccount.id } });
+        await db.opportunity.update({ where: { id: b.id }, data: { responsibleTeamId: null } });
+        await db.account.delete({ where: { id: otherPic.id } });
+        await db.salesTeam.delete({ where: { id: otherTeam.id } });
+      }
     });
     await t.test("global next-step order is applied before the 50-row page boundary", async () => {
       const extra = [];
