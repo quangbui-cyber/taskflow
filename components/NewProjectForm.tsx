@@ -83,7 +83,7 @@ export default function NewProjectForm(props: NewProjectFormProps) {
   return (
     <section aria-labelledby="project-choice-heading" className="space-y-4">
       <div>
-        <p className="text-xs font-normal text-zinc-500">
+        <p className={`text-xs text-zinc-500 ${restricted ? "font-normal" : "font-medium"}`}>
           Bước 1 / 2 · Chọn loại dự án
         </p>
         <h2
@@ -130,7 +130,7 @@ export default function NewProjectForm(props: NewProjectFormProps) {
               {description}
             </span>}
             {!restricted && <span className="mb-6 mt-4 text-xs text-zinc-400">{detail}</span>}
-            <span className={`mt-6 flex w-full items-center justify-between border-t border-zinc-100 pt-4 text-sm font-normal ${restricted ? "text-zinc-700" : "text-brand-800"}`}>
+            <span className={`flex w-full items-center justify-between border-t border-zinc-100 pt-4 text-sm ${restricted ? "mt-6 font-normal text-zinc-700" : "mt-auto font-medium text-brand-800"}`}>
               Tiếp tục
               <ArrowRight size={17} aria-hidden="true" />
             </span>
@@ -236,7 +236,7 @@ function ProjectDetailsForm({
           <ArrowLeft size={14} aria-hidden="true" />
           Chọn lại loại dự án
         </button>
-        <p className="mt-4 text-xs font-normal text-zinc-500">
+        <p className={`mt-4 text-xs text-zinc-500 ${restricted ? "font-normal" : "font-medium"}`}>
           Bước 2 / 2 · Thông tin dự án
         </p>
         <h2
@@ -369,7 +369,7 @@ function ProjectDetailsForm({
       )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="block">
-            <span className="text-xs font-normal text-zinc-500">
+            <span className={`text-xs text-zinc-500 ${restricted ? "font-normal" : "font-medium"}`}>
             Tình trạng ban đầu
           </span>
           <span className="tf-field mt-1 flex items-center bg-zinc-50 text-zinc-600">
