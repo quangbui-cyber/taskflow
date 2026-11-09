@@ -14,18 +14,27 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { assertMigrationTarget, MigrationTargetError, MigrationUsageError, parseMigrationArgs, runMigrationCommand } from "../../lib/crm/migrationCli";
-
 async function main() {
-  const args = parseMigrationArgs(process.argv.slice(2)), url = process.env.DATABASE_URL ?? "";
-  const target = assertMigrationTarget(url, process.env, args);
-  const { PrismaClient } = await import("@prisma/client");
-  const db = new PrismaClient({ datasources: { db: { url } } });
-  try {
-    const result = await runMigrationCommand(db, args, { now: () => new Date(), databaseHost: `${target.host}/${target.database}`, log: (line) => console.log(line),
-      writeFile: async (filePath, content) => { await mkdir(path.dirname(filePath), { recursive: true }); await writeFile(filePath, content, { encoding: "utf8", mode: 0o600 }); },
-      readTextFile: async (filePath) => { try { return await readFile(filePath, "utf8"); } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; } },
-    });
-    process.exitCode = result.exitCode;
-  } finally { await db.$disconnect(); }
+    const args = parseMigrationArgs(process.argv.slice(2)), url = process.env.DATABASE_URL ?? "";
+    const target = assertMigrationTarget(url, process.env, args);
+    const { PrismaClient } = await import("@prisma/client");
+    const db = new PrismaClient({ datasources: { db: { url } } });
+    try {
+        const result = await runMigrationCommand(db, args, { now: () => new Date(), databaseHost: `${target.host}/${target.database}`, log: (line) => console.log(line),
+            writeFile: async (filePath, content) => { await mkdir(path.dirname(filePath), { recursive: true }); await writeFile(filePath, content, { encoding: "utf8", mode: 0o600 }); },
+            readTextFile: async (filePath) => { try {
+                return await readFile(filePath, "utf8");
+            }
+            catch (error) {
+                if ((error as NodeJS.ErrnoException).code === "ENOENT")
+                    return null;
+                throw error;
+            } },
+        });
+        process.exitCode = result.exitCode;
+    }
+    finally {
+        await db.$disconnect();
+    }
 }
 void main().catch((error: unknown) => { console.error(error instanceof MigrationTargetError || error instanceof MigrationUsageError ? error.message : "Không hoàn tất lệnh chuyển dữ liệu."); process.exitCode = 1; });
