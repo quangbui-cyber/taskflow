@@ -5,10 +5,14 @@ import MeetingRecapPanel from "@/components/MeetingRecapPanel";
 import MeetingProjectLink from "@/components/MeetingProjectLink";
 import RecapActionItems, { type RecapActionItemView } from "@/components/RecapActionItems";
 import Sidebar from "@/components/Sidebar";
+import MeetingDraftTouchpoint from "@/components/crm/MeetingDraftTouchpoint";
 import { requireUser } from "@/lib/auth";
 import { meetingRecapsEnabled, meetingsEnabled, crmEnabled } from "@/lib/features";
 import { loadCrmOwnerTargets } from "@/lib/crm/ownerTargets";
-import { loadCrmActor } from "@/lib/crm/actor";
+import { loadClientResource, loadCrmActor } from "@/lib/crm/actor";
+import { loadTouchpointDialogOptions } from "@/lib/crm/dialogOptions";
+import { loadMeetingDraftForViewer } from "@/lib/crm/meetingDrafts";
+import { crmCan } from "@/lib/crm/policy";
 import { ownerOrNull, ownerHref } from "@/lib/workOwner";
 import {
   canManageMeetingRecap,
@@ -90,10 +94,23 @@ export default async function MeetingRecapPage({
   const ownerName = meeting.project?.name ?? meeting.opportunity?.name ?? meeting.client?.name;
   const ownerLabel = owner?.kind === "CLIENT" ? "Khách hàng" : owner?.kind === "OPPORTUNITY" ? "Cơ hội" : "Dự án";
   const crmOn = crmEnabled();
-  const crmTargets = canManage && crmOn ? await loadCrmOwnerTargets(prisma, await loadCrmActor(user)) : { opportunities: [], clients: [] };
-  const canCreateOwnerTask = !owner || (owner.kind === "PROJECT" ? user.role === "ADMIN" || sidebarProjects.some((project) => project.id === owner.id) : owner.kind === "CLIENT" ? crmTargets.clients.some((client) => client.id === owner.id) : crmTargets.opportunities.some((opportunity) => opportunity.id === owner.id));
   const recap = meeting.recap;
   const readable = canReadMeetingRecap(meeting, recap, user);
+  const canSeeDraft = Boolean(recap?.sentAt) && (canManage || readable) && (owner?.kind === "CLIENT" || owner?.kind === "OPPORTUNITY");
+  const crmActor = crmOn && (canManage || canSeeDraft) ? await loadCrmActor(user) : null;
+  const crmTargets = canManage && crmActor ? await loadCrmOwnerTargets(prisma, crmActor) : { opportunities: [], clients: [] };
+  const canCreateOwnerTask = !owner || (owner.kind === "PROJECT" ? user.role === "ADMIN" || sidebarProjects.some((project) => project.id === owner.id) : owner.kind === "CLIENT" ? crmTargets.clients.some((client) => client.id === owner.id) : crmTargets.opportunities.some((opportunity) => opportunity.id === owner.id));
+  const draft = canSeeDraft && crmActor ? await loadMeetingDraftForViewer(prisma, {
+    meetingId: meeting.id, meetingTitle: meeting.title, canSee: canSeeDraft, actor: crmActor,
+  }) : null;
+  const draftOptions = draft?.canConfirm && crmActor
+    ? await loadTouchpointDialogOptions(prisma, crmActor, { clientId: draft.clientId })
+    : null;
+  // The existing dismiss action always checks Client rights, independent of Opportunity assignment.
+  const draftClient = draft?.opportunityId ? await loadClientResource(prisma, draft.clientId) : null;
+  const canDismissDraft = draft?.opportunityId
+    ? Boolean(crmActor && draftClient && crmCan(crmActor, "LOG_TOUCHPOINT", draftClient))
+    : draft?.canConfirm ?? false;
   const startBlock = recapStartBlockReason(meeting, user, now);
 
   const recorderId = meetingRecorderId(meeting);
@@ -187,6 +204,8 @@ export default async function MeetingRecapPage({
               </div>
             </dl>
           </header>
+
+          {draft && <MeetingDraftTouchpoint key={draft.draftId} view={draft} options={draftOptions} canDismiss={canDismissDraft} />}
 
           {canManage && !owner && (
             <MeetingProjectLink meetingId={meeting.id} projects={linkableProjects} crmTargets={crmTargets} crmOn={crmOn} />
