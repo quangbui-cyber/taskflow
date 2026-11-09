@@ -6,7 +6,7 @@ import { X } from "lucide-react";
 
 export type CrmDialogFrameProps = {
   open: boolean; title: string; children: ReactNode; dirty: boolean; pending: boolean;
-  onClose: () => void; onSubmit: () => void; submitLabel: string; footer?: ReactNode;
+  onClose: () => void; onSubmit: () => void; submitLabel: string; submitDisabled?: boolean; footer?: ReactNode;
 };
 const focusable = 'button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],[tabindex="0"]';
 export function focusCrmError(root: HTMLElement | null, errors: Record<string, string>, order: readonly string[]) {
@@ -15,7 +15,7 @@ export function focusCrmError(root: HTMLElement | null, errors: Record<string, s
   const input = node?.matches(focusable) ? node : node?.querySelector<HTMLElement>(focusable);
   input?.focus();
 }
-export default function CrmDialogFrame({ open, title, children, dirty, pending, onClose, onSubmit, submitLabel, footer }: CrmDialogFrameProps) {
+export default function CrmDialogFrame({ open, title, children, dirty, pending, onClose, onSubmit, submitLabel, submitDisabled = false, footer }: CrmDialogFrameProps) {
   const titleId = useId();
   const section = useRef<HTMLElement>(null);
   const [discard, setDiscard] = useState(false);
@@ -61,7 +61,7 @@ export default function CrmDialogFrame({ open, title, children, dirty, pending, 
         <div className="mb-5 flex items-center justify-between gap-3"><h2 id={titleId} className="text-base font-semibold text-zinc-900">{title}</h2><button type="button" className="tf-icon-button" aria-label="Đóng" disabled={pending} onClick={requestClose}><X size={17} aria-hidden="true" /></button></div>
         <form noValidate onSubmit={event => { event.preventDefault(); if (!pending && !discard) onSubmit(); }}>
           <fieldset disabled={pending} className="min-w-0 space-y-4">{children}</fieldset>
-          {discard ? <div role="group" aria-label="Bỏ nội dung đang ghi?" className="mt-5 space-y-3 rounded-[10px] bg-zinc-50 p-4"><p className="text-sm font-semibold">Bỏ nội dung đang ghi?</p><div className="flex justify-end gap-2"><button type="button" className="tf-button-secondary" onClick={onClose}>Bỏ</button><button data-continue type="button" className="tf-button-primary" onClick={() => { setDiscard(false); requestAnimationFrame(() => section.current?.querySelector<HTMLElement>(focusable)?.focus()); }}>Tiếp tục ghi</button></div></div> : footer ?? <div className="mt-6 flex justify-end gap-2"><button type="button" className="tf-button-secondary" disabled={pending} onClick={requestClose}>Hủy</button><button type="submit" className="tf-button-primary" disabled={pending} aria-busy={pending}>{pending && <span className="tf-spinner" aria-hidden="true" />}{submitLabel}</button></div>}
+          {discard ? <div role="group" aria-label="Bỏ nội dung đang ghi?" className="mt-5 space-y-3 rounded-[10px] bg-zinc-50 p-4"><p className="text-sm font-semibold">Bỏ nội dung đang ghi?</p><div className="flex justify-end gap-2"><button type="button" className="tf-button-secondary" onClick={onClose}>Bỏ</button><button data-continue type="button" className="tf-button-primary" onClick={() => { setDiscard(false); requestAnimationFrame(() => section.current?.querySelector<HTMLElement>(focusable)?.focus()); }}>Tiếp tục ghi</button></div></div> : footer ?? <div className="mt-6 flex justify-end gap-2"><button type="button" className="tf-button-secondary" disabled={pending} onClick={requestClose}>Hủy</button><button type="submit" className="tf-button-primary" disabled={pending || submitDisabled} aria-busy={pending}>{pending && <span className="tf-spinner" aria-hidden="true" />}{submitLabel}</button></div>}
         </form>
       </section>
     </div>, document.body,

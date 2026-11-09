@@ -189,6 +189,7 @@ export default function DeadlineField({
   id,
   invalid,
   describedBy,
+  maxDate,
 }: {
   name?: string;
   startName?: string;
@@ -206,6 +207,7 @@ export default function DeadlineField({
   id?: string;
   invalid?: boolean;
   describedBy?: string;
+  maxDate?: string;
 }) {
   const initialEnd = splitValue(value ?? defaultValue);
   const initialStart = splitValue(startValue ?? defaultStartValue);
@@ -262,6 +264,7 @@ export default function DeadlineField({
   }
 
   function applyDraft() {
+    if (maxDate && draftDate > maxDate) return;
     setDate(draftDate);
     if (draftDate) {
       setStartTime(draftStartTime);
@@ -277,6 +280,7 @@ export default function DeadlineField({
 
   function chooseDate(nextDate: Date) {
     const nextValue = toDateInput(nextDate);
+    if (maxDate && nextValue > maxDate) return;
     setDraftDate(nextValue);
     setFocusedDate(nextValue);
     setCalendarMonth(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1, 12));
@@ -284,6 +288,7 @@ export default function DeadlineField({
   }
 
   function focusCalendarDate(nextDate: Date) {
+    if (maxDate && toDateInput(nextDate) > maxDate) nextDate = parseDateInput(maxDate) ?? nextDate;
     const nextValue = toDateInput(nextDate);
     setFocusedDate(nextValue);
     setCalendarMonth(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1, 12));
@@ -561,6 +566,7 @@ export default function DeadlineField({
                       key={dayValue}
                       type="button"
                       data-date={dayValue}
+                      disabled={!!maxDate && dayValue > maxDate}
                       role="gridcell"
                       tabIndex={dayValue === focusedDate ? 0 : -1}
                       onFocus={() => setFocusedDate(dayValue)}
