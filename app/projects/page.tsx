@@ -11,6 +11,11 @@ import {
 } from "@/lib/types";
 import Sidebar from "@/components/Sidebar";
 import HubTabs from "@/components/HubTabs";
+import OpenOpportunityDialog from "@/components/crm/OpenOpportunityDialog";
+import { loadCrmActor } from "@/lib/crm/actor";
+import { loadOpenOpportunityDialogOptions } from "@/lib/crm/dialogOptions";
+import { loadProjectCreationContext } from "@/lib/crm/projectCreationContext";
+import { projectCreationMode } from "@/lib/crm/projectCreation";
 
 type ProjectView = "active" | "archived";
 
@@ -25,6 +30,10 @@ export default async function ProjectsPage({
   const view: ProjectView = params.view === "archived" ? "archived" : "active";
   const archivedStatuses = [...ARCHIVED_PROJECT_STATUS_KEYS];
   const memberOf = { members: { some: { userId: user.id } } };
+  const creationContext = await loadProjectCreationContext(prisma, user.id);
+  const restricted = projectCreationMode(creationContext) === "RESTRICTED";
+  const openOptions = restricted && canCreateProjects(user.role)
+    ? await loadOpenOpportunityDialogOptions(prisma, await loadCrmActor(user), {}) : null;
 
   const [projects, activeCount, archivedCount] = await Promise.all([
     prisma.project.findMany({
@@ -106,10 +115,13 @@ export default async function ProjectsPage({
               </nav>
             </div>
             {canCreateProjects(user.role) && (
+              <div className="flex flex-wrap gap-2">
               <Link href="/projects/new" prefetch={false} className="tf-button-primary">
                 <Plus size={18} strokeWidth={2} aria-hidden="true" />
-                Tạo dự án
+                {restricted ? "Tạo dự án nội bộ" : "Tạo dự án"}
               </Link>
+              {openOptions && <OpenOpportunityDialog options={openOptions} triggerVariant="secondary" />}
+              </div>
             )}
           </div>
 

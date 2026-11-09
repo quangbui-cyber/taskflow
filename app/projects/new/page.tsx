@@ -4,9 +4,12 @@ import { canViewRevenue, requireUser } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
 import NewProjectForm from "@/components/NewProjectForm";
 import { canCreateClient } from "@/lib/clientCatalog";
+import { loadProjectCreationContext } from "@/lib/crm/projectCreationContext";
+import { projectCreationMode } from "@/lib/crm/projectCreation";
 
 export default async function NewProjectPage() {
   const user = await requireUser();
+  const creationContext = await loadProjectCreationContext(prisma, user.id);
   const programTypes = await loadProgramTypes(prisma, { activeOnly: true });
 
   const [sidebarProjects, clients, accounts, teams, groups] = await Promise.all([
@@ -51,6 +54,7 @@ export default async function NewProjectPage() {
             <h1 className="tf-page-title">Tạo dự án mới</h1>
           </div>
           <NewProjectForm
+            creationMode={projectCreationMode(creationContext)}
             programTypes={programTypes}
             canEditRevenue={canViewRevenue(user.role)}
             canCreateClient={canCreateClient(user.role)}

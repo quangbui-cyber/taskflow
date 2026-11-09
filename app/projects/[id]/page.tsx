@@ -39,6 +39,8 @@ import { loadProgramTypes, programTypeDisplay } from "@/lib/programTypes";
 import { FINANCE_APPROVER_ROLES, canSetFinanceApprovers } from "@/lib/financePolicy";
 import { ROLE_LABELS, isUserRole } from "@/lib/roles";
 import { storedFileDriveUrl } from "@/lib/storedFileResponse";
+import { loadProjectCreationContext } from "@/lib/crm/projectCreationContext";
+import { visibleProjectStatusKeys } from "@/lib/crm/projectCreation";
 
 function extractProjectMetadata(description: string | null) {
   if (!description) return { poNumber: null, poDate: null };
@@ -138,6 +140,17 @@ export default async function ProjectPage({
   if (!project) notFound();
   const isMember = project.members.some((m) => m.userId === user.id);
   if (!isMember && user.role !== "ADMIN") redirect("/");
+  const creationContext = await loadProjectCreationContext(prisma, user.id);
+  const statusGroups = creationContext.crmOn ? await prisma.project.groupBy({
+    by: ["status"], where: { status: { in: ["BIDDING", "FAIL"] } }, _count: { _all: true },
+  }) : [];
+  const statusKeys = visibleProjectStatusKeys(creationContext, {
+    current: project.status, hasSourceOpportunity: Boolean(project.sourceOpportunityId),
+    statusCounts: {
+      BIDDING: statusGroups.find(({ status }) => status === "BIDDING")?._count._all ?? 0,
+      FAIL: statusGroups.find(({ status }) => status === "FAIL")?._count._all ?? 0,
+    },
+  });
 
   const showMeetings = meetingsEnabled();
   const showFinance = financeEnabled();
@@ -362,6 +375,7 @@ export default async function ProjectPage({
                 <ProjectStatusSelect
                   projectId={project.id}
                   status={project.status}
+                  statusKeys={statusKeys}
                   canEdit={isOwner || user.role === "ADMIN"}
                 />
                 {canViewRevenue && (

@@ -19,10 +19,12 @@ export default function ProjectStatusSelect({
   projectId,
   status,
   canEdit,
+  statusKeys,
 }: {
   projectId: string;
   status: string;
   canEdit: boolean;
+  statusKeys?: string[];
 }) {
   const { notify } = useInteraction();
   const [selectedStatus, setSelectedStatus] = useState(status);
@@ -108,7 +110,7 @@ export default function ProjectStatusSelect({
           aria-label="Chọn trạng thái dự án"
           className="tf-popover-enter absolute right-0 top-11 z-50 w-48 overflow-hidden rounded-[8px] border border-zinc-200 bg-white p-1.5 shadow-xl"
         >
-          {PROJECT_STATUSES.map((projectStatus) => {
+          {PROJECT_STATUSES.filter(({ key }) => !statusKeys || statusKeys.includes(key)).map((projectStatus) => {
             const selected = projectStatus.key === selectedStatus;
             return (
               <button

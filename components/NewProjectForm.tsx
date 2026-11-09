@@ -52,6 +52,7 @@ function matchClientId(clientName: string, clients: ClientOption[]) {
 }
 
 type NewProjectFormProps = {
+  creationMode?: "LEGACY" | "RESTRICTED";
   programTypes: { code: string; label: string }[];
   clients: ClientOption[];
   accounts: ProjectAccountOption[];
@@ -61,6 +62,7 @@ type NewProjectFormProps = {
 };
 
 export default function NewProjectForm(props: NewProjectFormProps) {
+  const restricted = props.creationMode === "RESTRICTED";
   const [category, setCategory] = useState<ProjectCategory | null>(null);
   const choiceHeadingRef = useRef<HTMLHeadingElement>(null);
 
@@ -81,7 +83,7 @@ export default function NewProjectForm(props: NewProjectFormProps) {
   return (
     <section aria-labelledby="project-choice-heading" className="space-y-4">
       <div>
-        <p className="text-xs font-medium text-zinc-500">
+        <p className="text-xs font-normal text-zinc-500">
           Bước 1 / 2 · Chọn loại dự án
         </p>
         <h2
@@ -105,7 +107,7 @@ export default function NewProjectForm(props: NewProjectFormProps) {
             },
             {
               category: "CLIENT",
-              label: "Khách hàng",
+              label: restricted ? "Dự án khách hàng từ PO" : "Khách hàng",
               description:
                 "Dự án phục vụ khách hàng, có Client và Account phụ trách.",
               detail: "Theo dõi công việc cho khách hàng",
@@ -116,18 +118,19 @@ export default function NewProjectForm(props: NewProjectFormProps) {
           <button
             key={value}
             type="button"
+            disabled={restricted && value === "CLIENT" && !props.canEditRevenue}
             onClick={() => setCategory(value)}
-            className="tf-panel group flex flex-col items-start p-5 text-left transition-colors hover:border-brand-400 hover:bg-brand-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 sm:p-6"
+            className={`tf-panel group flex flex-col items-start p-5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 sm:p-6 ${restricted ? "hover:border-zinc-400 hover:bg-zinc-50" : "hover:border-brand-400 hover:bg-brand-50/40"}`}
           >
-            <span className="mb-5 flex h-11 w-11 items-center justify-center rounded-[8px] bg-brand-50 text-brand-800">
+            <span className={`mb-5 flex h-11 w-11 items-center justify-center rounded-[8px] ${restricted ? "bg-zinc-100 text-zinc-600" : "bg-brand-50 text-brand-800"}`}>
               <Icon size={22} aria-hidden="true" />
             </span>
             <span className="text-lg font-semibold text-zinc-900">{label}</span>
-            <span className="mt-2 text-sm leading-6 text-zinc-500">
+            {!restricted && <span className="mt-2 text-sm leading-6 text-zinc-500">
               {description}
-            </span>
-            <span className="mb-6 mt-4 text-xs text-zinc-400">{detail}</span>
-            <span className="mt-auto flex w-full items-center justify-between border-t border-zinc-100 pt-4 text-sm font-medium text-brand-800">
+            </span>}
+            {!restricted && <span className="mb-6 mt-4 text-xs text-zinc-400">{detail}</span>}
+            <span className={`mt-6 flex w-full items-center justify-between border-t border-zinc-100 pt-4 text-sm font-normal ${restricted ? "text-zinc-700" : "text-brand-800"}`}>
               Tiếp tục
               <ArrowRight size={17} aria-hidden="true" />
             </span>
@@ -139,6 +142,7 @@ export default function NewProjectForm(props: NewProjectFormProps) {
 }
 
 function ProjectDetailsForm({
+  creationMode = "LEGACY",
   programTypes,
   clients,
   accounts,
@@ -151,6 +155,7 @@ function ProjectDetailsForm({
   category: ProjectCategory;
   onBack: () => void;
 }) {
+  const restricted = creationMode === "RESTRICTED";
   const { notify } = useInteraction();
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     createProject,
@@ -210,6 +215,10 @@ function ProjectDetailsForm({
     <form
       action={formAction}
       onSubmit={(event) => {
+        if (restricted && category === "CLIENT" && importResult?.draft.provider !== "JABIL") {
+          event.preventDefault();
+          return;
+        }
         if (preventMissingProjectAccount(event)) {
           notify({ message: "Dự án Khách hàng bắt buộc chọn Account phụ trách.", tone: "error" });
         }
@@ -227,7 +236,7 @@ function ProjectDetailsForm({
           <ArrowLeft size={14} aria-hidden="true" />
           Chọn lại loại dự án
         </button>
-        <p className="mt-4 text-xs font-medium text-zinc-500">
+        <p className="mt-4 text-xs font-normal text-zinc-500">
           Bước 2 / 2 · Thông tin dự án
         </p>
         <h2
@@ -237,6 +246,7 @@ function ProjectDetailsForm({
         >
           {category === "INTERNAL" ? "Dự án nội bộ" : "Dự án khách hàng"}
         </h2>
+        {restricted && <span className="tf-badge mt-2 bg-zinc-100 font-normal text-zinc-700">{category === "INTERNAL" ? "Nội bộ" : "Dự án khách hàng từ PO"}</span>}
       </div>
 
       {category === "CLIENT" && canEditRevenue && (
@@ -359,11 +369,11 @@ function ProjectDetailsForm({
       )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="block">
-          <span className="text-xs font-medium text-zinc-500">
+            <span className="text-xs font-normal text-zinc-500">
             Tình trạng ban đầu
           </span>
           <span className="tf-field mt-1 flex items-center bg-zinc-50 text-zinc-600">
-            {category === "INTERNAL" || importResult?.draft.provider === "JABIL"
+            {restricted || category === "INTERNAL" || importResult?.draft.provider === "JABIL"
               ? "On Process"
               : "Bidding"}
           </span>
@@ -415,7 +425,7 @@ function ProjectDetailsForm({
         label="Thời gian thực hiện"
         startName="executionStartAt"
         endName="executionEndAt"
-        helperText="Chọn một ngày, hoặc thêm ngày kết thúc nếu dự án chạy nhiều ngày."
+        helperText={restricted ? undefined : "Chọn một ngày, hoặc thêm ngày kết thúc nếu dự án chạy nhiều ngày."}
       />
 
       {category === "CLIENT" && canEditRevenue && (
@@ -444,7 +454,7 @@ function ProjectDetailsForm({
       )}
       <button
         type="submit"
-        disabled={pending || importing}
+        disabled={pending || importing || (restricted && category === "CLIENT" && importResult?.draft.provider !== "JABIL")}
         className="tf-button-primary"
         aria-busy={pending}
       >
