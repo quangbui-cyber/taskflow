@@ -5,15 +5,17 @@ import type { CrmActor, CrmOwnerResource, CrmResource } from "./policy";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
-export const loadCrmActor = cache(async (user: { id: string; role: string }): Promise<CrmActor> => {
+export async function loadCrmActorFrom(db: Db, user: { id: string; role: string }): Promise<CrmActor> {
   const [account, managers, storedUser] = await Promise.all([
-    prisma.account.findUnique({ where: { userId: user.id }, select: { id: true } }),
-    prisma.crmTeamManager.findMany({ where: { userId: user.id }, select: { teamId: true } }),
-    prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: { role: true, isCrmDataSteward: true, isActive: true } }),
+    db.account.findUnique({ where: { userId: user.id }, select: { id: true } }),
+    db.crmTeamManager.findMany({ where: { userId: user.id }, select: { teamId: true } }),
+    db.user.findUniqueOrThrow({ where: { id: user.id }, select: { role: true, isCrmDataSteward: true, isActive: true } }),
   ]);
   if (!storedUser.isActive) throw new Error("Tài khoản không còn hoạt động.");
   return { id: user.id, role: storedUser.role, accountId: account?.id ?? null, managedTeamIds: managers.map(({ teamId }) => teamId), isDataSteward: storedUser.isCrmDataSteward };
-});
+}
+
+export const loadCrmActor = cache((user: { id: string; role: string }): Promise<CrmActor> => loadCrmActorFrom(prisma, user));
 
 export async function loadClientResource(db: Db, clientId: string): Promise<CrmOwnerResource | null> {
   const client = await db.client.findUnique({ where: { id: clientId }, select: { responsibleTeamId: true, picAccount: { select: { userId: true, teamId: true } } } });

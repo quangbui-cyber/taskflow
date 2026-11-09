@@ -34,7 +34,7 @@ test("home focus shares the PIC review without copying tasks", { skip: !crmTestD
       assert.deepEqual(await counts(), before);
     });
     await t.test("closed Opportunity tasks are ignored", async () => {
-      const closed = await db.opportunity.create({ data: { name: `${prefix} Closed`, clientId: a.id, stage: "CARE", outcome: "CUSTOMER_CANCELLED", programTypeCode: "MICE", expectedYear: 2026, source: "OTHER" } });
+      const closed = await db.opportunity.create({ data: { name: `${prefix} Closed`, clientId: a.id, stage: "CARE", outcome: "CUSTOMER_CANCELLED", programTypeCode: "MICE", expectedYear: 2026, source: "OTHER", demandSignal: "Synthetic closed deal" } });
       await db.task.create({ data: { title: `${prefix} Closed task`, opportunityId: closed.id, creatorId: f.pic.id, crmKind: "APPOINTMENT", dueDate: new Date("2026-10-01T00:00:00Z") } });
       assert.equal((await loadMyCrmFocus(db, f.pic, now)).rows[0].reason, "Bước tiếp theo");
     });
