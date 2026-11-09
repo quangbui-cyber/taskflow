@@ -18,7 +18,7 @@ test("detail isolates owners, orders next work/history and retains only transfer
     const effects = { notify: async () => {} };
     assert.ok("ok" in await advanceStage(db, actor, { opportunityId: id, expectedVersion: 0, to: "BRIEF", briefReceivedAt: now }, effects));
     assert.ok("ok" in await advanceStage(db, actor, { opportunityId: id, expectedVersion: 1, to: "BIDDING" }, effects));
-    const createTask = (title: string, status: string, dueDate: Date | null) => db.task.create({ data: { opportunityId: id, creatorId: f.pic.id, assigneeId: f.assignee.id, title, status, dueDate, crmKind: "BID_PREP" } });
+    const createTask = (title: string, status: string, dueDate: Date | null) => db.task.create({ data: { opportunityId: id, creatorId: f.pic.id, assigneeId: f.assignee.id, title, status, dueDate } });
     const later = await createTask("Later", "TODO", new Date("2026-11-10T00:00:00+07:00"));
     const next = await createTask("Next", "IN_PROGRESS", new Date("2026-11-08T00:00:00+07:00"));
     await db.task.update({ where: { id: next.id }, data: { escalatedAt: now } });
@@ -48,6 +48,9 @@ test("detail isolates owners, orders next work/history and retains only transfer
     const won = await winOpportunity(db, actor, { opportunityId: id, expectedVersion: 2, contractValue: 1500000, wonAt: new Date("2026-11-08T00:00:00+07:00"), projectName: `${prefix} Project` });
     assert.ok("ok" in won);
     await db.task.create({ data: { projectId: won.projectId, creatorId: f.pic.id, title: "Project only" } });
+    await db.task.create({ data: { clientId: f.client.id, sourceOpportunityId: id, creatorId: f.pic.id, title: "Client provenance only" } });
+    const otherProject = await db.project.create({ data: { name: `${prefix} Other Project`, ownerId: f.pic.id } });
+    await db.task.create({ data: { projectId: otherProject.id, sourceOpportunityId: id, creatorId: f.pic.id, title: "Other Project provenance" } });
     await db.projectFile.create({ data: { projectId: won.projectId, name: "Project only", mimeType: "text/plain", size: 0 } });
     const after = await loadOpportunityDetail(db, id, now); assert.ok(after);
     assert.equal(after.project?.id, won.projectId); assert.equal(after.contractValue, 1500000);

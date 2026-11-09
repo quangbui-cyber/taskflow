@@ -16,7 +16,9 @@ export async function loadOpportunityDetail(db: Db, opportunityId: string, now: 
     project: { select: { id: true, name: true } },
   } });
   if (!opportunity) return null;
-  const workWhere = opportunity.outcome === "WON" ? { sourceOpportunityId: opportunityId } : { opportunityId };
+  const workWhere = opportunity.outcome === "WON"
+    ? { sourceOpportunityId: opportunityId, projectId: opportunity.project?.id ?? "__none__" }
+    : { opportunityId };
   const [taskRows, fileRows, meetingRows, touchpoints] = await Promise.all([
     db.task.findMany({ where: workWhere, orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }, { id: "asc" }], include: {
       assignee: { select: { id: true, name: true, avatarUrl: true } }, creator: { select: { id: true, name: true } },
@@ -50,7 +52,7 @@ export async function loadOpportunityDetail(db: Db, opportunityId: string, now: 
     tasks, nextStep: next ? { taskId: next.id, title: next.title, assigneeName: next.assignee?.name ?? null, dueDate: next.dueDate, overdue: !!next.dueDate && next.dueDate < vnDayStart(now), escalated: next.escalatedAt !== null } : null,
     files, meetings: meetingRows.map(row => ({ id: row.id, title: row.title, startsAt: row.startAt, projectId: row.projectId })),
     touchpoints: touchpoints.map(row => ({ id: row.id, occurredAt: row.occurredAt, kind: row.kind, authorName: row.author?.name ?? null, outcomeLevel: row.outcomeLevel, notes: row.notes, status: row.status })),
-    openBidPrepTaskCount: tasks.filter(task => task.crmKind === "BID_PREP" && !isClosedTaskStatus(task.status)).length,
+    openBidPrepTaskCount: tasks.filter(task => !isClosedTaskStatus(task.status)).length,
   };
 }
 export type OpportunityDetail = NonNullable<Awaited<ReturnType<typeof loadOpportunityDetail>>>;
