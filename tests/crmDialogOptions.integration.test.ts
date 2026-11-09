@@ -38,5 +38,14 @@ test("CRM dialog options reflect persisted owners and carry no private content",
       await db.user.update({ where: { id: f.outsider.id }, data: { isActive: false } });
       assert.ok(!(await loadTouchpointDialogOptions(db, actor(f.pic), {})).users.some(u => u.id === f.outsider.id));
     });
+    await t.test("Opportunity PIC can log its own deal without inheriting Client or sibling rights", async () => {
+      await db.client.update({ where: { id: f.client.id }, data: { picAccountId: f.otherAccount.id } });
+      const other = await db.opportunity.create({ data: { name: `${prefix} Sibling`, clientId: f.client.id, programTypeCode: "MICE", expectedYear: 2027, source: "OTHER", demandSignal: "test", picAccountId: f.otherAccount.id } });
+      const opts = await loadTouchpointDialogOptions(db, actor(f.pic), { clientId: f.client.id });
+      assert.equal(opts.clients.length, 1); assert.equal(opts.clients[0].canLogClient, false);
+      assert.equal(opts.clients[0].openOpportunities.find(o => o.id === f.opportunity.id)?.canLog, true);
+      assert.equal(opts.clients[0].openOpportunities.find(o => o.id === other.id)?.canLog, false);
+      assert.equal(opts.clients[0].assignedTasks.length, 0);
+    });
   } finally { try { await cleanupCrmFixture(db, prefix); } finally { await db.$disconnect(); } }
 });

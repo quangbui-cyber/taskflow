@@ -27,7 +27,7 @@ export type TouchpointDialogProps = {
 function initialize(options: TouchpointDialogOptions, prefill: TouchpointPrefill) {
   const s = emptyTouchpointForm(prefill, vnDateKey(new Date()));
   const client = options.clients.find(c => c.id === s.clientId);
-  if (client && !client.canLogClient && !s.completeTaskId) {
+  if (client && !client.canLogClient && !client.openOpportunities.some(o => o.id === s.opportunityId && o.canLog) && !s.completeTaskId) {
     const own = client.assignedTasks.find(task => task.opportunityId === s.opportunityId) ?? client.assignedTasks[0];
     if (own) { s.opportunityId = own.opportunityId; s.completeTaskId = own.id; }
   }
@@ -64,12 +64,13 @@ function TouchpointDialogBody({ options, prefill = {}, lockClient, onSaved, onCl
   function chooseClient(clientId: string) {
     const next = options.clients.find(c => c.id === clientId);
     const own = !next?.canLogClient ? next?.assignedTasks[0] : undefined;
-    setState(s => ({ ...s, clientId, opportunityId: own?.opportunityId ?? null, completeTaskId: own?.id ?? null, confirmDraftId: null, assigneeId: options.users.find(u => u.id === next?.picUserId)?.id ?? null }));
+    setState(s => ({ ...s, clientId, opportunityId: own?.opportunityId ?? (!next?.canLogClient ? next?.openOpportunities.find(o => o.canLog)?.id : null) ?? null, completeTaskId: own?.id ?? null, confirmDraftId: null, assigneeId: options.users.find(u => u.id === next?.picUserId)?.id ?? null }));
     setErrors({});
   }
   function chooseOpportunity(opportunityId: string | null) {
     const own = client?.assignedTasks.find(task => task.opportunityId === opportunityId);
-    setState(s => ({ ...s, opportunityId, completeTaskId: client?.canLogClient ? (prefill.opportunityId === opportunityId ? prefill.completeTaskId ?? null : null) : own?.id ?? null, openOpportunity: false }));
+    const canLog = opportunityId ? client?.openOpportunities.some(o => o.id === opportunityId && o.canLog) : client?.canLogClient;
+    setState(s => ({ ...s, opportunityId, completeTaskId: canLog ? (prefill.opportunityId === opportunityId ? prefill.completeTaskId ?? null : null) : own?.id ?? null, openOpportunity: false }));
   }
   function a(field: string) {
     return { id: `${uid}-${field}`, "aria-invalid": !!errors[field] || undefined, "aria-describedby": errors[field] ? `${uid}-${field}-error` : undefined, style: errors[field] ? { borderColor: "var(--danger)" } : undefined };
@@ -89,7 +90,8 @@ function TouchpointDialogBody({ options, prefill = {}, lockClient, onSaved, onCl
     if (submitting.current || pending) return;
     const next = validateTouchpointForm(state);
     if (!client) next.clientId = "Chọn khách hàng.";
-    if (client && !client.canLogClient && !state.completeTaskId) next.opportunityId = "Chọn Cơ hội có việc được giao.";
+    const canLog = state.opportunityId ? client?.openOpportunities.some(o => o.id === state.opportunityId && o.canLog) : client?.canLogClient;
+    if (client && !canLog && !state.completeTaskId) next.opportunityId = "Chọn Cơ hội có việc được giao.";
     if (Object.keys(next).length) { showErrors(next); return; }
     submitting.current = true;
     startTransition(async () => {
@@ -146,7 +148,7 @@ function TouchpointDialogBody({ options, prefill = {}, lockClient, onSaved, onCl
         className="tf-field"
       >
         <option value="" disabled={client && !client.canLogClient && !client.assignedTasks.some(t => !t.opportunityId)}>Không gắn Cơ hội</option>
-        {client?.openOpportunities.map(o => <option key={o.id} value={o.id} disabled={!client.canLogClient && !client.assignedTasks.some(t => t.opportunityId === o.id)}>{o.name}</option>)}
+        {client?.openOpportunities.map(o => <option key={o.id} value={o.id} disabled={!o.canLog && !client.assignedTasks.some(t => t.opportunityId === o.id)}>{o.name}</option>)}
       </select>)}
       <div data-crm-field="kind">
         <span id={`${uid}-kind-label`} className="tf-label">Loại</span>

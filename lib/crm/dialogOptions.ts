@@ -19,12 +19,15 @@ export async function loadTouchpointDialogOptions(db: Db, actor: CrmActor, filte
   const assigned = await db.task.findMany({ where: { assigneeId: actor.id, status: OPEN_TASK_STATUS_FILTER, projectId: null, OR: [{ clientId: { not: null } }, { opportunity: { outcome: null } }] }, select: { id: true, clientId: true, opportunityId: true, opportunity: { select: { clientId: true } } }, orderBy: [{ dueDate: "asc" }, { id: "asc" }] });
   const ids = [...new Set(assigned.map(task => task.clientId ?? task.opportunity?.clientId).filter((id): id is string => !!id))];
   const [clients, users, programs] = await Promise.all([
-    db.client.findMany({ where: { AND: [filter.clientId ? { id: filter.clientId } : {}, { OR: [editableWhere(actor), { id: { in: ids } }] }] }, select: { id: true, name: true, responsibleTeamId: true, picAccount: { select: picSelect }, clientOpportunities: { where: { outcome: null }, select: { id: true, name: true }, orderBy: { name: "asc" } } }, orderBy: [{ name: "asc" }, { id: "asc" }], take: 500 }),
+    db.client.findMany({ where: { AND: [filter.clientId ? { id: filter.clientId } : {}, { OR: [editableWhere(actor), { id: { in: ids } }, { clientOpportunities: { some: { outcome: null, OR: [{ picAccount: { userId: actor.id } }, { responsibleTeamId: { in: actor.managedTeamIds } }, { responsibleTeamId: null, picAccount: { teamId: { in: actor.managedTeamIds } } }] } } }] }] }, select: { id: true, name: true, responsibleTeamId: true, picAccount: { select: picSelect }, clientOpportunities: { where: { outcome: null }, select: { id: true, name: true, responsibleTeamId: true, picAccount: { select: picSelect } }, orderBy: { name: "asc" } } }, orderBy: [{ name: "asc" }, { id: "asc" }], take: 500 }),
     db.user.findMany({ where: { isActive: true, deletedAt: null }, select: { id: true, name: true, avatarUrl: true }, orderBy: { name: "asc" } }),
     loadProgramTypes(db, { activeOnly: true }),
   ]);
   return {
-    clients: clients.filter(c => crmCan(actor, "LOG_TOUCHPOINT", resource(c)) || ids.includes(c.id)).map(c => ({ id: c.id, name: c.name, picUserId: c.picAccount?.userId ?? null, openOpportunities: c.clientOpportunities, canLogClient: crmCan(actor, "LOG_TOUCHPOINT", resource(c)), assignedTasks: assigned.filter(task => (task.clientId ?? task.opportunity?.clientId) === c.id).map(task => ({ id: task.id, opportunityId: task.opportunityId })) })),
+    clients: clients.map(c => {
+      const openOpportunities: { id: string; name: string; canLog?: boolean }[] = c.clientOpportunities.map(o => ({ id: o.id, name: o.name, canLog: crmCan(actor, "LOG_TOUCHPOINT", { kind: "OPPORTUNITY", picUserId: o.picAccount?.userId ?? null, teamId: o.responsibleTeamId ?? o.picAccount?.teamId ?? c.responsibleTeamId ?? c.picAccount?.teamId ?? null, closed: false }) }));
+      return { id: c.id, name: c.name, picUserId: c.picAccount?.userId ?? null, openOpportunities, canLogClient: crmCan(actor, "LOG_TOUCHPOINT", resource(c)), assignedTasks: assigned.filter(task => (task.clientId ?? task.opportunity?.clientId) === c.id).map(task => ({ id: task.id, opportunityId: task.opportunityId })) };
+    }).filter(c => c.canLogClient || ids.includes(c.id) || c.openOpportunities.some(o => o.canLog)),
     users: users satisfies UserPickerOption[], programTypes: programs.map(p => ({ code: p.code, label: p.label })),
   };
 }
