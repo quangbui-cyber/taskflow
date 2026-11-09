@@ -25,15 +25,15 @@ test("client merge preserves all owners, collisions, fields, audit and recognize
     const meeting = await db.meeting.create({ data: { title: `${prefix} Meeting`, clientId: source.id, organizerId: f.admin.id, startAt: new Date("2026-11-01"), endAt: new Date("2026-11-02") } });
     const score = await db.clientPotentialScore.create({ data: { clientId: source.id, level: "HIGH", scoredByName: f.admin.name } });
     const notice = await db.notification.create({ data: { userId: f.admin.id, clientId: source.id, message: "Synthetic", type: "CRM_DRAFT" } });
-    const point = await db.touchpoint.create({ data: { clientId: source.id, kind: "MEETING", occurredAt: new Date(), status: "CONFIRMED" } });
-    const collisions = [];
+    const point = await db.touchpoint.create({ data: { clientId: source.id, kind: "MEETING", occurredAt: new Date(), status: "CONFIRMED", outcomeLevel: 2 } });
+    const collisions: { from: { id: string }; to: { id: string }; keep: string }[] = [];
     for (const [key, fromStatus, toStatus] of [["target", "DRAFT", "CONFIRMED"], ["source", "CONFIRMED", "DISMISSED"], ["tie", "DRAFT", "DRAFT"]]) {
-      const from = await db.touchpoint.create({ data: { clientId: source.id, kind: "MEETING", occurredAt: new Date(), sourceType: "MEETING", sourceId: `${prefix}-${key}`, status: fromStatus } });
-      const to = await db.touchpoint.create({ data: { clientId: target.id, kind: "MEETING", occurredAt: new Date(), sourceType: "MEETING", sourceId: `${prefix}-${key}`, status: toStatus } });
+      const from = await db.touchpoint.create({ data: { clientId: source.id, kind: "MEETING", occurredAt: new Date(), sourceType: "MEETING", sourceId: `${prefix}-${key}`, status: fromStatus, outcomeLevel: fromStatus === "CONFIRMED" ? 2 : null } });
+      const to = await db.touchpoint.create({ data: { clientId: target.id, kind: "MEETING", occurredAt: new Date(), sourceType: "MEETING", sourceId: `${prefix}-${key}`, status: toStatus, outcomeLevel: toStatus === "CONFIRMED" ? 2 : null } });
       collisions.push({ from, to, keep: key === "source" ? from.id : to.id });
     }
     await db.cadenceReminder.createMany({ data: [{ clientId: source.id, periodKey: "P", taskId: task.id }, { clientId: target.id, periodKey: "P" }, { clientId: source.id, periodKey: "Q" }] });
-    const run = await db.trackerImportRun.create({ data: { mode: "DRY_RUN", actorName: f.admin.name } }); runIds.push(run.id);
+    const run = await db.trackerImportRun.create({ data: { mode: "DRY_RUN", actorName: f.admin.name, fileName: "synthetic.xlsx" } }); runIds.push(run.id);
     const tracker = await db.trackerImportRow.create({ data: { runId: run.id, sheet: "Prospect", rowNumber: 2, raw: {}, proposed: {}, status: "OK", matchedClientId: source.id } });
     for (const suffix of ["", ":tasks"]) { const id = `${prefix}-folder${suffix}`; folderIds.push(id); await db.driveFolder.create({ data: { key: `client:${source.id}${suffix}`, folderId: id, name: "Synthetic" } }); }
     const recognized = () => db.project.groupBy({ by: ["accountId"], where: { id: project.id, category: "CLIENT", status: { in: KPI_RECOGNIZED_STATUSES } }, _sum: { revenue: true } });
