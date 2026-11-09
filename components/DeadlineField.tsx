@@ -184,6 +184,11 @@ export default function DeadlineField({
   onStartChange,
   className = "",
   compact = false,
+  dateOnly = false,
+  required = false,
+  id,
+  invalid,
+  describedBy,
 }: {
   name?: string;
   startName?: string;
@@ -196,6 +201,11 @@ export default function DeadlineField({
   onStartChange?: (value: string) => void;
   className?: string;
   compact?: boolean;
+  dateOnly?: boolean;
+  required?: boolean;
+  id?: string;
+  invalid?: boolean;
+  describedBy?: string;
 }) {
   const initialEnd = splitValue(value ?? defaultValue);
   const initialStart = splitValue(startValue ?? defaultStartValue);
@@ -256,7 +266,7 @@ export default function DeadlineField({
     if (draftDate) {
       setStartTime(draftStartTime);
       setEndTime(draftEndTime);
-      onChange?.(composeValue(draftDate, draftEndTime));
+      onChange?.(dateOnly ? draftDate : composeValue(draftDate, draftEndTime));
       onStartChange?.(composeValue(draftDate, draftStartTime));
     } else {
       onChange?.("");
@@ -464,11 +474,11 @@ export default function DeadlineField({
 
   return (
     <div className={className}>
-      {name && <input type="hidden" name={name} value={composeValue(date, endTime)} />}
+      {name && <input type="hidden" name={name} value={dateOnly ? date : composeValue(date, endTime)} />}
       {startName && <input type="hidden" name={startName} value={composeValue(date, startTime)} />}
       <div className="flex items-center justify-between gap-3">
-        <span id={labelId} className="text-xs font-medium text-zinc-500">{label}</span>
-        <span className="text-[11px] text-zinc-400">Không bắt buộc</span>
+        <span id={labelId} className={dateOnly ? "tf-label" : "text-xs font-medium text-zinc-500"}>{label}</span>
+        {!required && <span className="text-[11px] text-zinc-400">Không bắt buộc</span>}
       </div>
 
       <div
@@ -479,20 +489,24 @@ export default function DeadlineField({
       >
         <button
           ref={triggerRef}
+          id={id}
           type="button"
           onClick={() => (pickerOpen ? closePicker() : openPicker())}
           className={`tf-deadline-control flex w-full items-center text-left active:scale-[0.99] ${compact ? "min-h-10" : "min-h-11"}`}
           aria-labelledby={labelId}
+          {...(dateOnly ? { role: "combobox" as const, "aria-invalid": invalid || undefined, "aria-required": required || undefined } : {})}
+          style={invalid ? { borderColor: "var(--danger)" } : undefined}
+          aria-describedby={describedBy}
           aria-controls={pickerOpen ? pickerId : undefined}
           aria-haspopup="dialog"
           aria-expanded={pickerOpen}
         >
           <CalendarDays size={17} className={`ml-3 shrink-0 ${date ? "text-brand-700" : "text-zinc-400"}`} aria-hidden="true" />
           <span className="min-w-0 flex-1 px-3 py-1">
-            <span className={`block truncate text-sm font-medium tabular-nums ${date ? "text-zinc-800" : "text-zinc-500"}`}>
+            <span className={`block truncate text-sm ${dateOnly ? "font-normal" : "font-medium"} tabular-nums ${date ? "text-zinc-800" : "text-zinc-500"}`}>
               {formatDate(date)}
             </span>
-            <span className="block truncate text-[11px] tabular-nums text-zinc-400">{timeSummary}</span>
+            {!dateOnly && <span className="block truncate text-[11px] tabular-nums text-zinc-400">{timeSummary}</span>}
           </span>
           <ChevronDown size={15} className={`mr-3 shrink-0 text-zinc-400 transition-transform duration-150 ${pickerOpen ? "rotate-180" : ""}`} aria-hidden="true" />
         </button>
@@ -503,7 +517,7 @@ export default function DeadlineField({
             ref={popoverRef}
             id={pickerId}
             role="dialog"
-            aria-label="Chọn hạn chót"
+            aria-label={dateOnly ? `Chọn ${label.toLowerCase()}` : "Chọn hạn chót"}
             data-floating-layer
             onKeyDown={trapPopoverFocus}
             style={{
@@ -566,7 +580,7 @@ export default function DeadlineField({
               </div>
             </div>
 
-            <div className="border-t border-zinc-100 px-3.5 py-2.5">
+            {!dateOnly && <div className="border-t border-zinc-100 px-3.5 py-2.5">
               {draftStartTime ? (
                 <div className="space-y-2">
                   <InlineTimeControl
@@ -599,7 +613,7 @@ export default function DeadlineField({
                   <p className="mt-2 text-[10px] leading-4 text-zinc-500">{feedback}</p>
                 )}
               </div>
-            </div>
+            </div>}
 
             <div className="sticky bottom-0 z-10 flex min-h-14 items-center gap-2 border-t border-zinc-100 bg-white px-3.5 py-2.5">
               {draftDate || date ? (

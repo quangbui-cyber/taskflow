@@ -13,7 +13,9 @@ export type TouchpointForm = {
 };
 export const TOUCHPOINT_FIELD_ORDER = ["clientId", "opportunityId", "kind", "occurredAt", "outcomeLevel", "programTypeCode", "expectedPeriod", "demandSignal", "notes", "nextTitle", "assigneeId", "nextDueDate", "waitReason", "waitReviewDate"] as const;
 export const TOUCHPOINT_FORM_MESSAGES = {
-  outcome: "Chọn mức kết quả.", next: "Nhập việc cần làm và hạn, hoặc chọn Chờ khách.", wait: "Nhập lý do chờ và ngày xem lại.",
+  outcome: "Chọn mức kết quả.",
+  next: "Nhập việc cần làm và hạn, hoặc chọn Chờ khách.",
+  wait: "Nhập lý do chờ và ngày xem lại.",
 } as const;
 export function emptyTouchpointForm(prefill: TouchpointPrefill = {}, todayKey: string): TouchpointForm {
   let occurredAt = todayKey;
