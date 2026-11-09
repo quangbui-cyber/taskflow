@@ -29,6 +29,34 @@ export async function winPreview(db: PrismaClient, opportunityId: string) {
   return { tasks, files, meetings, ...opportunity };
 }
 
+/** Read participants before moving tasks away from their Opportunity. */
+export async function opportunityProjectMemberIds(tx: Prisma.TransactionClient, opportunityId: string): Promise<string[]> {
+  const opportunity = await tx.opportunity.findUniqueOrThrow({ where: { id: opportunityId }, select: {
+    picAccount: { select: { userId: true } }, opportunityMembers: { select: { userId: true } },
+  } });
+  const tasks = await tx.task.findMany({ where: { opportunityId }, select: {
+    creatorId: true, assigneeId: true, followers: { select: { userId: true } },
+  } });
+  return [...new Set([opportunity.picAccount?.userId, ...opportunity.opportunityMembers.map((member) => member.userId),
+    ...tasks.flatMap((task) => [task.creatorId, task.assigneeId, ...task.followers.map((follower) => follower.userId)]),
+  ].filter((id): id is string => !!id))];
+}
+
+export async function moveOpportunityWorkToProjectTx(tx: Prisma.TransactionClient, opportunityId: string, projectId: string): Promise<{ tasks: number; files: number; meetings: number }> {
+  const owner = { opportunityId: null, projectId, sourceOpportunityId: opportunityId };
+  const tasks = await tx.task.updateMany({ where: { opportunityId }, data: owner });
+  const files = await tx.projectFile.updateMany({ where: { opportunityId }, data: owner });
+  const meetings = await tx.meeting.updateMany({ where: { opportunityId }, data: owner });
+  return { tasks: tasks.count, files: files.count, meetings: meetings.count };
+}
+
+export async function closeOpportunityEventStepsTx(tx: Prisma.TransactionClient, opportunityId: string, reason: "OPPORTUNITY_WON"): Promise<number> {
+  const { expectedEventId } = await tx.opportunity.findUniqueOrThrow({ where: { id: opportunityId }, select: { expectedEventId: true } });
+  if (!expectedEventId) return 0;
+  await tx.$queryRaw`SELECT id FROM "ExpectedEvent" WHERE id = ${expectedEventId} FOR UPDATE`;
+  return (await tx.reminderStep.updateMany({ where: { expectedEventId, status: { in: ["PLANNED", "OPEN"] } }, data: { status: "CLOSED", closedReason: reason } })).count;
+}
+
 /** Commit the whole ownership transfer before the caller schedules Drive work in after(). */
 export async function winOpportunity(db: PrismaClient, actor: Actor, input: WinOpportunityInput): Promise<WinResult> {
   if (!Number.isSafeInteger(input.contractValue) || input.contractValue <= 0) return { error: "Nhập giá trị hợp đồng." };
@@ -56,13 +84,7 @@ export async function winOpportunity(db: PrismaClient, actor: Actor, input: WinO
       if (!canClose(opportunity, "WON")) return { error: "Thắng chỉ ghi được từ Bidding." };
       if (opportunity.version !== input.expectedVersion) return { error: STALE };
 
-      const tasks = await tx.task.findMany({ where: { opportunityId: opportunity.id }, select: {
-        creatorId: true, assigneeId: true, followers: { select: { userId: true } },
-      } });
-      const memberIds = new Set([actor.id, opportunity.picAccount?.userId,
-        ...opportunity.opportunityMembers.map((member) => member.userId),
-        ...tasks.flatMap((task) => [task.creatorId, task.assigneeId, ...task.followers.map((follower) => follower.userId)]),
-      ].filter((id): id is string => !!id));
+      const memberIds = new Set([actor.id, ...await opportunityProjectMemberIds(tx, opportunity.id)]);
       const changed = await tx.opportunity.updateMany({ where: { id: opportunity.id, version: input.expectedVersion, outcome: null }, data: {
         outcome: "WON", wonAt: input.wonAt, closedAt: new Date(), closedById: actor.id, contractValue: input.contractValue, version: { increment: 1 },
       } });
@@ -73,17 +95,11 @@ export async function winOpportunity(db: PrismaClient, actor: Actor, input: WinO
         revenue: input.contractValue, onProcessAt: vnDayStart(input.wonAt), ownerId: actor.id, sourceOpportunityId: opportunity.id,
         members: { create: [...memberIds].map((userId) => ({ userId, role: userId === actor.id ? "owner" : "member" })) },
       }, select: { id: true, name: true } });
-      const owner = { opportunityId: null, projectId: project.id, sourceOpportunityId: opportunity.id };
-      await tx.task.updateMany({ where: { opportunityId: opportunity.id }, data: owner });
-      await tx.projectFile.updateMany({ where: { opportunityId: opportunity.id }, data: owner });
-      await tx.meeting.updateMany({ where: { opportunityId: opportunity.id }, data: owner });
+      await moveOpportunityWorkToProjectTx(tx, opportunity.id, project.id);
       await tx.opportunityStageEvent.create({ data: {
         opportunityId: opportunity.id, fromStage: "BIDDING", toStage: "WON", outcome: "WON", actorId: actor.id, actorName: actor.name,
       } });
-      if (opportunity.expectedEventId) {
-        await tx.$queryRaw`SELECT id FROM "ExpectedEvent" WHERE id = ${opportunity.expectedEventId} FOR UPDATE`;
-        await tx.reminderStep.updateMany({ where: { expectedEventId: opportunity.expectedEventId, status: { in: ["PLANNED", "OPEN"] } }, data: { status: "CLOSED", closedReason: "OPPORTUNITY_WON" } });
-      }
+      await closeOpportunityEventStepsTx(tx, opportunity.id, "OPPORTUNITY_WON");
       return { ok: true, projectId: project.id, projectName: project.name, alreadyWon: false };
     }, { timeout: 15_000 });
   } catch (error) {
