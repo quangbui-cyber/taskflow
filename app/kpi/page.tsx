@@ -23,6 +23,8 @@ import {
   vietnamYearMonth,
 } from "@/lib/kpi";
 import { loadKpiOverview, loadMemberContribution } from "@/lib/kpiData";
+import { crmEnabled } from "@/lib/features";
+import { resolveOfficialSource } from "@/lib/crm/officialReport";
 import { formatVND } from "@/lib/types";
 
 
@@ -97,7 +99,7 @@ export default async function KpiPage({
   const [overview, contribution, planYears, viewerAccount, sidebarProjects] =
     await Promise.all([
       loadKpiOverview(year),
-      loadMemberContribution(user.id, year),
+      resolveOfficialSource(prisma, crmEnabled()).then(({ source }) => loadMemberContribution(user.id, year, source)),
       prisma.kpiPlan.findMany({ select: { year: true } }),
       prisma.account.findUnique({
         where: { userId: user.id },

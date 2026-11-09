@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { teamMemberOpenTasksWhere, taskOwnerSelect, toTaskOwnerDisplay } from "@/lib/taskQueries";
 import { crmEnabled } from "@/lib/features";
+import { resolveOfficialSource, countBiddingOpportunitiesByUser } from "@/lib/crm/officialReport";
 import { activeDirectReportsWhere } from "@/lib/directReports";
 import { requireUser } from "@/lib/auth";
 import {
@@ -146,7 +147,7 @@ export default async function TeamPage({
     ],
   };
 
-  const [members, myTasks, sidebarProjects, allOpenTasks, unassigned] =
+  const [members, myTasks, sidebarProjects, allOpenTasks, unassigned, { source }] =
     await Promise.all([
       // Admin thấy mọi nhân viên; quản lý thấy nhân viên trực tiếp của mình
       prisma.user.findMany({
@@ -222,7 +223,10 @@ export default async function TeamPage({
             orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }],
           })
         : Promise.resolve([]),
+      resolveOfficialSource(prisma, crmOn),
     ]);
+
+  const biddingByUser = source === "OPPORTUNITY" ? await countBiddingOpportunitiesByUser(prisma, members.map((m) => m.id)) : new Map<string, number>();
 
   const myPeriodPerf = computePerf(myTasks);
   const myActiveWorkPerf = computePerf(
@@ -259,7 +263,7 @@ export default async function TeamPage({
         periodPerf.done > 0
           ? Math.round((periodPerf.onTime / periodPerf.done) * 100)
           : null;
-      const biddingProjectCount = m.memberships.filter(
+      const biddingProjectCount = source === "OPPORTUNITY" ? biddingByUser.get(m.id) ?? 0 : m.memberships.filter(
         (membership) => membership.project.status === "BIDDING"
       ).length;
       const onProcessProjectCount = m.memberships.filter(
