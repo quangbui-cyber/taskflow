@@ -23,10 +23,12 @@ import { DateRangeField } from "@/components/TemporalFields";
 import { useActionFeedback, useInteraction } from "@/components/InteractionProvider";
 import { type ProjectCategory } from "@/lib/types";
 import type { PurchaseOrderDraft } from "@/lib/purchaseOrder";
+import { vnDateKey } from "@/lib/crm/dates";
 
 type ImportResult = {
   draft: PurchaseOrderDraft;
   fileName: string;
+  sourceOpportunities: { id: string; name: string; clientId: string; clientName: string; programTypeCode: string }[];
 };
 
 function normalizeName(value: string) {
@@ -169,6 +171,9 @@ function ProjectDetailsForm({
   const [draftVersion, setDraftVersion] = useState(0);
   const [clientOptions, setClientOptions] = useState(clients);
   const [selectedClientId, setSelectedClientId] = useState("");
+  const [sourceSelection, setSourceSelection] = useState({ clientId: "", opportunityId: "" });
+  const sourceOpportunityId = sourceSelection.clientId === selectedClientId ? sourceSelection.opportunityId : "";
+  const [purchaseOrderDate, setPurchaseOrderDate] = useState("");
   useActionFeedback(state);
 
   useEffect(() => {
@@ -194,6 +199,9 @@ function ProjectDetailsForm({
         throw new Error(result.error || "Không thể đọc PO.");
       }
       setImportResult(result);
+      setSourceSelection({ clientId: "", opportunityId: "" });
+      const poDate = result.draft.poDate?.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      setPurchaseOrderDate(poDate ? `${poDate[3]}-${poDate[2]}-${poDate[1]}` : "");
       setSelectedClientId(matchClientId(result.draft.clientName, clientOptions));
       setDraftVersion((version) => version + 1);
     } catch (error) {
@@ -210,6 +218,12 @@ function ProjectDetailsForm({
   const importedClientId = importResult
     ? matchClientId(importResult.draft.clientName, clientOptions)
     : "";
+  const sourceOpportunities = category === "CLIENT" && importResult?.draft.provider === "JABIL"
+    ? (importResult.sourceOpportunities ?? []).filter((o) => o.clientId === selectedClientId) : [];
+  function changeClient(clientId: string) {
+    setSelectedClientId(clientId);
+    setSourceSelection({ clientId, opportunityId: "" });
+  }
 
   return (
     <form
@@ -396,7 +410,7 @@ function ProjectDetailsForm({
             <ClientSelect
               clients={clientOptions}
               value={selectedClientId}
-              onChange={setSelectedClientId}
+              onChange={changeClient}
               disabled={pending}
               className="mt-1"
             />
@@ -410,7 +424,7 @@ function ProjectDetailsForm({
                       a.name.localeCompare(b.name, "vi"),
                     ),
                   );
-                  setSelectedClientId(client.id);
+                  changeClient(client.id);
                 }}
               />
             )}
@@ -420,6 +434,24 @@ function ProjectDetailsForm({
           <ProjectAccountSelect accounts={accounts} disabled={pending} />
         )}
       </div>
+
+      {sourceOpportunities.length > 0 && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="block" htmlFor="project-source-opportunity">
+            <span className="tf-label">Cơ hội nguồn</span>
+            <select id="project-source-opportunity" name="sourceOpportunityId" className="tf-field" value={sourceOpportunityId} disabled={pending || importing} onChange={(event) => setSourceSelection({ clientId: selectedClientId, opportunityId: event.target.value })}>
+              <option value="">Không gắn Cơ hội</option>
+              {sourceOpportunities.map((o) => <option key={o.id} value={o.id}>{o.name} · {programTypes.find((p) => p.code === o.programTypeCode)?.label ?? o.programTypeCode}</option>)}
+            </select>
+          </label>
+          {sourceOpportunityId && (
+            <label className="block" htmlFor="project-po-date">
+              <span className="tf-label">Ngày PO</span>
+              <input id="project-po-date" name="purchaseOrderDate" type="date" className="tf-field" required max={vnDateKey(new Date())} value={purchaseOrderDate} disabled={pending || importing} onChange={(event) => setPurchaseOrderDate(event.target.value)} />
+            </label>
+          )}
+        </div>
+      )}
 
       <DateRangeField
         label="Thời gian thực hiện"

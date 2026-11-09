@@ -23,6 +23,11 @@ import { projectStatusColor, type ProjectCategory } from "@/lib/types";
 import { loadProgramTypes, isActiveProgramType } from "@/lib/programTypes";
 import { loadProjectCreationContext } from "@/lib/crm/projectCreationContext";
 import { checkProjectCreation, checkProjectCategoryChange, checkProjectStatusChange } from "@/lib/crm/projectCreation";
+import { crmEnabled } from "@/lib/features";
+import { loadCrmActor } from "@/lib/crm/actor";
+import { parseVnDateKey } from "@/lib/crm/opportunityInput";
+import { linkPurchaseOrderProjectTx } from "@/lib/crm/purchaseOrderLink";
+import { handOverOpportunityDrive } from "@/lib/crm/opportunityDrive";
 
 export type ActionState = { error?: string; success?: string };
 
@@ -34,6 +39,8 @@ const PROJECT_STATUS_KEYS = [
   "CANCEL",
   "FAIL",
 ];
+
+class PurchaseOrderLinkError extends Error {}
 
 
 /** "yyyy-MM-dd" → nửa đêm giờ VN; "" → null; sai định dạng → undefined */
@@ -132,6 +139,11 @@ export async function createProject(
   if ("error" in business) return business;
   const { category, revenue, clientId, accountId } = business;
   const projectSource = String(formData.get("projectSource") ?? "");
+  const sourceOpportunityId = crmEnabled() ? String(formData.get("sourceOpportunityId") ?? "").trim() : "";
+  if (sourceOpportunityId.length > 40) return { error: "Thông tin Cơ hội không hợp lệ." };
+  if (sourceOpportunityId && projectSource !== "JABIL_PO") return { error: "Chỉ gắn Cơ hội nguồn khi tạo dự án từ PO." };
+  const purchaseOrderDate = sourceOpportunityId ? parseVnDateKey(formData.get("purchaseOrderDate")) : null;
+  if (sourceOpportunityId && !purchaseOrderDate) return { error: "Nhập ngày PO." };
   let purchaseOrderNumber: string | null = null;
   let projectFile: Awaited<ReturnType<typeof readProjectUpload>> = null;
 
@@ -206,8 +218,7 @@ export async function createProject(
   const { initialStatus } = creation;
   let project;
   try {
-    project = await prisma.project.create({
-      data: {
+    const data: Prisma.ProjectUncheckedCreateInput = {
         name,
         description: description || null,
         category,
@@ -235,13 +246,25 @@ export async function createProject(
               },
             }
           : undefined,
-      },
-    });
+    };
+    if (sourceOpportunityId && purchaseOrderDate) {
+      const actor = { ...await loadCrmActor(user), name: user.name };
+      project = await prisma.$transaction(async (tx) => {
+        const created = await tx.project.create({ data });
+        const result = await linkPurchaseOrderProjectTx(tx, actor, { opportunityId: sourceOpportunityId, projectId: created.id, contractValue: revenue, purchaseOrderNumber: purchaseOrderNumber!, wonAt: purchaseOrderDate, now: new Date() });
+        if ("error" in result) throw new PurchaseOrderLinkError(result.error);
+        return created;
+      }, { timeout: 15000 });
+    } else {
+      project = await prisma.project.create({ data });
+    }
   } catch (error) {
+    if (error instanceof PurchaseOrderLinkError) return { error: error.message };
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
     ) {
+      if (Array.isArray(error.meta?.target) && error.meta.target.includes("sourceOpportunityId")) return { error: "Cơ hội này đã có Project." };
       return {
         error: `PO ${purchaseOrderNumber} đã tồn tại. Không thể tạo thêm dự án trùng PO.`,
       };
@@ -250,6 +273,12 @@ export async function createProject(
   }
 
   if (projectFile) queueDrivePush(project.id);
+  if (sourceOpportunityId) {
+    after(() => handOverOpportunityDrive(sourceOpportunityId, project.id));
+    revalidatePath("/crm");
+    revalidatePath("/crm/opportunities");
+    revalidatePath(`/crm/opportunities/${sourceOpportunityId}`);
+  }
   revalidatePath("/", "layout");
   redirect(`/projects/${project.id}`);
 }

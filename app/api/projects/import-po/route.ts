@@ -2,6 +2,9 @@ import { canViewRevenue, getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { MAX_PROJECT_FILE_SIZE } from "@/lib/projectFiles";
 import { parsePurchaseOrderPdf } from "@/lib/purchaseOrderPdf";
+import { crmEnabled } from "@/lib/features";
+import { loadCrmActor } from "@/lib/crm/actor";
+import { listPurchaseOrderSourceOpportunities } from "@/lib/crm/purchaseOrderLink";
 
 export const runtime = "nodejs";
 
@@ -57,7 +60,8 @@ export async function POST(request: Request) {
         );
       }
     }
-    return Response.json({ draft, fileName: file.name });
+    const sourceOpportunities = crmEnabled() ? await listPurchaseOrderSourceOpportunities(prisma, await loadCrmActor(user)) : [];
+    return Response.json({ draft, fileName: file.name, sourceOpportunities });
   } catch (error) {
     const message =
       error instanceof Error
