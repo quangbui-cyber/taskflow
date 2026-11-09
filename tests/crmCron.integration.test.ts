@@ -29,7 +29,7 @@ test("daily CRM job opens, merges and deduplicates reminder work", { skip: !crmT
       expectedEventSteps: { create: { kind: "OFFSET", offsetDays: 90, revision: 0, dueDate } },
     }, include: { expectedEventSteps: true } });
     const task = (f: Fixture, extra: Partial<Prisma.TaskUncheckedCreateInput> = {}) => db.task.create({ data: { title: "Existing work", creatorId: f.pic.id, assigneeId: f.pic.id, clientId: f.client.id, dueDate: today, crmKind: "NEXT_STEP", ...extra } });
-    const confirmed = (f: Fixture, days: number) => db.touchpoint.create({ data: { clientId: f.client.id, kind: "CALL", status: "CONFIRMED", occurredAt: addDaysVn(today, -days), confirmedAt: addDaysVn(today, -days) } });
+    const confirmed = (f: Fixture, days: number) => db.touchpoint.create({ data: { clientId: f.client.id, kind: "CALL", status: "CONFIRMED", outcomeLevel: 2, occurredAt: addDaysVn(today, -days), confirmedAt: addDaysVn(today, -days) } });
 
     await scenario("1 planned step in this week opens a PIC-assigned Client reminder", async f => {
       const e = await event(f);
