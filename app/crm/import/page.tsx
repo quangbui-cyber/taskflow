@@ -38,7 +38,7 @@ export default async function CrmImportPage({ searchParams }: { searchParams: Pr
   });
   const href = (nextPage: number) => `/crm/import?${new URLSearchParams({ run: runId!, ...(status ? { status } : {}), page: String(nextPage) })}`;
   return <div className="tf-shell"><Sidebar user={user} activeSection="crmImport" /><main className="tf-main bg-zinc-50"><HubTabs section="crmImport" role={user.role} />
-    <div className="tf-page space-y-6"><header className="flex flex-wrap items-center justify-between gap-4"><h1 className="tf-page-title">Nhập dữ liệu tracker</h1><CrmTrackerUpload /></header>
+    <div className="tf-page space-y-6"><header className="flex flex-wrap items-center justify-between gap-4"><h1 className="tf-page-title">Nhập dữ liệu tracker</h1><div className="flex flex-wrap items-center gap-2">{crmCan(actor, "MERGE_CLIENT") && <Link href="/crm/import/duplicates" className="tf-button-secondary">Khách nghi trùng</Link>}<CrmTrackerUpload /></div></header>
       {run ? <>
         <div className="space-y-2"><Link href="/crm/import" className="text-sm text-zinc-500 hover:underline">Các lượt nhập</Link><h2 className="break-words text-lg font-semibold">{run.fileName}</h2><p className="text-sm text-zinc-500">{run.actorName} · {run.createdAt.toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })} · {run.mode === "APPLIED" ? "Đã nhập" : "Chạy thử"}</p></div>
         <CrmImportReview key={run.id} runId={run.id} rows={reviewRows} clients={clients} accounts={accounts} programs={programs} reasons={reasons} currentStatus={status ?? ""} legacyLabel="Chưa rõ kết quả" originalLabel="Giá trị gốc" />

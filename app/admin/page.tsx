@@ -14,6 +14,8 @@ import MemberGroupManager from "@/components/MemberGroupManager";
 import SalesTeamManager from "@/components/SalesTeamManager";
 import AccountCatalogManager from "@/components/AccountCatalogManager";
 import ClientCatalogManager from "@/components/ClientCatalogManager";
+import ClientMergeManager from "@/components/crm/ClientMergeManager";
+import { listDuplicateClientPairs } from "@/lib/crm/clientMerge";
 import MeetingRoomManager from "@/components/MeetingRoomManager";
 import RecapGlossaryManager from "@/components/RecapGlossaryManager";
 import DriveStorageSettings from "@/components/DriveStorageSettings";
@@ -177,6 +179,7 @@ async function SettingsContent({
   }
 
   if (activeTab === "client") {
+    if (crmEnabled()) return <ClientMergeManager pairs={await listDuplicateClientPairs(prisma)} />;
     const clients = await prisma.client.findMany({
       include: { _count: { select: { projects: true } } },
       orderBy: { name: "asc" },
