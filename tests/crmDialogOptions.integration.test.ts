@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
-import { loadOpenOpportunityDialogOptions, loadTouchpointDialogOptions } from "../lib/crm/dialogOptions";
+import { loadOpenOpportunityDialogOptions, loadTouchpointDialogOptions, loadOpportunityEditDialogOptions } from "../lib/crm/dialogOptions";
 import { cleanupCrmFixture, createCrmTestDb, crmTestDatabaseUrl, seedCrmFixture } from "./helpers/crmTestDb";
 
 test("CRM dialog options reflect persisted owners and carry no private content", { skip: !crmTestDatabaseUrl() }, async t => {
@@ -46,6 +46,31 @@ test("CRM dialog options reflect persisted owners and carry no private content",
       assert.equal(opts.clients[0].openOpportunities.find(o => o.id === f.opportunity.id)?.canLog, true);
       assert.equal(opts.clients[0].openOpportunities.find(o => o.id === other.id)?.canLog, false);
       assert.equal(opts.clients[0].assignedTasks.length, 0);
+    });
+    await t.test("Opportunity-only editor gets exact-client edit options, retaining used hidden selections without Client rights", async () => {
+      const used = await db.buyingUnit.create({ data: { clientId: f.client.id, name: "Used hidden", active: false } });
+      const hidden = await db.buyingUnit.create({ data: { clientId: f.client.id, name: "Unused hidden", active: false } });
+      const active = await db.buyingUnit.create({ data: { clientId: f.client.id, name: "Active unit" } });
+      const other = await db.client.create({ data: { name: `${prefix} Foreign client` } });
+      const foreign = await db.buyingUnit.create({ data: { clientId: other.id, name: "Foreign unit" } });
+      const code = `H${randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()}`;
+      await db.programType.create({ data: { code, label: "Hidden used", color: "#71717a", active: false } });
+      try {
+        await db.opportunity.update({ where: { id: f.opportunity.id }, data: { buyingUnitId: used.id, programTypeCode: code } });
+        const opts = await loadOpportunityEditDialogOptions(db, actor(f.pic), f.opportunity.id);
+        assert.ok(opts);
+        assert.deepEqual(new Set(opts.buyingUnits.map(u => u.id)), new Set([used.id, active.id]));
+        assert.ok(!opts.buyingUnits.some(u => [hidden.id, foreign.id].includes(u.id)));
+        assert.ok(opts.programTypes.some(p => p.code === code));
+        assert.equal((await loadOpenOpportunityDialogOptions(db, actor(f.pic), { clientId: f.client.id })).clients.length, 0);
+        assert.equal(await loadOpportunityEditDialogOptions(db, actor(f.assignee), f.opportunity.id), null);
+        assert.equal(await loadOpportunityEditDialogOptions(db, actor(f.pic), "missing"), null);
+        await db.opportunity.update({ where: { id: f.opportunity.id }, data: { outcome: "CUSTOMER_CANCELLED" } });
+        assert.equal(await loadOpportunityEditDialogOptions(db, actor(f.pic), f.opportunity.id), null);
+      } finally {
+        await db.opportunity.update({ where: { id: f.opportunity.id }, data: { programTypeCode: "MICE", outcome: null } });
+        await db.programType.delete({ where: { code } });
+      }
     });
   } finally { try { await cleanupCrmFixture(db, prefix); } finally { await db.$disconnect(); } }
 });

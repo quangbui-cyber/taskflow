@@ -68,5 +68,21 @@ test("Opportunity edit and assignment authorize persisted ownership and version"
     await t.test("Admin empty PIC rejected without changing the row", async () => {
       const before = await read(); assert.ok("error" in await changeOpportunityPicOrTeam(db, admin, { ...base, expectedVersion: 1, picAccountId: "", responsibleTeamId: f.team.id })); assert.deepEqual(await read(), before);
     });
+    await t.test("editing retains used hidden program and unit but rejects a newly selected hidden catalog item", async () => {
+      const code = `H${randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()}`;
+      await db.programType.create({ data: { code, label: "Hidden", color: "#71717a", active: false } });
+      const used = await db.buyingUnit.create({ data: { clientId: f.client.id, name: "Hidden used", active: false } });
+      const other = await db.buyingUnit.create({ data: { clientId: f.client.id, name: "Hidden new", active: false } });
+      try {
+        await db.opportunity.update({ where: { id: opportunityId }, data: { programTypeCode: code, buyingUnitId: used.id } });
+        assert.deepEqual(await editOpportunity(db, pic, { opportunityId, expectedVersion: 1, name: "Updated hidden catalog", programTypeCode: code, buyingUnitId: used.id }), { ok: true, version: 2 });
+        assert.ok("error" in await editOpportunity(db, pic, { opportunityId, expectedVersion: 2, buyingUnitId: other.id }));
+        const fresh = await open();
+        assert.ok("error" in await editOpportunity(db, pic, { opportunityId: fresh, expectedVersion: 0, programTypeCode: code }));
+      } finally {
+        await db.opportunity.update({ where: { id: opportunityId }, data: { programTypeCode: "MICE", buyingUnitId: null } });
+        await db.programType.delete({ where: { code } });
+      }
+    });
   } finally { await cleanupCrmFixture(db, prefix); await db.$disconnect(); }
 });
