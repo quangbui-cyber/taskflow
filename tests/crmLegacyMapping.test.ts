@@ -31,6 +31,7 @@ test("mapping preserves unknown closed outcome and projected budget", () => {
   const open = mapLegacyProjectToOpportunity(project, { opportunityId: "o2" });
   assert.equal(open.budgetMax, null); assert.equal(open.outcome, null); assert.equal(open.expectedMonth, null);
   assert.equal(mapLegacyProjectToOpportunity({ ...project, status: "CANCEL" }, { opportunityId: "o3" }).legacyStatus, "CANCEL");
+  assert.equal(mapLegacyProjectToOpportunity({ ...project, status: "CANCEL", revenue: 123 }, { opportunityId: "o3" }).budgetMax, null);
   assert.throws(() => mapLegacyProjectToOpportunity({ ...project, clientId: null }, { opportunityId: "o" }));
 });
 test("expected date uses Vietnam calendar across year boundary", () => {

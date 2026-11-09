@@ -166,3 +166,22 @@ test("rollback failure is atomic and retryable across the whole batch", { skip: 
   assert.deepEqual(await dumpFixture(db, f, prefix), before); assert.equal(await db.crmMigrationRecord.count({ where: { batchId, status: "APPLIED" } }), 3);
   assert.ok("ok" in await rollbackLegacyBatch(db, batchId, options(prefix)));
 }));
+test("apply transaction failure leaves snapshot and all owners retryable", { skip: !crmTestDatabaseUrl() }, () => withFixture(async (db, f, prefix) => {
+  const before = await dumpFixture(db, f, prefix), plan = await planLegacyMigration(db, { projectIds: [f.bid.id] });
+  const { batchId } = await createApplyBatch(db, plan, options(prefix));
+  const failing = db.$extends({ query: { driveFolder: { async update() { throw new Error("synthetic rename failure"); } } } }) as unknown as PrismaClient;
+  await assert.rejects(applyLegacyBatch(failing, batchId), /synthetic rename failure/);
+  assert.deepEqual(await dumpFixture(db, f, prefix), before);
+  const record = await db.crmMigrationRecord.findFirstOrThrow({ where: { batchId } }); assert.equal(record.status, "PLANNED"); assert.equal(record.opportunityId, null);
+  assert.equal(await db.opportunity.count({ where: { legacyProjectId: f.bid.id } }), 0);
+  assert.equal((await applyLegacyBatch(db, batchId)).applied, 1);
+}));
+test("concurrent batches cannot migrate one Project twice, dry-run batches cannot apply", { skip: !crmTestDatabaseUrl() }, () => withFixture(async (db, f, prefix) => {
+  const plan = await planLegacyMigration(db, { projectIds: [f.bid.id] });
+  const dry = await recordDryRun(db, plan, options(prefix)); await assert.rejects(applyLegacyBatch(db, dry), /active APPLY/);
+  const a = await createApplyBatch(db, plan, options(prefix)), b = await createApplyBatch(db, plan, options(prefix));
+  const result = await Promise.all([applyLegacyBatch(db, a.batchId), applyLegacyBatch(db, b.batchId)]);
+  assert.equal(result.reduce((n, r) => n + r.applied, 0), 1);
+  assert.ok(result.some((r) => r.skipped.some((s) => s.reason === "ALREADY_MIGRATED")));
+  assert.equal(await db.opportunity.count({ where: { legacyProjectId: f.bid.id } }), 1);
+}));

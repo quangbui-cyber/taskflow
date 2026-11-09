@@ -26,7 +26,7 @@ export function mapLegacyProjectToOpportunity(p: MappingProject, opts: { opportu
   const [year, month] = vnDateKey(p.executionStartAt ?? p.createdAt).split("-").map(Number);
   const closed = p.status !== "BIDDING";
   return { id: opts.opportunityId, name: p.name, clientId: p.clientId, programTypeCode: p.type, expectedYear: year, expectedMonth: p.executionStartAt ? month : null,
-    source: "OTHER", demandSignal: `Dữ liệu cũ từ dự án ${p.name}`, budgetMax: p.revenue > 0 ? p.revenue : null, stage: "BIDDING", outcome: closed ? "LEGACY_UNCLASSIFIED" : null,
+    source: "OTHER", demandSignal: `Dữ liệu cũ từ dự án ${p.name}`, budgetMax: ["BIDDING", "FAIL"].includes(p.status) && p.revenue > 0 ? p.revenue : null, stage: "BIDDING", outcome: closed ? "LEGACY_UNCLASSIFIED" : null,
     legacyStatus: closed ? p.status : null, closedAt: closed ? p[legacyClosedAtSource(p)] : null, picAccountId: p.accountId, responsibleTeamId: null, createdById: p.ownerId, createdAt: p.createdAt, legacyProjectId: p.id, version: 0 };
 }
 export function legacyDriveKeyPairs(projectId: string, opportunityId: string, existingKeys: string[]) {
