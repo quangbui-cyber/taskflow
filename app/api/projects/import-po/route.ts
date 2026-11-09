@@ -61,7 +61,13 @@ export async function POST(request: Request) {
       }
     }
     const sourceOpportunities = crmEnabled() ? await listPurchaseOrderSourceOpportunities(prisma, await loadCrmActor(user)) : [];
-    return Response.json({ draft, fileName: file.name, sourceOpportunities });
+    const programLabels = new Map(sourceOpportunities.length > 0 ? (await prisma.programType.findMany({
+      where: { code: { in: [...new Set(sourceOpportunities.map((o) => o.programTypeCode))] } },
+      select: { code: true, label: true },
+    })).map(({ code, label }) => [code, label]) : []);
+    return Response.json({ draft, fileName: file.name, sourceOpportunities: sourceOpportunities.map((o) => ({
+      ...o, programTypeLabel: programLabels.get(o.programTypeCode) ?? o.programTypeCode,
+    })) });
   } catch (error) {
     const message =
       error instanceof Error

@@ -28,7 +28,7 @@ import { vnDateKey } from "@/lib/crm/dates";
 type ImportResult = {
   draft: PurchaseOrderDraft;
   fileName: string;
-  sourceOpportunities: { id: string; name: string; clientId: string; clientName: string; programTypeCode: string }[];
+  sourceOpportunities: { id: string; name: string; clientId: string; programTypeLabel: string }[];
 };
 
 function normalizeName(value: string) {
@@ -171,8 +171,7 @@ function ProjectDetailsForm({
   const [draftVersion, setDraftVersion] = useState(0);
   const [clientOptions, setClientOptions] = useState(clients);
   const [selectedClientId, setSelectedClientId] = useState("");
-  const [sourceSelection, setSourceSelection] = useState({ clientId: "", opportunityId: "" });
-  const sourceOpportunityId = sourceSelection.clientId === selectedClientId ? sourceSelection.opportunityId : "";
+  const [sourceOpportunityId, setSourceOpportunityId] = useState("");
   const [purchaseOrderDate, setPurchaseOrderDate] = useState("");
   useActionFeedback(state);
 
@@ -199,10 +198,9 @@ function ProjectDetailsForm({
         throw new Error(result.error || "Không thể đọc PO.");
       }
       setImportResult(result);
-      setSourceSelection({ clientId: "", opportunityId: "" });
       const poDate = result.draft.poDate?.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
       setPurchaseOrderDate(poDate ? `${poDate[3]}-${poDate[2]}-${poDate[1]}` : "");
-      setSelectedClientId(matchClientId(result.draft.clientName, clientOptions));
+      changeClient(matchClientId(result.draft.clientName, clientOptions));
       setDraftVersion((version) => version + 1);
     } catch (error) {
       setImportResult(null);
@@ -222,12 +220,13 @@ function ProjectDetailsForm({
     ? (importResult.sourceOpportunities ?? []).filter((o) => o.clientId === selectedClientId) : [];
   function changeClient(clientId: string) {
     setSelectedClientId(clientId);
-    setSourceSelection({ clientId, opportunityId: "" });
+    setSourceOpportunityId("");
   }
 
   return (
     <form
       action={formAction}
+      onReset={(event) => { if (importResult?.draft.provider === "JABIL") event.preventDefault(); }}
       onSubmit={(event) => {
         if (restricted && category === "CLIENT" && importResult?.draft.provider !== "JABIL") {
           event.preventDefault();
@@ -437,18 +436,18 @@ function ProjectDetailsForm({
 
       {sourceOpportunities.length > 0 && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="block" htmlFor="project-source-opportunity">
-            <span className="tf-label">Cơ hội nguồn</span>
-            <select id="project-source-opportunity" name="sourceOpportunityId" className="tf-field" value={sourceOpportunityId} disabled={pending || importing} onChange={(event) => setSourceSelection({ clientId: selectedClientId, opportunityId: event.target.value })}>
+          <div className="block">
+            <label className="tf-label" htmlFor="project-source-opportunity">Cơ hội nguồn</label>
+            <select id="project-source-opportunity" name="sourceOpportunityId" className="tf-field" value={sourceOpportunityId} disabled={pending || importing} onChange={(event) => setSourceOpportunityId(event.target.value)}>
               <option value="">Không gắn Cơ hội</option>
-              {sourceOpportunities.map((o) => <option key={o.id} value={o.id}>{o.name} · {programTypes.find((p) => p.code === o.programTypeCode)?.label ?? o.programTypeCode}</option>)}
+              {sourceOpportunities.map((o) => <option key={o.id} value={o.id}>{o.name} · {o.programTypeLabel}</option>)}
             </select>
-          </label>
+          </div>
           {sourceOpportunityId && (
-            <label className="block" htmlFor="project-po-date">
-              <span className="tf-label">Ngày PO</span>
+            <div className="block">
+              <label className="tf-label" htmlFor="project-po-date">Ngày PO</label>
               <input id="project-po-date" name="purchaseOrderDate" type="date" className="tf-field" required max={vnDateKey(new Date())} value={purchaseOrderDate} disabled={pending || importing} onChange={(event) => setPurchaseOrderDate(event.target.value)} />
-            </label>
+            </div>
           )}
         </div>
       )}

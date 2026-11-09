@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { queueChatMemberSync } from "@/lib/projectChatSync";
 import {
   driveFolderKeys,
+  pushPendingFiles,
   queueDrivePush,
   queueDriveSharingSync,
   renameDriveFolderSafe,
@@ -272,13 +273,17 @@ export async function createProject(
     throw error;
   }
 
-  if (projectFile) queueDrivePush(project.id);
   if (sourceOpportunityId) {
-    after(() => handOverOpportunityDrive(sourceOpportunityId, project.id));
+    const projectId = project.id;
+    // Reuse the Opportunity folders before uploading the PO and any pending files.
+    after(async () => {
+      await handOverOpportunityDrive(sourceOpportunityId, projectId);
+      await pushPendingFiles({ projectId });
+    });
     revalidatePath("/crm");
     revalidatePath("/crm/opportunities");
     revalidatePath(`/crm/opportunities/${sourceOpportunityId}`);
-  }
+  } else if (projectFile) queueDrivePush(project.id);
   revalidatePath("/", "layout");
   redirect(`/projects/${project.id}`);
 }
