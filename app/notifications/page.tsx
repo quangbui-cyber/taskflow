@@ -109,6 +109,8 @@ export default async function NotificationsPage({
               type: notification.type,
               message: notification.message,
               projectId: notification.projectId,
+              clientId: notification.clientId,
+              opportunityId: notification.opportunityId,
               taskId: notification.taskId,
               recognitionId: notification.recognitionId,
               meetingId: notification.meetingId,
