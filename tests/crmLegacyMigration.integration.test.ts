@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import type { PrismaClient } from "@prisma/client";
-import { planLegacyMigration, recordDryRun, createApplyBatch, applyLegacyBatch, LegacyApprovalError } from "../lib/crm/legacyMigration";
+import { planLegacyMigration, recordDryRun, createApplyBatch, applyLegacyBatch, rollbackLegacyBatch, detectNewActivity, LegacyApprovalError } from "../lib/crm/legacyMigration";
+import { closeOpportunity } from "../lib/crm/opportunityWorkflow";
 import { LEGACY_IMPORT_ACTOR_NAME } from "../lib/crm/legacyMapping";
 import { emptyMonths, KPI_RECOGNIZED_STATUSES, kpiYearRange, vietnamYearMonth } from "../lib/kpi";
 import { LEGACY_WON_STATUSES, LEGACY_LOST_STATUSES } from "../lib/crm/metrics";
@@ -98,4 +99,70 @@ test("state changes between plan and apply skip the changed Project", { skip: !c
   const result = await applyLegacyBatch(db, batchId);
   assert.deepEqual(result, { applied: 0, skipped: [{ legacyProjectId: f.cancel.id, reason: "STATE_CHANGED" }], status: "PARTIAL" });
   assert.equal((await db.project.findUniqueOrThrow({ where: { id: f.cancel.id } })).status, "ON_PROCESS");
+}));
+
+async function dumpFixture(db: PrismaClient, f: Awaited<ReturnType<typeof fixture>>, prefix: string) {
+  const orderBy = { id: "asc" as const };
+  return {
+    projects: await db.project.findMany({ where: { id: { in: f.ids } }, orderBy }),
+    members: await db.projectMember.findMany({ where: { projectId: { in: f.ids } }, orderBy }),
+    wishes: await db.projectWish.findMany({ where: { projectId: { in: f.ids } }, orderBy }),
+    tasks: await db.task.findMany({ where: { creatorId: f.admin.id }, select: { id: true, projectId: true, opportunityId: true }, orderBy }),
+    files: await db.projectFile.findMany({ where: { OR: [{ projectId: { in: f.ids } }, { opportunity: { legacyProjectId: { in: f.ids } } }] }, select: { id: true, projectId: true, opportunityId: true }, orderBy }),
+    meetings: await db.meeting.findMany({ where: { organizerId: f.admin.id }, select: { id: true, projectId: true, opportunityId: true }, orderBy }),
+    notification: await db.notification.findUnique({ where: { id: f.notification.id }, select: { id: true, projectId: true, opportunityId: true } }),
+    drive: await db.driveFolder.findMany({ where: { folderId: { startsWith: prefix } }, orderBy: { folderId: "asc" } }),
+  };
+}
+async function applyFixture(db: PrismaClient, f: Awaited<ReturnType<typeof fixture>>, prefix: string, ids = f.ids) {
+  const plan = await planLegacyMigration(db, { projectIds: ids }), { batchId } = await createApplyBatch(db, plan, options(prefix));
+  await applyLegacyBatch(db, batchId); return batchId;
+}
+test("rollback restores exact Project scalars, members, wishes, owners and Drive keys with KPI unchanged", { skip: !crmTestDatabaseUrl() }, () => withFixture(async (db, f, prefix) => {
+  const before = await dumpFixture(db, f, prefix), revenue = await monthlyRevenue(db, f.client.id), batchId = await applyFixture(db, f, prefix);
+  const result = await rollbackLegacyBatch(db, batchId, options(prefix)); assert.ok("ok" in result); assert.equal(result.restored, 3);
+  assert.deepEqual(await dumpFixture(db, f, prefix), before); assert.deepEqual(await monthlyRevenue(db, f.client.id), revenue);
+  assert.equal(await db.opportunity.count({ where: { legacyProjectId: { in: f.ids } } }), 0);
+  assert.equal((await db.crmMigrationBatch.findUniqueOrThrow({ where: { id: batchId } })).status, "ROLLED_BACK");
+  assert.equal(await db.crmMigrationRecord.count({ where: { batchId, status: "ROLLED_BACK" } }), 3);
+  assert.deepEqual((await db.crmMigrationBatch.findUniqueOrThrow({ where: { id: result.rollbackBatchId } })).summary, { rolledBackBatchId: batchId });
+  const again = await rollbackLegacyBatch(db, batchId, options(prefix)); assert.ok("ok" in again); assert.equal(again.restored, 0); assert.equal(again.rollbackBatchId, result.rollbackBatchId);
+}));
+test("new task blocks whole batch without writes; another independent batch can roll back", { skip: !crmTestDatabaseUrl() }, () => withFixture(async (db, f, prefix) => {
+  const batchId = await applyFixture(db, f, prefix, [f.bid.id, f.fail.id]);
+  const opp = await db.opportunity.findUniqueOrThrow({ where: { legacyProjectId: f.bid.id } });
+  await db.task.create({ data: { title: `${prefix} NEW`, creatorId: f.admin.id, opportunityId: opp.id } });
+  const dump = async () => ({ fixture: await dumpFixture(db, f, prefix), batches: await db.crmMigrationBatch.findMany({ where: { actorName: prefix }, orderBy: { id: "asc" } }), records: await db.crmMigrationRecord.findMany({ where: { batchId }, orderBy: { id: "asc" } }) });
+  const before = await dump(), result = await rollbackLegacyBatch(db, batchId, options(prefix)); assert.ok("blocked" in result);
+  assert.deepEqual(result.blocked, [{ legacyProjectId: f.bid.id, opportunityId: opp.id, reasons: ["NEW_TASK"] }]); assert.deepEqual(await dump(), before);
+  const independent = await applyFixture(db, f, prefix, [f.cancel.id]); assert.ok("ok" in await rollbackLegacyBatch(db, independent, options(prefix)));
+  assert.equal((await db.crmMigrationBatch.findUniqueOrThrow({ where: { id: batchId } })).status, "APPLIED");
+  assert.equal(await db.opportunity.count({ where: { legacyProjectId: { in: [f.bid.id, f.fail.id] } } }), 2);
+}));
+test("workflow stage events and confirmed touchpoints prevent rollback", { skip: !crmTestDatabaseUrl() }, () => withFixture(async (db, f, prefix) => {
+  const batchId = await applyFixture(db, f, prefix, [f.bid.id]), opp = await db.opportunity.findUniqueOrThrow({ where: { legacyProjectId: f.bid.id } });
+  const actor = { id: f.admin.id, name: f.admin.name, role: "ADMIN", accountId: null, managedTeamIds: [], isDataSteward: false };
+  const reason = await db.crmReason.findFirstOrThrow({ where: { group: "CANCELLED", active: true, requiresNote: false } });
+  const closed = await closeOpportunity(db, actor, { opportunityId: opp.id, expectedVersion: 0, outcome: "CUSTOMER_CANCELLED", reasonId: reason.id }); assert.ok("ok" in closed);
+  await db.touchpoint.create({ data: { clientId: f.client.id, opportunityId: opp.id, kind: "CALL", occurredAt: new Date(), outcomeLevel: 2, status: "CONFIRMED", authorId: f.admin.id } });
+  const result = await rollbackLegacyBatch(db, batchId, options(prefix)); assert.ok("blocked" in result);
+  assert.ok(result.blocked[0].reasons.includes("NEW_STAGE_EVENT")); assert.ok(result.blocked[0].reasons.includes("NEW_TOUCHPOINT")); assert.ok(result.blocked[0].reasons.includes("STAGE_OR_OUTCOME_CHANGED"));
+}));
+test("activity detector covers files, meetings, won Project and missing Opportunity", { skip: !crmTestDatabaseUrl() }, () => withFixture(async (db, f, prefix) => {
+  const batchId = await applyFixture(db, f, prefix, [f.bid.id]), record = await db.crmMigrationRecord.findFirstOrThrow({ where: { batchId } }), opportunityId = record.opportunityId!;
+  await db.projectFile.create({ data: { opportunityId, name: "new", mimeType: "text/plain", size: 0 } });
+  await db.meeting.create({ data: { opportunityId, title: "new", organizerId: f.admin.id, startAt: new Date(), endAt: new Date() } });
+  await db.project.create({ data: { name: `${prefix} WON`, ownerId: f.admin.id, sourceOpportunityId: opportunityId } });
+  const reasons = await detectNewActivity(db, record);
+  assert.ok(reasons.includes("NEW_FILE")); assert.ok(reasons.includes("NEW_MEETING")); assert.ok(reasons.includes("WON_PROJECT_EXISTS"));
+  await db.opportunity.delete({ where: { id: opportunityId } });
+  assert.deepEqual(await detectNewActivity(db, record), ["OPPORTUNITY_MISSING"]);
+}));
+test("rollback failure is atomic and retryable across the whole batch", { skip: !crmTestDatabaseUrl() }, () => withFixture(async (db, f, prefix) => {
+  const batchId = await applyFixture(db, f, prefix), before = await dumpFixture(db, f, prefix);
+  let creates = 0;
+  const failing = db.$extends({ query: { project: { async create({ args, query }) { if (++creates === 2) throw new Error("synthetic restore failure"); return query(args); } } } }) as unknown as PrismaClient;
+  await assert.rejects(rollbackLegacyBatch(failing, batchId, options(prefix)), /synthetic restore failure/);
+  assert.deepEqual(await dumpFixture(db, f, prefix), before); assert.equal(await db.crmMigrationRecord.count({ where: { batchId, status: "APPLIED" } }), 3);
+  assert.ok("ok" in await rollbackLegacyBatch(db, batchId, options(prefix)));
 }));
