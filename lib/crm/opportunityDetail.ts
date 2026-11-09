@@ -38,6 +38,8 @@ export async function loadOpportunityDetail(db: Db, opportunityId: string, now: 
   const files: ProjectFileDTO[] = fileRows.map(file => ({ id: file.id, name: file.name, mimeType: file.mimeType, size: file.size, createdAt: file.createdAt.toISOString(), driveUrl: storedFileDriveUrl(file), uploader: file.uploader }));
   return {
     id: opportunity.id, name: opportunity.name, version: opportunity.version, stage: opportunity.stage, outcome: opportunity.outcome,
+    buyingUnitId: opportunity.buyingUnitId, picAccountId: opportunity.picAccountId, responsibleTeamId: opportunity.responsibleTeamId,
+    expectedYear: opportunity.expectedYear, expectedMonth: opportunity.expectedMonth, expectedQuarter: opportunity.expectedQuarter,
     client: opportunity.client, buyingUnitName: opportunity.buyingUnit?.name ?? null, programTypeCode: opportunity.programTypeCode, programTypeLabel: opportunity.programType.label,
     timingLabel: formatExpectedTiming(opportunity), expectedEventSource: opportunity.expectedEvent?.source ?? null,
     budgetMin: opportunity.budgetMin === null ? null : Number(opportunity.budgetMin), budgetMax: opportunity.budgetMax === null ? null : Number(opportunity.budgetMax),

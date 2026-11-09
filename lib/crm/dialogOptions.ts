@@ -41,3 +41,20 @@ export async function loadOpenOpportunityDialogOptions(db: Db, actor: CrmActor, 
 }
 export type TouchpointDialogOptions = Awaited<ReturnType<typeof loadTouchpointDialogOptions>>;
 export type OpenOpportunityDialogOptions = Awaited<ReturnType<typeof loadOpenOpportunityDialogOptions>>;
+
+/** Options for one persisted Opportunity; this never grants Client opening/edit rights. */
+export async function loadOpportunityEditDialogOptions(db: Db, actor: CrmActor, opportunityId: string) {
+  const o = await db.opportunity.findUnique({ where: { id: opportunityId }, select: {
+    outcome: true, clientId: true, buyingUnitId: true, programTypeCode: true, picAccountId: true, responsibleTeamId: true,
+    picAccount: { select: picSelect }, client: { select: { responsibleTeamId: true, picAccount: { select: picSelect } } },
+  } });
+  if (!o || !crmCan(actor, "EDIT", { kind: "OPPORTUNITY", closed: o.outcome !== null, picUserId: o.picAccount?.userId ?? null, teamId: o.responsibleTeamId ?? o.picAccount?.teamId ?? o.client.responsibleTeamId ?? o.client.picAccount?.teamId ?? null })) return null;
+  const [base, buyingUnits, usedProgram, currentPic] = await Promise.all([
+    loadOpenOpportunityDialogOptions(db, actor, { clientId: o.clientId }),
+    db.buyingUnit.findMany({ where: { clientId: o.clientId, OR: [{ active: true }, { id: o.buyingUnitId ?? "__none__" }] }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    db.programType.findUnique({ where: { code: o.programTypeCode }, select: { code: true, label: true } }),
+    o.picAccountId ? db.account.findUnique({ where: { id: o.picAccountId }, select: { id: true, name: true } }) : null,
+  ]);
+  return { buyingUnits, programTypes: usedProgram && !base.programTypes.some(p => p.code === usedProgram.code) ? [...base.programTypes, usedProgram] : base.programTypes,
+    picAccounts: currentPic && !base.picAccounts.some(p => p.id === currentPic.id) ? [...base.picAccounts, currentPic] : base.picAccounts };
+}

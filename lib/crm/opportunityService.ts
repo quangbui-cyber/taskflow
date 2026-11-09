@@ -41,8 +41,8 @@ export async function editOpportunity(db: PrismaClient, actor: Actor, input: Edi
     for (const key of EDIT_KEYS) if (input[key] !== undefined) Object.assign(merged, { [key]: input[key] });
     const checked = validateOpenOpportunityInput(merged);
     if (!("ok" in checked)) return { error: Object.values(checked.errors)[0] };
-    if (!await tx.programType.findFirst({ where: { code: merged.programTypeCode, active: true }, select: { code: true } })) return { error: "Chọn loại chương trình đang dùng." };
-    if (merged.buyingUnitId && !await tx.buyingUnit.findFirst({ where: { id: merged.buyingUnitId, clientId: current.clientId, active: true }, select: { id: true } })) return { error: INVALID };
+    if (!await tx.programType.findFirst({ where: { code: merged.programTypeCode, ...(merged.programTypeCode !== current.programTypeCode ? { active: true } : {}) }, select: { code: true } })) return { error: "Chọn loại chương trình đang dùng." };
+    if (merged.buyingUnitId && !await tx.buyingUnit.findFirst({ where: { id: merged.buyingUnitId, clientId: current.clientId, ...(merged.buyingUnitId !== current.buyingUnitId ? { active: true } : {}) }, select: { id: true } })) return { error: INVALID };
     const data: Prisma.OpportunityUpdateManyMutationInput = { version: { increment: 1 } };
     for (const key of EDIT_KEYS) {
       if (input[key] === undefined) continue;

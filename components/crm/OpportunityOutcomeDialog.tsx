@@ -81,24 +81,69 @@ function OutcomeFormBody(props: OpportunityOutcomeDialogProps) {
       {won ? <>
         {field("contractValue", "Giá trị hợp đồng (VND)", <>
           {budget && <p className="mb-2 text-xs text-zinc-500">Ngân sách dự kiến: {budget}</p>}
-          <input {...a("contractValue")} required inputMode="numeric" className="tf-field" value={state.contractValue} onChange={e => set("contractValue", formatThousandsInput(e.target.value))} />
+          <input
+            {...a("contractValue")}
+            required
+            inputMode="numeric"
+            className="tf-field"
+            value={state.contractValue}
+            onChange={e => set("contractValue", formatThousandsInput(e.target.value))}
+          />
         </>)}
         {date("wonAt", "Ngày thắng")}
-        {field("projectName", "Tên Project", <input {...a("projectName")} required maxLength={200} className="tf-field" value={state.projectName} onChange={e => set("projectName", e.target.value)} />)}
+        {field("projectName", "Tên Project", <input
+          {...a("projectName")}
+          required
+          maxLength={200}
+          className="tf-field"
+          value={state.projectName}
+          onChange={e => set("projectName", e.target.value)}
+        />)}
       </> : state.outcome && <>
-        {field("reasonId", state.outcome === "LOST_COMPETITIVE" ? "Lý do thua" : state.outcome === "CUSTOMER_CANCELLED" ? "Lý do hủy" : "Lý do không tham gia", <select {...a("reasonId")} required className="tf-field" value={state.reasonId} onChange={e => { set("reasonId", e.target.value); setErrors({}); }}>
-          <option value="">Chọn lý do</option>{catalog.map(reason => <option key={reason.id} value={reason.id}>{reason.label}</option>)}
+        {field("reasonId", state.outcome === "LOST_COMPETITIVE" ? "Lý do thua" : state.outcome === "CUSTOMER_CANCELLED" ? "Lý do hủy" : "Lý do không tham gia", <select
+          {...a("reasonId")}
+          required
+          className="tf-field"
+          value={state.reasonId}
+          onChange={e => { set("reasonId", e.target.value); setErrors({}); }}
+        >
+          <option value="">Chọn lý do</option>
+          {catalog.map(reason => <option key={reason.id} value={reason.id}>{reason.label}</option>)}
         </select>)}
         {field("note", "Ghi chú", <textarea {...a("note")} required={catalog.find(r => r.id === state.reasonId)?.requiresNote} rows={3} maxLength={4000} className="tf-field" value={state.note} onChange={e => set("note", e.target.value)} />)}
         {state.outcome === "LOST_COMPETITIVE" && field("lessons", "Điều rút ra", <textarea {...a("lessons")} rows={3} maxLength={4000} className="tf-field" value={state.lessons} onChange={e => set("lessons", e.target.value)} />)}
-        <button type="button" role="switch" aria-checked={state.followUp} className="flex min-h-10 w-full items-center justify-between gap-3 text-left text-sm" onClick={() => set("followUp", !state.followUp)}>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={state.followUp}
+          className="flex min-h-10 w-full items-center justify-between gap-3 text-left text-sm"
+          onClick={() => set("followUp", !state.followUp)}
+        >
           {state.outcome === "LOST_COMPETITIVE" ? "Kế hoạch lấy lại" : "Hẹn tiếp cận lại"}
           <span aria-hidden="true" className={`flex h-6 w-10 items-center rounded-full p-1 ${state.followUp ? "justify-end bg-zinc-900" : "bg-zinc-200"}`}><span className="h-4 w-4 rounded-full bg-white" /></span>
         </button>
         {state.followUp && <div data-crm-field="followUp" className="space-y-4">
-          {field("followUpTitle", "Việc cần làm", <input {...a("followUp")} aria-label="Việc cần làm" required maxLength={500} className="tf-field" value={state.followUpTitle} onChange={e => set("followUpTitle", e.target.value)} />)}
+          {field("followUpTitle", "Việc cần làm", <input
+            {...a("followUpTitle")}
+            aria-invalid={!!(errors.followUpTitle || errors.followUp) || undefined}
+            aria-describedby={errors.followUp ? `${uid}-followUp-error` : a("followUpTitle")["aria-describedby"]}
+            style={errors.followUp ? { borderColor: "var(--danger)" } : a("followUpTitle").style}
+            required
+            maxLength={500}
+            className="tf-field"
+            value={state.followUpTitle}
+            onChange={e => set("followUpTitle", e.target.value)}
+          />)}
           {error("followUp")}
-          {field("assigneeId", "Người làm", <div {...a("assigneeId")} role="group"><UserPicker options={users} value={state.assigneeId ?? ""} onChange={id => set("assigneeId", id || null)} ariaLabel="Người làm" placeholder="Chọn người làm" /></div>)}
+          {field("assigneeId", "Người làm", <div {...a("assigneeId")} role="group">
+            <UserPicker
+              options={users}
+              value={state.assigneeId ?? ""}
+              onChange={id => set("assigneeId", id || null)}
+              ariaLabel="Người làm"
+              placeholder="Chọn người làm"
+            />
+          </div>)}
           {date("dueDate", "Hạn")}
         </div>}
       </>}

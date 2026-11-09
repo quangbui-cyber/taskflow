@@ -11,16 +11,19 @@ import OutcomeDots from "@/components/crm/OutcomeDots";
 import OpportunityFilesPanel from "@/components/crm/OpportunityFilesPanel";
 import OpportunityStepper from "@/components/crm/OpportunityStepper";
 import OpportunityNextStep from "@/components/crm/OpportunityNextStep";
+import OpportunityHeaderActions from "@/components/crm/OpportunityHeaderActions";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { crmEnabled, meetingsEnabled } from "@/lib/features";
 import { loadCrmActor, loadOpportunityResource } from "@/lib/crm/actor";
 import { crmCan } from "@/lib/crm/policy";
 import { loadOpportunityDetail } from "@/lib/crm/opportunityDetail";
-import { loadTouchpointDialogOptions } from "@/lib/crm/dialogOptions";
+import { loadTouchpointDialogOptions, loadOpportunityEditDialogOptions } from "@/lib/crm/dialogOptions";
+import { listReasons } from "@/lib/crm/settings";
+import { winPreview } from "@/lib/crm/opportunityWin";
 import { describeStageEvent } from "@/lib/crm/opportunityStepper";
 import { OPPORTUNITY_STAGES, OPPORTUNITY_OUTCOMES, OPPORTUNITY_SOURCES, EVENT_SOURCES, TOUCHPOINT_KINDS } from "@/lib/crm/labels";
-import { formatCrmDate } from "@/lib/crm/dates";
+import { formatCrmDate, vnDateKey } from "@/lib/crm/dates";
 import { formatBudgetRange, formatCompactVnd } from "@/lib/crm/opportunityFormat";
 import { assertTaskAccess } from "@/lib/taskAccess";
 import { toTaskOwnerDisplay } from "@/lib/taskQueries";
@@ -44,10 +47,14 @@ export default async function OpportunityPage({ params, searchParams }: {
   const canAssign = crmCan(actor, "ASSIGN", resource);
   const canLog = crmCan(actor, "LOG_TOUCHPOINT", resource);
   const closed = detail.outcome !== null;
-  const [options, projects, users] = await Promise.all([
+  const [options, projects, users, reasons, preview, editOptions, teams] = await Promise.all([
     loadTouchpointDialogOptions(prisma, actor, { clientId: detail.client.id }),
     prisma.project.findMany({ where: { members: { some: { userId: user.id } } }, select: { id: true, name: true, color: true, status: true, category: true, responsibleTeam: { select: { id: true, name: true } }, responsibleGroup: { select: { id: true, name: true } }, account: { select: { team: { select: { id: true, name: true } } } } }, orderBy: { createdAt: "desc" } }),
     prisma.user.findMany({ where: { isActive: true, deletedAt: null }, select: { id: true, name: true, email: true, avatarUrl: true }, orderBy: { name: "asc" } }),
+    !closed ? listReasons(prisma) : [],
+    !closed && detail.stage === "BIDDING" ? winPreview(prisma, id) : null,
+    !closed && canEdit ? loadOpportunityEditDialogOptions(prisma, actor, id) : null,
+    !closed ? prisma.salesTeam.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }) : [],
   ]);
   const base = `/crm/opportunities/${id}`;
   const members = users.map(person => ({ userId: person.id, role: "MEMBER", user: person }));
@@ -80,6 +87,14 @@ export default async function OpportunityPage({ params, searchParams }: {
     files: selectedTask.files.map(file => ({ id: file.id, kind: file.kind === "RESULT" ? "RESULT" : "BRIEF", name: file.name, mimeType: file.mimeType, size: file.size, createdAt: file.createdAt.toISOString(), driveUrl: storedFileDriveUrl(file), uploader: file.uploader })),
   } : null;
   const badge = detail.outcome ? OPPORTUNITY_OUTCOMES.find(row => row.key === detail.outcome) : OPPORTUNITY_STAGES.find(row => row.key === detail.stage);
+  const actionOpportunity = {
+    id, name: detail.name, version: detail.version, stage: detail.stage, outcome: detail.outcome, clientId: detail.client.id,
+    budgetMin: detail.budgetMin, budgetMax: detail.budgetMax, picUserId: detail.pic?.userId ?? null,
+    picAccountId: detail.picAccountId, responsibleTeamId: detail.responsibleTeamId, buyingUnitId: detail.buyingUnitId,
+    programTypeCode: detail.programTypeCode, expectedYear: detail.expectedYear, expectedMonth: detail.expectedMonth, expectedQuarter: detail.expectedQuarter,
+    source: detail.source, demandSignal: detail.demandSignal, briefSummary: detail.briefSummary, winStrategy: detail.winStrategy,
+    proposalDueAt: detail.proposalDueAt ? vnDateKey(detail.proposalDueAt) : null, proposalPlannedAt: detail.proposalPlannedAt ? vnDateKey(detail.proposalPlannedAt) : null,
+  };
   const eventSource = EVENT_SOURCES.find(row => row.key === detail.expectedEventSource);
   const date = (value: Date | null) => value ? formatCrmDate(value, now) : "-";
   const info: [string, string | null][] = [
@@ -104,6 +119,7 @@ export default async function OpportunityPage({ params, searchParams }: {
         </div>
         <div className="flex flex-wrap gap-2" data-slot="opportunity-actions">
           {canHeaderLog && options.clients.length > 0 && <TouchpointDialog options={options} lockClient triggerVariant="secondary" prefill={{ clientId: detail.client.id, opportunityId: closed ? null : id }} />}
+          {!closed && <OpportunityHeaderActions key={`${id}-${detail.version}`} opportunity={actionOpportunity} rights={{ canAdvance: canEdit, canEdit, canClose: crmCan(actor, "CLOSE_OPPORTUNITY", resource), canChangePic: crmCan(actor, "CHANGE_PIC_OR_TEAM", resource) }} reasons={{ LOST: reasons.filter(r => r.group === "LOST").map(r => ({ id: r.id, label: r.label, requiresNote: r.requiresNote })), CANCELLED: reasons.filter(r => r.group === "CANCELLED").map(r => ({ id: r.id, label: r.label, requiresNote: r.requiresNote })), DECLINED: reasons.filter(r => r.group === "DECLINED").map(r => ({ id: r.id, label: r.label, requiresNote: r.requiresNote })) }} winPreview={preview ? { tasks: preview.tasks, files: preview.files, meetings: preview.meetings } : null} openBidPrepTaskCount={detail.openBidPrepTaskCount} users={options.users} picAccounts={editOptions?.picAccounts ?? []} teams={teams} programTypes={editOptions?.programTypes ?? []} buyingUnits={editOptions?.buyingUnits ?? []} todayKey={vnDateKey(now)} />}
         </div>
       </header>
       <OpportunityStepper stage={detail.stage} outcome={detail.outcome} events={detail.stageEvents} now={now} />
