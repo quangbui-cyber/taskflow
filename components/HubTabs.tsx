@@ -1,11 +1,13 @@
 import Link from "next/link";
-import { canViewRevenue } from "@/lib/auth";
+import { canViewRevenue, getCurrentUser } from "@/lib/auth";
+import { loadCrmActor } from "@/lib/crm/actor";
+import { crmCan } from "@/lib/crm/policy";
 import { creativeEnabled, financeEnabled, meetingsEnabled, crmEnabled } from "@/lib/features";
 import { canManageHr } from "@/lib/employeeRecords";
 import { hubForSection, visibleSections, type ActiveSection } from "@/lib/navigation";
 
 /** Tab các mục con của khu vực đang mở, đặt ở đầu vùng nội dung của trang. */
-export default function HubTabs({
+export default async function HubTabs({
   section,
   role,
   isHrManager = false,
@@ -16,8 +18,11 @@ export default function HubTabs({
 }) {
   const hub = hubForSection(section);
   if (!hub) return null;
+  const user = hub.key === "crm" && crmEnabled() ? await getCurrentUser() : null;
+  const showCrmImport = user ? crmCan(await loadCrmActor(user), "REVIEW_IMPORT") : false;
   const sections = visibleSections(hub, {
     showCrm: crmEnabled(),
+    showCrmImport,
     showMeetings: meetingsEnabled(),
     showRevenue: canViewRevenue(role ?? ""),
     showSuppliers: financeEnabled(),

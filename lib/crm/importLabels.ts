@@ -1,0 +1,1 @@
+export const IMPORT_STATUSES: Record<string, string> = { OK: "Sẵn sàng", DUPLICATE: "Trùng", UNCLEAR: "Chưa rõ", TEXT_DATE: "Ngày ghi bằng chữ", MISSING_PIC: "Thiếu PIC", CONFIRMED: "Đã xác nhận", SKIPPED: "Đã bỏ" };

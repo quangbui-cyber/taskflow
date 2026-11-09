@@ -56,7 +56,7 @@ async function validateProposed(tx: Prisma.TransactionClient, p: Json, sheet: st
   return sheetKind(sheet) !== null;
 }
 
-export async function resolveImportRow(db: PrismaClient, actor: Actor, input: ResolveImportInput) {
+export async function resolveImportRow(db: PrismaClient, actor: Actor, input: ResolveImportInput): Promise<{ ok: true } | { error: string }> {
   if (!crmCan(actor, "REVIEW_IMPORT")) return { error: DENIED };
   if (!input || !id(input.rowId) || !["MATCH", "CREATE_NEW", "EDIT", "SKIP"].includes(input.action)) return { error: INVALID };
   const ref = await db.trackerImportRow.findUnique({ where: { id: input.rowId }, select: { runId: true } });
@@ -86,7 +86,7 @@ export async function resolveImportRow(db: PrismaClient, actor: Actor, input: Re
 }
 
 // One run lock covers row application and cross-row grouping. Every row commits independently.
-export async function applyImportRun(db: PrismaClient, actor: Actor, runId: string) {
+export async function applyImportRun(db: PrismaClient, actor: Actor, runId: string): Promise<{ ok: true; applied: number; errors: { rowId: string; error: string }[]; summary: Record<string, number> } | { error: string }> {
   if (!crmCan(actor, "REVIEW_IMPORT")) return { error: DENIED };
   if (!id(runId)) return { error: INVALID };
   if (!await db.trackerImportRun.findUnique({ where: { id: runId }, select: { id: true } })) return { error: "Không tìm thấy lượt nhập." };
@@ -113,7 +113,8 @@ export async function applyImportRun(db: PrismaClient, actor: Actor, runId: stri
           if (matches.length > 1 || (matches.length && p.clientResolution === "CREATE_NEW")) throw new Error("Tên khách đã tồn tại. Ghép khách hoặc sửa tên trước khi tạo mới.");
           clientId = matches[0]?.id ?? (await tx.client.create({ data: { name, picAccountId: p.picAccountId as string, responsibleTeamId: pic.teamId, importStatus: "PENDING_PIC_CONFIRM" } })).id;
         }
-        await tx.client.update({ where: { id: clientId }, data: { importStatus: "PENDING_PIC_CONFIRM", importConfirmedAt: null } });
+        const client = await tx.client.findUniqueOrThrow({ where: { id: clientId }, select: { picAccountId: true, responsibleTeamId: true } });
+        await tx.client.update({ where: { id: clientId }, data: { importStatus: "PENDING_PIC_CONFIRM", importConfirmedAt: null, picAccountId: client.picAccountId ?? p.picAccountId as string, responsibleTeamId: client.responsibleTeamId ?? pic.teamId, version: { increment: 1 } } });
         const marker: { clientId: string; opportunityId?: string; touchpointId?: string } = { clientId };
         if (sheetKind(row.sheet) === "OPPORTUNITY") {
           const period = periodParts(p.period)!;
@@ -130,8 +131,10 @@ export async function applyImportRun(db: PrismaClient, actor: Actor, runId: stri
           const legacyStatus = importedOutcome === "LEGACY_UNCLASSIFIED" ? rawOutcome : null;
           let opportunityId = previous ? object(previous.applied).opportunityId as string : null;
           if (opportunityId) {
+            await tx.$queryRaw`SELECT id FROM "Opportunity" WHERE id = ${opportunityId} FOR UPDATE`;
             const existing = await tx.opportunity.findUniqueOrThrow({ where: { id: opportunityId } });
             await tx.opportunity.update({ where: { id: opportunityId }, data: {
+              version: { increment: 1 },
               ...(brief ? { stage: "BIDDING", briefReceivedAt: existing.briefReceivedAt ?? brief } : {}),
               ...(outcome ? { outcome: importedOutcome, legacyStatus, outcomeReasonId: typeof p.reasonId === "string" ? p.reasonId : null } : {}),
             } });

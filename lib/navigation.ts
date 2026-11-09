@@ -27,6 +27,7 @@ export type HubKey = "home" | "work" | "crm" | "projects" | "performance" | "peo
 
 export type NavFlags = {
   showCrm?: boolean;
+  showCrmImport?: boolean;
   showMeetings: boolean;
   showRevenue: boolean;
   showSuppliers: boolean;
@@ -73,6 +74,7 @@ export const HUBS: Hub[] = [
       { key: "crmClients", label: "Khách hàng", href: "/crm/clients" },
       { key: "crmOpportunities", label: "Cơ hội", href: "/crm/opportunities" },
       { key: "crmPipeline", label: "Pipeline và hiệu quả", href: "/crm/pipeline" },
+      { key: "crmImport", label: "Nhập dữ liệu tracker", href: "/crm/import", visible: (f) => !!f.showCrmImport },
     ],
   },
   {
