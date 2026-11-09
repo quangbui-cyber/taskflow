@@ -7,16 +7,16 @@ import { kpiYearRange } from "../lib/kpi";
 import { cleanupCrmFixture, createCrmTestDb, crmTestDatabaseUrl, seedCrmFixture } from "./helpers/crmTestDb";
 test("official report loaders keep source teams, participation, money and feature-off query boundaries", { skip: !crmTestDatabaseUrl() }, async () => {
   const db = createCrmTestDb(), prefix = `official-${randomUUID()}`;
-  let previous: Awaited<ReturnType<typeof db.crmSetting.findUnique>>;
+  let previous: Awaited<ReturnType<typeof db.crmSetting.findUnique>> = null;
   try {
     const f = await seedCrmFixture(db, prefix);
     await db.opportunity.update({ where: { id: f.opportunity.id }, data: { responsibleTeamId: null, createdAt: new Date("2026-08-01Z"), budgetMax: 300 } });
     const project = await db.project.create({ data: { name: `${prefix} Project`, ownerId: f.admin.id, clientId: f.client.id, accountId: f.picAccount.id, sourceOpportunityId: f.opportunity.id, status: "ON_PROCESS", revenue: 1234, createdAt: new Date("2026-08-01Z"), onProcessAt: new Date("2026-09-01Z"), members: { create: { userId: f.assignee.id } } } });
     assert.equal((await loadReportProjects(db, { id: project.id })).get(project.id), f.team.id);
     await db.opportunityMember.create({ data: { opportunityId: f.opportunity.id, userId: f.assignee.id } });
-    for (const [i, outcome] of ["LOST_COMPETITIVE", "LEGACY_UNCLASSIFIED", "CUSTOMER_CANCELLED", "WON"].entries()) await db.opportunity.create({ data: { name: `${prefix} ${i}`, clientId: f.client.id, programTypeCode: "MICE", source: "OTHER", demandSignal: "test", stage: "BIDDING", outcome, legacyStatus: outcome === "LEGACY_UNCLASSIFIED" ? "FAIL" : null, createdAt: new Date("2025-08-01Z"), closedAt: new Date("2026-09-01Z"), opportunityMembers: { create: { userId: f.assignee.id } } } });
+    for (const [i, outcome] of ["LOST_COMPETITIVE", "LEGACY_UNCLASSIFIED", "CUSTOMER_CANCELLED", "WON"].entries()) await db.opportunity.create({ data: { name: `${prefix} ${i}`, clientId: f.client.id, programTypeCode: "MICE", expectedYear: 2026, source: "OTHER", demandSignal: "test", stage: "BIDDING", outcome, legacyStatus: outcome === "LEGACY_UNCLASSIFIED" ? "FAIL" : null, createdAt: new Date("2025-08-01Z"), closedAt: new Date("2026-09-01Z"), opportunityMembers: { create: { userId: f.assignee.id } } } });
     assert.deepEqual(await loadOpportunityParticipation(db, f.assignee.id, kpiYearRange(2026)), { joined: 4, failed: 2 });
-    await db.opportunity.create({ data: { name: `${prefix} Care`, clientId: f.client.id, programTypeCode: "MICE", source: "OTHER", demandSignal: "test", stage: "CARE", createdAt: new Date("2025-01-01Z"), opportunityMembers: { create: { userId: f.assignee.id } } } });
+    await db.opportunity.create({ data: { name: `${prefix} Care`, clientId: f.client.id, programTypeCode: "MICE", expectedYear: 2026, source: "OTHER", demandSignal: "test", stage: "CARE", createdAt: new Date("2025-01-01Z"), opportunityMembers: { create: { userId: f.assignee.id } } } });
     assert.equal((await countBiddingOpportunitiesByUser(db, [f.assignee.id, f.outsider.id])).get(f.assignee.id), 1);
     assert.equal((await countBiddingOpportunitiesByUser(db, [f.assignee.id, f.outsider.id])).get(f.outsider.id), undefined);
     const projects = await loadMemberContributionFrom(db, f.assignee.id, 2026), opportunities = await loadMemberContributionFrom(db, f.assignee.id, 2026, "OPPORTUNITY");
@@ -34,3 +34,4 @@ test("official report loaders keep source teams, participation, money and featur
     await cleanupCrmFixture(db, prefix); await db.$disconnect();
   }
 });
+

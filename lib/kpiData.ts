@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import type { PrismaClient } from "@prisma/client";
+import { loadOpportunityParticipation } from "./crm/officialReport";
 import {
   KPI_RECOGNIZED_STATUSES,
   addMonths,
@@ -167,15 +169,17 @@ export type KpiMemberContribution = {
  * Doanh số ghi nhận trong năm của các dự án mà một người được thêm làm thành viên —
  * dùng cho phòng ban không thuộc team kinh doanh.
  */
-export async function loadMemberContribution(
+export async function loadMemberContributionFrom(
+  db: PrismaClient,
   userId: string,
-  year: number
+  year: number,
+  source: "PROJECT" | "OPPORTUNITY" = "PROJECT"
 ): Promise<KpiMemberContribution> {
   const range = kpiYearRange(year);
   const inYear = { gte: range.start, lt: range.end };
   // Dự án thuộc năm nếu được tạo hoặc được ghi nhận doanh số trong năm đó
   // (dự án Fail thường chưa từng On Process nên chỉ có ngày tạo).
-  const joined = await prisma.project.findMany({
+  const joined = await db.project.findMany({
     where: {
       members: { some: { userId } },
       category: "CLIENT",
@@ -198,9 +202,10 @@ export async function loadMemberContribution(
       project.onProcessAt < range.end
   );
 
+  const participation = source === "OPPORTUNITY" ? await loadOpportunityParticipation(db, userId, range) : { joined: 0, failed: 0 };
   return {
-    joinedCount: joined.length,
-    failedCount: joined.filter((project) => project.status === "FAIL").length,
+    joinedCount: joined.length + participation.joined,
+    failedCount: joined.filter((project) => project.status === "FAIL").length + participation.failed,
     total: projects.reduce((sum, project) => sum + project.revenue, 0),
     projects: projects.map((project) => ({
       id: project.id,
@@ -209,4 +214,8 @@ export async function loadMemberContribution(
       month: vietnamYearMonth(project.onProcessAt!).month,
     })),
   };
+}
+
+export async function loadMemberContribution(userId: string, year: number, source: "PROJECT" | "OPPORTUNITY" = "PROJECT"): Promise<KpiMemberContribution> {
+  return loadMemberContributionFrom(prisma, userId, year, source);
 }
