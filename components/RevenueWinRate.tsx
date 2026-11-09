@@ -3,7 +3,7 @@ import type { RevenueRow } from "@/components/RevenueBreakdown";
 const WON_COLOR = "#2563eb";
 const LOST_COLOR = "#ef4444";
 
-export default function RevenueWinRate({ rows }: { rows: RevenueRow[] }) {
+export default function RevenueWinRate({ rows, title = "Tỷ lệ thắng theo Account", lostLabel = "Thua", unitLabel = "dự án" }: { rows: RevenueRow[]; title?: string; lostLabel?: string; unitLabel?: string }) {
   const ranked = [...rows].sort((a, b) => {
     const aClosed = a.wonCount + a.lostCount;
     const bClosed = b.wonCount + b.lostCount;
@@ -16,7 +16,7 @@ export default function RevenueWinRate({ rows }: { rows: RevenueRow[] }) {
     <section className="tf-panel overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-100 px-5 py-3">
         <div>
-          <h2 className="font-semibold">Tỷ lệ thắng theo Account</h2>
+          <h2 className="font-semibold">{title}</h2>
         </div>
         <div className="flex items-center gap-3 text-[11px] text-zinc-400">
           <span className="inline-flex items-center gap-1.5">
@@ -33,7 +33,7 @@ export default function RevenueWinRate({ rows }: { rows: RevenueRow[] }) {
               style={{ backgroundColor: LOST_COLOR }}
               aria-hidden="true"
             />
-            Thua
+            {lostLabel}
           </span>
         </div>
       </div>
@@ -61,20 +61,20 @@ export default function RevenueWinRate({ rows }: { rows: RevenueRow[] }) {
                   {winRate !== null && row.wonCount > 0 && (
                     <div
                       style={{ width: `${winRate}%`, backgroundColor: WON_COLOR }}
-                      title={`${row.wonCount} dự án thắng`}
+                      title={`${row.wonCount} ${unitLabel} thắng`}
                     />
                   )}
                   {winRate !== null && row.lostCount > 0 && (
                     <div
                       style={{ width: `${lossRate}%`, backgroundColor: LOST_COLOR }}
-                      title={`${row.lostCount} dự án thua`}
+                      title={`${row.lostCount} ${unitLabel} ${lostLabel.toLocaleLowerCase("vi-VN")}`}
                     />
                   )}
                 </div>
                 <p className="mt-1.5 text-xs text-zinc-400">
                   {closed > 0
-                    ? `${row.wonCount} thắng · ${row.lostCount} thua · ${closed} dự án đã có kết quả`
-                    : `${row.count} dự án chưa có kết quả cuối`}
+                    ? `${row.wonCount} thắng · ${row.lostCount} ${lostLabel.toLocaleLowerCase("vi-VN")} · ${closed} ${unitLabel} đã có kết quả`
+                    : `${row.count} ${unitLabel} chưa có kết quả cuối`}
                 </p>
               </li>
             );

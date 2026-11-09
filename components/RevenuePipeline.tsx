@@ -22,7 +22,7 @@ function formatCompactVND(value: number) {
   return formatVND(value);
 }
 
-export default function RevenuePipeline({ stages }: { stages: PipelineStage[] }) {
+export default function RevenuePipeline({ stages, title = "Pipeline dự án", unitLabel = "dự án" }: { stages: PipelineStage[]; title?: string; unitLabel?: string }) {
   const total = stages.reduce((sum, stage) => sum + stage.value, 0);
   const activeStages = stages.filter((stage) => stage.value > 0);
   // Khe trắng mảnh giữa các múi: các trạng thái dùng chung tông màu nên cần tách bằng khe.
@@ -48,7 +48,7 @@ export default function RevenuePipeline({ stages }: { stages: PipelineStage[] })
     <section className="tf-panel p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <h2 className="font-semibold">Pipeline dự án</h2>
+          <h2 className="font-semibold">{title}</h2>
         </div>
       </div>
 
@@ -101,7 +101,7 @@ export default function RevenuePipeline({ stages }: { stages: PipelineStage[] })
                       {formatVND(stage.value)}
                     </span>
                     <span className="shrink-0 text-xs text-zinc-400">
-                      {stage.count} dự án
+                      {stage.count} {unitLabel}
                     </span>
                   </div>
                 </div>
