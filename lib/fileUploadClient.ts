@@ -7,6 +7,7 @@ import { MAX_PROJECT_FILE_SIZE } from "@/lib/projectFiles";
 
 export type UploadTargetInput =
   | { target: "project"; projectId: string }
+  | { target: "opportunity"; opportunityId: string }
   | { target: "task"; taskId: string; kind: "BRIEF" | "RESULT" };
 
 async function errorMessage(response: Response, fallback: string) {
@@ -27,7 +28,7 @@ async function legacyUpload<T>(input: UploadTargetInput, file: File): Promise<T>
   const body = new FormData();
   body.append("file", file);
   if (input.target === "task") body.append("kind", input.kind);
-  const url = input.target === "project" ? `/api/projects/${input.projectId}/files` : `/api/tasks/${input.taskId}/files`;
+  const url = input.target === "project" ? `/api/projects/${input.projectId}/files` : input.target === "opportunity" ? `/api/crm/opportunities/${input.opportunityId}/files` : `/api/tasks/${input.taskId}/files`;
   const response = await fetch(url, { method: "POST", body });
   if (!response.ok) throw new Error(await errorMessage(response, "Không thể tải tệp lên."));
   const result = (await response.json()) as { file: T };
