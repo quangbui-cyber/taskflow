@@ -21,6 +21,8 @@ import { readProjectUpload } from "@/lib/projectFiles";
 import { parsePurchaseOrderPdf } from "@/lib/purchaseOrderPdf";
 import { projectStatusColor, type ProjectCategory } from "@/lib/types";
 import { loadProgramTypes, isActiveProgramType } from "@/lib/programTypes";
+import { loadProjectCreationContext } from "@/lib/crm/projectCreationContext";
+import { checkProjectCreation, checkProjectCategoryChange, checkProjectStatusChange } from "@/lib/crm/projectCreation";
 
 export type ActionState = { error?: string; success?: string };
 
@@ -74,7 +76,7 @@ async function findValidAccount(accountId: string | null) {
       id: accountId,
       user: { isActive: true, role: { in: ["ADMIN", "ACCOUNT"] } },
     },
-    select: { id: true, userId: true },
+    select: { id: true, userId: true, teamId: true },
   });
 }
 
@@ -195,10 +197,13 @@ export async function createProject(
   if (account?.userId && account.userId !== user.id) {
     initialMembers.push({ userId: account.userId, role: "member" });
   }
-  const initialStatus =
-    category === "INTERNAL" || (projectSource === "JABIL_PO" && projectFile?.mimeType === "application/pdf")
-      ? "ON_PROCESS"
-      : "BIDDING";
+  const creationContext = await loadProjectCreationContext(prisma, user.id);
+  const creation = checkProjectCreation(creationContext, {
+    category, accountTeamId: account?.teamId ?? null,
+    isPurchaseOrderImport: projectSource === "JABIL_PO" && projectFile?.mimeType === "application/pdf",
+  });
+  if ("error" in creation) return creation;
+  const { initialStatus } = creation;
   let project;
   try {
     project = await prisma.project.create({
@@ -297,6 +302,11 @@ export async function updateProject(
   if (clientId && !client) {
     return { error: "Client không còn tồn tại. Vui lòng chọn lại." };
   }
+  if (project.category === "INTERNAL" && category === "CLIENT") {
+    const creationContext = await loadProjectCreationContext(prisma, user.id);
+    const change = checkProjectCategoryChange(creationContext, { from: "INTERNAL", to: category, accountTeamId: account?.teamId ?? null });
+    if ("error" in change) return change;
+  }
   await prisma.$transaction(async (tx) => {
     await tx.project.update({
       where: { id: projectId },
@@ -355,12 +365,17 @@ export async function updateProjectStatus(
       status: true,
       onProcessAt: true,
       completedAt: true,
+      sourceOpportunityId: true,
     },
   });
   if (!project) return { error: "Project không tồn tại." };
   if (project.ownerId !== user.id && user.role !== "ADMIN") {
     return { error: "Chỉ chủ project hoặc admin mới được đổi trạng thái." };
   }
+
+  const creationContext = await loadProjectCreationContext(prisma, user.id);
+  const change = checkProjectStatusChange(creationContext, { from: project.status, to: status, hasSourceOpportunity: Boolean(project.sourceOpportunityId) });
+  if ("error" in change) return change;
 
   await prisma.project.update({
     where: { id: projectId },
