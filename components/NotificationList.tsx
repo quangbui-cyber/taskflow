@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ownerHref } from "@/lib/workOwner";
+import { isCrmNotificationType } from "@/lib/crm/notificationDisplay";
 import {
   CalendarCheck,
   Handshake,
@@ -46,8 +47,6 @@ export type NotificationItem = {
 };
 
 const TYPE_ICON: Record<string, LucideIcon> = {
-  CRM_DUE: Handshake, CRM_OVERDUE: Handshake, CRM_PIC_ASSIGNED: Handshake,
-  CRM_TASK_ASSIGNED: Handshake, CRM_DRAFT: Handshake, CRM_STAGE: Handshake,
   TASK_ASSIGNED: Inbox,
   TASK_COMPLETED: CheckCircle2,
   TASK_UPDATED: RefreshCw,
@@ -305,7 +304,7 @@ export default function NotificationList({
       ) : (
         <ul className="divide-y divide-zinc-100">
           {notifications.map((notification) => {
-            const Icon = TYPE_ICON[notification.type] ?? Bell;
+            const Icon = isCrmNotificationType(notification.type) ? Handshake : TYPE_ICON[notification.type] ?? Bell;
             const isReading = readingId === notification.id;
 
             return (

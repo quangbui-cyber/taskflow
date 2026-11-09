@@ -9,6 +9,7 @@ export async function notify(
   data: {
     type:
       | "CRM_DUE" | "CRM_OVERDUE" | "CRM_PIC_ASSIGNED" | "CRM_TASK_ASSIGNED" | "CRM_DRAFT" | "CRM_STAGE"
+      | "CRM_NUDGE"
       | "TASK_ASSIGNED"
       | "TASK_COMPLETED"
       | "TASK_UPDATED"
