@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Run Club Preview</title>
+<style>
+  :root {
+    --brand-50: #f7fbe9; --brand-100: #edf7cb; --brand-200: #dced9b; --brand-300: #c7e365;
+    --brand-400: #a8d431; --brand-500: #93bb24; --brand-600: #739419; --brand-700: #587216; --brand-800: #465a16;
+    --z50: #fafafa; --z100: #f4f4f5; --z200: #e4e4e7; --z300: #d4d4d8; --z400: #a1a1aa;
+    --z500: #71717a; --z600: #52525b; --z700: #3f3f46; --z800: #27272a; --z900: #18181b; --z950: #09090b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--z50); color: var(--z900);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    font-size: 14px; line-height: 1.45;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 32px 16px 64px; }
+  .section-label {
+    display: inline-block; margin: 48px 0 6px; padding: 3px 10px; border-radius: 999px;
+    background: var(--z900); color: #fff; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  }
+  .section-label:first-of-type { margin-top: 0; }
+  .section-note { margin: 0 0 18px; color: var(--z500); font-size: 13px; max-width: 640px; }
+  h1.page { font-size: 26px; margin: 0 0 4px; letter-spacing: -.01em; }
+  .muted { color: var(--z500); }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* Card — giống Card() ở app/page.tsx */
+  .card { background: #fff; border: 1px solid var(--z200); border-radius: 16px; padding: 20px; }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .card-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15px; font-weight: 600; color: var(--z950); }
+  .ico { width: 18px; height: 18px; color: var(--brand-600); flex-shrink: 0; }
+  .link-sm { font-size: 12px; font-weight: 600; color: var(--brand-700); text-decoration: none; }
+  .link-sm:hover { color: var(--brand-800); }
+
+  .avatar {
+    display: inline-flex; align-items: center; justify-content: center; border-radius: 999px;
+    font-weight: 600; color: #fff; flex-shrink: 0;
+  }
+  .a20 { width: 20px; height: 20px; font-size: 9px; }
+  .a28 { width: 28px; height: 28px; font-size: 11px; }
+  .a36 { width: 36px; height: 36px; font-size: 13px; }
+
+  /* ---------- Trang chủ ---------- */
+  .home { display: grid; grid-template-columns: 1fr 340px; gap: 20px; align-items: start; }
+  .home-main { display: grid; gap: 20px; }
+  .hello { padding: 28px; border-radius: 18px; background: linear-gradient(135deg, var(--brand-50), #fff 60%); border: 1px solid var(--z200); }
+  .hello h2 { margin: 0 0 6px; font-size: 22px; }
+  .ghost { height: 120px; border-radius: 16px; background: #fff; border: 1px dashed var(--z200); display: flex; align-items: center; justify-content: center; color: var(--z400); font-size: 13px; }
+  .side { display: grid; gap: 16px; }
+
+  .rc-total { display: flex; align-items: baseline; gap: 6px; margin-bottom: 2px; }
+  .rc-total b { font-size: 26px; letter-spacing: -.02em; color: var(--z950); }
+  .rc-sub { font-size: 12px; color: var(--z500); margin-bottom: 14px; }
+  .podium { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 2px; }
+  .podium li { display: flex; align-items: center; gap: 10px; padding: 6px 6px; border-radius: 10px; transition: background .15s, transform .15s; }
+  .podium li:hover { background: var(--z50); transform: translateX(4px); }
+  .medal { width: 20px; text-align: center; font-size: 13px; }
+  .podium .name { flex: 1; min-width: 0; font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .podium .km { font-size: 13px; font-weight: 600; color: var(--z700); }
+  .me-row {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--z50);
+    font-size: 13px; text-decoration: none; color: var(--z800); transition: transform .15s, background .15s;
+  }
+  .me-row:hover { transform: translateY(-2px); background: var(--brand-50); }
+  .bar { display: block; height: 6px; border-radius: 999px; background: var(--z200); overflow: hidden; margin-top: 6px; }
+  .bar > i { display: block; height: 100%; border-radius: 999px; background: var(--brand-500); }
+
+  .invite {
+    display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 12px;
+    border: 1px dashed var(--brand-300); color: var(--brand-800); text-decoration: none; font-size: 13px; font-weight: 500;
+    transition: background .15s, transform .15s;
+  }
+  .invite:hover { background: var(--brand-50); transform: translateY(-2px); }
+  .invite .badge { width: 32px; height: 32px; border-radius: 10px; background: var(--brand-100); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
+  .game { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--z50); font-weight: 600; font-size: 14px; color: var(--z800); }
+  .game + .game { margin-top: 6px; }
+  .game .badge { width: 32px; height: 32px; border-radius: 10px; background: var(--brand-100); color: var(--brand-700); display: flex; align-items: center; justify-content: center; }
+
+  /* ---------- /run-club ---------- */
+  .rc-page { display: grid; gap: 20px; }
+  .rc-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .month-switch { display: inline-flex; align-items: center; gap: 4px; padding: 4px; border-radius: 12px; background: #fff; border: 1px solid var(--z200); }
+  .month-switch button { border: 0; background: transparent; width: 32px; height: 32px; border-radius: 8px; color: var(--z600); cursor: pointer; font-size: 16px; }
+  .month-switch button:hover { background: var(--z100); }
+  .month-switch span { padding: 0 10px; font-weight: 600; font-size: 13px; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .stat { background: #fff; border: 1px solid var(--z200); border-radius: 16px; padding: 18px 20px; }
+  .stat .k { font-size: 12px; color: var(--z500); margin-bottom: 4px; }
+  .stat .v { font-size: 24px; font-weight: 700; letter-spacing: -.02em; }
+  .stat .v small { font-size: 13px; font-weight: 500; color: var(--z500); margin-left: 2px; }
+  .rc-grid { display: grid; grid-template-columns: 1fr 340px; gap: 20px; align-items: start; }
+
+  table.board { width: 100%; border-collapse: collapse; }
+  .board th { text-align: left; font-size: 11px; font-weight: 600; color: var(--z500); text-transform: uppercase; letter-spacing: .04em; padding: 0 10px 10px; }
+  .board td { padding: 10px; border-top: 1px solid var(--z100); font-size: 13px; }
+  .board tr.me td { background: var(--brand-50); }
+  .board tr.me td:first-child { border-radius: 10px 0 0 10px; }
+  .board tr.me td:last-child { border-radius: 0 10px 10px 0; }
+  .board .r { text-align: right; }
+  .rank { width: 28px; font-weight: 700; color: var(--z400); }
+  .who { display: flex; align-items: center; gap: 10px; font-weight: 500; }
+  .tag { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 999px; background: var(--brand-100); color: var(--brand-800); }
+
+  .mine-km { font-size: 32px; font-weight: 700; letter-spacing: -.02em; }
+  .goal { font-size: 12px; color: var(--z500); margin-top: 4px; }
+  .runs { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 2px; }
+  .runs li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 4px; border-top: 1px solid var(--z100); font-size: 13px; }
+  .runs .d { color: var(--z500); font-size: 12px; }
+  .flagged { margin-top: 16px; padding: 12px; border-radius: 12px; background: #fffbeb; border: 1px solid #fde68a; font-size: 12px; color: #92400e; }
+
+  /* ---------- /profile ---------- */
+  .profile-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .strava-logo { width: 40px; height: 40px; border-radius: 12px; background: #fc4c02; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; flex-shrink: 0; }
+  .btn { height: 36px; padding: 0 14px; border-radius: 10px; border: 0; font-weight: 600; font-size: 13px; cursor: pointer; transition: transform .15s, background .15s; }
+  .btn:hover { transform: translateY(-2px); }
+  .btn-strava { background: #fc4c02; color: #fff; }
+  .btn-ghost { background: var(--z100); color: var(--z700); }
+  .ok { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--brand-700); }
+  .ok::before { content: ""; width: 7px; height: 7px; border-radius: 999px; background: var(--brand-500); }
+  .fine { font-size: 12px; color: var(--z500); margin: 12px 0 0; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+  @media (max-width: 860px) {
+    .home, .rc-grid, .two { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: 1fr; }
+    .board .hide-sm { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+    .podium li:hover, .me-row:hover, .invite:hover, .btn:hover { transform: none; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="run" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="13" cy="4" r="2"/><path d="M4 22l4-6 3 2 2-5 4 3"/><path d="M8 11l3-3 4 1 2 4"/>
+  </symbol>
+  <symbol id="game" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="6" width="20" height="12" rx="3"/><path d="M6 12h4M8 10v4M15 11h.01M18 13h.01"/></symbol>
+</svg>
+
+<div class="wrap">
+
+  <!-- ===================== 1. TRANG CHỦ ===================== -->
+  <span class="section-label">1 · Trang chủ — đã kết nối</span>
+  <p class="section-note">Một ô nhỏ ở cột phải, ngay trên “Góc giải trí”. Chỉ có tổng km cả công ty, top 3 và km của bạn — không đếm ngược, không danh sách dài.</p>
+
+  <div class="home">
+    <div class="home-main">
+      <div class="hello">
+        <h2>Chào buổi sáng, An 🌿</h2>
+        <div class="muted">“Làm ít thôi, nhưng làm cho tử tế.”</div>
+      </div>
+      <div class="ghost">(Các khung hiện có của trang chủ giữ nguyên)</div>
+    </div>
+
+    <aside class="side">
+      <section class="card" aria-labelledby="rc-h">
+        <div class="card-head">
+          <h3 class="card-title" id="rc-h"><svg class="ico"><use href="#run"/></svg>Run Club · Tháng 11</h3>
+          <a class="link-sm" href="#runclub">Bảng xếp hạng →</a>
+        </div>
+        <div class="rc-total"><b class="num">412</b><span class="muted">km</span></div>
+        <div class="rc-sub">cả công ty đã chạy cùng nhau · 18 người tham gia</div>
+
+        <ol class="podium">
+          <li><span class="medal">🥇</span><span class="avatar a28" style="background:#6366f1">MT</span><span class="name">Minh Trần</span><span class="km num">86,4 km</span></li>
+          <li><span class="medal">🥈</span><span class="avatar a28" style="background:#ec4899">LN</span><span class="name">Lan Nguyễn</span><span class="km num">71,2 km</span></li>
+          <li><span class="medal">🥉</span><span class="avatar a28" style="background:#0ea5e9">HP</span><span class="name">Huy Phạm</span><span class="km num">64,0 km</span></li>
+        </ol>
+
+        <a class="me-row" href="#runclub">
+          <span class="avatar a28" style="background:var(--brand-600)">AN</span>
+          <span style="flex:1">
+            <span style="display:flex;justify-content:space-between"><b>Bạn</b><span class="num"><b>23,5</b> / 50 km</span></span>
+            <span class="bar"><i style="width:47%"></i></span>
+          </span>
+        </a>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h3 class="card-title"><svg class="ico"><use href="#game"/></svg>Góc giải trí</h3></div>
+        <div class="game"><span class="badge">▦</span><span style="flex:1">Cờ Caro</span><span class="muted" style="font-size:12px">›</span></div>
+        <div class="game"><span class="badge">▤</span><span style="flex:1">Sudoku</span><span class="muted" style="font-size:12px">›</span></div>
+      </section>
+    </aside>
+  </div>
+
+  <span class="section-label">2 · Trang chủ — chưa kết nối</span>
+  <p class="section-note">Người chưa tham gia vẫn thấy tinh thần chung của công ty, cùng một lời mời nhẹ nhàng — không ép buộc.</p>
+
+  <div style="max-width:340px">
+    <section class="card">
+      <div class="card-head">
+        <h3 class="card-title"><svg class="ico"><use href="#run"/></svg>Run Club · Tháng 11</h3>
+        <a class="link-sm" href="#runclub">Xem →</a>
+      </div>
+      <div class="rc-total"><b class="num">412</b><span class="muted">km</span></div>
+      <div class="rc-sub">cả công ty đã chạy cùng nhau · 18 người tham gia</div>
+      <a class="invite" href="#profile">
+        <span class="badge">🏃</span>
+        <span>Tham gia Run Club<br><span style="font-weight:400;color:var(--z600);font-size:12px">Kết nối Strava, km sẽ tự cộng vào.</span></span>
+      </a>
+    </section>
+  </div>
+
+  <!-- ===================== 3. /run-club ===================== -->
+  <span class="section-label" id="runclub">3 · Trang /run-club</span>
+  <p class="section-note">Trang chi tiết: chọn tháng, tổng quan, bảng xếp hạng đầy đủ và các buổi chạy của bạn. Dòng của bạn được tô nhẹ màu brand.</p>
+
+  <div class="rc-page">
+    <div class="rc-top">
+      <div>
+        <h1 class="page">Run Club</h1>
+        <div class="muted">Mỗi bước chạy đều được ghi nhận. Chạy vì mình, vui cùng nhau.</div>
+      </div>
+      <div class="month-switch"><button aria-label="Tháng trước">‹</button><span>Tháng 11/2026</span><button aria-label="Tháng sau">›</button></div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="k">Tổng quãng đường</div><div class="v num">412<small>km</small></div></div>
+      <div class="stat"><div class="k">Người tham gia</div><div class="v num">18<small>người</small></div></div>
+      <div class="stat"><div class="k">Số buổi chạy</div><div class="v num">96<small>buổi</small></div></div>
+    </div>
+
+    <div class="rc-grid">
+      <section class="card">
+        <div class="card-head"><h3 class="card-title">Bảng xếp hạng tháng</h3><span class="muted" style="font-size:12px">Theo tổng km</span></div>
+        <table class="board">
+          <thead><tr><th>#</th><th>Thành viên</th><th class="r">Km</th><th class="r hide-sm">Buổi</th><th class="r hide-sm">Pace TB</th></tr></thead>
+          <tbody>
+            <tr><td class="rank">🥇</td><td><span class="who"><span class="avatar a28" style="background:#6366f1">MT</span>Minh Trần</span></td><td class="r num"><b>86,4</b></td><td class="r num hide-sm">12</td><td class="r num hide-sm">5:42</td></tr>
+            <tr><td class="rank">🥈</td><td><span class="who"><span class="avatar a28" style="background:#ec4899">LN</span>Lan Nguyễn</span></td><td class="r num"><b>71,2</b></td><td class="r num hide-sm">10</td><td class="r num hide-sm">6:05</td></tr>
+            <tr><td class="rank">🥉</td><td><span class="who"><span class="avatar a28" style="background:#0ea5e9">HP</span>Huy Phạm</span></td><td class="r num"><b>64,0</b></td><td class="r num hide-sm">8</td><td class="r num hide-sm">5:18</td></tr>
+            <tr><td class="rank">4</td><td><span class="who"><span class="avatar a28" style="background:#f59e0b">TV</span>Thảo Võ</span></td><td class="r num"><b>41,7</b></td><td class="r num hide-sm">7</td><td class="r num hide-sm">6:31</td></tr>
+            <tr><td class="rank">5</td><td><span class="who"><span class="avatar a28" style="background:#14b8a6">KĐ</span>Khoa Đỗ</span></td><td class="r num"><b>35,0</b></td><td class="r num hide-sm">5</td><td class="r num hide-sm">5:56</td></tr>
+            <tr class="me"><td class="rank">6</td><td><span class="who"><span class="avatar a28" style="background:var(--brand-600)">AN</span>An Lê <span class="tag">Bạn</span></span></td><td class="r num"><b>23,5</b></td><td class="r num hide-sm">4</td><td class="r num hide-sm">6:12</td></tr>
+            <tr><td class="rank">7</td><td><span class="who"><span class="avatar a28" style="background:#8b5cf6">QB</span>Quân Bùi</span></td><td class="r num"><b>21,3</b></td><td class="r num hide-sm">4</td><td class="r num hide-sm">6:48</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <aside class="side">
+        <section class="card">
+          <div class="card-head"><h3 class="card-title"><svg class="ico"><use href="#run"/></svg>Của tôi</h3></div>
+          <div class="mine-km num">23,5 <span class="muted" style="font-size:15px;font-weight:500">km</span></div>
+          <div class="bar"><i style="width:47%"></i></div>
+          <div class="goal">Còn 26,5 km nữa tới mốc 50 km 🌱</div>
+          <ul class="runs">
+            <li><span>Chạy sáng hồ Tây<br><span class="d">Th 6, 30/10 · 6:05/km</span></span><b class="num">8,2 km</b></li>
+            <li><span>Chạy chậm phục hồi<br><span class="d">Th 4, 28/10 · 6:40/km</span></span><b class="num">5,0 km</b></li>
+            <li><span>Interval công viên<br><span class="d">Th 2, 26/10 · 5:30/km</span></span><b class="num">6,1 km</b></li>
+            <li><span>Chạy chủ nhật<br><span class="d">CN, 25/10 · 6:22/km</span></span><b class="num">4,2 km</b></li>
+          </ul>
+        </section>
+
+        <section class="card">
+          <div class="card-head"><h3 class="card-title">Dành cho Admin</h3></div>
+          <div class="muted" style="font-size:13px">Hoạt động cần xem lại</div>
+          <div class="flagged">⚠️ <b>Quân Bùi</b> · “Morning Run” 12,4 km — pace 2:10/km (có thể quên tắt khi đi xe). <a href="#" style="color:#92400e;font-weight:600">Giữ</a> · <a href="#" style="color:#92400e;font-weight:600">Loại</a></div>
+        </section>
+      </aside>
+    </div>
+  </div>
+
+  <!-- ===================== 4. /profile ===================== -->
+  <span class="section-label" id="profile">4 · Trang /profile — kết nối Strava</span>
+  <p class="section-note">Khối Strava trong trang hồ sơ: trước và sau khi kết nối. Ghi rõ dữ liệu nào được lưu để mọi người yên tâm.</p>
+
+  <div class="two">
+    <section class="card">
+      <div class="profile-row">
+        <span class="strava-logo">S</span>
+        <div style="flex:1;min-width:160px">
+          <b>Strava</b>
+          <div class="muted" style="font-size:13px">Kết nối để km chạy bộ tự cộng vào Run Club.</div>
+        </div>
+        <button class="btn btn-strava">Kết nối Strava</button>
+      </div>
+      <p class="fine">Chỉ lấy quãng đường, thời gian và ngày chạy. Không lưu bản đồ hay vị trí. Hoạt động để chế độ riêng tư sẽ được bỏ qua.</p>
+    </section>
+
+    <section class="card">
+      <div class="profile-row">
+        <span class="strava-logo">S</span>
+        <div style="flex:1;min-width:160px">
+          <b>Strava</b> <span class="ok">Đã kết nối</span>
+          <div class="muted" style="font-size:13px">An Lê · đồng bộ lần cuối 5 phút trước</div>
+        </div>
+        <button class="btn btn-ghost">Ngắt kết nối</button>
+      </div>
+      <p class="fine">Ngắt kết nối sẽ xoá toàn bộ dữ liệu Run Club của bạn khỏi hệ thống.</p>
+    </section>
+  </div>
+
+  <span class="section-label">5 · Ghi nhận cuối tháng</span>
+  <p class="section-note">Ngày 1 hằng tháng, app tự đăng lời ghi nhận lên Kudos Wall cho top 3 tháng trước.</p>
+  <div style="max-width:420px">
+    <section class="card" style="background:linear-gradient(135deg,var(--brand-50),#fff 70%)">
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <span class="avatar a36" style="background:#6366f1">MT</span>
+        <div>
+          <div style="font-size:12px;color:var(--brand-700);font-weight:600">🏃 Run Club · Tháng 10</div>
+          <div style="margin-top:4px"><b>Minh Trần</b> dẫn đầu Run Club tháng 10 với <b class="num">92,8 km</b>. Cảm ơn bạn đã truyền năng lượng cho cả nhà! 🎉</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+</div>
+</body>
+</html>
