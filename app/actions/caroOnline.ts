@@ -34,6 +34,10 @@ export type OnlineGameState = {
   scoreX: number;
   scoreO: number;
   updatedAt: string;
+  /** Lúc bắt đầu lượt hiện tại (giờ máy chủ), để hai máy cùng đếm ngược một mốc. */
+  turnStartedAt: string | null;
+  /** Giờ máy chủ lúc trả dữ liệu, để máy khách bù độ lệch đồng hồ. */
+  serverNow: string;
 };
 
 type Row = NonNullable<Awaited<ReturnType<typeof prisma.caroGame.findUnique>>>;
@@ -53,6 +57,7 @@ function formatGameState(game: {
   scoreX: number;
   scoreO: number;
   updatedAt?: Date;
+  turnStartedAt?: Date | null;
 }): OnlineGameState {
   return {
     id: game.id,
@@ -68,6 +73,8 @@ function formatGameState(game: {
     scoreX: game.scoreX,
     scoreO: game.scoreO,
     updatedAt: game.updatedAt ? game.updatedAt.toISOString() : new Date().toISOString(),
+    turnStartedAt: (game.turnStartedAt ?? game.updatedAt)?.toISOString() ?? null,
+    serverNow: new Date().toISOString(),
   };
 }
 

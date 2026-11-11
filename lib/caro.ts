@@ -234,3 +234,15 @@ export function getAiMove(board: Board, aiPlayer: Player = "O", difficulty: "eas
   // Chế độ khó: chọn nước đi có điểm cao nhất
   return { r: candidates[0].r, c: candidates[0].c };
 }
+
+/** Thời gian mỗi lượt (giây). Máy chủ chấp nhận báo hết giờ sau 14s để bù độ trễ mạng. */
+export const TURN_SECONDS = 15;
+
+/**
+ * Số giây còn lại của lượt đang chơi online, tính từ mốc bắt đầu lượt của máy chủ.
+ * `serverNowMs` là giờ máy chủ hiện tại (giờ máy khách + độ lệch đồng hồ). Luôn nằm trong [0, TURN_SECONDS].
+ */
+export function turnSecondsLeft(serverNowMs: number, turnStartedAtMs: number, total: number = TURN_SECONDS): number {
+  const elapsedSec = (serverNowMs - turnStartedAtMs) / 1000;
+  return Math.max(0, Math.min(total, Math.ceil(total - elapsedSec)));
+}

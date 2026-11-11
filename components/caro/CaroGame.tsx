@@ -6,6 +6,8 @@ import {
   checkWin,
   isBoardFull,
   getAiMove,
+  TURN_SECONDS,
+  turnSecondsLeft,
   type Board,
   type Player,
   type Point,
@@ -56,7 +58,8 @@ export default function CaroGame({ initialRoomCode = null }: CaroGameProps) {
 
   // Chế độ đếm giờ 15s mỗi lượt
   const [timerEnabled, setTimerEnabled] = useState(true);
-  const [timeLeft, setTimeLeft] = useState(15);
+  // Đồng hồ chế độ chơi với máy. Chế độ online lấy giờ từ máy chủ (xem onlineTimeLeft).
+  const [timeLeft, setTimeLeft] = useState(TURN_SECONDS);
   const [timeoutMessage, setTimeoutMessage] = useState<string | null>(null);
 
   // Local AI state
@@ -83,6 +86,16 @@ export default function CaroGame({ initialRoomCode = null }: CaroGameProps) {
   const [isJoining, setIsJoining] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [onlineError, setOnlineError] = useState<string | null>(null);
+  const [clockOffset, setClockOffset] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
+  const timeoutSentFor = useRef<string | null>(null);
+
+  /** Nhận trạng thái phòng từ máy chủ và căn lại đồng hồ theo giờ máy chủ. */
+  const applyOnlineGame = useCallback((game: OnlineGameState) => {
+    setClockOffset(new Date(game.serverNow).getTime() - Date.now());
+    setNow(Date.now());
+    setOnlineGame(game);
+  }, []);
 
   // Khởi tạo âm thanh
   useEffect(() => {
@@ -103,7 +116,7 @@ export default function CaroGame({ initialRoomCode = null }: CaroGameProps) {
     setWinningLine([]);
     setMoveHistory([]);
     setIsAiThinking(false);
-    setTimeLeft(15);
+    setTimeLeft(TURN_SECONDS);
     setTimeoutMessage(null);
     setIsAiStarted(true);
 
@@ -143,7 +156,7 @@ export default function CaroGame({ initialRoomCode = null }: CaroGameProps) {
       if (!isAiStarted || winner || board[r][c] !== null || isAiThinking || currentTurn !== "X") return;
 
       caroSound.playStone();
-      setTimeLeft(15);
+      setTimeLeft(TURN_SECONDS);
       setTimeoutMessage(null);
 
       const newBoard = board.map((row) => [...row]);
@@ -195,7 +208,7 @@ export default function CaroGame({ initialRoomCode = null }: CaroGameProps) {
             setLastWinner("DRAW");
           } else {
             setCurrentTurn("X");
-            setTimeLeft(15);
+            setTimeLeft(TURN_SECONDS);
           }
         }
         setIsAiThinking(false);
@@ -220,7 +233,7 @@ export default function CaroGame({ initialRoomCode = null }: CaroGameProps) {
     setCurrentTurn("X");
     setWinner(null);
     setWinningLine([]);
-    setTimeLeft(15);
+    setTimeLeft(TURN_SECONDS);
     setTimeoutMessage(null);
   };
 
@@ -233,9 +246,8 @@ export default function CaroGame({ initialRoomCode = null }: CaroGameProps) {
     setIsJoining(false);
     if (res.success && res.game) {
       setOnlineRoomCode(res.game.code);
-      setOnlineGame(res.game);
+      applyOnlineGame(res.game);
       setMyRole("X");
-      setTimeLeft(15);
     } else {
       setOnlineError(res.error || "Không thể tạo phòng.");
     }
@@ -251,9 +263,8 @@ export default function CaroGame({ initialRoomCode = null }: CaroGameProps) {
     setIsJoining(false);
     if (res.success && res.game) {
       setOnlineRoomCode(res.game.code);
-      setOnlineGame(res.game);
+      applyOnlineGame(res.game);
       setMyRole(res.role || "O");
-      setTimeLeft(15);
     } else {
       setOnlineError(res.error || "Không thể vào phòng.");
     }
@@ -283,13 +294,12 @@ export default function CaroGame({ initialRoomCode = null }: CaroGameProps) {
             onlineGame.lastMove.c !== res.game.lastMove.c)
         ) {
           caroSound.playStone();
-          setTimeLeft(15);
           setTimeoutMessage(null);
           if (res.game.winner && res.game.winner !== "DRAW") {
             caroSound.playWin();
           }
         }
-        setOnlineGame(res.game);
+        applyOnlineGame(res.game);
       }
     }, 1200);
 
@@ -297,7 +307,7 @@ export default function CaroGame({ initialRoomCode = null }: CaroGameProps) {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [mode, onlineRoomCode, onlineGame]);
+  }, [mode, onlineRoomCode, onlineGame, applyOnlineGame]);
 
   const handleOnlineCellClick = async (r: number, c: number) => {
     if (!onlineGame || !onlineRoomCode || !myRole) return;
@@ -305,11 +315,10 @@ export default function CaroGame({ initialRoomCode = null }: CaroGameProps) {
     if (onlineGame.turn !== myRole) return;
 
     caroSound.playStone();
-    setTimeLeft(15);
     setTimeoutMessage(null);
     const res = await makeOnlineMove(onlineRoomCode, r, c);
     if (res.success && res.game) {
-      setOnlineGame(res.game);
+      applyOnlineGame(res.game);
       if (res.game.winner && res.game.winner !== "DRAW") {
         caroSound.playWin();
       }
@@ -322,8 +331,7 @@ export default function CaroGame({ initialRoomCode = null }: CaroGameProps) {
     if (!onlineRoomCode) return;
     const res = await startOnlineGame(onlineRoomCode);
     if (res.success && res.game) {
-      setOnlineGame(res.game);
-      setTimeLeft(15);
+      applyOnlineGame(res.game);
       setTimeoutMessage(null);
     }
   };
@@ -347,63 +355,67 @@ export default function CaroGame({ initialRoomCode = null }: CaroGameProps) {
   // Biểu tượng khi hover: Ai nắm X thấy X, ai nắm O thấy O
   const effectiveHoverSymbol: Player = isOnlineActive ? (myRole || "X") : "X";
 
-  // Reset đếm giờ 15s mỗi khi đổi lượt hoặc có nước đi mới
+  // --- Đồng hồ chế độ chơi với máy ---
+  // Mỗi lần đổi lượt, setTimeLeft(TURN_SECONDS) được gọi ngay ở chỗ đổi lượt (đi quân, máy đi, ván mới, đi lại).
   useEffect(() => {
-    setTimeLeft(15);
-  }, [activeTurn, currentLastMove]);
-
-  // Bộ đếm ngược 15s
-  useEffect(() => {
-    if (!timerEnabled || activeWinner) return;
-    if (mode === "online" && (!onlineGame || onlineGame.status !== "PLAYING")) return;
-    if (mode === "ai" && (!isAiStarted || isAiThinking)) return;
-
-    const interval = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          return 0;
-        }
-        if (prev <= 6) {
-          caroSound.playTick();
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
+    if (mode !== "ai" || !timerEnabled || winner || !isAiStarted || isAiThinking) return;
+    const interval = setInterval(() => setTimeLeft((prev) => Math.max(0, prev - 1)), 1000);
     return () => clearInterval(interval);
-  }, [timerEnabled, activeWinner, mode, onlineGame?.status, activeTurn, isAiThinking, isAiStarted]);
+  }, [mode, timerEnabled, winner, isAiStarted, isAiThinking, currentTurn]);
 
-  // Xử lý khi hết 15 giây (xử thua do hết giờ)
+  // Hết giờ khi chơi với máy: bên đang tới lượt bị xử thua.
   useEffect(() => {
-    if (!timerEnabled || timeLeft !== 0 || activeWinner) return;
-    if (mode === "ai" && !isAiStarted) return;
-    if (mode === "online" && (!onlineGame || onlineGame.status !== "PLAYING")) return;
+    if (mode !== "ai" || !isAiStarted || !timerEnabled || timeLeft !== 0 || winner) return;
+    caroSound.playTimeout();
+    if (currentTurn === "X") {
+      setWinner("O");
+      setLastWinner("O");
+      setScoreO((s) => s + 1);
+      setTimeoutMessage("Hết 15 giây! Bạn bị xử thua vì quá thời gian.");
+    } else {
+      setWinner("X");
+      setLastWinner("X");
+      setScoreX((s) => s + 1);
+      setTimeoutMessage("Máy hết thời gian suy nghĩ, bạn thắng!");
+    }
+  }, [mode, isAiStarted, timerEnabled, timeLeft, winner, currentTurn]);
 
+  // --- Đồng hồ chế độ online: tính từ mốc lượt do máy chủ gửi, nên hai máy luôn khớp nhau ---
+  const onlinePlaying = mode === "online" && onlineGame?.status === "PLAYING" && !onlineGame.winner;
+  useEffect(() => {
+    if (!onlinePlaying) return;
+    const interval = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(interval);
+  }, [onlinePlaying]);
+
+  let onlineTimeLeft = TURN_SECONDS;
+  if (onlinePlaying && onlineGame?.turnStartedAt) {
+    onlineTimeLeft = turnSecondsLeft(now + clockOffset, new Date(onlineGame.turnStartedAt).getTime());
+  }
+  const shownTimeLeft = mode === "online" ? onlineTimeLeft : timeLeft;
+
+  // Hết giờ khi chơi online: báo máy chủ xử thua người đang tới lượt (máy chủ tự kiểm tra lại đồng hồ).
+  useEffect(() => {
+    if (!onlinePlaying || !timerEnabled || onlineTimeLeft > 0 || !onlineRoomCode || !onlineGame) return;
+    const key = `${onlineGame.code}:${onlineGame.turnStartedAt}`;
+    if (timeoutSentFor.current === key) return;
+    timeoutSentFor.current = key;
     caroSound.playTimeout();
 
-    if (mode === "ai") {
-      if (currentTurn === "X") {
-        setWinner("O");
-        setLastWinner("O");
-        setScoreO((s) => s + 1);
-        setTimeoutMessage("Hết 15 giây! Bạn bị xử thua vì quá thời gian.");
+    const timedOutPlayer = onlineGame.turn;
+    handleOnlineTimeout(onlineRoomCode).then((res) => {
+      if (res.success && res.game) {
+        applyOnlineGame(res.game);
+        const loser = timedOutPlayer === "X" ? res.game.playerXName : res.game.playerOName;
+        setTimeoutMessage(`Hết 15 giây! ${loser} bị xử thua vì quá thời gian.`);
       } else {
-        setWinner("X");
-        setLastWinner("X");
-        setScoreX((s) => s + 1);
-        setTimeoutMessage("Máy hết thời gian suy nghĩ, bạn thắng!");
+        // Máy chủ chưa chấp nhận (lệch đồng hồ) hoặc ván vừa đổi: thử lại sau, không dồn dập.
+        setTimeout(() => {
+          if (timeoutSentFor.current === key) timeoutSentFor.current = null;
+        }, 1500);
       }
-    } else if (mode === "online" && onlineRoomCode && onlineGame?.status === "PLAYING") {
-      const timedOutPlayer = onlineGame.turn;
-      handleOnlineTimeout(onlineRoomCode).then((res) => {
-        if (res.success && res.game) {
-          setOnlineGame(res.game);
-          const loser = timedOutPlayer === "X" ? res.game.playerXName : res.game.playerOName;
-          setTimeoutMessage(`Hết 15 giây! ${loser} bị xử thua vì quá thời gian.`);
-        }
-      });
-    }
-  }, [timeLeft, timerEnabled, activeWinner, mode, currentTurn, onlineGame, onlineRoomCode, isAiStarted]);
+    });
+  }, [onlinePlaying, timerEnabled, onlineTimeLeft, onlineRoomCode, onlineGame, applyOnlineGame]);
 
 
   // --- Dữ liệu hiển thị ---
@@ -414,7 +426,12 @@ export default function CaroGame({ initialRoomCode = null }: CaroGameProps) {
     timerEnabled &&
     !activeWinner &&
     ((mode === "ai" && isAiStarted) || (isOnlineActive && onlineGame.status === "PLAYING"));
-  const timeLow = timeLeft <= 5;
+  const timeLow = shownTimeLeft <= 5;
+
+  // Tiếng tích tắc ở 5 giây cuối (cả chơi với máy lẫn online).
+  useEffect(() => {
+    if (showTimer && shownTimeLeft >= 1 && shownTimeLeft <= 5) caroSound.playTick();
+  }, [showTimer, shownTimeLeft]);
 
   const xName = mode === "ai" ? "Bạn" : isOnlineActive ? onlineGame.playerXName : "Kỳ thủ X";
   const oName =
@@ -481,7 +498,7 @@ export default function CaroGame({ initialRoomCode = null }: CaroGameProps) {
     setLastMove(null);
     setWinner(null);
     setWinningLine([]);
-    setTimeLeft(15);
+    setTimeLeft(TURN_SECONDS);
     setTimeoutMessage(null);
   };
 
@@ -688,7 +705,7 @@ export default function CaroGame({ initialRoomCode = null }: CaroGameProps) {
                         timeLow ? "text-amber-700" : "text-zinc-600"
                       }`}
                     >
-                      {timeLeft}s
+                      {shownTimeLeft}s
                     </span>
                   )}
                 </div>
@@ -700,7 +717,7 @@ export default function CaroGame({ initialRoomCode = null }: CaroGameProps) {
                     className={`h-full w-full origin-left rounded-full transition-transform duration-1000 ease-linear motion-reduce:transition-none ${
                       timeLow ? "bg-amber-500" : "bg-brand-500"
                     }`}
-                    style={{ transform: `scaleX(${timeLeft / 15})` }}
+                    style={{ transform: `scaleX(${shownTimeLeft / TURN_SECONDS})` }}
                   />
                 </div>
               )}
@@ -801,7 +818,7 @@ export default function CaroGame({ initialRoomCode = null }: CaroGameProps) {
               aria-pressed={timerEnabled}
               onClick={() => {
                 setTimerEnabled((t) => !t);
-                setTimeLeft(15);
+                setTimeLeft(TURN_SECONDS);
                 setTimeoutMessage(null);
               }}
               className={`w-full ${toggleBtn} ${timerEnabled ? toggleOn : toggleOff}`}
