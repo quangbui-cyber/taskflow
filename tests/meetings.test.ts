@@ -3,8 +3,10 @@ import test from "node:test";
 import { buildMeetingIcs } from "../lib/meetingIcs";
 import {
   MEETING_TIME_SLOTS,
+  findFreeMeetingSlots,
   formatMeetingWhen,
   isMeetingTimeSlot,
+  meetingConflicts,
   presetMeetingAttendees,
   rangesOverlap,
   vnDateTimeToUtc,
@@ -187,4 +189,68 @@ test("recurrence limits are enforced with Vietnamese errors", () => {
     end: { type: "date", until: "2026-11-10" },
   });
   assert.ok("error" in single);
+});
+
+test("free slot search keeps the duration and skips busy ranges", () => {
+  const vn = (time: string, date = "2026-11-12") => vnDateTimeToUtc(date, time)!;
+  const slots = findFreeMeetingSlots({
+    date: "2026-11-12",
+    startTime: "14:00",
+    endTime: "15:00",
+    busy: [
+      { startAt: vn("13:30"), endAt: vn("15:00") },
+      { startAt: vn("15:00"), endAt: vn("15:30") },
+    ],
+    now: vn("08:00"),
+  });
+  assert.deepEqual(slots, [
+    { date: "2026-11-12", startTime: "15:30", endTime: "16:30" },
+    { date: "2026-11-12", startTime: "16:00", endTime: "17:00" },
+  ]);
+});
+
+test("free slot search stays inside work hours and moves to the next workday", () => {
+  // Thứ Sáu 13/11, 16:30–18:00 kín → sang Thứ Hai 16/11 từ 08:00
+  const slots = findFreeMeetingSlots({
+    date: "2026-11-13",
+    startTime: "16:00",
+    endTime: "17:30",
+    busy: [{ startAt: vnDateTimeToUtc("2026-11-13", "16:30")!, endAt: vnDateTimeToUtc("2026-11-13", "18:00")! }],
+    now: vnDateTimeToUtc("2026-11-13", "09:00")!,
+  });
+  assert.deepEqual(slots, [
+    { date: "2026-11-16", startTime: "08:00", endTime: "09:30" },
+    { date: "2026-11-16", startTime: "08:30", endTime: "10:00" },
+  ]);
+});
+
+test("free slot search never suggests a time that already passed", () => {
+  const slots = findFreeMeetingSlots({
+    date: "2026-11-12",
+    startTime: "09:00",
+    endTime: "10:00",
+    busy: [],
+    now: vnDateTimeToUtc("2026-11-12", "11:10")!,
+    limit: 1,
+  });
+  assert.deepEqual(slots, [{ date: "2026-11-12", startTime: "11:30", endTime: "12:30" }]);
+});
+
+test("conflicts only count meetings still on the calendar, back-to-back ones are not", () => {
+  const m = (id: string, start: string, end: string) => ({
+    id,
+    title: id,
+    startAt: vnDateTimeToUtc("2026-11-12", start)!,
+    endAt: vnDateTimeToUtc("2026-11-12", end)!,
+  });
+  const a = m("a", "14:00", "15:00");
+  const b = m("b", "14:30", "15:30");
+  const declined = m("declined", "14:00", "15:00");
+  const c = m("c", "15:30", "16:00");
+  const result = meetingConflicts([a, b, declined, c], [a, b, c]);
+  assert.deepEqual(result.get("a")?.map((x) => x.id), ["b"]);
+  assert.deepEqual(result.get("b")?.map((x) => x.id), ["a"]);
+  // Lời mời đã từ chối vẫn biết mình trùng với cuộc nào
+  assert.deepEqual(result.get("declined")?.map((x) => x.id), ["a", "b"]);
+  assert.equal(result.has("c"), false);
 });

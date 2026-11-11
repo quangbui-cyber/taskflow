@@ -111,3 +111,83 @@ export function presetMeetingAttendees(
   allowed.delete(organizerId);
   return [...new Set(candidateIds)].filter((id) => allowed.has(id));
 }
+
+export type BusyRange = { startAt: Date; endAt: Date };
+export type FreeMeetingSlot = { date: string; startTime: string; endTime: string };
+
+const WORKDAY_START = "08:00";
+const WORKDAY_END = "18:00";
+const SLOT_STEP_MS = 30 * 60 * 1000;
+
+/** Ngày làm việc (bỏ Thứ Bảy, Chủ nhật) ngay sau ngày đã cho, dạng yyyy-MM-dd */
+function nextWorkday(date: string): string {
+  const day = new Date(`${date}T00:00:00Z`);
+  do {
+    day.setUTCDate(day.getUTCDate() + 1);
+  } while (day.getUTCDay() === 0 || day.getUTCDay() === 6);
+  return day.toISOString().slice(0, 10);
+}
+
+/**
+ * Những khung giờ sớm nhất, cùng độ dài với khung đang chọn, mà không vướng khoảng bận nào.
+ * Tìm trong giờ làm 08:00–18:00: hôm đã chọn (từ giờ đã chọn trở đi), rồi ngày làm việc kế tiếp.
+ * Bỏ qua khung đang chọn và khung đã qua.
+ */
+export function findFreeMeetingSlots({
+  date,
+  startTime,
+  endTime,
+  busy,
+  now = new Date(),
+  limit = 2,
+}: {
+  date: string;
+  startTime: string;
+  endTime: string;
+  busy: readonly BusyRange[];
+  now?: Date;
+  limit?: number;
+}): FreeMeetingSlot[] {
+  const selectedStart = vnDateTimeToUtc(date, startTime);
+  const selectedEnd = vnDateTimeToUtc(date, endTime);
+  if (!selectedStart || !selectedEnd || selectedEnd <= selectedStart) return [];
+  const duration = selectedEnd.getTime() - selectedStart.getTime();
+
+  const found: FreeMeetingSlot[] = [];
+  for (const day of [date, nextWorkday(date)]) {
+    const dayStart = vnDateTimeToUtc(day, WORKDAY_START)!.getTime();
+    const dayEnd = vnDateTimeToUtc(day, WORKDAY_END)!.getTime();
+    let start = day === date ? Math.max(dayStart, selectedStart.getTime()) : dayStart;
+    for (; start + duration <= dayEnd && found.length < limit; start += SLOT_STEP_MS) {
+      if (start === selectedStart.getTime() || start < now.getTime()) continue;
+      const startAt = new Date(start);
+      const endAt = new Date(start + duration);
+      if (busy.some((range) => rangesOverlap(startAt, endAt, range.startAt, range.endAt))) continue;
+      found.push({ date: day, startTime: formatHour(startAt), endTime: formatHour(endAt) });
+    }
+  }
+  return found;
+}
+
+export type TimedMeeting = { id: string; title: string; startAt: Date; endAt: Date };
+
+/**
+ * Với mỗi cuộc họp cần xét: những cuộc họp khác trong danh sách đang giữ lịch
+ * (tự tổ chức hoặc chưa từ chối) trùng giờ với nó, theo thứ tự giờ bắt đầu.
+ */
+export function meetingConflicts<T extends TimedMeeting>(
+  meetings: readonly TimedMeeting[],
+  committed: readonly T[]
+): Map<string, T[]> {
+  const sorted = [...committed].sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
+  const result = new Map<string, T[]>();
+  for (const meeting of meetings) {
+    const clashes = sorted.filter(
+      (other) =>
+        other.id !== meeting.id &&
+        rangesOverlap(meeting.startAt, meeting.endAt, other.startAt, other.endAt)
+    );
+    if (clashes.length > 0) result.set(meeting.id, clashes);
+  }
+  return result;
+}
