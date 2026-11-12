@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Check, Heart, X } from "lucide-react";
 import {
@@ -82,9 +83,10 @@ export default function BirthdayWishButton({
         </span>
       </button>
 
-      {open && (
+      {/* Portal ra body: banner cha có transform/overflow-hidden sẽ giam popup `fixed` trong khung banner. */}
+      {open && typeof document !== "undefined" && createPortal(
         <div
-          className="tf-overlay-enter fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-4"
+          className="tf-overlay-enter fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-zinc-950/45 p-4"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget && !pending) setOpen(false);
           }}
@@ -93,7 +95,7 @@ export default function BirthdayWishButton({
             role="dialog"
             aria-modal="true"
             aria-labelledby={`birthday-wish-${recipientId}`}
-            className="tf-modal-enter w-full max-w-md rounded-[14px] border border-zinc-200 bg-white shadow-2xl"
+            className="tf-modal-enter my-auto w-full max-w-md rounded-[14px] border border-zinc-200 bg-white shadow-2xl"
           >
             <header className="flex items-start justify-between gap-4 border-b border-zinc-200 px-5 py-4">
               <h2
@@ -134,10 +136,6 @@ export default function BirthdayWishButton({
                   className="tf-field min-h-28 resize-y leading-6"
                 />
               </label>
-              <p className="text-xs text-zinc-600">
-                Lời chúc hiện trong Kudos Wall cho cả công ty và không trừ sao
-                của tuần.
-              </p>
               <div className="flex justify-end gap-2.5">
                 <button
                   type="button"
@@ -163,7 +161,8 @@ export default function BirthdayWishButton({
               </div>
             </form>
           </section>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

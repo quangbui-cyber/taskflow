@@ -18,7 +18,6 @@ import {
   Heart,
   Plane,
   Plus,
-  Sprout,
   Star,
   Trophy,
   UserRoundX,
@@ -60,8 +59,6 @@ import TaskListItem from "@/components/TaskListItem";
 import BirthdayWishButton from "@/components/BirthdayWishButton";
 import Confetti from "@/components/Confetti";
 import CreativeTodayCard from "@/components/creative/CreativeTodayCard";
-import ProjectWishComments from "@/components/ProjectWishComments";
-import { executionWishWhere } from "@/lib/projectWishes";
 import { handwriting } from "@/app/fonts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -278,7 +275,6 @@ export default async function HomePage({
     unreadNotifications,
     sudokuMatches,
     caroMatches,
-    executionProjects,
     crmFocus,
   ] = await Promise.all([
     prisma.user.findUniqueOrThrow({
@@ -375,28 +371,6 @@ export default async function HomePage({
     prisma.caroMatch.findMany({
       where: { finishedAt: { gte: gameMonth.start, lt: gameMonth.end } },
       select: { hostUserId: true, guestUserId: true, winnerUserId: true },
-    }),
-    prisma.project.findMany({
-      where: executionWishWhere(now),
-      select: {
-        id: true,
-        name: true,
-        wishes: {
-          where: { createdAt: { gte: dayStart, lt: dayEnd } },
-          select: {
-            id: true, body: true, createdAt: true, chatSentAt: true,
-            author: { select: { id: true, name: true, avatarUrl: true } },
-          },
-          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-          take: 20,
-        },
-        _count: { select: { wishes: { where: { createdAt: { gte: dayStart, lt: dayEnd } } } } },
-        members: {
-          select: { user: { select: { id: true, name: true, avatarUrl: true } } },
-          orderBy: { user: { name: "asc" } },
-        },
-      },
-      orderBy: [{ executionStartAt: "asc" }, { name: "asc" }, { id: "asc" }],
     }),
     crmOn ? loadMyCrmFocus(prisma, user, now) : null,
   ]);
@@ -705,67 +679,6 @@ export default async function HomePage({
               <QuickAction href="/documents" label="Tài liệu" icon={FolderOpen} />
             </div>
           </nav>
-
-          {executionProjects.length > 0 && (
-            <section
-              aria-labelledby="execution-wish-heading"
-              className="rounded-[18px] border border-zinc-200 bg-gradient-to-br from-white to-brand-50/60 px-5 py-5 sm:px-6"
-            >
-              <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-brand-100 text-brand-700">
-                  <Sprout size={22} strokeWidth={1.8} aria-hidden="true" />
-                </span>
-                <h2 id="execution-wish-heading" className="text-base font-semibold text-zinc-900">
-                  Hôm nay là ngày của đội mình!
-                </h2>
-              </div>
-              <ul className="mt-4 space-y-5 sm:pl-[52px]">
-                {executionProjects.map((project) => {
-                  const people = project.members.map((member) => member.user);
-                  return (
-                    <li key={project.id}>
-                      <p className="text-sm leading-6 text-zinc-600">
-                        Chúc team <strong className="font-semibold text-zinc-900 break-words">{project.name}</strong>{" "}
-                        chạy chương trình thật suôn sẻ, phối hợp thật ăn ý và mang về những khoảnh khắc đáng nhớ!
-                      </p>
-                      <div className="mt-2.5 flex items-center gap-2.5">
-                        <span className="flex shrink-0" aria-hidden="true">
-                          {people.slice(0, 3).map((person, index) => (
-                            <Avatar
-                              key={person.id}
-                              id={person.id}
-                              name={person.name}
-                              avatarUrl={person.avatarUrl}
-                              className={`h-7 w-7 border-2 border-white text-[10px] ${index > 0 ? "-ml-2" : ""}`}
-                            />
-                          ))}
-                        </span>
-                        <p className="min-w-0 text-xs leading-5 text-zinc-500 break-words">
-                          {people.slice(0, 3).map((person) => person.name).join(", ")}
-                          {people.length > 3 && ` và ${people.length - 3} đồng đội`}
-                        </p>
-                      </div>
-                      <ProjectWishComments
-                        projectId={project.id}
-                        projectName={project.name}
-                        currentUserId={user.id}
-                        count={project._count.wishes}
-                        wishes={project.wishes.map((wish) => ({
-                          id: wish.id,
-                          body: wish.body,
-                          author: wish.author,
-                          sent: Boolean(wish.chatSentAt),
-                          time: new Intl.DateTimeFormat("vi-VN", {
-                            hour: "2-digit", minute: "2-digit", timeZone: "Asia/Ho_Chi_Minh",
-                          }).format(wish.createdAt),
-                        }))}
-                      />
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          )}
 
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
             <div className="min-w-0 space-y-5">
