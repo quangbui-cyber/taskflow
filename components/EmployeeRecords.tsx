@@ -1,9 +1,9 @@
 "use client";
 
-import { useActionState, useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useActionState, useCallback, useEffect, useMemo, useState, useSyncExternalStore, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Cake, Dices, FileDown, FileUp, Pencil, Plus, Search, TriangleAlert, UserPlus, X } from "lucide-react";
+import { Cake, Dices, FileUp, Pencil, Plus, Search, TriangleAlert, UserPlus, X } from "lucide-react";
 import {
   createEmployee,
   saveEmployeeRecord,
@@ -45,6 +45,8 @@ function displayDate(value: string) {
   return `${day}/${month}/${year}`;
 }
 
+const subscribeMounted = () => () => {};
+
 function Dialog({
   title,
   labelledBy,
@@ -60,10 +62,9 @@ function Dialog({
   wide?: boolean;
   children: React.ReactNode;
 }) {
-  const [mounted, setMounted] = useState(false);
+  const mounted = useSyncExternalStore(subscribeMounted, () => true, () => false);
 
   useEffect(() => {
-    setMounted(true);
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onKey = (event: KeyboardEvent) => {

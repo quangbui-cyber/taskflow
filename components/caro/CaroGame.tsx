@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useEffectEvent, useCallback, useSyncExternalStore } from "react";
 import {
   createEmptyBoard,
   checkWin,
@@ -19,7 +19,6 @@ import {
   getOnlineGame,
   makeOnlineMove,
   startOnlineGame,
-  resetOnlineGame,
   handleOnlineTimeout,
   type OnlineGameState,
 } from "@/app/actions/caroOnline";
@@ -49,7 +48,7 @@ export default function CaroGame({ initialRoomCode = null }: CaroGameProps) {
   // Chỉ có 2 chế độ: "ai" (Chơi với máy) và "online" (Chơi online)
   const [mode, setMode] = useState<GameMode>(initialRoomCode ? "online" : "ai");
   const [difficulty, setDifficulty] = useState<AiDifficulty>("hard");
-  const [soundOn, setSoundOn] = useState(true);
+  const soundOn = useSyncExternalStore(caroSound.subscribe, () => caroSound.isEnabled(), () => true);
 
   // Trạng thái đã bấm Bắt đầu hay chưa
   const [isAiStarted, setIsAiStarted] = useState(false);
@@ -80,18 +79,12 @@ export default function CaroGame({ initialRoomCode = null }: CaroGameProps) {
   const [onlineGame, setOnlineGame] = useState<OnlineGameState | null>(null);
   const [myRole, setMyRole] = useState<Player | null>(null);
   const [roomInput, setRoomInput] = useState("");
-  const [isJoining, setIsJoining] = useState(false);
+  const [isJoining, setIsJoining] = useState(!!initialRoomCode);
   const [copiedLink, setCopiedLink] = useState(false);
   const [onlineError, setOnlineError] = useState<string | null>(null);
 
-  // Khởi tạo âm thanh
-  useEffect(() => {
-    setSoundOn(caroSound.isEnabled());
-  }, []);
-
   const handleToggleSound = () => {
-    const next = caroSound.toggle();
-    setSoundOn(next);
+    caroSound.toggle();
   };
 
   // Hàm Bắt đầu / Ván mới với AI
@@ -241,13 +234,7 @@ export default function CaroGame({ initialRoomCode = null }: CaroGameProps) {
     }
   };
 
-  const handleJoinRoom = async (codeToJoin?: string) => {
-    const code = (codeToJoin || roomInput).trim().toUpperCase();
-    if (!code) return;
-    setIsJoining(true);
-    setOnlineError(null);
-    setTimeoutMessage(null);
-    const res = await joinOnlineGame(code);
+  const completeJoin = useCallback((res: Awaited<ReturnType<typeof joinOnlineGame>>) => {
     setIsJoining(false);
     if (res.success && res.game) {
       setOnlineRoomCode(res.game.code);
@@ -257,14 +244,26 @@ export default function CaroGame({ initialRoomCode = null }: CaroGameProps) {
     } else {
       setOnlineError(res.error || "Không thể vào phòng.");
     }
+  }, []);
+
+  const handleJoinRoom = async (codeToJoin?: string) => {
+    const code = (codeToJoin || roomInput).trim().toUpperCase();
+    if (!code) return;
+    setIsJoining(true);
+    setOnlineError(null);
+    setTimeoutMessage(null);
+    completeJoin(await joinOnlineGame(code));
   };
 
   // Tự động vào phòng nếu có initialRoomCode trong URL
   useEffect(() => {
-    if (initialRoomCode && !onlineGame) {
-      handleJoinRoom(initialRoomCode);
-    }
-  }, [initialRoomCode]);
+    if (!initialRoomCode) return;
+    let active = true;
+    joinOnlineGame(initialRoomCode.trim().toUpperCase()).then((result) => {
+      if (active) completeJoin(result);
+    });
+    return () => { active = false; };
+  }, [initialRoomCode, completeJoin]);
 
   // Polling đồng bộ phòng Online mỗi 1.2s
   useEffect(() => {
@@ -347,37 +346,25 @@ export default function CaroGame({ initialRoomCode = null }: CaroGameProps) {
   // Biểu tượng khi hover: Ai nắm X thấy X, ai nắm O thấy O
   const effectiveHoverSymbol: Player = isOnlineActive ? (myRole || "X") : "X";
 
-  // Reset đếm giờ 15s mỗi khi đổi lượt hoặc có nước đi mới
-  useEffect(() => {
+  const turnKey = `${mode}:${onlineRoomCode}:${activeTurn}:${currentLastMove?.r}:${currentLastMove?.c}`;
+  const [previousTurnKey, setPreviousTurnKey] = useState(turnKey);
+  if (previousTurnKey !== turnKey) {
+    setPreviousTurnKey(turnKey);
     setTimeLeft(15);
-  }, [activeTurn, currentLastMove]);
-
-  // Bộ đếm ngược 15s
-  useEffect(() => {
-    if (!timerEnabled || activeWinner) return;
-    if (mode === "online" && (!onlineGame || onlineGame.status !== "PLAYING")) return;
-    if (mode === "ai" && (!isAiStarted || isAiThinking)) return;
-
-    const interval = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          return 0;
-        }
-        if (prev <= 6) {
-          caroSound.playTick();
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [timerEnabled, activeWinner, mode, onlineGame?.status, activeTurn, isAiThinking, isAiStarted]);
+  }
 
   // Xử lý khi hết 15 giây (xử thua do hết giờ)
-  useEffect(() => {
-    if (!timerEnabled || timeLeft !== 0 || activeWinner) return;
+  const onTimerTick = useEffectEvent(() => {
+    if (!timerEnabled || activeWinner || timeLeft === 0) return;
     if (mode === "ai" && !isAiStarted) return;
     if (mode === "online" && (!onlineGame || onlineGame.status !== "PLAYING")) return;
+
+    if (timeLeft > 1) {
+      if (timeLeft <= 6) caroSound.playTick();
+      setTimeLeft(timeLeft - 1);
+      return;
+    }
+    setTimeLeft(0);
 
     caroSound.playTimeout();
 
@@ -403,7 +390,18 @@ export default function CaroGame({ initialRoomCode = null }: CaroGameProps) {
         }
       });
     }
-  }, [timeLeft, timerEnabled, activeWinner, mode, currentTurn, onlineGame, onlineRoomCode, isAiStarted]);
+  });
+
+  const onlineStatus = onlineGame?.status;
+  // Bộ đếm ngược 15s
+  useEffect(() => {
+    if (!timerEnabled || activeWinner) return;
+    if (mode === "online" && onlineStatus !== "PLAYING") return;
+    if (mode === "ai" && (!isAiStarted || isAiThinking)) return;
+
+    const interval = setInterval(() => onTimerTick(), 1000);
+    return () => clearInterval(interval);
+  }, [timerEnabled, activeWinner, mode, onlineStatus, turnKey, isAiThinking, isAiStarted]);
 
 
   // --- Dữ liệu hiển thị ---

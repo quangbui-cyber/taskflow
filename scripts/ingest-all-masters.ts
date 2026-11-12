@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type CreativeArticle } from "@prisma/client";
 import { paulArdenArticles } from "./data-paul-arden";
 import { paulArdenArticlesPart2 } from "./data-paul-arden-part2";
 import { georgeLoisArticles } from "./data-george-lois";
@@ -44,7 +44,7 @@ async function main() {
   console.log(`Bob Hoffman: ${hoffmanList.length} bài`);
 
   // Interleave round-robin để khi hiển thị theo thứ tự thời gian người đọc có trải nghiệm đa dạng phong phú
-  const allMasters: any[] = [];
+  const allMasters: (typeof ardenList)[number][] = [];
   const maxLen = Math.max(
     ardenList.length,
     loisList.length,
@@ -69,7 +69,9 @@ async function main() {
   console.log(`Seed data hiện tại: ${currentSeed.length} bài`);
 
   // Tạo map slug -> article để không trùng lặp
-  const seedMap = new Map<string, any>();
+  const seedMap = new Map<string, Omit<CreativeArticle, "originalPublishedAt" | "publishedDate" | "createdAt" | "updatedAt"> & {
+    originalPublishedAt: string; publishedDate: string | null; createdAt: string; updatedAt: string;
+  }>();
   for (const item of currentSeed) {
     seedMap.set(item.slug, item);
   }
@@ -77,9 +79,7 @@ async function main() {
   // Chuẩn bị ngày phát hành (từ 2026-10-31 lùi dần 2 tiếng mỗi bài)
   const baseDate = new Date("2026-10-31T12:00:00.000Z");
 
-  const newRecords: any[] = [];
-
-  allMasters.forEach((art, idx) => {
+  const newRecords = allMasters.map((art, idx) => {
     // Parity check
     if (art.en.length !== art.vi.length) {
       throw new Error(`Mismatch line count in ${art.slug}: EN ${art.en.length} vs VI ${art.vi.length}`);
@@ -110,7 +110,7 @@ async function main() {
     };
 
     seedMap.set(art.slug, record);
-    newRecords.push(record);
+    return record;
   });
 
   // Ghi lại seedData (150 Dave Trott + 150 5 tác giả = 300 bài)
@@ -158,7 +158,7 @@ async function main() {
 
     console.log(`🎉 Hoàn tất upsert thành công ${upsertedCount} bài viết vào Database!`);
   } catch (dbError) {
-    console.warn("⚠️ Không thể kết nối cơ sở dữ liệu local (không sao, seedData.json đã cập nhật 300 bài để tự động nạp trên serverless):", (dbError as any).message);
+    console.warn("⚠️ Không thể kết nối cơ sở dữ liệu local (không sao, seedData.json đã cập nhật 300 bài để tự động nạp trên serverless):", dbError instanceof Error ? dbError.message : String(dbError));
   }
 }
 

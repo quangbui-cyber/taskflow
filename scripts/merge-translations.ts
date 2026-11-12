@@ -1,11 +1,18 @@
 import { prisma } from "../lib/prisma";
 import fs from "fs";
 import path from "path";
+import type { Prisma } from "@prisma/client";
+
+type Translation = Prisma.InputJsonArray | {
+  titleVi?: string;
+  tags?: string[];
+  linesVi?: Prisma.InputJsonArray;
+};
 
 async function main() {
   const dir = path.join(process.cwd(), "scripts", "translations");
 
-  const translations: Record<string, any> = {};
+  const translations: Record<string, Translation> = {};
 
   for (let b = 1; b <= 8; b++) {
     const bPath = path.join(dir, `batch-${b}-output.json`);
@@ -35,19 +42,20 @@ async function main() {
       await prisma.creativeArticle.updateMany({
         where: { slug },
         data: {
-          linesVi: item as any,
+          linesVi: item,
           status: "PUBLISHED",
         },
       });
       updatedCount++;
     } else if (typeof item === "object") {
       // Định dạng mới ({ titleVi, tags, linesVi })
-      const updateData: any = {
+      const translated = item as Exclude<Translation, Prisma.InputJsonArray>;
+      const updateData: Prisma.CreativeArticleUpdateManyMutationInput = {
         status: "PUBLISHED",
       };
-      if (item.titleVi) updateData.titleVi = item.titleVi;
-      if (Array.isArray(item.tags) && item.tags.length > 0) updateData.tags = item.tags;
-      if (Array.isArray(item.linesVi) && item.linesVi.length > 0) updateData.linesVi = item.linesVi;
+      if (translated.titleVi) updateData.titleVi = translated.titleVi;
+      if (Array.isArray(translated.tags) && translated.tags.length > 0) updateData.tags = translated.tags;
+      if (Array.isArray(translated.linesVi) && translated.linesVi.length > 0) updateData.linesVi = translated.linesVi;
 
       await prisma.creativeArticle.updateMany({
         where: { slug },

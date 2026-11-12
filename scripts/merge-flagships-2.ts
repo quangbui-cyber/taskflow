@@ -1,6 +1,9 @@
 import fs from "fs";
 import path from "path";
 import { prisma } from "../lib/prisma";
+import type { Prisma } from "@prisma/client";
+
+type Translation = { titleVi: string; linesVi: Prisma.InputJsonArray };
 
 const revisedDir = path.join(__dirname, "translations", "revised");
 const all150Path = path.join(revisedDir, "all-150.json");
@@ -10,12 +13,12 @@ const seedDataPath = path.join(__dirname, "..", "lib", "creativeSeedData.json");
 async function main() {
   console.log("Reading all-150.json and flagships-2.json...");
   const all150 = JSON.parse(fs.readFileSync(all150Path, "utf-8"));
-  const flagships2 = JSON.parse(fs.readFileSync(flagships2Path, "utf-8"));
+  const flagships2: Record<string, Translation> = JSON.parse(fs.readFileSync(flagships2Path, "utf-8"));
 
   // 1. Merge flagships2 into all150
   for (const [slug, data] of Object.entries(flagships2)) {
     all150[slug] = data;
-    console.log(`Merged flagship batch 2: ${slug} -> "${(data as any).titleVi}"`);
+    console.log(`Merged flagship batch 2: ${slug} -> "${data.titleVi}"`);
   }
   fs.writeFileSync(all150Path, JSON.stringify(all150, null, 2) + "\n");
   console.log("Updated all-150.json.");
@@ -35,7 +38,7 @@ async function main() {
 
   // 3. Update PostgreSQL database
   console.log("Syncing updated articles into PostgreSQL database...");
-  for (const [slug, item] of Object.entries(flagships2) as [string, any][]) {
+  for (const [slug, item] of Object.entries(flagships2)) {
     await prisma.creativeArticle.update({
       where: { slug },
       data: {
