@@ -10,11 +10,11 @@ export function draftsOpenFrom(searchParams: Record<string, string | string[] | 
 export type ReviewPrimary = "LOG_RESULT" | "SET_NEXT_STEP" | "ASSIGN_PIC" | null;
 export type ReviewRowActions = { primary: ReviewPrimary; secondary: ("ASSIGN" | "POSTPONE")[]; menu: "ESCALATE"[] };
 /** Assign and postpone are shown directly; asking AD/AM stays in the menu and only appears with permission. */
-export function rowActionsFor(group: ReviewRow["group"], row: Pick<ReviewRow, "pic" | "taskId" | "can"> & { reason?: { key: string } }): ReviewRowActions {
+export function rowActionsFor(group: ReviewRow["group"], row: Pick<ReviewRow, "pic" | "taskId" | "can" | "campaignTask"> & { reason?: { key: string } }): ReviewRowActions {
   const { can } = row;
   const secondary: ReviewRowActions["secondary"] = [];
   const menu: ReviewRowActions["menu"] = [];
-  if (!row.pic) return { primary: can.assignPic ? "ASSIGN_PIC" : null, secondary, menu };
+  if (!row.pic && !(row.campaignTask && row.taskId && can.logResult)) return { primary: can.assignPic ? "ASSIGN_PIC" : null, secondary, menu };
   if (group !== "NO_NEXT_STEP" && can.assign && row.taskId) secondary.push("ASSIGN");
   if (can.postpone && row.taskId) secondary.push("POSTPONE");
   if (can.escalate && row.taskId && row.reason?.key !== "ESCALATED") menu.push("ESCALATE");

@@ -7,6 +7,8 @@ import { getCrmSettings, listReasons, listProgramTypesForAdmin, listSettingChang
 import { evaluatePrepilot, loadPrepilotInput, prepilotSectionFlags } from "@/lib/crm/prepilot";
 import CrmSettings from "@/components/crm/CrmSettings";
 import CrmAccessSettings from "@/components/crm/CrmAccessSettings";
+import CampaignSettings from "@/components/crm/CampaignSettings";
+import { parseCampaignSteps } from "@/lib/crm/campaignPlan";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 import Sidebar from "@/components/Sidebar";
@@ -57,13 +59,14 @@ async function SettingsContent({
 }) {
   if (activeTab === "create-user") return <CreateUserForm />;
   if (activeTab === "crm" && crmEnabled()) {
-    const [settings, reasons, programTypes, teams, users, history, prepilotInput, clientTags, competitors] = await Promise.all([
+    const [settings, reasons, programTypes, teams, users, history, prepilotInput, clientTags, competitors, campaignTemplates] = await Promise.all([
       getCrmSettings(prisma), listReasons(prisma, { includeHidden: true }), listProgramTypesForAdmin(prisma),
       prisma.salesTeam.findMany({ include: { crmManagedTeam: { select: { userId: true } } }, orderBy: { name: "asc" } }),
       prisma.user.findMany({ where: { isActive: true, deletedAt: null }, select: { id: true, name: true, email: true, avatarUrl: true, isCrmDataSteward: true, role: true }, orderBy: { name: "asc" } }),
       Promise.all(["tier.", "reminder.", "reason.", "programType.", "review.", "teamManagers.", "stewards", "pipeline.mode", "persona.depth", "client.industries", "client.sources", "clientTag.", "competitor.", "access.users"].map((key) => listSettingChanges(prisma, key, 20))),
       loadPrepilotInput(prisma, new Date()),
       listClientTags(prisma, { includeHidden: true }), listCompetitors(prisma, { includeHidden: true }),
+      prisma.careCampaignTemplate.findMany({ orderBy: [{ order: "asc" }, { name: "asc" }] }),
     ]);
     const notConfigured = prepilotSectionFlags(evaluatePrepilot(prepilotInput));
     const changes = history.flat()
@@ -74,6 +77,7 @@ async function SettingsContent({
       <nav aria-label="Mục CRM" className="flex flex-wrap gap-2"><span aria-current="page" className="inline-flex min-h-9 items-center rounded-full bg-zinc-900 px-3.5 text-sm font-medium text-white">Cấu hình</span><Link href="/admin/crm-data" prefetch={false} className="inline-flex min-h-9 items-center rounded-full border border-zinc-200 bg-white px-3.5 text-sm text-zinc-600 hover:text-zinc-900">Dữ liệu</Link></nav>
       <CrmSettings initial={settings} reasons={reasons} programTypes={programTypes} changes={changes} notConfigured={notConfigured} clientTags={clientTags.map((t) => ({ id: t.id, label: t.label, active: t.active, order: t.order }))} competitors={competitors.map((c) => ({ id: c.id, name: c.name, active: c.active }))} />
       <CrmAccessSettings teams={teams.map((t) => ({ id: t.id, name: t.name, managerIds: t.crmManagedTeam.map((m) => m.userId) }))} users={users} stewardIds={users.filter((u) => u.isCrmDataSteward).map((u) => u.id)} pipelineMode={settings.pipelineMode} version={settings.versions["pipeline.mode"]} changes={changes} notConfigured={notConfigured} access={{ userIds: settings.accessUserIds, version: settings.versions["access.users"], adminIds: users.filter((u) => u.role === "ADMIN").map((u) => u.id), limited: crmLimitedAccessActive() }} />
+      <CampaignSettings templates={campaignTemplates.flatMap((t) => { const steps = parseCampaignSteps(t.steps); return steps ? [{ id: t.id, name: t.name, description: t.description, steps, active: t.active, order: t.order }] : []; })} weeklyLoadWarn={settings.campaignWeeklyLoadWarn} version={settings.versions["campaign.weeklyLoadWarn"]} />
     </div>;
   }
 

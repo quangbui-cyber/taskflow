@@ -6,12 +6,13 @@ import { DEFAULT_CADENCE_WEEKS, parseClientCatalog, type ClientCatalogItem, pars
 import { parsePipelineMode, type PipelineModeSetting } from "./pipelineMode";
 import { emptyPersonaDepth, parsePersonaDepth, type PersonaDepth } from "./personaDepth";
 import { parseCrmAccessUsers } from "../features";
-export const CRM_SETTING_KEYS = ["tier.cadenceWeeks", "tier.potentialScale", "tier.matrix", "reminder.offsets", "review.priority", "pipeline.mode", "persona.depth", "client.industries", "client.sources", "access.users"] as const;
+import { parseWeeklyLoadWarn } from "./campaignPlan";
+export const CRM_SETTING_KEYS = ["tier.cadenceWeeks", "tier.potentialScale", "tier.matrix", "reminder.offsets", "review.priority", "pipeline.mode", "persona.depth", "client.industries", "client.sources", "access.users", "campaign.weeklyLoadWarn"] as const;
 /** Optional keys are created by the first explicit Admin save, without a migration or reseed. */
-const OPTIONAL_KEYS: readonly CrmSettingKey[] = ["persona.depth", "client.industries", "client.sources", "access.users"];
+const OPTIONAL_KEYS: readonly CrmSettingKey[] = ["persona.depth", "client.industries", "client.sources", "access.users", "campaign.weeklyLoadWarn"];
 const CATALOG_COLUMNS = { "client.industries": "industry", "client.sources": "acquisitionSource" } as const;
 export type CrmSettingKey = typeof CRM_SETTING_KEYS[number];
-export type CrmSettings = { cadenceWeeks: CadenceWeeks; potentialScale: PotentialLevel[]; tierMatrix: TierMatrix; reminderOffsets: ReminderOffsets; reviewPriority: ReviewPriorityKey[]; pipelineMode: PipelineModeSetting; personaDepth: PersonaDepth; industries: ClientCatalogItem[]; sources: ClientCatalogItem[]; accessUserIds: string[]; versions: Record<CrmSettingKey, number> };
+export type CrmSettings = { cadenceWeeks: CadenceWeeks; potentialScale: PotentialLevel[]; tierMatrix: TierMatrix; reminderOffsets: ReminderOffsets; reviewPriority: ReviewPriorityKey[]; pipelineMode: PipelineModeSetting; personaDepth: PersonaDepth; industries: ClientCatalogItem[]; sources: ClientCatalogItem[]; accessUserIds: string[]; campaignWeeklyLoadWarn: number | null; versions: Record<CrmSettingKey, number> };
 type Actor = { id: string; name: string };
 type Db = PrismaClient;
 const STALE = "Dữ liệu vừa được người khác cập nhật. Tải lại trang để xem bản mới.";
@@ -20,7 +21,7 @@ const defaults = {
   "tier.cadenceWeeks": DEFAULT_CADENCE_WEEKS, "tier.potentialScale": [], "tier.matrix": { revenueBands: [], cells: {} },
   "reminder.offsets": { MICE: [90,60,30], YEP: [90,60,30], OUTING: [60,30], TEAMBUILDING: [60,30], ACTIVATION: [45,21], EVENT: [45,21] },
   "review.priority": ["APPOINTMENT", "PLAN_CLOSE", "ESCALATED", "TIER"], "pipeline.mode": { mode: "PROJECT_OFFICIAL", pilotTeamIds: [], plannedCutoverDate: null },
-  "persona.depth": emptyPersonaDepth(), "client.industries": [], "client.sources": [], "access.users": [],
+  "persona.depth": emptyPersonaDepth(), "client.industries": [], "client.sources": [], "access.users": [], "campaign.weeklyLoadWarn": { perWeek: null },
 };
 function parse(key: CrmSettingKey, value: unknown) {
   switch (key) {
@@ -33,6 +34,7 @@ function parse(key: CrmSettingKey, value: unknown) {
     case "persona.depth": return parsePersonaDepth(value);
     case "client.industries": case "client.sources": return parseClientCatalog(value);
     case "access.users": return parseCrmAccessUsers(value);
+    case "campaign.weeklyLoadWarn": return parseWeeklyLoadWarn(value);
   }
 }
 const json = (v: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(v)) as Prisma.InputJsonValue;
@@ -42,7 +44,7 @@ async function log(tx: Prisma.TransactionClient, key: string, oldValue: unknown,
 export async function getCrmSettings(db: PrismaClient | Prisma.TransactionClient): Promise<CrmSettings> {
   const rows = await db.crmSetting.findMany({ where: { key: { in: [...CRM_SETTING_KEYS] } } });
   const value = (key: CrmSettingKey) => parse(key, rows.find((r) => r.key === key)?.value) ?? defaults[key];
-  return { cadenceWeeks: value("tier.cadenceWeeks") as CadenceWeeks, potentialScale: value("tier.potentialScale") as PotentialLevel[], tierMatrix: value("tier.matrix") as TierMatrix, reminderOffsets: value("reminder.offsets") as ReminderOffsets, reviewPriority: value("review.priority") as ReviewPriorityKey[], pipelineMode: value("pipeline.mode") as PipelineModeSetting, personaDepth: value("persona.depth") as PersonaDepth, industries: value("client.industries") as ClientCatalogItem[], sources: value("client.sources") as ClientCatalogItem[], accessUserIds: value("access.users") as string[], versions: Object.fromEntries(CRM_SETTING_KEYS.map((key) => [key, rows.find((r) => r.key === key)?.version ?? 0])) as Record<CrmSettingKey, number> };
+  return { cadenceWeeks: value("tier.cadenceWeeks") as CadenceWeeks, potentialScale: value("tier.potentialScale") as PotentialLevel[], tierMatrix: value("tier.matrix") as TierMatrix, reminderOffsets: value("reminder.offsets") as ReminderOffsets, reviewPriority: value("review.priority") as ReviewPriorityKey[], pipelineMode: value("pipeline.mode") as PipelineModeSetting, personaDepth: value("persona.depth") as PersonaDepth, industries: value("client.industries") as ClientCatalogItem[], sources: value("client.sources") as ClientCatalogItem[], accessUserIds: value("access.users") as string[], campaignWeeklyLoadWarn: (value("campaign.weeklyLoadWarn") as { perWeek: number | null }).perWeek, versions: Object.fromEntries(CRM_SETTING_KEYS.map((key) => [key, rows.find((r) => r.key === key)?.version ?? 0])) as Record<CrmSettingKey, number> };
 }
 export const getCrmSettingsCached = cache(() => getCrmSettings(prisma));
 export const CRM_LIMITED_SOURCE_ERROR = "Đang ở chế độ giới hạn. Chưa thể chuyển báo cáo chính thức sang Cơ hội.";

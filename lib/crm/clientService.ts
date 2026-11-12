@@ -6,6 +6,7 @@ import { diffClientFields, normalizeTaxCode, normalizeWebsite, validateClientNot
 import { clientDuplicateKey } from "./clientMerge";
 import { CLIENT_NAME_MAX_LENGTH, canCreateClient, clientNameError, clientNameKey, normalizeClientName } from "../clientCatalog";
 import { crmDeniedForUser } from "./access";
+import { reassignCampaignOnPicChange } from "./campaignService";
 
 type Actor = CrmActor & { name: string };
 type Result = { ok: true; version: number; id?: string } | { error: string };
@@ -76,6 +77,8 @@ export async function changeClientPicOrTeam(
     if (!pic || (pic.user && (!pic.user.isActive || pic.user.deletedAt)) || (input.responsibleTeamId && !team)) return { error: INVALID };
     const changed = await tx.client.updateMany({ where: { id: client.id, version: input.expectedVersion }, data: { picAccountId: input.picAccountId, responsibleTeamId: input.responsibleTeamId, version: { increment: 1 } } });
     if (changed.count !== 1) return { error: STALE };
+    // crm52: open steps of running campaigns follow the new PIC when that person may use CRM.
+    if (client.picAccountId !== input.picAccountId) await reassignCampaignOnPicChange(tx, client.id, input.picAccountId);
     const [accounts, teams] = await Promise.all([
       tx.account.findMany({ where: { id: { in: [client.picAccountId, input.picAccountId].filter((v): v is string => !!v) } }, select: { id: true, name: true } }),
       tx.salesTeam.findMany({ where: { id: { in: [client.responsibleTeamId, input.responsibleTeamId].filter((v): v is string => !!v) } }, select: { id: true, name: true } }),

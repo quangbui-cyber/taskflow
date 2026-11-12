@@ -5,7 +5,7 @@ import type { ReviewRow } from "../lib/crm/reviewData";
 import { REVIEW_REASON_LABELS } from "../lib/crm/labels";
 
 const all = { logResult: true, assign: true, postpone: true, escalate: true, assignPic: true };
-const row = (overrides: Partial<Pick<ReviewRow, "pic" | "taskId" | "can" | "reason">> = {}) => ({
+const row = (overrides: Partial<Pick<ReviewRow, "pic" | "taskId" | "can" | "reason" | "campaignTask">> = {}) => ({
   pic: { accountId: "a", name: "PIC", userId: "u" }, taskId: "k1", can: all, ...overrides,
 });
 test("drafts opens only from a single open value", () => {
@@ -35,6 +35,15 @@ test("missing PIC offers only authorized PIC assignment", () => {
     assert.deepEqual(rowActionsFor(group, row({ pic: null })), { primary: "ASSIGN_PIC", secondary: [], menu: [] });
     assert.deepEqual(rowActionsFor(group, row({ pic: null, can: { ...all, assignPic: false } })), { primary: null, secondary: [], menu: [] });
   }
+});
+
+test("assigned campaign work can be logged without changing the client's missing PIC, including escalated work", () => {
+  const can = { ...all, assign: false, assignPic: false };
+  const assigned = row({ pic: null, can, campaignTask: true });
+  assert.equal(rowActionsFor("DUE_THIS_WEEK", assigned).primary, "LOG_RESULT");
+  assert.equal(rowActionsFor("OVERDUE", { ...assigned, reason: { key: "ESCALATED" } }).primary, "LOG_RESULT");
+  assert.equal(rowActionsFor("DUE_THIS_WEEK", { ...assigned, can: { ...can, logResult: false } }).primary, null);
+  assert.equal(rowActionsFor("NO_NEXT_STEP", { ...assigned, taskId: null }).primary, null);
 });
 test("view-only rows offer no actions", () => {
   const can = { logResult: false, assign: false, postpone: false, escalate: false, assignPic: false };

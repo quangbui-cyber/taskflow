@@ -1,7 +1,7 @@
 export type CrmActor = { id: string; role: string; accountId: string | null; managedTeamIds: string[]; isDataSteward: boolean };
 export type CrmOwnerResource = { kind: "CLIENT"; picUserId: string | null; teamId: string | null } | { kind: "OPPORTUNITY"; picUserId: string | null; teamId: string | null; closed: boolean };
 export type CrmResource = CrmOwnerResource | { kind: "TASK"; owner: CrmOwnerResource; assigneeId: string | null; creatorId: string };
-export type CrmAction = "VIEW" | "EDIT" | "CHANGE_PIC_OR_TEAM" | "ASSIGN" | "LOG_TOUCHPOINT" | "EDIT_TASK" | "SCORE_POTENTIAL" | "CLOSE_OPPORTUNITY" | "CONFIRM_IMPORTED_CLIENT" | "REVIEW_IMPORT" | "MERGE_CLIENT" | "CONFIGURE" | "ARCHIVE_CLIENT";
+export type CrmAction = "VIEW" | "EDIT" | "CHANGE_PIC_OR_TEAM" | "ASSIGN" | "LOG_TOUCHPOINT" | "EDIT_TASK" | "SCORE_POTENTIAL" | "CLOSE_OPPORTUNITY" | "CONFIRM_IMPORTED_CLIENT" | "REVIEW_IMPORT" | "MERGE_CLIENT" | "CONFIGURE" | "ARCHIVE_CLIENT" | "MANAGE_CAMPAIGN";
 
 export function isTeamManager(actor: CrmActor, teamId: string | null): boolean {
   return teamId !== null && actor.managedTeamIds.includes(teamId);
@@ -15,6 +15,8 @@ export function crmCan(actor: CrmActor, action: CrmAction, resource?: CrmResourc
   if (actor.role === "ADMIN") return true;
   if (action === "CONFIGURE") return false;
   if (action === "REVIEW_IMPORT" || action === "MERGE_CLIENT") return actor.isDataSteward;
+  // crm52: care campaigns belong to a team; only its CRM managers (or Admin) create, launch, pause or cancel them.
+  if (action === "MANAGE_CAMPAIGN") return owner ? isTeamManager(actor, owner.teamId) : actor.managedTeamIds.length > 0;
   if (!owner) return false;
   const pic = owner.picUserId === actor.id;
   const manager = isTeamManager(actor, owner.teamId);

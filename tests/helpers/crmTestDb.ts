@@ -70,6 +70,8 @@ export async function cleanupCrmFixture(db: PrismaClient, prefix: string): Promi
     await tx.project.deleteMany({ where: { id: { in: projectIds } } });
     const clients = await tx.client.findMany({ where: { name: { startsWith: `${prefix} ` } }, select: { id: true } });
     const clientIds = clients.map(({ id }) => id);
+    // crm52: campaigns created by fixture users or targeting fixture clients (targets restrict client deletion).
+    await tx.careCampaign.deleteMany({ where: { OR: [{ createdById: { in: userIds } }, { targets: { some: { clientId: { in: clientIds } } } }] } });
     await tx.meeting.deleteMany({ where: { OR: [{ organizerId: { in: userIds } }, { clientId: { in: clientIds } }] } });
     await tx.task.deleteMany({ where: { OR: [{ creatorId: { in: userIds } }, { clientId: { in: clientIds } }] } });
     await tx.projectFile.deleteMany({ where: { clientId: { in: clientIds } } });

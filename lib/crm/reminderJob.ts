@@ -11,6 +11,7 @@ import { getCrmSettings } from "./settings";
 import { cadenceWeeksFor, computeTier, revenueBandFor, revenuePercentiles } from "./tier";
 import { produceMeetingDrafts } from "./touchpoints";
 import { renewalPeriodKey, renewalReminderDue, renewalTaskTitle, type RenewalKind } from "./clientHub";
+import { cadencePausedByCampaign } from "./campaignService";
 
 type NotificationCandidate = { userId: string; type: string; message: string; taskId: string | null; clientId: string | null; opportunityId: string | null; dedupeKey: string };
 export type CrmReminderJobSummary = {
@@ -150,7 +151,8 @@ export async function runCrmReminderJob(db: PrismaClient, opts: { now: Date; bud
       const { tier } = computeTier({ potentialLevel: client.potentialLevel, revenueBand: band?.key ?? null, matrix: settings.tierMatrix, scale: settings.potentialScale });
       const cadenceWeeks = cadenceWeeksFor(tier, settings.cadenceWeeks);
       const cadence = { lastConfirmedAt: last?.occurredAt ?? null, clientCreatedAt: client.createdAt, cadenceWeeks, hasOpenCrmTask: openTasks.some(task => REVIEW_WINDOW_KINDS.some(kind => kind === task.crmKind)), hasActiveEventStepInWindow: !!await tx.reminderStep.count({ where: { status: { in: ["PLANNED", "OPEN"] }, dueDate: { lt: week.end }, expectedEvent: { clientId, status: "ACTIVE" } } }), weekEnd: week.end };
-      if (!close && isCadenceDue(cadence)) {
+      // crm52: a running campaign with "pause cadence" on and an open step for this client holds the cadence task; event reminders are unaffected.
+      if (!close && isCadenceDue(cadence) && !await cadencePausedByCampaign(tx, clientId)) {
         const dueDate = nextCadenceDueDate(cadence.lastConfirmedAt, client.createdAt, cadenceWeeks);
         await periodTask("CADENCE", { dueDate, periodKey: cadencePeriodKey(dueDate) });
         openTasks = await readTasks();

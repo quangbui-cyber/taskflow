@@ -5,6 +5,7 @@ import { crmCan, type CrmActor } from "./policy";
 import { OPPORTUNITY_OUTCOMES, OPPORTUNITY_STAGES } from "./labels";
 import { canAdvance, canClose, defaultOpportunityName, validateOpenOpportunityInput, validOpportunityMoney } from "./opportunityStage";
 import { crmDeniedForUser } from "./access";
+import { stopCampaignTargetsOnOpportunity } from "./campaignService";
 
 type Actor = CrmActor & { name: string };
 type WorkflowError = { error: string; fieldErrors?: Record<string, string> };
@@ -61,6 +62,8 @@ export async function openOpportunityTx(tx: Prisma.TransactionClient, actor: Act
   const userIds = [...new Set([actor.id, pic?.userId].filter((id): id is string => !!id))];
   await tx.opportunityMember.createMany({ data: userIds.map((userId) => ({ opportunityId: opportunity.id, userId })) });
   await tx.opportunityStageEvent.create({ data: { opportunityId: opportunity.id, fromStage: null, toStage: "CARE", actorId: actor.id, actorName: actor.name, note: "Mở Cơ hội ở Chăm sóc" } });
+  // crm52: an Opportunity opened during a care campaign stops that client’s remaining campaign steps.
+  await stopCampaignTargetsOnOpportunity(tx, input.clientId);
   return { ok: true, opportunityId: opportunity.id, version: opportunity.version };
 }
 

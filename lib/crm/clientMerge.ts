@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { clientNameKey } from "../clientCatalog";
 import { crmCan, type CrmActor } from "./policy";
 import { PLAYBOOK_FIELDS, playbookHistoryValue } from "./clientHub";
+import { moveCampaignTargetsOnMerge } from "./campaignService";
 
 export function clientDuplicateKey(name: string): string {
   const key = name.normalize("NFKC").toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").replace(/đ/g, "d")
@@ -75,7 +76,9 @@ export type MergeClientsInput = { sourceClientId: string; targetClientId: string
 export type MergeMovedCounts = { projects: number; opportunities: number; expectedEvents: number; buyingUnitsMoved: number; buyingUnitsMerged: number; touchpoints: number; touchpointCollisions: number; tasks: number; files: number; meetings: number; potentialScores: number; cadenceMoved: number; cadenceDropped: number; trackerRows: number; notifications: number; driveFoldersRekeyed: boolean;
   aliasesMoved: number; aliasesDropped: number; sourceNameAlias: boolean; tagsMoved: number; competitorsMoved: number; competitorsMerged: number; childClients: number; fieldChanges: number;
   /** crm53: playbook fields filled from the source because the target was empty, and section "updated by" rows moved. */
-  playbookFields?: number; playbookSections?: number };
+  playbookFields?: number; playbookSections?: number;
+  /** crm52: present only when the source client was in a care campaign. */
+  campaignTargetsMoved?: number; campaignTargetsMerged?: number };
 type MergeResult = { ok: true; movedCounts: MergeMovedCounts; sourceClientName: string; targetClientName: string } | { error: string };
 const STALE = "Dữ liệu vừa được người khác cập nhật. Tải lại trang để xem bản mới.";
 
@@ -188,6 +191,10 @@ export async function mergeClients(db: PrismaClient, actor: CrmActor & { name: s
         }
       }
     }
+    // crm52: campaign targets follow the kept client; a duplicate target in the same campaign is folded in.
+    const campaign = await moveCampaignTargetsOnMerge(tx, source.id, target.id);
+    if (campaign.moved) counts.campaignTargetsMoved = campaign.moved;
+    if (campaign.merged) counts.campaignTargetsMerged = campaign.merged;
     await tx.client.delete({ where: { id: source.id } });
     await tx.clientMergeLog.create({ data: { sourceClientId: source.id, sourceClientName: source.name, targetClientId: target.id, movedCounts: counts, actorId: actor.id, actorName: actor.name } });
     return { ok: true, movedCounts: counts, sourceClientName: source.name, targetClientName: target.name };

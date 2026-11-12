@@ -30,7 +30,7 @@ type ReviewTask = { id: string; dueDate: Date | null; crmKind: string | null; es
 export function reviewReasonFor(task: Pick<ReviewTask, "crmKind" | "escalatedAt"> | null, planClose: boolean): keyof typeof REVIEW_REASON_LABELS {
   if (task?.escalatedAt) return "ESCALATED";
   if (!task) return planClose ? "PLAN_CLOSE" : "NEXT_STEP";
-  return ["APPOINTMENT", "EVENT_REMINDER", "VERIFY_MONTH", "CADENCE", "WAIT", "NEXT_STEP"].includes(task.crmKind ?? "") ? task.crmKind as keyof typeof REVIEW_REASON_LABELS : "NEXT_STEP";
+  return ["APPOINTMENT", "EVENT_REMINDER", "VERIFY_MONTH", "CADENCE", "WAIT", "NEXT_STEP", "CAMPAIGN"].includes(task.crmKind ?? "") ? task.crmKind as keyof typeof REVIEW_REASON_LABELS : "NEXT_STEP";
 }
 export function toReviewItem(input: { clientId: string; tier: TierValue; task: ReviewTask | null; budgetSeasonMonth: number | null }, now: Date): ReviewItem {
   const month = vietnamYearMonth(now).month;
@@ -48,6 +48,7 @@ export type ReviewRow = {
   opportunity: { id: string; name: string } | null;
   pic: { accountId: string; name: string; userId: string | null } | null;
   assignee: { id: string; name: string } | null; dueDate: Date | null; taskId: string | null;
+  campaignTask?: boolean;
   prefill: { clientId: string; opportunityId: string | null; completeTaskId: string | null; title: string | null; nextDueDate: string | null; assigneeId: string | null };
   can: { logResult: boolean; assign: boolean; postpone: boolean; escalate: boolean; assignPic: boolean };
 };
@@ -84,27 +85,62 @@ async function loadReviewCore(db: PrismaClient, actor: CrmActor, raw: ReviewRawF
   ]);
   const ctx = { managedTeamIds: actor.managedTeamIds, accountTeamId: account?.teamId ?? null, accountId: actor.accountId, teamIds: teams.map((t) => t.id) };
   const teamFilters = resolveReviewFilters(raw, ctx);
+  // Campaign assignment belongs to the task/target, independently of the client's original PIC and team.
+  const campaignLinks = await db.careCampaignTask.findMany({
+    where: {
+      task: { status: OPEN_TASK_STATUS_FILTER, crmKind: "CAMPAIGN", projectId: null, client: { archivedAt: null } },
+      AND: [
+        ...(actor.role === "ADMIN" ? [] : [{ OR: [
+          { task: { assigneeId: actor.id } }, { target: { campaign: { teamId: { in: actor.managedTeamIds } } } },
+        ] }]),
+        ...(teamFilters.teamId ? [{ target: { OR: [
+          { campaign: { teamId: teamFilters.teamId } },
+          { campaign: { teamId: null }, picAccount: { teamId: teamFilters.teamId } },
+        ] } }] : []),
+      ],
+    },
+    select: { taskId: true, task: { select: { clientId: true } }, target: { select: { picAccountId: true, picAccount: { select: { id: true, name: true } } } } },
+  });
   const picRows = full ? await db.client.findMany({ where: careScope(teamFilters.teamId), distinct: ["picAccountId"], select: { picAccount: { select: { id: true, name: true } } } }) : [];
-  const pics = picRows.flatMap((c) => c.picAccount ? [{ accountId: c.picAccount.id, name: c.picAccount.name }] : []).sort((a, b) => a.name.localeCompare(b.name, "vi") || a.accountId.localeCompare(b.accountId));
+  const pics = [...new Map([...picRows, ...campaignLinks.map((l) => l.target)].flatMap((c) => c.picAccount ? [[c.picAccount.id, { accountId: c.picAccount.id, name: c.picAccount.name }] as const] : [])).values()]
+    .sort((a, b) => a.name.localeCompare(b.name, "vi") || a.accountId.localeCompare(b.accountId));
   const requestedPic = typeof raw.pic === "string" && raw.pic.length <= 64 && !["all", "me"].includes(raw.pic) ? raw.pic : null;
   const picAccountIds = full ? pics.map((p) => p.accountId) : requestedPic ? (await db.account.findMany({ where: { id: requestedPic }, select: { id: true } })).map((p) => p.id) : [];
   const filters = resolveReviewFilters(raw, { ...ctx, picAccountIds });
   const picScope = filters.pic === "me" ? { picAccountId: actor.accountId } : filters.pic !== "all" ? { picAccountId: filters.pic } : {};
-  const clients = (await db.client.findMany({ where: { AND: [careScope(filters.teamId), picScope] }, select: clientSelect }))
-    .filter((c) => clientInCare({ picAccountId: c.picAccountId, openOpportunityCount: c._count.clientOpportunities, activeEventCount: c._count.clientExpectedEvents, importStatus: c.importStatus }));
+  const campaignTasks = new Set(campaignLinks.filter((l) => filters.pic === "all" || l.target.picAccountId === (filters.pic === "me" ? actor.accountId : filters.pic)).map((l) => l.taskId));
+  const campaignClientIds = [...new Set(campaignLinks.filter((l) => campaignTasks.has(l.taskId)).flatMap((l) => l.task.clientId ? [l.task.clientId] : []))];
+  const [nativeClients, assignedClients] = await Promise.all([
+    db.client.findMany({ where: { AND: [careScope(filters.teamId), picScope] }, select: clientSelect }),
+    campaignClientIds.length ? db.client.findMany({ where: { id: { in: campaignClientIds }, archivedAt: null }, select: clientSelect }) : [],
+  ]);
+  const nativeIds = new Set(nativeClients.filter((c) => clientInCare({ picAccountId: c.picAccountId, openOpportunityCount: c._count.clientOpportunities, activeEventCount: c._count.clientExpectedEvents, importStatus: c.importStatus })).map((c) => c.id));
+  const clients = [...new Map([...nativeClients.filter((c) => nativeIds.has(c.id)), ...assignedClients].map((c) => [c.id, c])).values()];
   const clientIds = clients.map((c) => c.id);
   const [tasks, touches, revenue, settings] = await Promise.all([
     db.task.findMany({
       where: { status: OPEN_TASK_STATUS_FILTER, OR: [{ clientId: { in: clientIds } }, { opportunity: { clientId: { in: clientIds }, outcome: null } }] },
-      select: { id: true, title: true, clientId: true, opportunityId: true, dueDate: true, crmKind: true, escalatedAt: true, creatorId: true, assigneeId: true, assignee: { select: { id: true, name: true } }, opportunity: { select: { id: true, name: true, clientId: true, outcome: true, responsibleTeamId: true, picAccount: { select: accountSelect }, buyingUnit: { select: { name: true } } } }, reminderTask: { where: { status: { in: ["OPEN", "PLANNED"] } }, orderBy: [{ dueDate: "asc" }, { id: "asc" }], select: { expectedEvent: { select: { source: true } } } } },
+      select: { id: true, title: true, clientId: true, opportunityId: true, dueDate: true, crmKind: true, escalatedAt: true, creatorId: true, assigneeId: true, assignee: { select: { id: true, name: true } }, opportunity: { select: { id: true, name: true, clientId: true, outcome: true, responsibleTeamId: true, picAccount: { select: accountSelect }, buyingUnit: { select: { name: true } } } }, reminderTask: { where: { status: { in: ["OPEN", "PLANNED"] } }, orderBy: [{ dueDate: "asc" }, { id: "asc" }], select: { expectedEvent: { select: { source: true } } } }, careCampaignTask: { select: { target: { select: { campaign: { select: { name: true } } } } } } },
       orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }, { id: "asc" }],
     }),
     db.touchpoint.findMany({ where: { clientId: { in: clientIds }, status: "CONFIRMED" }, select: { clientId: true, occurredAt: true, kind: true, outcomeLevel: true }, orderBy: [{ occurredAt: "desc" }, { id: "desc" }], distinct: ["clientId"] }),
     // Phân vị hạng dùng cùng tập doanh thu toàn công ty như hồ sơ khách, không đổi khi lọc PIC/team.
     loadClientRevenue24m(db, now), getCrmSettings(db),
   ]);
+  const clientById = new Map(clients.map((c) => [c.id, c]));
+  const ownCampaignClients = new Set(tasks.filter((t) => campaignTasks.has(t.id) && t.assigneeId === actor.id).flatMap((t) => t.clientId ? [t.clientId] : []));
   const nextTasks = new Map<string, typeof tasks[number]>();
-  for (const task of tasks) { const clientId = task.clientId ?? task.opportunity?.clientId; if (clientId && !nextTasks.has(clientId)) nextTasks.set(clientId, task); }
+  for (const task of tasks) {
+    const clientId = task.clientId ?? task.opportunity?.clientId;
+    if (!clientId || (task.crmKind === "CAMPAIGN" ? !campaignTasks.has(task.id) : !nativeIds.has(clientId))) continue;
+    if (task.crmKind !== "CAMPAIGN" && ownCampaignClients.has(clientId)) {
+      const clientOwner = clientResource(clientById.get(clientId)!);
+      const opp = task.opportunity;
+      const owner: CrmOwnerResource = opp ? { kind: "OPPORTUNITY", picUserId: opp.picAccount?.userId ?? null, teamId: opp.responsibleTeamId ?? opp.picAccount?.teamId ?? clientOwner.teamId, closed: opp.outcome !== null } : clientOwner;
+      if (!crmCan(actor, "LOG_TOUCHPOINT", { kind: "TASK", owner, assigneeId: task.assigneeId, creatorId: task.creatorId })) continue;
+    }
+    if (!nextTasks.has(clientId)) nextTasks.set(clientId, task);
+  }
   const latest = new Map(touches.map((t) => [t.clientId, t]));
   const percentiles = revenuePercentiles(revenue);
   const tierByClient = new Map(clients.map((c) => {
@@ -113,7 +149,6 @@ async function loadReviewCore(db: PrismaClient, actor: CrmActor, raw: ReviewRawF
   }));
   const items = clients.map((c) => toReviewItem({ clientId: c.id, tier: tierByClient.get(c.id)!.tier, task: nextTasks.get(c.id) ?? null, budgetSeasonMonth: c.budgetSeasonMonth }, now));
   const grouped = review.buildReviewGroups(items, settings.reviewPriority, now);
-  const clientById = new Map(clients.map((c) => [c.id, c]));
   const groups = Object.fromEntries((Object.keys(grouped) as ReviewGroup[]).map((group) => [group, grouped[group].map((item): ReviewRow => {
     const client = clientById.get(item.clientId)!;
     const task = nextTasks.get(client.id) ?? null; const opp = task?.opportunity ?? null;
@@ -126,11 +161,12 @@ async function loadReviewCore(db: PrismaClient, actor: CrmActor, raw: ReviewRawF
     return {
       key: item.key, group,
       client: { id: client.id, name: client.name, version: client.version, tier: item.tier, buyingUnitName: opp?.buyingUnit?.name ?? null },
-      reason: { key: reasonKey, label: REVIEW_REASON_LABELS[reasonKey], sourceLabel: EVENT_SOURCES.find((s) => s.key === source)?.label ?? null, sentence: task?.title ?? "Chưa có bước tiếp theo", lateDays: group === "OVERDUE" && task?.dueDate ? Math.floor((vnDayStart(now).getTime() - vnDayStart(task.dueDate).getTime()) / 86400000) : null },
+      reason: { key: reasonKey, label: reasonKey === "CAMPAIGN" && task?.careCampaignTask ? `Chiến dịch ${task.careCampaignTask.target.campaign.name}` : REVIEW_REASON_LABELS[reasonKey], sourceLabel: EVENT_SOURCES.find((s) => s.key === source)?.label ?? null, sentence: task?.title ?? "Chưa có bước tiếp theo", lateDays: group === "OVERDUE" && task?.dueDate ? Math.floor((vnDayStart(now).getTime() - vnDayStart(task.dueDate).getTime()) / 86400000) : null },
       lastTouch: touch ? { date: touch.occurredAt, kindLabel: TOUCHPOINT_KINDS.find((k) => k.key === touch.kind)?.label ?? touch.kind, outcomeLabel: OUTCOME_LEVELS.find((level) => level.key === touch.outcomeLevel)?.label ?? null } : null,
       opportunity: opp ? { id: opp.id, name: opp.name } : null,
       pic: client.picAccount ? { accountId: client.picAccount.id, name: client.picAccount.name, userId: client.picAccount.userId } : null,
       assignee: task?.assignee ?? null, dueDate: task?.dueDate ?? null, taskId: task?.id ?? null,
+      campaignTask: task?.crmKind === "CAMPAIGN",
       prefill: reviewPrefill({ clientId: client.id, opportunityId: opp?.id ?? null, taskId: task?.id ?? null, taskAssigneeId: task?.assigneeId ?? null, picUserId: client.picAccount?.userId ?? null, tier: item.tier, cadenceWeeks: settings.cadenceWeeks }, now),
       can: { logResult: crmCan(actor, "LOG_TOUCHPOINT", owner) || !!taskOwner && crmCan(actor, "LOG_TOUCHPOINT", taskOwner), assign: crmCan(actor, "ASSIGN", owner), postpone: !!taskOwner && crmCan(actor, "EDIT_TASK", taskOwner), escalate: !!taskOwner && crmCan(actor, "EDIT_TASK", taskOwner), assignPic: client.picAccountId === null && crmCan(actor, "CHANGE_PIC_OR_TEAM", clientOwner) },
     };

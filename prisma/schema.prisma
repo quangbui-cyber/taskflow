@@ -103,6 +103,7 @@ model User {
   clientFieldChangeActor ClientFieldChange[]     @relation("ClientFieldChangeActor")
   clientPlaybookUpdater  ClientPlaybookUpdate[]  @relation("ClientPlaybookUpdater")
   projectFeedbackAuthor  ProjectFeedback[]       @relation("ProjectFeedbackAuthor")
+  careCampaignCreator    CareCampaign[]          @relation("CareCampaignCreator")
 
   @@index([isActive])
 }
@@ -424,6 +425,7 @@ model Client {
   brandDonts             String?
   executionNotes         String?
   clientPlaybookUpdates  ClientPlaybookUpdate[] @relation("ClientPlaybookUpdates")
+  careCampaignTargets    CareCampaignTarget[]   @relation("CareCampaignTargetClient")
 
   @@index([parentClientId])
 }
@@ -443,6 +445,7 @@ model Account {
 
   clientPic      Client[]      @relation("ClientPic")
   opportunityPic Opportunity[] @relation("OpportunityPic")
+  careCampaignPic CareCampaignTarget[] @relation("CareCampaignTargetPic")
 
   @@index([teamId])
 }
@@ -461,6 +464,7 @@ model SalesTeam {
 
   clientTeam      Client[]         @relation("ClientTeam")
   crmManagedTeam  CrmTeamManager[] @relation("CrmManagedTeam")
+  careCampaignTeam CareCampaign[]  @relation("CareCampaignTeam")
   opportunityTeam Opportunity[]    @relation("OpportunityTeam")
 }
 
@@ -616,6 +620,7 @@ model Task {
   reminderTask        ReminderStep[]    @relation("ReminderTask")
   cadenceTask         CadenceReminder[] @relation("CadenceTask")
   taskPostpones       TaskPostpone[]    @relation("TaskPostpones")
+  careCampaignTask    CareCampaignTask? @relation("CareCampaignTaskTask")
 
   @@index([opportunityId, status])
   @@index([clientId, status])
@@ -1424,6 +1429,7 @@ model Touchpoint {
   author        User?        @relation("TouchpointAuthor", fields: [authorId], references: [id], onDelete: SetNull)
   confirmedById String?
   confirmedBy   User?        @relation("TouchpointConfirmer", fields: [confirmedById], references: [id], onDelete: SetNull)
+  careCampaignTasks CareCampaignTask[] @relation("CareCampaignTaskTouchpoint")
 
   @@unique([sourceType, sourceId, clientId])
   @@index([clientId, status, occurredAt])
@@ -1685,4 +1691,81 @@ model ProjectFeedback {
   project     Project @relation("ProjectFeedback", fields: [projectId], references: [id], onDelete: Cascade)
   createdById String?
   createdBy   User?   @relation("ProjectFeedbackAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+}
+
+// crm52: mẫu chiến dịch chăm sóc do Admin quản lý; bước chỉ ghi việc, không lưu giá trị quà (G-LEGAL).
+model CareCampaignTemplate {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  steps       Json
+  active      Boolean  @default(true)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// crm52: chiến dịch chăm sóc một nhóm khách. steps/options/filter là bản chụp lúc lưu; chỉ tạo việc cho người làm, không gửi email.
+model CareCampaign {
+  id                  String    @id @default(cuid())
+  name                String
+  goal                String?
+  targetOpportunities Int?
+  status              String    @default("DRAFT") // DRAFT | ACTIVE | PAUSED | DONE | CANCELLED
+  startDate           DateTime
+  endDate             DateTime?
+  steps               Json
+  options             Json
+  filter              Json
+  assignments         Json      @default("{}")
+  launchedAt          DateTime?
+  pausedAt            DateTime?
+  closedAt            DateTime?
+  version             Int       @default(0)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  teamId      String?
+  team        SalesTeam?           @relation("CareCampaignTeam", fields: [teamId], references: [id], onDelete: SetNull)
+  createdById String?
+  createdBy   User?                @relation("CareCampaignCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  targets     CareCampaignTarget[] @relation("CareCampaignTargets")
+
+  @@index([status])
+  @@index([teamId])
+}
+
+model CareCampaignTarget {
+  id            String    @id @default(cuid())
+  status        String    @default("ACTIVE") // ACTIVE | STOPPED | DONE
+  stoppedReason String?
+  stoppedAt     DateTime?
+  createdAt     DateTime  @default(now())
+
+  campaignId   String
+  campaign     CareCampaign       @relation("CareCampaignTargets", fields: [campaignId], references: [id], onDelete: Cascade)
+  clientId     String
+  client       Client             @relation("CareCampaignTargetClient", fields: [clientId], references: [id], onDelete: Restrict)
+  picAccountId String?
+  picAccount   Account?           @relation("CareCampaignTargetPic", fields: [picAccountId], references: [id], onDelete: SetNull)
+  tasks        CareCampaignTask[] @relation("CareCampaignTargetTasks")
+
+  @@unique([campaignId, clientId])
+  @@index([clientId, status])
+}
+
+model CareCampaignTask {
+  id        String   @id @default(cuid())
+  stepIndex Int
+  createdAt DateTime @default(now())
+
+  targetId     String
+  target       CareCampaignTarget @relation("CareCampaignTargetTasks", fields: [targetId], references: [id], onDelete: Cascade)
+  taskId       String             @unique
+  task         Task               @relation("CareCampaignTaskTask", fields: [taskId], references: [id], onDelete: Cascade)
+  touchpointId String?
+  touchpoint   Touchpoint?        @relation("CareCampaignTaskTouchpoint", fields: [touchpointId], references: [id], onDelete: SetNull)
+
+  @@unique([targetId, stepIndex])
+  @@index([touchpointId])
 }

@@ -5,6 +5,7 @@ import { lockOpportunity, openOpportunityTx } from "./opportunityWorkflow";
 import { validateOpenOpportunityInput, type OpenOpportunityInput } from "./opportunityStage";
 import { TOUCHPOINT_KINDS } from "./labels";
 import { crmDeniedForUser } from "./access";
+import { linkCampaignTouchpoint } from "./campaignService";
 
 type Actor = CrmActor & { name: string };
 type Failure = { error: string; fieldErrors?: Record<string, string> };
@@ -118,7 +119,12 @@ export async function logTouchpoint(db: PrismaClient, actor: Actor, raw: unknown
       clientId: opportunityId ? null : input.clientId, opportunityId, status: "TODO",
       crmKind: input.next.mode === "WAIT" ? "WAIT" : input.outcomeLevel === 3 ? "APPOINTMENT" : "NEXT_STEP",
     } });
-    if (completeTask) await tx.task.update({ where: { id: completeTask.id }, data: { status: "DONE", completedAt: now } });
+    if (completeTask) {
+      // crm52: a campaign step completed here records its touchpoint for the campaign funnel; an Opportunity opened in the same
+      // save may have just closed the other open steps, but this one is the step being done.
+      const campaignStep = await linkCampaignTouchpoint(tx, completeTask.id, touchpoint.id);
+      await tx.task.update({ where: { id: completeTask.id }, data: { status: "DONE", completedAt: now, ...(campaignStep ? { closedReason: null } : {}) } });
+    }
     return { ok: true, touchpointId: touchpoint.id, openedOpportunityId, ...(assigneeId === actor.id ? {} : { notice: { userId: assigneeId, taskId: task.id, title: task.title, ownerName, opportunityId } }) };
   });
   if ("ok" in result && result.notice) {

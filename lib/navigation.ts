@@ -4,7 +4,7 @@
 
 export type ActiveSection =
   | "home"
-  | "crm" | "crmClients" | "crmOpportunities" | "crmPipeline" | "crmImport"
+  | "crm" | "crmClients" | "crmOpportunities" | "crmCampaigns" | "crmPipeline" | "crmImport"
   | "tasks"
   | "meetings"
   | "documents"
@@ -73,6 +73,7 @@ export const HUBS: Hub[] = [
       { key: "crm", label: "Review tuần", href: "/crm" },
       { key: "crmClients", label: "Khách hàng", href: "/crm/clients" },
       { key: "crmOpportunities", label: "Cơ hội", href: "/crm/opportunities" },
+      { key: "crmCampaigns", label: "Chiến dịch", href: "/crm/campaigns" },
       { key: "crmPipeline", label: "Pipeline và hiệu quả", href: "/crm/pipeline" },
       { key: "crmImport", label: "Nhập dữ liệu tracker", href: "/crm/import", visible: (f) => !!f.showCrmImport },
     ],
