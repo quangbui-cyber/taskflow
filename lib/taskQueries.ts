@@ -12,9 +12,10 @@ export function assignedByMeOpenWhere(userId: string, crmOn = crmEnabled()): Pri
   return { creatorId: userId, assigneeId: { not: null }, NOT: { assigneeId: userId }, status: OPEN_TASK_STATUS_FILTER, AND: [openTaskOwnerScope(userId, crmOn)] };
 }
 export function teamMemberOpenTasksWhere(userId: string, crmOn = crmEnabled()): Prisma.TaskWhereInput { return myOpenTasksWhere(userId, crmOn); }
-export function digestCrmTasksWhere(range: { start: Date; end: Date }, crmOn = crmEnabled()): Prisma.TaskWhereInput {
+/** crm54: allowedAssigneeIds limits CRM reminders to users who may use CRM; omitted keeps the earlier scope. */
+export function digestCrmTasksWhere(range: { start: Date; end: Date }, crmOn = crmEnabled(), allowedAssigneeIds?: readonly string[]): Prisma.TaskWhereInput {
   if (!crmOn) return { id: "__none__" };
-  return { status: OPEN_TASK_STATUS_FILTER, dueDate: { lt: range.end }, assigneeId: { not: null }, assignee: { isActive: true }, OR: [{ clientId: { not: null } }, { opportunity: { outcome: null } }] };
+  return { status: OPEN_TASK_STATUS_FILTER, dueDate: { lt: range.end }, assigneeId: allowedAssigneeIds ? { in: [...allowedAssigneeIds] } : { not: null }, assignee: { isActive: true }, OR: [{ clientId: { not: null } }, { opportunity: { outcome: null } }] };
 }
 export const taskOwnerSelect = { projectId: true, opportunityId: true, clientId: true, project: { select: { id: true, name: true, color: true, status: true } }, opportunity: { select: { id: true, name: true } }, client: { select: { id: true, name: true } } } as const;
 export type TaskOwnerDisplay = { kind: WorkOwnerKind; id: string; name: string; color: string | null };

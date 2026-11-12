@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { after } from "next/server";
 import { deliverPush } from "@/lib/webPush";
 import { crmEnabled } from "./features";
+import { filterCrmAllowedUserIds } from "./crm/access";
 
 /** Tạo thông báo cho nhiều người nhận (tự loại trùng và loại bỏ id rỗng) */
 export async function notify(
@@ -58,8 +59,11 @@ export async function notify(
     if (unique.length === 0) return;
   } else if (data.clientId || data.opportunityId) {
     if (!crmEnabled()) return;
-    const active = await prisma.user.findMany({ where: { id: { in: unique }, isActive: true }, select: { id: true } });
-    unique = active.map(({ id }) => id);
+    // crm54: only Admins and listed, active users receive CRM notifications.
+    unique = await filterCrmAllowedUserIds(prisma, unique);
+    if (!unique.length) return;
+  } else if (data.type.startsWith("CRM_") && crmEnabled()) {
+    unique = await filterCrmAllowedUserIds(prisma, unique);
     if (!unique.length) return;
   }
 

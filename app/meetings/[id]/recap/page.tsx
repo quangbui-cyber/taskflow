@@ -7,7 +7,8 @@ import RecapActionItems, { type RecapActionItemView } from "@/components/RecapAc
 import Sidebar from "@/components/Sidebar";
 import MeetingDraftTouchpoint from "@/components/crm/MeetingDraftTouchpoint";
 import { requireUser } from "@/lib/auth";
-import { meetingRecapsEnabled, meetingsEnabled, crmEnabled } from "@/lib/features";
+import { meetingRecapsEnabled, meetingsEnabled } from "@/lib/features";
+import { crmAllowed } from "@/lib/crm/access";
 import { loadCrmOwnerTargets } from "@/lib/crm/ownerTargets";
 import { loadClientResource, loadCrmActor } from "@/lib/crm/actor";
 import { loadTouchpointDialogOptions } from "@/lib/crm/dialogOptions";
@@ -93,7 +94,7 @@ export default async function MeetingRecapPage({
   const owner = ownerOrNull(meeting);
   const ownerName = meeting.project?.name ?? meeting.opportunity?.name ?? meeting.client?.name;
   const ownerLabel = owner?.kind === "CLIENT" ? "Khách hàng" : owner?.kind === "OPPORTUNITY" ? "Cơ hội" : "Dự án";
-  const crmOn = crmEnabled();
+  const crmOn = await crmAllowed(user);
   const recap = meeting.recap;
   const readable = canReadMeetingRecap(meeting, recap, user);
   const canSeeDraft = Boolean(recap?.sentAt) && (canManage || readable) && (owner?.kind === "CLIENT" || owner?.kind === "OPPORTUNITY");

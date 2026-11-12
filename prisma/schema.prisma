@@ -82,23 +82,27 @@ model User {
   creativeArticlesReviewed CreativeArticle[]        @relation("CreativeArticleReviewer")
   articleReads             ArticleReader[]
 
-  isCrmDataSteward      Boolean                 @default(false) // Phụ trách chất lượng dữ liệu CRM
-  clientPotentialScorer Client[]                @relation("ClientPotentialScorer")
-  potentialScorer       ClientPotentialScore[]  @relation("PotentialScorer")
-  crmManager            CrmTeamManager[]        @relation("CrmManager")
-  opportunityCloser     Opportunity[]           @relation("OpportunityCloser")
-  opportunityCreator    Opportunity[]           @relation("OpportunityCreator")
-  opportunityStageActor OpportunityStageEvent[] @relation("OpportunityStageActor")
-  opportunityMemberUser OpportunityMember[]     @relation("OpportunityMemberUser")
-  expectedEventCreator  ExpectedEvent[]         @relation("ExpectedEventCreator")
-  touchpointAuthor      Touchpoint[]            @relation("TouchpointAuthor")
-  touchpointConfirmer   Touchpoint[]            @relation("TouchpointConfirmer")
-  postponeActor         TaskPostpone[]          @relation("PostponeActor")
-  crmSettingUpdater     CrmSetting[]            @relation("CrmSettingUpdater")
-  crmSettingChangeUser  CrmSettingChange[]      @relation("CrmSettingChangeUser")
-  trackerImportActor    TrackerImportRun[]      @relation("TrackerImportActor")
-  trackerResolver       TrackerImportRow[]      @relation("TrackerResolver")
-  clientMergeActor      ClientMergeLog[]        @relation("ClientMergeActor")
+  isCrmDataSteward       Boolean                 @default(false) // Phụ trách chất lượng dữ liệu CRM
+  clientPotentialScorer  Client[]                @relation("ClientPotentialScorer")
+  potentialScorer        ClientPotentialScore[]  @relation("PotentialScorer")
+  crmManager             CrmTeamManager[]        @relation("CrmManager")
+  opportunityCloser      Opportunity[]           @relation("OpportunityCloser")
+  opportunityCreator     Opportunity[]           @relation("OpportunityCreator")
+  opportunityStageActor  OpportunityStageEvent[] @relation("OpportunityStageActor")
+  opportunityMemberUser  OpportunityMember[]     @relation("OpportunityMemberUser")
+  expectedEventCreator   ExpectedEvent[]         @relation("ExpectedEventCreator")
+  touchpointAuthor       Touchpoint[]            @relation("TouchpointAuthor")
+  touchpointConfirmer    Touchpoint[]            @relation("TouchpointConfirmer")
+  postponeActor          TaskPostpone[]          @relation("PostponeActor")
+  crmSettingUpdater      CrmSetting[]            @relation("CrmSettingUpdater")
+  crmSettingChangeUser   CrmSettingChange[]      @relation("CrmSettingChangeUser")
+  trackerImportActor     TrackerImportRun[]      @relation("TrackerImportActor")
+  trackerResolver        TrackerImportRow[]      @relation("TrackerResolver")
+  clientMergeActor       ClientMergeLog[]        @relation("ClientMergeActor")
+  clientArchiver         Client[]                @relation("ClientArchiver")
+  clientFieldChangeActor ClientFieldChange[]     @relation("ClientFieldChangeActor")
+  clientPlaybookUpdater  ClientPlaybookUpdate[]  @relation("ClientPlaybookUpdater")
+  projectFeedbackAuthor  ProjectFeedback[]       @relation("ProjectFeedbackAuthor")
 
   @@index([isActive])
 }
@@ -168,6 +172,7 @@ model Project {
   sourceOpportunityId String?      @unique
   sourceOpportunity   Opportunity? @relation("ProjectSourceOpportunity", fields: [sourceOpportunityId], references: [id], onDelete: SetNull)
   programType         ProgramType  @relation(fields: [type], references: [code], onDelete: Restrict, onUpdate: Cascade)
+  feedback            ProjectFeedback? @relation("ProjectFeedback")
 
   @@index([status, onProcessAt])
   @@index([status, completedAt])
@@ -383,6 +388,44 @@ model Client {
   clientCadences        CadenceReminder[]      @relation("ClientCadences")
   clientTouchpoints     Touchpoint[]           @relation("ClientTouchpoints")
   trackerMatchedClient  TrackerImportRow[]     @relation("TrackerMatchedClient")
+
+  // crm50: hồ sơ công ty, mọi trường không bắt buộc.
+  taxCode            String?             @unique
+  legalName          String?
+  shortName          String?
+  website            String?
+  address            String?
+  parentClientId     String?
+  parentClient       Client?             @relation("ClientParent", fields: [parentClientId], references: [id], onDelete: SetNull)
+  childClients       Client[]            @relation("ClientParent")
+  acquisitionSource  String?
+  referredBy         String?
+  notes              String?
+  archivedAt         DateTime?
+  archivedReason     String?
+  archivedById       String?
+  archivedBy         User?               @relation("ClientArchiver", fields: [archivedById], references: [id], onDelete: SetNull)
+  clientAliases      ClientAlias[]       @relation("ClientAliases")
+  clientTagLinks     ClientTagLink[]     @relation("ClientTagLinks")
+  clientCompetitors  ClientCompetitor[]  @relation("ClientCompetitors")
+  clientFieldChanges ClientFieldChange[] @relation("ClientFieldChanges")
+
+  // crm53: sổ tay làm việc, mọi trường không bắt buộc, văn bản tối đa 1000 ký tự.
+  vendorStatus           String? // NOT_REGISTERED | IN_PROGRESS | REGISTERED | EXPIRED
+  vendorRegisteredUntil  DateTime?
+  frameworkContractUntil DateTime?
+  quotesRequired         Int?
+  approvalFlow           String?
+  paymentTermsText       String?
+  paymentPractice        String?
+  invoiceNotes           String?
+  brandGuidelineUrl      String?
+  brandDos               String?
+  brandDonts             String?
+  executionNotes         String?
+  clientPlaybookUpdates  ClientPlaybookUpdate[] @relation("ClientPlaybookUpdates")
+
+  @@index([parentClientId])
 }
 
 // Danh mục account (đầu mối phụ trách) — do admin tạo sẵn
@@ -1256,6 +1299,7 @@ model Opportunity {
   opportunityStageEvents       OpportunityStageEvent[] @relation("OpportunityStageEvents")
   opportunityMembers           OpportunityMember[]     @relation("OpportunityMembers")
   opportunityTouchpoints       Touchpoint[]            @relation("OpportunityTouchpoints")
+  opportunityCompetitors       OpportunityCompetitor[] @relation("OpportunityCompetitors")
   programTypeCode              String
   programType                  ProgramType             @relation(fields: [programTypeCode], references: [code], onDelete: Restrict)
 
@@ -1518,4 +1562,127 @@ model ClientMergeLog {
 
   actorId String?
   actor   User?   @relation("ClientMergeActor", fields: [actorId], references: [id], onDelete: SetNull)
+}
+
+// crm50: tên gọi khác, key theo clientDuplicateKey.
+model ClientAlias {
+  id        String   @id @default(cuid())
+  name      String
+  key       String   @unique
+  createdAt DateTime @default(now())
+
+  clientId String
+  client   Client @relation("ClientAliases", fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+}
+
+// crm50: danh mục nhãn khách do Admin quản lý; tắt thay vì xóa.
+model ClientTag {
+  id        String   @id @default(cuid())
+  label     String   @unique
+  active    Boolean  @default(true)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  clientTagLinks ClientTagLink[] @relation("ClientTagLinkTag")
+}
+
+model ClientTagLink {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  clientId String
+  client   Client    @relation("ClientTagLinks", fields: [clientId], references: [id], onDelete: Cascade)
+  tagId    String
+  tag      ClientTag @relation("ClientTagLinkTag", fields: [tagId], references: [id], onDelete: Restrict)
+
+  @@unique([clientId, tagId])
+  @@index([tagId])
+}
+
+// crm50: agency/đối thủ; tắt thay vì xóa.
+model Competitor {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  clientCompetitors      ClientCompetitor[]      @relation("ClientCompetitorCompetitor")
+  opportunityCompetitors OpportunityCompetitor[] @relation("OpportunityCompetitorCompetitor")
+}
+
+model ClientCompetitor {
+  id        String    @id @default(cuid())
+  note      String?
+  since     DateTime?
+  createdAt DateTime  @default(now())
+
+  clientId     String
+  client       Client     @relation("ClientCompetitors", fields: [clientId], references: [id], onDelete: Cascade)
+  competitorId String
+  competitor   Competitor @relation("ClientCompetitorCompetitor", fields: [competitorId], references: [id], onDelete: Restrict)
+
+  @@unique([clientId, competitorId])
+  @@index([competitorId])
+}
+
+model OpportunityCompetitor {
+  id        String   @id @default(cuid())
+  isWinner  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  opportunityId String
+  opportunity   Opportunity @relation("OpportunityCompetitors", fields: [opportunityId], references: [id], onDelete: Cascade)
+  competitorId  String
+  competitor    Competitor  @relation("OpportunityCompetitorCompetitor", fields: [competitorId], references: [id], onDelete: Restrict)
+
+  @@unique([opportunityId, competitorId])
+  @@index([competitorId])
+}
+
+// crm50: lịch sử thay đổi trường hồ sơ, ghi trong cùng transaction với thay đổi.
+model ClientFieldChange {
+  id        String   @id @default(cuid())
+  field     String
+  oldValue  Json?
+  newValue  Json?
+  actorName String
+  createdAt DateTime @default(now())
+
+  clientId String
+  client   Client  @relation("ClientFieldChanges", fields: [clientId], references: [id], onDelete: Cascade)
+  actorId  String?
+  actor    User?   @relation("ClientFieldChangeActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([clientId, createdAt])
+}
+
+// crm53: người và thời điểm cập nhật từng mục sổ tay; giá trị nằm trên Client, thay đổi ghi ClientFieldChange.
+model ClientPlaybookUpdate {
+  id          String   @id @default(cuid())
+  section     String // PROCUREMENT | PAYMENT | BRAND | EXECUTION
+  updatedAt   DateTime @updatedAt
+
+  clientId    String
+  client      Client  @relation("ClientPlaybookUpdates", fields: [clientId], references: [id], onDelete: Cascade)
+  updatedById String?
+  updatedBy   User?   @relation("ClientPlaybookUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([clientId, section])
+}
+
+// crm53: đánh giá của khách sau dự án; không lưu tên hay thông tin cá nhân người đánh giá phía khách.
+model ProjectFeedback {
+  id          String   @id @default(cuid())
+  rating      Int // 1-5
+  note        String?
+  caseStudy   String   @default("NOT_ASKED") // ALLOWED | NOT_ASKED | DENIED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  projectId   String  @unique
+  project     Project @relation("ProjectFeedback", fields: [projectId], references: [id], onDelete: Cascade)
+  createdById String?
+  createdBy   User?   @relation("ProjectFeedbackAuthor", fields: [createdById], references: [id], onDelete: SetNull)
 }

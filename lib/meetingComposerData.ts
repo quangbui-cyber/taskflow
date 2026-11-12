@@ -7,7 +7,7 @@ import type {
 } from "@/components/MeetingComposer";
 import { isEmailConfigured } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
-import { crmEnabled } from "./features";
+import { crmAllowed } from "./crm/access";
 import { loadCrmActor } from "./crm/actor";
 import { loadCrmOwnerTargets } from "./crm/ownerTargets";
 import type { PickerProject, PickerCrmTargets } from "./projectPickerGroups";
@@ -29,10 +29,11 @@ export type MeetingComposerData = {
  * và lịch bận của từng người. Dùng chung cho trang Lịch họp và trang dự án.
  */
 export async function loadMeetingComposerData(now = new Date(), user?: { id: string; role: string }) {
+  const crmOn = user ? await crmAllowed(user) : false;
   const ownerOptions = user ? Promise.all([
     prisma.project.findMany({ where: user.role === "ADMIN" ? {} : { members: { some: { userId: user.id } } }, select: { id: true, name: true, status: true }, orderBy: { name: "asc" } }),
-    crmEnabled() ? loadCrmActor(user).then((actor) => loadCrmOwnerTargets(prisma, actor)) : Promise.resolve({ opportunities: [], clients: [] }),
-  ]).then(([ownerProjects, crmTargets]) => ({ ownerProjects, crmTargets, crmOn: crmEnabled() })) : Promise.resolve({ ownerProjects: [], crmTargets: { opportunities: [], clients: [] }, crmOn: false });
+    crmOn ? loadCrmActor(user).then((actor) => loadCrmOwnerTargets(prisma, actor)) : Promise.resolve({ opportunities: [], clients: [] }),
+  ]).then(([ownerProjects, crmTargets]) => ({ ownerProjects, crmTargets, crmOn })) : Promise.resolve({ ownerProjects: [], crmTargets: { opportunities: [], clients: [] }, crmOn: false });
   const [people, rooms, groups, upcomingMeetings, ownership] = await Promise.all([
     prisma.user.findMany({
       where: { isActive: true },

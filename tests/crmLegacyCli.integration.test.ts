@@ -85,7 +85,7 @@ test("CLI dry-run, explicit approval apply and rollback restore the full synthet
     assert.deepEqual(await c.dump(), before);
     const file = path.join(c.dir, "approved.txt");
     await writeFile(file, `# synthetic review only\n${f.old.id}\n${f.old.id}\n`);
-    const applied = await c.run("--apply", `--batch=${dry.batchId}`, `--approve-review-ids=${file}`);
+    const applied = await c.run("--apply", "--switch-source", `--batch=${dry.batchId}`, `--approve-review-ids=${file}`);
     assert.equal(applied.exitCode, 0, c.logs.join("\n"));
     assert.notEqual(applied.batchId, dry.batchId);
     assert.equal(await db.project.count({ where: { id: { in: [f.bid.id, f.fail.id, f.old.id] } } }), 0);
@@ -111,7 +111,7 @@ test("CLI dry-run, explicit approval apply and rollback restore the full synthet
     assertEquivalent(await c.dump(), before);
     assert.deepEqual((await getCrmSettings(db)).pipelineMode, mode);
     assert.equal((await c.report(restored)).revenueInvariant.equal, true);
-    const again = await c.dry(), reapplied = await c.run("--apply", `--batch=${again.batchId}`);
+    const again = await c.dry(), reapplied = await c.run("--apply", "--switch-source", `--batch=${again.batchId}`);
     assert.equal(reapplied.exitCode, 0);
     assert.equal(await db.project.count({ where: { id: f.old.id } }), 1);
     const moved = await db.opportunity.findUniqueOrThrow({ where: { legacyProjectId: f.bid.id } });
@@ -155,7 +155,7 @@ test("CLI detects a one-VND KPI/revenue mismatch and automatically rolls back", 
 test("CLI restores the original pipeline source after multiple batches roll back in either order", { skip: !crmTestDatabaseUrl() }, () => withFixture(async (db, f, c) => {
     const original = (await getCrmSettings(db)).pipelineMode;
     for (const reversed of [false, true]) {
-        const a = await c.dry([f.bid.id]), applyA = await c.run("--apply", `--batch=${a.batchId}`);
+        const a = await c.dry([f.bid.id]), applyA = await c.run("--apply", "--switch-source", `--batch=${a.batchId}`);
         assert.equal(applyA.exitCode, 0);
         const b = await c.dry([f.fail.id]), applyB = await c.run("--apply", `--batch=${b.batchId}`);
         assert.equal(applyB.exitCode, 0);
@@ -165,6 +165,15 @@ test("CLI restores the original pipeline source after multiple batches roll back
         assert.equal((await c.run("--rollback", `--batch=${last.batchId}`)).exitCode, 0);
         assert.deepEqual((await getCrmSettings(db)).pipelineMode, original);
     }
+}));
+test("CLI apply keeps the official report source in limited mode unless --switch-source is given", { skip: !crmTestDatabaseUrl() }, () => withFixture(async (db, f, c) => {
+    const original = (await getCrmSettings(db)).pipelineMode;
+    const dry = await c.dry([f.bid.id]), applied = await c.run("--apply", `--batch=${dry.batchId}`);
+    assert.equal(applied.exitCode, 0, c.logs.join(" | "));
+    assert.deepEqual((await getCrmSettings(db)).pipelineMode, original);
+    assert.ok(c.logs.some((s) => s.includes("--switch-source")));
+    assert.equal((await c.run("--rollback", `--batch=${applied.batchId}`)).exitCode, 0);
+    assert.deepEqual((await getCrmSettings(db)).pipelineMode, original);
 }));
 test("CLI keeps a recovery batch id when writing a post-apply report fails", { skip: !crmTestDatabaseUrl() }, () => withFixture(async (db, f, c) => {
     const dry = await c.dry([f.bid.id]);

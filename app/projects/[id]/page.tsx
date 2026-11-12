@@ -26,7 +26,8 @@ import ProjectFilesPanel from "@/components/ProjectFilesPanel";
 import ProjectFinancePanel from "@/components/ProjectFinancePanel";
 import ProjectStatusSelect from "@/components/ProjectStatusSelect";
 import MeetingComposer from "@/components/MeetingComposer";
-import { crmEnabled, financeEnabled, meetingsEnabled } from "@/lib/features";
+import { financeEnabled, meetingsEnabled } from "@/lib/features";
+import { crmAllowed } from "@/lib/crm/access";
 import { loadMeetingComposerData } from "@/lib/meetingComposerData";
 import {
   formatVND,
@@ -67,7 +68,7 @@ export default async function ProjectPage({
   const { id } = await params;
   const { tab, task: requestedTaskId, google: googleResult, chat: chatIntent } = await searchParams;
   const user = await requireUser();
-  const crmOn = crmEnabled();
+  const crmOn = await crmAllowed(user);
   const project = await prisma.project.findUnique({
     where: { id },
     include: {

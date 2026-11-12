@@ -16,7 +16,8 @@ import Brand from "@/components/Brand";
 import Avatar from "@/components/Avatar";
 import MobileSidebarMenu from "@/components/MobileSidebarMenu";
 import { canViewRevenue } from "@/lib/auth";
-import { creativeEnabled, financeEnabled, meetingsEnabled, crmEnabled } from "@/lib/features";
+import { creativeEnabled, financeEnabled, meetingsEnabled } from "@/lib/features";
+import { crmAllowed } from "@/lib/crm/access";
 import {
   HUBS,
   hubForSection,
@@ -139,7 +140,7 @@ export default async function Sidebar({
     where: { userId: user.id, read: false },
   });
   const flags = {
-    showCrm: crmEnabled(),
+    showCrm: await crmAllowed(user),
     showMeetings: meetingsEnabled(),
     showRevenue: canViewRevenue(user.role ?? ""),
     showSuppliers: financeEnabled(),

@@ -15,12 +15,14 @@ type ActionResult = { error?: string; success?: string; version?: number };
 const LABELS: Record<ManualKey, string> = { industry: "Ngành", budgetSeason: "Mùa lập ngân sách", vendorSelection: "Cách chọn nhà cung cấp", valuedMost: "Điều khách coi trọng" };
 const MANUAL = ["budgetSeason", "vendorSelection", "valuedMost"] as const;
 
-export default function ClientProfileEditors({ client, variant, canEdit = false, canScore = false, potentialScale = [], buyingUnits = [], firstHeaderMenuItem }: {
+export default function ClientProfileEditors({ client, variant, canEdit = false, canScore = false, potentialScale = [], buyingUnits = [], firstHeaderMenuItem, lastHeaderMenuItem, missing = [] }: {
   client: Client; variant: "header" | "persona" | "tier" | "buyingUnits";
   canEdit?: boolean; canScore?: boolean;
   potentialScale?: { key: string; label: string }[];
   buyingUnits?: { id: string; name: string; active: boolean; programs: string[] }[];
   firstHeaderMenuItem?: ReactNode;
+  lastHeaderMenuItem?: ReactNode;
+  missing?: string[];
 }) {
   const [menu, setMenu] = useState(false);
   const menuRoot = useRef<HTMLDivElement>(null);
@@ -81,7 +83,7 @@ export default function ClientProfileEditors({ client, variant, canEdit = false,
       }
       if (event.key === "Tab") setMenu(false);
     }}><button ref={menuTrigger} type="button" disabled={pending} className="tf-icon-button" aria-label="Thao tác khách hàng" aria-haspopup="menu" aria-expanded={menu} aria-controls={menu ? menuId : undefined} onClick={() => setMenu(value => !value)}><MoreHorizontal size={18} aria-hidden="true" /></button>
-      {menu && <div id={menuId} role="menu" aria-label="Thao tác khách hàng" className="absolute right-0 z-20 mt-2 w-64 max-w-[calc(100vw-24px)] rounded-[10px] border border-zinc-200 bg-white p-1 shadow-lg">{firstHeaderMenuItem}<button type="button" role="menuitem" disabled={pending} className="flex min-h-10 w-full items-center rounded-[8px] px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 focus:bg-zinc-100 focus:outline-none" onClick={() => begin("profile")}>Sửa thông tin</button></div>}
+      {menu && <div id={menuId} role="menu" aria-label="Thao tác khách hàng" className="absolute right-0 z-20 mt-2 w-64 max-w-[calc(100vw-24px)] rounded-[10px] border border-zinc-200 bg-white p-1 shadow-lg">{firstHeaderMenuItem}<button type="button" role="menuitem" disabled={pending} className="flex min-h-10 w-full items-center rounded-[8px] px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 focus:bg-zinc-100 focus:outline-none" onClick={() => begin("profile")}>Sửa thông tin</button>{lastHeaderMenuItem}</div>}
     </div> : <button type="button" disabled={pending} className="tf-button-secondary" onClick={() => begin("profile")}>Sửa thông tin</button>)}
     <CrmDialog open={editing === "profile"} title="Sửa thông tin" pending={pending} onClose={() => setEditing(null)}><form onSubmit={(event) => { event.preventDefault(); run(() => updateClientProfileAction({ clientId: client.id, expectedVersion, ...fields, budgetSeasonMonth: month ? Number(month) : null })); }}><fieldset disabled={pending} className="min-w-0 space-y-4">{(["industry", ...MANUAL] as const).map(field)}{monthField}{buttons}</fieldset></form></CrmDialog>
   </>;
@@ -94,7 +96,14 @@ export default function ClientProfileEditors({ client, variant, canEdit = false,
     {canEdit && !editing && <button type="button" className="tf-button-secondary" disabled={pending} onClick={() => { setUnit({ name: "", active: true }); begin("unit"); }}>Thêm đơn vị mua</button>}
     {editing === "unit" && <form onSubmit={(event) => { event.preventDefault(); run(() => saveBuyingUnitAction({ clientId: client.id, ...unit })); }}><fieldset disabled={pending} className="min-w-0 space-y-3"><label className="block text-sm">Tên đơn vị mua<input required maxLength={200} className="tf-field mt-2" value={unit.name} onChange={(event) => setUnit({ ...unit, name: event.target.value })} /></label><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={unit.active} onChange={(event) => setUnit({ ...unit, active: event.target.checked })} />Đang dùng</label>{buttons}</fieldset></form>}
   </div>;
-  return <dl className="space-y-4">{MANUAL.map((key) => <div key={key}><dt className="mb-1 text-xs text-zinc-500">{LABELS[key]}</dt><dd>
-    {editing === key ? <form onSubmit={(event) => { event.preventDefault(); run(() => updateClientProfileAction({ clientId: client.id, expectedVersion, [key]: fields[key], ...(key === "budgetSeason" ? { budgetSeasonMonth: month ? Number(month) : null } : {}) })); }}><fieldset disabled={pending} className="min-w-0 space-y-3">{field(key)}{key === "budgetSeason" && monthField}{buttons}</fieldset></form> : canEdit ? <button type="button" disabled={pending || !!editing} onClick={() => begin(key)} className={`w-full text-left text-sm ${client[key] ? "text-zinc-900" : "text-zinc-400"}`}>{client[key] || "Chưa ghi"}{key === "budgetSeason" && client.budgetSeasonMonth ? ` · Tháng ${client.budgetSeasonMonth}` : ""}</button> : <p className={`text-sm ${client[key] ? "" : "text-zinc-400"}`}>{client[key] || "Chưa ghi"}{key === "budgetSeason" && client.budgetSeasonMonth ? ` · Tháng ${client.budgetSeasonMonth}` : ""}</p>}
-  </dd></div>)}</dl>;
+  const valueText = (key: typeof MANUAL[number]) => [client[key], key === "budgetSeason" && client.budgetSeasonMonth ? `Tháng ${client.budgetSeasonMonth}` : null].filter(Boolean).join(" · ");
+  return <dl className="space-y-3">{MANUAL.map((key) => {
+    const text = valueText(key);
+    const isMissing = missing.includes(key) || key === "budgetSeason" && missing.includes("budgetSeasonMonth");
+    return <div key={key} data-persona-field={key} data-missing={isMissing || undefined} className={editing === key ? "" : "flex items-baseline justify-between gap-3"}><dt className={`text-[13px] ${editing === key ? "mb-1" : "shrink-0"} ${isMissing ? "font-semibold text-[#b86a08]" : "text-zinc-500"}`}>{LABELS[key]}</dt><dd className={editing === key ? "" : "min-w-0 text-right"}>
+    {editing === key ? <form onSubmit={(event) => { event.preventDefault(); run(() => updateClientProfileAction({ clientId: client.id, expectedVersion, [key]: fields[key], ...(key === "budgetSeason" ? { budgetSeasonMonth: month ? Number(month) : null } : {}) })); }}><fieldset disabled={pending} className="min-w-0 space-y-3">{field(key)}{key === "budgetSeason" && monthField}{buttons}</fieldset></form>
+      : canEdit ? text ? <button type="button" disabled={pending || !!editing} onClick={() => begin(key)} className="break-words text-right text-[13px] text-zinc-900 hover:underline">{text}</button>
+        : <button type="button" disabled={pending || !!editing} aria-label={`Thêm ${LABELS[key]}`} onClick={() => begin(key)} className="whitespace-nowrap text-[13px] font-semibold text-brand-700 hover:underline">+ Thêm</button>
+      : <p className={`break-words text-[13px] ${text ? "" : "text-zinc-400"}`}>{text || "Chưa ghi"}</p>}
+  </dd></div>; })}</dl>;
 }

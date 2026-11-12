@@ -4,12 +4,13 @@ import Link from "next/link";
 import { useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronUp, ChevronDown, Plus } from "lucide-react";
-import { saveCrmSettingAction, saveReasonAction, saveProgramTypeAction } from "@/app/actions/crmSettings";
+import { saveCrmSettingAction, saveReasonAction, saveProgramTypeAction, saveClientTagAction, saveCompetitorAction } from "@/app/actions/crmSettings";
 import { useInteraction } from "@/components/InteractionProvider";
 import { parseCadenceWeeks, parsePotentialScale, parseTierMatrix, parseReminderOffsets, parseReviewPriority, type TierKey, type TierValue } from "@/lib/crm/settingsSchema";
 import type { CrmSettings as Settings, CrmSettingKey } from "@/lib/crm/settings";
 import type { PrepilotSection } from "@/lib/crm/prepilot";
 import { TIER_LABELS, REVIEW_REASON_LABELS, REASON_GROUP_LABELS } from "@/lib/crm/labels";
+import { emptyPersonaDepth, parsePersonaDepth, personaDepthConfigured, PERSONA_FIELDS, PERSONA_FIELD_LABELS, PERSONA_TIERS, type PersonaField } from "@/lib/crm/personaDepth";
 
 export type CrmChange = { id: string; key: string; createdAt: string; userName: string; oldValue: unknown; newValue: unknown };
 type Reason = { id: string; group: string; label: string; requiresNote: boolean; active: boolean; order: number };
@@ -19,11 +20,12 @@ const field = "tf-field min-w-0";
 const SAVE_FAILED = "Không lưu được cấu hình. Vui lòng thử lại.";
 const HISTORY_LABELS: Record<string, string> = {
   ...TIER_LABELS, ...REVIEW_REASON_LABELS, ...REASON_GROUP_LABELS,
-  TIER: "Hạng khách", key: "Mã", label: "Tên", code: "Mã", color: "Màu",
+  TIER: "Hạng khách", key: "Mã", label: "Tên", name: "Tên", code: "Mã", color: "Màu",
   active: "Đang dùng", requiresNote: "Bắt buộc ghi chú", group: "Nhóm",
   revenueBands: "Dải doanh thu", minPercentile: "Phân vị từ", cells: "Ghép hạng",
   mode: "Nguồn báo cáo", pilotTeamIds: "Team pilot", plannedCutoverDate: "Ngày chuyển thống nhất",
   PROJECT_OFFICIAL: "Project", OPPORTUNITY_OFFICIAL: "Cơ hội",
+  ...PERSONA_FIELD_LABELS,
 };
 const historyLabel = (key: string, names: Record<string, string>) =>
   Object.hasOwn(names, key) ? names[key] : Object.hasOwn(HISTORY_LABELS, key) ? HISTORY_LABELS[key] : key;
@@ -61,8 +63,9 @@ function Save({ label, dirty, pending, onClick }: { label: string; dirty: boolea
   return <button type="button" className={`${dirty ? "tf-button-primary" : "tf-button-secondary"} mt-4`} disabled={!dirty || pending} onClick={onClick}>{label}</button>;
 }
 
-export default function CrmSettings({ initial, reasons, programTypes, changes, notConfigured }: {
+export default function CrmSettings({ initial, reasons, programTypes, changes, notConfigured, clientTags = [], competitors = [] }: {
   initial: Settings; reasons: Reason[]; programTypes: Program[]; changes: CrmChange[];
+  clientTags?: { id: string; label: string; active: boolean; order: number }[]; competitors?: { id: string; name: string; active: boolean }[];
   notConfigured: Pick<Record<PrepilotSection, boolean>, "TIER" | "REASONS">;
 }) {
   const [value, setValue] = useState(initial);
@@ -79,6 +82,9 @@ export default function CrmSettings({ initial, reasons, programTypes, changes, n
       case "reminder.offsets": return s.reminderOffsets;
       case "review.priority": return s.reviewPriority;
       case "pipeline.mode": return s.pipelineMode;
+      case "persona.depth": return s.personaDepth;
+      case "client.industries": return s.industries;
+      case "client.sources": return s.sources;
     }
   };
   function save(key: CrmSettingKey) {
@@ -93,6 +99,7 @@ export default function CrmSettings({ initial, reasons, programTypes, changes, n
           if (key === "tier.matrix") next.tierMatrix = parseTierMatrix(value.tierMatrix)!;
           if (key === "reminder.offsets") next.reminderOffsets = parseReminderOffsets(value.reminderOffsets)!;
           if (key === "review.priority") next.reviewPriority = parseReviewPriority(value.reviewPriority)!;
+          if (key === "persona.depth") next.personaDepth = parsePersonaDepth(value.personaDepth)!;
           return next;
         });
         setValue((current) => ({
@@ -137,6 +144,24 @@ export default function CrmSettings({ initial, reasons, programTypes, changes, n
       <button type="button" className="tf-button-secondary mt-3" onClick={() => setValue({ ...value, tierMatrix: { ...value.tierMatrix, revenueBands: [...value.tierMatrix.revenueBands, { key: `band_${value.tierMatrix.revenueBands.length + 1}`, label: "", minPercentile: 0 }] } })}>Thêm dải doanh thu</button>
       <Save label="Lưu bảng ghép hạng" dirty={dirty("tier.matrix")} pending={pending} onClick={() => save("tier.matrix")} />
     </Section>
+    <Section title="Độ sâu persona theo hạng" changes={history("persona.depth")} warning={!personaDepthConfigured(baseline.personaDepth)}>
+      <div className="grid gap-x-8 gap-y-6 md:grid-cols-2 xl:grid-cols-3">
+        {PERSONA_TIERS.map(tier => <fieldset key={tier} className="min-w-0 space-y-3">
+          <legend className="mb-3 text-sm font-semibold">{tier === "UNRATED" ? TIER_LABELS[tier] : `Hạng ${tier}`}</legend>
+          <label className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-zinc-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500" aria-label={`Thiết lập ${TIER_LABELS[tier]}`} checked={value.personaDepth[tier] !== null} onChange={event => setValue(current => ({ ...current, personaDepth: { ...current.personaDepth, [tier]: event.target.checked ? [] : null } }))} />Thiết lập yêu cầu</label>
+          {value.personaDepth[tier] !== null && <div className="space-y-2">
+            {PERSONA_FIELDS.map(name => <label key={name} className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-zinc-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500" aria-label={`${PERSONA_FIELD_LABELS[name]} — ${TIER_LABELS[tier]}`} checked={value.personaDepth[tier]!.includes(name)} onChange={event => setValue(current => {
+              const selected = new Set<PersonaField>(current.personaDepth[tier] ?? []);
+              if (event.target.checked) selected.add(name); else selected.delete(name);
+              return { ...current, personaDepth: { ...current.personaDepth, [tier]: PERSONA_FIELDS.filter(field => selected.has(field)) } };
+            })} />{PERSONA_FIELD_LABELS[name]}</label>)}
+            {!value.personaDepth[tier]!.length && <p className="text-sm text-zinc-500">Không yêu cầu bổ sung</p>}
+          </div>}
+        </fieldset>)}
+      </div>
+      <Save label="Lưu độ sâu persona" dirty={dirty("persona.depth")} pending={pending} onClick={() => save("persona.depth")} />
+      {PERSONA_TIERS.some(tier => value.personaDepth[tier] !== null) && <button type="button" className="tf-button-secondary ml-3 mt-4" onClick={() => setValue(current => ({ ...current, personaDepth: emptyPersonaDepth() }))}>Thiết lập sau</button>}
+    </Section>
     <Section title="Mốc nhắc trước sự kiện" changes={history("reminder.")}>
       <div className="space-y-4">{programTypes.map((program) => <div key={program.code} className="flex flex-wrap items-center gap-2">
         <span className="w-40 text-sm">{program.label}</span>
@@ -157,7 +182,11 @@ export default function CrmSettings({ initial, reasons, programTypes, changes, n
         <Save label="Lưu thứ tự ưu tiên" dirty={dirty("review.priority")} pending={pending} onClick={() => save("review.priority")} />
       </Section>
     </fieldset>
-    <section className="tf-panel p-5"><h2 className="mb-4 text-base font-semibold">Nhập dữ liệu tracker</h2><Link href="/crm/import" className="tf-button-secondary">Mở màn rà dữ liệu nhập</Link></section>
+    <ClientCatalogEditor title="Ngành" settingKey="client.industries" initial={initial.industries} version={initial.versions["client.industries"]} changes={history("client.industries")} addLabel="Thêm ngành" />
+    <ClientCatalogEditor title="Nguồn khách" settingKey="client.sources" initial={initial.sources} version={initial.versions["client.sources"]} changes={history("client.sources")} addLabel="Thêm nguồn" />
+    <ClientTagEditor initial={clientTags} changes={history("clientTag.")} />
+    <CompetitorEditor initial={competitors} changes={history("competitor.")} />
+    <section className="tf-panel p-5"><h2 className="mb-4 text-base font-semibold">Nhập dữ liệu tracker</h2><Link href="/admin/crm-data" className="tf-button-secondary">Mở dữ liệu CRM</Link></section>
   </div>;
 }
 
@@ -245,3 +274,102 @@ function ProgramEditor({ initial, changes }: { initial: Program[]; changes: CrmC
   </Section>;
 }
 
+
+type CatalogItem = { label: string; active: boolean };
+/** crm50: industry and source catalogs live in CrmSetting with CAS and history; used items are disabled, not deleted. */
+export function ClientCatalogEditor({ title, settingKey, initial, version, changes, addLabel }: { title: string; settingKey: "client.industries" | "client.sources"; initial: CatalogItem[]; version: number; changes: CrmChange[]; addLabel: string }) {
+  const [rows, setRows] = useState(initial);
+  const [baseline, setBaseline] = useState({ rows: initial, version });
+  const [pending, startTransition] = useTransition();
+  const { notify } = useInteraction();
+  const router = useRouter();
+  const dirty = !same(rows, baseline.rows);
+  function save() {
+    startTransition(async () => {
+      try {
+        const value = rows.map((row) => ({ label: row.label.trim(), active: row.active }));
+        const result = await saveCrmSettingAction(settingKey, value, baseline.version);
+        if ("error" in result && result.error) { notify({ message: result.error, tone: "error" }); return; }
+        setRows(value); setBaseline({ rows: value, version: baseline.version + 1 });
+        notify({ message: "Đã lưu cấu hình.", tone: "success" }); router.refresh();
+      } catch { notify({ message: SAVE_FAILED, tone: "error" }); }
+    });
+  }
+  return <Section title={title} changes={changes}><fieldset disabled={pending} className="min-w-0">
+    {rows.length ? <div className="space-y-3">{rows.map((row, index) => <div key={index} className="flex flex-wrap items-center gap-3">
+      <input aria-label={`${title} ${index + 1}`} maxLength={80} className={`${field} flex-1`} value={row.label} onChange={(e) => setRows(rows.map((r, i) => i === index ? { ...r, label: e.target.value } : r))} />
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={row.active} onChange={(e) => setRows(rows.map((r, i) => i === index ? { ...r, active: e.target.checked } : r))} />Đang dùng</label>
+      <button type="button" className="tf-button-secondary" aria-label={`Xóa ${row.label || `mục ${index + 1}`}`} onClick={() => setRows(rows.filter((_, i) => i !== index))}>Xóa</button>
+    </div>)}</div> : <p className="text-sm text-zinc-500">Chưa có mục nào. Bấm “{addLabel}” để tạo danh mục.</p>}
+    <button type="button" className="tf-button-secondary mt-3" onClick={() => setRows([...rows, { label: "", active: true }])}><Plus size={14} />{addLabel}</button>
+    <Save label={`Lưu ${title.toLocaleLowerCase("vi")}`} dirty={dirty} pending={pending} onClick={save} />
+  </fieldset></Section>;
+}
+
+type TagRow = { id: string; label: string; active: boolean; order: number };
+export function ClientTagEditor({ initial, changes }: { initial: TagRow[]; changes: CrmChange[] }) {
+  const [rows, setRows] = useState(initial);
+  const [baseline, setBaseline] = useState(initial);
+  const [pending, startTransition] = useTransition();
+  const { notify } = useInteraction();
+  const router = useRouter();
+  const update = (index: number, patch: Partial<TagRow>) => setRows(rows.map((r, i) => i === index ? { ...r, ...patch } : r));
+  function save() {
+    startTransition(async () => {
+      try {
+        for (const [index, row] of rows.entries()) {
+          if (same(row, baseline.find((r) => r.id === row.id))) continue;
+          const result = await saveClientTagAction({ id: row.id.startsWith("new-") ? undefined : row.id, label: row.label, active: row.active, order: index });
+          if (!("id" in result) || !result.id) { notify({ message: ("error" in result && result.error) || SAVE_FAILED, tone: "error" }); return; }
+          const saved = { ...row, id: result.id, label: row.label.trim(), order: index };
+          setRows((current) => current.map((r) => r.id === row.id ? saved : r));
+          setBaseline((current) => [...current.filter((r) => r.id !== row.id), saved]);
+        }
+        notify({ message: "Đã lưu cấu hình.", tone: "success" });
+      } catch { notify({ message: SAVE_FAILED, tone: "error" }); }
+      finally { router.refresh(); }
+    });
+  }
+  return <Section title="Nhãn khách" changes={changes}><fieldset disabled={pending} className="min-w-0">
+    {rows.length ? <div className="space-y-3">{rows.map((row, index) => <div key={row.id} className="flex flex-wrap items-center gap-3">
+      <input aria-label={`Nhãn ${index + 1}`} maxLength={60} className={`${field} flex-1`} value={row.label} onChange={(e) => update(index, { label: e.target.value })} />
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={row.active} onChange={(e) => update(index, { active: e.target.checked })} />Đang dùng</label>
+    </div>)}</div> : <p className="text-sm text-zinc-500">Chưa có nhãn. Bấm “Thêm nhãn” để tạo danh mục.</p>}
+    <button type="button" className="tf-button-secondary mt-3" onClick={() => setRows([...rows, { id: `new-${crypto.randomUUID()}`, label: "", active: true, order: rows.length }])}><Plus size={14} />Thêm nhãn</button>
+    <Save label="Lưu nhãn khách" dirty={rows.some((row) => !same(row, baseline.find((r) => r.id === row.id)))} pending={pending} onClick={save} />
+  </fieldset></Section>;
+}
+
+type AgencyRow = { id: string; name: string; active: boolean };
+export function CompetitorEditor({ initial, changes }: { initial: AgencyRow[]; changes: CrmChange[] }) {
+  const [rows, setRows] = useState(initial);
+  const [baseline, setBaseline] = useState(initial);
+  const [pending, startTransition] = useTransition();
+  const { notify } = useInteraction();
+  const router = useRouter();
+  const update = (index: number, patch: Partial<AgencyRow>) => setRows(rows.map((r, i) => i === index ? { ...r, ...patch } : r));
+  function save() {
+    startTransition(async () => {
+      try {
+        for (const row of rows) {
+          if (same(row, baseline.find((r) => r.id === row.id))) continue;
+          const result = await saveCompetitorAction({ id: row.id.startsWith("new-") ? undefined : row.id, name: row.name, active: row.active });
+          if (!("id" in result) || !result.id) { notify({ message: ("error" in result && result.error) || SAVE_FAILED, tone: "error" }); return; }
+          const saved = { ...row, id: result.id, name: row.name.trim() };
+          setRows((current) => current.map((r) => r.id === row.id ? saved : r));
+          setBaseline((current) => [...current.filter((r) => r.id !== row.id), saved]);
+        }
+        notify({ message: "Đã lưu cấu hình.", tone: "success" });
+      } catch { notify({ message: SAVE_FAILED, tone: "error" }); }
+      finally { router.refresh(); }
+    });
+  }
+  return <Section title="Agency và đối thủ" changes={changes}><fieldset disabled={pending} className="min-w-0">
+    {rows.length ? <div className="space-y-3">{rows.map((row, index) => <div key={row.id} className="flex flex-wrap items-center gap-3">
+      <input aria-label={`Agency ${index + 1}`} maxLength={120} className={`${field} flex-1`} value={row.name} onChange={(e) => update(index, { name: e.target.value })} />
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={row.active} onChange={(e) => update(index, { active: e.target.checked })} />Đang dùng</label>
+    </div>)}</div> : <p className="text-sm text-zinc-500">Chưa có agency. Bấm “Thêm agency” để tạo danh mục.</p>}
+    <button type="button" className="tf-button-secondary mt-3" onClick={() => setRows([...rows, { id: `new-${crypto.randomUUID()}`, name: "", active: true }])}><Plus size={14} />Thêm agency</button>
+    <Save label="Lưu agency" dirty={rows.some((row) => !same(row, baseline.find((r) => r.id === row.id)))} pending={pending} onClick={save} />
+  </fieldset></Section>;
+}

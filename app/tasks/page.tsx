@@ -15,7 +15,7 @@ import HubTabs from "@/components/HubTabs";
 import NewTaskInline from "@/components/NewTaskInline";
 import { loadCrmOwnerTargets } from "@/lib/crm/ownerTargets";
 import { loadCrmActor } from "@/lib/crm/actor";
-import { crmEnabled } from "@/lib/features";
+import { crmAllowed, crmAllowedUserWhere, loadCrmAccessUserIds } from "@/lib/crm/access";
 import Avatar from "@/components/Avatar";
 import TaskListItem, { type TaskListItemData } from "@/components/TaskListItem";
 import DashboardSort from "@/components/DashboardSort";
@@ -72,6 +72,7 @@ export default async function DashboardPage({
   searchParams: Promise<{ sort?: string; view?: string }>;
 }) {
   const user = await requireUser();
+  const crmOn = await crmAllowed(user);
   const params = await searchParams;
   const sort = params.sort === "project" ? "project" : "due";
   const requestedView: DashboardView =
@@ -104,12 +105,12 @@ export default async function DashboardPage({
       orderBy: { createdAt: "desc" },
     }),
     prisma.task.findMany({
-      where: myOpenTasksWhere(user.id),
+      where: myOpenTasksWhere(user.id, crmOn),
       include: taskInclude,
       orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }],
     }),
     prisma.task.findMany({
-      where: assignedByMeOpenWhere(user.id),
+      where: assignedByMeOpenWhere(user.id, crmOn),
       include: taskInclude,
       orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }],
     }),
@@ -117,7 +118,7 @@ export default async function DashboardPage({
       where: {
         followers: { some: { userId: user.id } },
         status: OPEN_TASK_STATUS_FILTER,
-        AND: [openTaskOwnerScope(user.id)],
+        AND: [openTaskOwnerScope(user.id, crmOn)],
       },
       include: taskInclude,
       orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }],
@@ -131,7 +132,7 @@ export default async function DashboardPage({
         avatarUrl: true,
         assignedTasks: {
           where: {
-            AND: [openTaskOwnerScope(user.id)],
+            AND: [openTaskOwnerScope(user.id, crmOn)],
             status: { not: "CANCELLED" },
           },
           include: taskInclude,
@@ -140,8 +141,8 @@ export default async function DashboardPage({
       },
       orderBy: { name: "asc" },
     }),
-    crmEnabled() ? loadCrmActor(user).then((actor) => loadCrmOwnerTargets(prisma, actor)) : Promise.resolve({ opportunities: [], clients: [] }),
-    crmEnabled() ? prisma.user.findMany({ where: { isActive: true, deletedAt: null }, select: { id: true, name: true, email: true, avatarUrl: true }, orderBy: { name: "asc" } }) : Promise.resolve([]),
+    crmOn ? loadCrmActor(user).then((actor) => loadCrmOwnerTargets(prisma, actor)) : Promise.resolve({ opportunities: [], clients: [] }),
+    crmOn ? loadCrmAccessUserIds(prisma).then((ids) => prisma.user.findMany({ where: crmAllowedUserWhere(ids), select: { id: true, name: true, email: true, avatarUrl: true }, orderBy: { name: "asc" } })) : Promise.resolve([]),
   ]);
 
   const activeView: DashboardView =

@@ -96,7 +96,9 @@ function OpenOpportunityBody({ options, prefill, lockClient, onSaved, onClose }:
           notify({ message: result.error, tone: "error" }); return;
         }
         if (result.success && result.opportunityId) {
-          notify({ message: result.success, tone: "success" }); onClose(); onSaved?.({ success: result.success, opportunityId: result.opportunityId }); router.refresh();
+          // A caller that handles onSaved owns the single success toast for its flow.
+          if (!onSaved) notify({ message: result.success, tone: "success" });
+          onClose(); onSaved?.({ success: result.success, opportunityId: result.opportunityId }); router.refresh();
         }
       } catch { notify({ message: "Không lưu được. Kiểm tra kết nối rồi thử lại.", tone: "error" }); }
       finally { submitting.current = false; }

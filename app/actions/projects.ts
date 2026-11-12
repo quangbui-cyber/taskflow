@@ -24,7 +24,7 @@ import { projectStatusColor, type ProjectCategory } from "@/lib/types";
 import { loadProgramTypes, isActiveProgramType } from "@/lib/programTypes";
 import { loadProjectCreationContext } from "@/lib/crm/projectCreationContext";
 import { checkProjectCreation, checkProjectCategoryChange, checkProjectStatusChange } from "@/lib/crm/projectCreation";
-import { crmEnabled } from "@/lib/features";
+import { crmAllowed } from "@/lib/crm/access";
 import { loadCrmActor } from "@/lib/crm/actor";
 import { parseVnDateKey } from "@/lib/crm/opportunityInput";
 import { linkPurchaseOrderProjectTx } from "@/lib/crm/purchaseOrderLink";
@@ -140,7 +140,7 @@ export async function createProject(
   if ("error" in business) return business;
   const { category, revenue, clientId, accountId } = business;
   const projectSource = String(formData.get("projectSource") ?? "");
-  const sourceOpportunityId = crmEnabled() ? String(formData.get("sourceOpportunityId") ?? "").trim() : "";
+  const sourceOpportunityId = (await crmAllowed(user)) ? String(formData.get("sourceOpportunityId") ?? "").trim() : "";
   if (sourceOpportunityId.length > 40) return { error: "Thông tin Cơ hội không hợp lệ." };
   if (sourceOpportunityId && projectSource !== "JABIL_PO") return { error: "Chỉ gắn Cơ hội nguồn khi tạo dự án từ PO." };
   const purchaseOrderDate = sourceOpportunityId ? parseVnDateKey(formData.get("purchaseOrderDate")) : null;

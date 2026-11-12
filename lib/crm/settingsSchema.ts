@@ -62,3 +62,21 @@ export function parseReviewPriority(value: unknown): ReviewPriorityKey[] | null 
 export function isTierConfigured(matrix: TierMatrix | null, scale: PotentialLevel[]): boolean {
   return !!matrix && scale.length > 0 && matrix.revenueBands.length > 0 && matrix.revenueBands.some((band) => band.minPercentile === 0) && matrix.revenueBands.every((band) => scale.every((level) => !!matrix.cells[band.key]?.[level.key]));
 }
+
+/** crm50: Admin catalogs for industry and acquisition source. Items are disabled, never silently dropped. */
+export type ClientCatalogItem = { label: string; active: boolean };
+export const CLIENT_CATALOG_LABEL_MAX = 80;
+export const catalogLabelKey = (label: string) => label.normalize("NFKC").trim().replace(/s+/g, " ").toLocaleLowerCase("vi");
+export function parseClientCatalog(value: unknown): ClientCatalogItem[] | null {
+  if (!Array.isArray(value) || value.length > 200) return null;
+  const result: ClientCatalogItem[] = [];
+  const seen = new Set<string>();
+  for (const row of value) {
+    if (!record(row) || typeof row.label !== "string" || typeof row.active !== "boolean") return null;
+    const label = row.label.normalize("NFKC").trim().replace(/s+/g, " ");
+    if (!label || label.length > CLIENT_CATALOG_LABEL_MAX || seen.has(catalogLabelKey(label))) return null;
+    seen.add(catalogLabelKey(label));
+    result.push({ label, active: row.active });
+  }
+  return result;
+}

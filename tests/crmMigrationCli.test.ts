@@ -7,6 +7,10 @@ test("default/explicit dry-run, apply/rollback batch rules, and strict options",
     assert.equal(dry.mode, "DRY_RUN");
     assert.deepEqual(parseMigrationArgs(["--dry-run"]), dry);
     assert.equal(parseMigrationArgs(["--rollback", "--batch", "b1"]).mode, "ROLLBACK");
+    assert.equal(dry.switchSource, false);
+    assert.equal(parseMigrationArgs(["--apply", "--switch-source", "--batch", "b1"]).switchSource, true);
+    assert.throws(() => parseMigrationArgs(["--dry-run", "--switch-source"]), /--switch-source/);
+    assert.throws(() => parseMigrationArgs(["--apply", "--switch-source=yes", "--batch", "b1"]), /./);
     assert.deepEqual(parseMigrationArgs(["--dry-run", "--project-ids=a,b"]).projectIds, ["a", "b"]);
     for (const argv of [["--apply"], ["--apply", "--rollback", "--batch", "b1"], ["--dry-run", "--apply", "--batch", "b1"], ["--dry-run", "--rollback", "--batch", "b1"], ["--what"], ["--year=NaN"], ["--project-ids="], ["--batch=x"], ["--year=2026", "--year=2027"]])
         assert.throws(() => parseMigrationArgs(argv), /./);

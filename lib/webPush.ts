@@ -4,6 +4,7 @@ import webpush from "web-push";
 import { prisma } from "@/lib/prisma";
 import { isPushEndpoint, notificationDestination } from "@/lib/pushPolicy";
 import { crmEnabled } from "./features";
+import { filterCrmAllowedUserIds } from "./crm/access";
 
 export function pushConfiguration() {
   const publicKey = process.env.VAPID_PUBLIC_KEY;
@@ -25,7 +26,10 @@ type PushMessage = {
 
 /** Failure to deliver push never reverses the user's task or saved bell notification. */
 export async function deliverPush(userIds: string[], data: PushMessage, endpoint?: string) {
+  const crmMessage = !data.projectId && (data.clientId || data.opportunityId || data.type.startsWith("CRM_"));
   if (!data.projectId && (data.clientId || data.opportunityId) && !crmEnabled()) return { sent: 0, failed: 0 };
+  // crm54: CRM pushes go only to Admins and listed, active users, read fresh for each delivery.
+  if (crmMessage && crmEnabled()) userIds = await filterCrmAllowedUserIds(prisma, userIds);
   const config = pushConfiguration();
   if (!config || userIds.length === 0) return { sent: 0, failed: 0 };
   const subscriptions = await prisma.pushSubscription.findMany({

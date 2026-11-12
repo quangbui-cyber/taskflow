@@ -79,6 +79,10 @@ export function parseClosePayload(raw: unknown): Result<CloseOpportunityInput> {
   if (!id(input.reasonId)) errors.reasonId = "Chọn lý do.";
   const output: Raw = { opportunityId, expectedVersion, outcome: input.outcome, reasonId: input.reasonId };
   texts(input, output, errors, { note: 4000, lessons: 4000 });
+  if (input.winnerCompetitorId != null && input.winnerCompetitorId !== "") {
+    if (!id(input.winnerCompetitorId) || input.outcome !== "LOST_COMPETITIVE") errors.winnerCompetitorId = "Chỉ chọn agency thắng khi thua cạnh tranh.";
+    else output.winnerCompetitorId = input.winnerCompetitorId;
+  }
   if (input.followUp != null) {
     const follow = input.followUp;
     if (!record(follow) || typeof follow.title !== "string" || !follow.title.trim() || follow.title.trim().length > 500 || !id(follow.assigneeId) || !parseVnDateKey(follow.dueDate)) errors.followUp = "Nhập đủ việc, người làm và hạn tiếp cận lại.";

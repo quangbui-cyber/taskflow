@@ -1,8 +1,9 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { KPI_RECOGNIZED_STATUSES } from "../kpi";
+import { KPI_RECOGNIZED_STATUSES, vietnamYearMonth } from "../kpi";
 import { loadProgramTypes } from "../programTypes";
 import { OPEN_TASK_STATUS_FILTER } from "../types";
 import { vnDayStart } from "./dates";
+import { buildPipelineFlow, organizationMonths } from "./pipelineFlow";
 import { competitiveWinRate, outsideWinRate, pipelineByStage, nextStepCoverage, careToBrief, touchQuality } from "./metrics";
 import type { PipelineModeSetting } from "./pipelineMode";
 import { endReasonTables, isNewClient, parsePipelineFilters, pipelineScope, qualityBars, resolvePipelinePeriod, usageSummary, type PipelineFilters } from "./pipelineReport";
@@ -47,14 +48,20 @@ export async function loadPipelineReport(db: Db, input: PipelineFilters, setting
   const touchWhere: Prisma.TouchpointWhereInput = { OR: [{ opportunityId: null, client: clientWhere }, { opportunity: opportunityWhere }] };
   const inPeriod = { gte: period.start, lt: period.end };
   const today = vnDayStart(now);
-  const [closed, created, open, clients, touches, drafts, overdueTasks] = await Promise.all([
-    db.opportunity.findMany({ where: { AND: [opportunityWhere, { outcome: { not: null }, closedAt: inPeriod }] }, select: { id: true, clientId: true, outcome: true, closedAt: true, programTypeCode: true, outcomeReason: { select: { label: true } } } }),
+  const orgYear = vietnamYearMonth(period.start).year;
+  const [closed, created, open, clients, touches, drafts, overdueTasks, flowRows, yearRows, target] = await Promise.all([
+    db.opportunity.findMany({ where: { AND: [opportunityWhere, { outcome: { not: null }, closedAt: inPeriod }] }, select: { id: true, clientId: true, outcome: true, closedAt: true, programTypeCode: true, outcomeReason: { select: { label: true } }, contractValue: true } }),
     db.opportunity.findMany({ where: { AND: [opportunityWhere, { createdAt: inPeriod }] }, select: { briefReceivedAt: true, stage: true, outcome: true } }),
     db.opportunity.findMany({ where: { AND: [opportunityWhere, { outcome: null }] }, select: { stage: true, budgetMin: true, budgetMax: true, taskOpportunity: { where: { status: OPEN_TASK_STATUS_FILTER, dueDate: { lt: today } }, take: 1, select: { id: true } } } }),
     db.client.findMany({ where: { AND: [clientWhere, { picAccountId: { not: null } }] }, select: { id: true, taskClient: { where: { status: OPEN_TASK_STATUS_FILTER }, take: 1, select: { id: true } }, clientOpportunities: { where: { AND: [opportunityWhere, { outcome: null, taskOpportunity: { some: { status: OPEN_TASK_STATUS_FILTER } } }] }, take: 1, select: { id: true } } } }),
     db.touchpoint.findMany({ where: { AND: [touchWhere, { status: "CONFIRMED", occurredAt: inPeriod }] }, select: { clientId: true, outcomeLevel: true, status: true } }),
     db.touchpoint.findMany({ where: { AND: [touchWhere, { status: "DRAFT" }] }, select: { createdAt: true } }),
     db.task.count({ where: { AND: [taskWhere, { status: OPEN_TASK_STATUS_FILTER, dueDate: { lt: today } }] } }),
+    // crm51 overview (display only): Opportunities created or closed in the period, for the sankey and funnel.
+    db.opportunity.findMany({ where: { AND: [opportunityWhere, { OR: [{ createdAt: inPeriod }, { outcome: { not: null }, closedAt: inPeriod }] }] }, select: { id: true, name: true, source: true, stage: true, outcome: true, client: { select: { name: true } } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
+    // Won and expected value by organization month of the period's year; never written to Project.revenue or KPI.
+    db.opportunity.findMany({ where: { AND: [opportunityWhere, { expectedYear: orgYear, OR: [{ outcome: "WON" }, { outcome: null }] }] }, select: { outcome: true, expectedMonth: true, expectedQuarter: true, contractValue: true, budgetMin: true, budgetMax: true } }),
+    periodKpiTarget(db, period, teamIds),
   ]);
   const closedIds = closed.map(r => r.id), closedClientIds = [...new Set(closed.map(r => r.clientId))];
   const [winbackTasks, laterBriefs] = closed.length ? await Promise.all([
@@ -77,6 +84,32 @@ export async function loadPipelineReport(db: Db, input: PipelineFilters, setting
     usage: usageSummary({ overdueTasks, drafts, touchpoints: touches.length, now }),
     options: { teams: baseScope.teamIds === null ? teams : teams.filter(t => baseScope.teamIds!.includes(t.id)), programTypes },
     isEmpty: closed.length === 0 && created.length === 0 && open.length === 0,
+    overview: {
+      flow: buildPipelineFlow(flowRows.map(o => ({ id: o.id, name: o.name, clientName: o.client.name, source: o.source, stage: o.stage, outcome: o.outcome }))),
+      wonValue: closed.reduce((sum, o) => sum + (o.outcome === "WON" && o.contractValue !== null ? Number(o.contractValue) : 0), 0),
+      target,
+      months: organizationMonths(orgYear, yearRows.map(o => ({ outcome: o.outcome, expectedMonth: o.expectedMonth, expectedQuarter: o.expectedQuarter, contractValue: o.contractValue === null ? null : Number(o.contractValue), budgetMin: o.budgetMin === null ? null : Number(o.budgetMin), budgetMax: o.budgetMax === null ? null : Number(o.budgetMax) }))),
+    },
   };
 }
 export type PipelineReportData = Awaited<ReturnType<typeof loadPipelineReport>>;
+
+/** KpiPlan target for the months of the period (D-20). Team targets first; company target prorated when no team split exists. */
+async function periodKpiTarget(db: Db, period: { start: Date; end: Date }, teamIds: string[] | null): Promise<number | null> {
+  const months: { year: number; month: number }[] = [];
+  for (let cursor = vietnamYearMonth(period.start); ;) {
+    const start = new Date(Date.UTC(cursor.year, cursor.month - 1, 1) - 7 * 3600000);
+    if (start >= period.end) break;
+    months.push(cursor);
+    cursor = cursor.month === 12 ? { year: cursor.year + 1, month: 1 } : { year: cursor.year, month: cursor.month + 1 };
+  }
+  const plans = await db.kpiPlan.findMany({ where: { year: { in: [...new Set(months.map(m => m.year))] } }, select: { year: true, companyTarget: true, teamTargets: { select: { teamId: true, month: true, amount: true } } } });
+  if (!plans.length) return null;
+  let total = 0;
+  for (const plan of plans) {
+    const inPeriod = months.filter(m => m.year === plan.year).map(m => m.month);
+    const teamSum = plan.teamTargets.filter(t => inPeriod.includes(t.month) && (teamIds === null || teamIds.includes(t.teamId))).reduce((sum, t) => sum + t.amount, 0);
+    total += teamSum > 0 || teamIds !== null ? teamSum : plan.companyTarget * inPeriod.length / 12;
+  }
+  return total > 0 ? total : null;
+}

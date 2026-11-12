@@ -24,6 +24,7 @@ function harness() {
       state.jobs++; if (state.error && state.jobs <= state.failJobs) throw state.error;
       return { openedSteps: 1, mergedSteps: 2, cadenceTasks: 3, planCloseTasks: 4, passedEvents: 5, meetingDrafts: 6, partial: true, skipped: [{ reason: "NO_CREATOR", id: "private-id" }], notifications: rows };
     } },
+    "@/lib/crm/access": { listCrmAllowedUserIds: async () => ["private-user"] },
     "@/lib/webPush": { deliverPush: async () => { state.push++; if (state.failPush) throw new Error("private provider payload"); } },
   };
   const compiled = ts.transpileModule(readFileSync(resolve("app/api/cron/crm-reminders/route.ts"), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;

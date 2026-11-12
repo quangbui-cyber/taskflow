@@ -1,7 +1,5 @@
 import Link from "next/link";
-import { canViewRevenue, getCurrentUser } from "@/lib/auth";
-import { loadCrmActor } from "@/lib/crm/actor";
-import { crmCan } from "@/lib/crm/policy";
+import { canViewRevenue } from "@/lib/auth";
 import { creativeEnabled, financeEnabled, meetingsEnabled, crmEnabled } from "@/lib/features";
 import { canManageHr } from "@/lib/employeeRecords";
 import { hubForSection, visibleSections, type ActiveSection } from "@/lib/navigation";
@@ -18,8 +16,8 @@ export default async function HubTabs({
 }) {
   const hub = hubForSection(section);
   if (!hub) return null;
-  const user = hub.key === "crm" && crmEnabled() ? await getCurrentUser() : null;
-  const showCrmImport = user ? crmCan(await loadCrmActor(user), "REVIEW_IMPORT") : false;
+  // crm51: tracker import and duplicate merge live in Admin → CRM → Dữ liệu, not in the daily CRM tab bar.
+  const showCrmImport = false;
   const sections = visibleSections(hub, {
     showCrm: crmEnabled(),
     showCrmImport,

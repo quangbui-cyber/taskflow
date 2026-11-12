@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { emailAppUrl } from "@/lib/email";
-import { MEETING_RECAPS_DISABLED_MESSAGE, meetingRecapsEnabled, crmEnabled, CRM_DISABLED_MESSAGE } from "@/lib/features";
+import { MEETING_RECAPS_DISABLED_MESSAGE, meetingRecapsEnabled, CRM_DISABLED_MESSAGE } from "@/lib/features";
+import { crmAllowed } from "@/lib/crm/access";
 import {
   RECAP_ACTION_ITEMS_MAX,
   RECAP_ACTION_TITLE_MAX,
@@ -60,7 +61,7 @@ export async function attachOwnerToMeeting(meetingId: string, ownerKind: string,
   const user = await requireUser();
   const owner = parseOwnerInput(ownerKind, ownerId);
   if (typeof meetingId !== "string" || !meetingId || meetingId.length > 64 || !owner) return { error: "Hãy chọn nơi gắn cuộc họp." };
-  if (owner.kind !== "PROJECT" && !crmEnabled()) return { error: CRM_DISABLED_MESSAGE };
+  if (owner.kind !== "PROJECT" && !(await crmAllowed(user))) return { error: CRM_DISABLED_MESSAGE };
   const result = await attachMeetingOwner(prisma, meetingId, owner, user);
   if ("error" in result) return { error: result.error };
   if (result.archived) {
@@ -374,7 +375,7 @@ export async function createTaskFromRecapActionItem(
   const requested = typeof target === "string" ? parseOwnerInput("PROJECT", target) : target && typeof target === "object" ? parseOwnerInput(target.kind, target.id) : null;
   const owner = ownerOrNull(meeting) ?? requested;
   if (!owner) return { error: "Hãy chọn nơi tạo task." };
-  if (owner.kind !== "PROJECT" && !crmEnabled()) return { error: CRM_DISABLED_MESSAGE };
+  if (owner.kind !== "PROJECT" && !(await crmAllowed(user))) return { error: CRM_DISABLED_MESSAGE };
   const access = await assertOwnerAccess(prisma, user, owner, "CREATE_TASK");
   if ("error" in access) return access;
   let task: Awaited<ReturnType<typeof createLinkedRecapTask>>;

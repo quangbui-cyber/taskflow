@@ -19,7 +19,7 @@ export async function loadMyCrmFocus(db: PrismaClient, user: { id: string; role:
     .slice(0, HOME_FOCUS_LIMIT)
     .map((row) => ({
       clientId: row.client.id, clientName: row.client.name,
-      reason: row.group === "NO_NEXT_STEP" ? "Chưa có bước tiếp theo" : row.reason.label,
+      reason: row.group === "NO_NEXT_STEP" ? "Chưa có việc tiếp theo" : row.reason.label,
       dueLabel: row.dueDate ? `hạn ${formatCrmDate(row.dueDate, now)}` : null,
     }));
   return { isPic: true, rows };

@@ -11,20 +11,22 @@ import DeadlineField from "@/components/DeadlineField";
 import { useInteraction } from "@/components/InteractionProvider";
 import type { ReviewRow as Row } from "@/lib/crm/reviewData";
 import type { TouchpointDialogOptions } from "@/lib/crm/dialogOptions";
-import { formatCrmDate, vnDateKey } from "@/lib/crm/dates";
-import { OUTCOME_LEVELS } from "@/lib/crm/labels";
-import { lateLabel, REVIEW_DONE_LABELS, type rowActionsFor } from "@/lib/crm/reviewView";
-import TierBadge from "./TierBadge";
-import OutcomeDots from "./OutcomeDots";
+import { vnDateKey } from "@/lib/crm/dates";
+import type { TierValue } from "@/lib/crm/settingsSchema";
+import { REVIEW_DONE_LABELS, reviewPrimaryLabel, reviewRowSentence, type ReviewRowActions } from "@/lib/crm/reviewView";
+import { ownerHref } from "@/lib/workOwner";
+import { TierSquare } from "./TierBadge";
 import TouchpointDialog from "./TouchpointDialog";
 
 type Panel = "MENU" | "ASSIGN" | "POSTPONE" | "ASSIGN_PIC";
 type Props = {
-  row: Row; actions: ReturnType<typeof rowActionsFor>; dialogOptions: TouchpointDialogOptions;
-  accounts: { id: string; name: string }[]; now: Date;
+  row: Row; actions: ReviewRowActions; dialogOptions: TouchpointDialogOptions;
+  accounts: { id: string; name: string }[]; now: Date; cadenceWeeks: Record<TierValue, number>; showPic: boolean;
+  /** crm51: "first" = Cần làm trước, "week" = Trong tuần (actions on hover/focus), "compact" = right column. */
+  variant?: "first" | "week" | "compact";
 };
 const FALLBACK = "Không lưu được. Kiểm tra kết nối rồi thử lại.";
-export default function ReviewRow({ row, actions, dialogOptions, accounts, now }: Props) {
+export default function ReviewRow({ row, actions, dialogOptions, accounts, now, cadenceWeeks, showPic, variant = "first" }: Props) {
   const { notify } = useInteraction();
   const [done, setDone] = useState<keyof typeof REVIEW_DONE_LABELS | null>(null);
   const [dialog, setDialog] = useState(false);
@@ -40,6 +42,7 @@ export default function ReviewRow({ row, actions, dialogOptions, accounts, now }
   const [reason, setReason] = useState("");
   const [reviewDate, setReviewDate] = useState("");
   const [invalid, setInvalid] = useState(false);
+  const [escalated, setEscalated] = useState(false);
   const uid = useId();
   function closePanel() { setPanel(null); requestAnimationFrame(() => trigger.current?.focus()); }
   function openPanel(value: Panel, button: HTMLButtonElement) { trigger.current = button; setPanel(value); setInvalid(false); }
@@ -80,7 +83,7 @@ export default function ReviewRow({ row, actions, dialogOptions, accounts, now }
     const frame = requestAnimationFrame(() => popup.current?.querySelector<HTMLElement>("button,input,select,textarea")?.focus());
     return () => cancelAnimationFrame(frame);
   }, [panel]);
-  function run(action: () => Promise<{ error?: string; success?: string }>, mark?: keyof typeof REVIEW_DONE_LABELS) {
+  function run(action: () => Promise<{ error?: string; success?: string }>, mark?: keyof typeof REVIEW_DONE_LABELS, onSuccess?: () => void) {
     if (submitting.current || pending) return;
     submitting.current = true;
     startTransition(async () => {
@@ -89,6 +92,7 @@ export default function ReviewRow({ row, actions, dialogOptions, accounts, now }
         if (result.error || !result.success) { notify({ tone: "error", message: result.error || FALLBACK }); return; }
         notify({ tone: "success", message: result.success });
         if (mark) setDone(mark);
+        onSuccess?.();
         closePanel();
       } catch { notify({ tone: "error", message: FALLBACK }); }
       finally { submitting.current = false; }
@@ -101,22 +105,37 @@ export default function ReviewRow({ row, actions, dialogOptions, accounts, now }
     } else if (panel === "ASSIGN") run(() => assignCrmTaskAction({ taskId: row.taskId, assigneeId: assignee, dueDate: due }), "ASSIGNED");
     else if (panel === "ASSIGN_PIC") run(() => assignClientPicAction(row.client.id, pic, row.client.version), "ASSIGNED");
   }
-  const primaryLabel = actions.primary === "LOG_RESULT" ? "Ghi kết quả" : actions.primary === "SET_NEXT_STEP" ? "Đặt bước tiếp" : "Giao PIC";
-  const late = lateLabel(row.dueDate, now);
-  const sourceClass = row.reason.sourceLabel === "Khách xác nhận" ? "bg-emerald-50 text-emerald-700" : row.reason.sourceLabel === "Suy từ lịch sử" ? "border border-dashed border-zinc-400 bg-white text-zinc-600" : "border border-dashed border-zinc-300 bg-white text-zinc-500";
-  return <article data-review-key={row.key} aria-label={row.client.name} className={`grid min-w-0 gap-4 px-5 py-4 text-sm md:grid-cols-[1.6fr_2.4fr_1.4fr_1fr_auto] ${done ? "opacity-50 transition-opacity duration-[160ms] motion-reduce:transition-none" : ""}`}>
-    <div className="min-w-0"><Link href={`/crm/clients/${row.client.id}`} className="break-words font-semibold hover:underline">{row.client.name}</Link><div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">{row.client.buyingUnitName && <span>{row.client.buyingUnitName} ·</span>}<TierBadge tier={row.client.tier} /></div></div>
-    <div className="min-w-0"><div className="flex flex-wrap gap-2"><span className="tf-badge bg-zinc-100 text-zinc-700">{row.reason.label}</span>{row.reason.sourceLabel && <span className={`tf-badge ${sourceClass}`}>{row.reason.sourceLabel}</span>}</div><p className="mt-2 break-words">{row.reason.sentence}{late && <span className="ml-2 text-[#b86a08]">{late}</span>}</p></div>
-    <div className="min-w-0 space-y-1 text-xs text-zinc-500">{row.lastTouch ? <><p>{formatCrmDate(row.lastTouch.date, now)} · {row.lastTouch.kindLabel}</p><OutcomeDots level={OUTCOME_LEVELS.find(l => l.label === row.lastTouch?.outcomeLabel)?.key ?? null} /></> : <span>—</span>}{row.opportunity ? <Link href={`/crm/opportunities/${row.opportunity.id}`} className="block break-words hover:underline">Cơ hội: {row.opportunity.name}</Link> : <p className="text-zinc-400">Chưa có Cơ hội</p>}</div>
-    <div className="min-w-0 text-xs"><div className="flex items-center gap-2">{row.pic ? <Avatar id={row.pic.accountId} name={row.pic.name} className="h-6 w-6 text-xs" /> : <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-400">?</span>}<span className="break-words">{row.pic?.name ?? "Chưa giao"}</span></div>{row.dueDate && <p className="mt-1 text-zinc-500">hạn {formatCrmDate(row.dueDate, now)}</p>}</div>
-    <div className="flex items-start gap-2">{done ? <span role="status" className="py-2 text-xs text-zinc-500">{REVIEW_DONE_LABELS[done]}</span> : <>
-      {actions.primary && <button type="button" className="tf-button-secondary min-h-10 whitespace-nowrap md:!min-h-9" disabled={pending} onClick={e => { if (actions.primary === "ASSIGN_PIC") openPanel("ASSIGN_PIC", e.currentTarget); else setDialog(true); }}>{primaryLabel}</button>}
-      {!!actions.menu.length && <button type="button" aria-label="Thao tác khác" aria-expanded={!!panel} aria-controls={`${uid}-panel`} className="tf-icon-button min-h-10 md:!min-h-9" disabled={pending} onClick={e => openPanel("MENU", e.currentTarget)}><MoreHorizontal size={16} aria-hidden="true" /></button>}
+  const primaryLabel = variant === "compact" && actions.primary === "SET_NEXT_STEP" ? "Đặt việc" : reviewPrimaryLabel(actions.primary);
+  const sentence = reviewRowSentence(row, now, cadenceWeeks);
+  const toneClass = sentence.lateTone === "late" ? "bg-[#fff4ed] text-[#c2410c]" : sentence.lateTone === "warn" ? "bg-[#fff7e6] text-[#b86a08]" : "text-zinc-500";
+  const context = [sentence.why, sentence.lastTouch, row.opportunity && `Cơ hội: ${row.opportunity.name}`].filter(Boolean).join(" · ");
+  const urgency = row.group === "OVERDUE" ? "bg-[#c2410c]" : sentence.lateTone === "warn" ? "bg-[#f59e0b]" : "bg-zinc-200";
+  // crm51: one primary button per row; assign, postpone, edit and escalate live in the ⋯ menu.
+  const menuItems = [
+    ...actions.secondary.map(a => ({ key: a, label: a === "ASSIGN" ? "Giao lại" : "Hoãn" })),
+    ...(row.taskId && actions.secondary.includes("POSTPONE") ? [{ key: "EDIT" as const, label: "Đổi việc" }] : []),
+    ...(!escalated ? actions.menu.map(a => ({ key: a, label: "Nhờ AD/AM hỗ trợ" })) : []),
+  ];
+  // Week lane: actions appear on hover or focus where a pointer can hover; touch screens always show them.
+  const reveal = variant === "week" ? "transition-opacity duration-150 motion-reduce:transition-none [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100" : "";
+  const compact = variant === "compact";
+  return <article data-review-key={row.key} data-review-lane={variant} aria-label={row.client.name} className={`group relative grid min-w-0 gap-2 text-sm ${compact ? "py-2" : "py-3 pl-5 pr-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-4"} ${done ? "opacity-50 transition-opacity duration-[160ms] motion-reduce:transition-none" : ""}`}>
+    {!compact && <span aria-hidden="true" className={`absolute bottom-3 left-2 top-3 w-[3px] rounded-full ${urgency}`} />}
+    <div className="min-w-0">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"><TierSquare tier={row.client.tier} /><Link href={`/crm/clients/${row.client.id}`} className="min-w-0 break-words font-semibold text-zinc-900 hover:underline">{row.client.name}</Link>{!compact && sentence.lateLabel && <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${toneClass}`}>{sentence.lateLabel}</span>}</div>
+      {!compact && <p data-review-todo className="mt-1 truncate text-[13px] text-zinc-700" title={[sentence.todo, context].filter(Boolean).join(" · ")}><span className={sentence.todoMuted ? "text-zinc-500" : "font-medium text-zinc-900"}>{sentence.todo}</span>{context && <span className="text-zinc-500"> · {context}</span>}</p>}
+      {compact && sentence.lateLabel && <p className="mt-0.5 truncate text-xs text-zinc-500" title={sentence.why ?? undefined}>{sentence.lateLabel}</p>}
+    </div>
+    <div className={`flex min-w-0 flex-wrap items-center gap-2 md:flex-nowrap md:justify-end ${reveal}`}>{done ? <span role="status" className="py-2 text-xs text-zinc-500">{REVIEW_DONE_LABELS[done]}</span> : <>
+      {showPic && !compact && (row.pic ? <span title={row.pic.name} className="hidden md:inline-flex"><Avatar id={row.pic.accountId} name={row.pic.name} className="h-6 w-6 text-xs" /></span> : <span className="hidden whitespace-nowrap text-xs text-zinc-400 md:inline">Chưa giao</span>)}
+      {actions.primary && <button type="button" className={`tf-button-secondary min-h-10 whitespace-nowrap md:!min-h-9 ${compact ? "" : "flex-1 md:flex-none"}`} disabled={pending} onClick={e => { if (actions.primary === "ASSIGN_PIC") openPanel("ASSIGN_PIC", e.currentTarget); else setDialog(true); }}>{primaryLabel}</button>}
+      {!!menuItems.length && <button type="button" aria-label={`Thao tác khác cho ${row.client.name}`} aria-haspopup="dialog" aria-expanded={panel !== null && panel !== "ASSIGN_PIC"} aria-controls={panel ? `${uid}-panel` : undefined} className="tf-icon-button min-h-10 md:!h-9 md:!min-h-9 md:!w-9" disabled={pending} onClick={e => openPanel("MENU", e.currentTarget)}><MoreHorizontal size={16} aria-hidden="true" /></button>}
+      {escalated && <span role="status" className="whitespace-nowrap text-xs text-zinc-500">Đã nhờ AD/AM</span>}
     </>}</div>
     <TouchpointDialog options={dialogOptions} triggerVariant="secondary" renderTrigger={false} open={dialog} onOpenChange={setDialog} lockClient prefill={row.prefill} onSaved={() => setDone("LOGGED")} />
-    {panel && position && createPortal(<div ref={popup} id={`${uid}-panel`} role="dialog" aria-label={panel === "MENU" ? "Thao tác khác" : panel === "POSTPONE" ? "Hoãn có lý do" : panel === "ASSIGN_PIC" ? "Giao PIC" : "Giao người và hạn"} data-floating-layer className="tf-scheduling-popover fixed z-40 max-h-[calc(100dvh-24px)] overflow-y-auto rounded-[8px] border border-zinc-200 bg-white p-4" style={position}>
+    {panel && position && createPortal(<div ref={popup} id={`${uid}-panel`} role="dialog" aria-label={panel === "MENU" ? "Thao tác khác" : panel === "POSTPONE" ? "Hoãn có lý do" : panel === "ASSIGN_PIC" ? "Giao PIC" : "Giao lại người và hạn"} data-floating-layer className="tf-scheduling-popover fixed z-40 max-h-[calc(100dvh-24px)] overflow-y-auto rounded-[8px] border border-zinc-200 bg-white p-4" style={position}>
       <div className="mb-3 flex justify-end"><button type="button" className="tf-icon-button !h-9 !min-h-9 !w-9" disabled={pending} aria-label="Đóng" onClick={closePanel}><X size={14} aria-hidden="true" /></button></div>
-      {panel === "MENU" ? <div className="space-y-1">{actions.menu.map(a => <button key={a} type="button" disabled={pending} aria-busy={pending} className="flex min-h-10 w-full items-center gap-2 rounded px-2 text-left text-sm hover:bg-zinc-50" onClick={() => a === "ESCALATE" ? run(() => escalateCrmTaskAction(row.taskId)) : setPanel(a)}>{pending && <span className="tf-spinner" />}{a === "ASSIGN" ? "Giao người và hạn" : a === "POSTPONE" ? "Hoãn có lý do" : "Cần AD/AM"}</button>)}</div> : <form className="space-y-4" aria-busy={pending} onSubmit={e => { e.preventDefault(); submit(); }}>
+      {panel === "MENU" ? <div className="space-y-1">{menuItems.map(item => item.key === "EDIT" ? <Link key={item.key} href={ownerHref({ kind: row.opportunity ? "OPPORTUNITY" : "CLIENT", id: row.opportunity?.id ?? row.client.id }, row.taskId!)} className="flex min-h-10 w-full items-center gap-2 rounded px-2 text-left text-sm hover:bg-zinc-50">{item.label}</Link> : <button key={item.key} type="button" disabled={pending} aria-busy={pending && item.key === "ESCALATE"} className="flex min-h-10 w-full items-center gap-2 rounded px-2 text-left text-sm hover:bg-zinc-50" onClick={e => item.key === "ESCALATE" ? run(() => escalateCrmTaskAction(row.taskId), undefined, () => setEscalated(true)) : openPanel(item.key, trigger.current ?? e.currentTarget)}>{pending && item.key === "ESCALATE" && <span className="tf-spinner" />}{item.label}</button>)}</div> : <form className="space-y-4" aria-busy={pending} onSubmit={e => { e.preventDefault(); submit(); }}>
         {panel === "ASSIGN" && <><UserPicker options={dialogOptions.users} value={assignee} onChange={setAssignee} ariaLabel="Người làm" disabled={pending} /><DeadlineField dateOnly required label="Hạn" value={due} onChange={setDue} /></>}
         {panel === "ASSIGN_PIC" && <div><label htmlFor={`${uid}-pic`} className="tf-label">PIC</label><select id={`${uid}-pic`} required disabled={pending} className="tf-field" value={pic} onChange={e => setPic(e.target.value)}><option value="">Chọn PIC</option>{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>}
         {panel === "POSTPONE" && <><div><label htmlFor={`${uid}-reason`} className="tf-label">Lý do hoãn</label><textarea id={`${uid}-reason`} className="tf-field" rows={2} maxLength={500} value={reason} disabled={pending} onChange={e => setReason(e.target.value)} aria-required="true" aria-invalid={invalid && !reason.trim() || undefined} aria-describedby={invalid ? `${uid}-error` : undefined} /></div><DeadlineField dateOnly required label="Xem lại ngày" value={reviewDate} onChange={setReviewDate} invalid={invalid && !reviewDate} describedBy={invalid ? `${uid}-error` : undefined} />{invalid && <p id={`${uid}-error`} role="alert" className="text-xs text-[var(--danger)]">Nhập lý do hoãn và ngày xem lại.</p>}</>}

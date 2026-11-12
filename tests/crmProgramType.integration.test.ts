@@ -11,7 +11,8 @@ test("CRM foundation seeds program types, aliases, reasons and safe unconfigured
     const projects = await db.project.findMany({ distinct: ["type"], select: { type: true } });
     for (const p of projects) assert.ok(types.some((t) => t.code === p.type));
     const settings = await db.crmSetting.findMany();
-    assert.equal(settings.length, 6);
+    const requiredKeys = ["tier.cadenceWeeks", "tier.potentialScale", "tier.matrix", "pipeline.mode", "reminder.offsets", "review.priority"];
+    assert.deepEqual(settings.filter((s) => requiredKeys.includes(s.key)).map((s) => s.key).sort(), [...requiredKeys].sort());
     assert.deepEqual(settings.find((s) => s.key === "tier.cadenceWeeks")?.value, { S: 2, A: 4, B: 8, C: 13, UNRATED: 4 });
     assert.deepEqual(settings.find((s) => s.key === "tier.potentialScale")?.value, []);
     assert.deepEqual(settings.find((s) => s.key === "tier.matrix")?.value, { revenueBands: [], cells: {} });

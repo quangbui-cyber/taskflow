@@ -100,6 +100,23 @@ test("tracker review preserves evidence and applies atomically once", { skip: !c
       assert.equal(await db.touchpoint.count({ where: { sourceId: fresh.id } }), 1);
       assert.deepEqual((await db.trackerImportRow.findUniqueOrThrow({ where: { id: fresh.id } })).raw, { "Ngày thực tế": "sau Tết" });
     });
+    await t.test("crm50 matching uses tax code, then alias key, then name; columns read from the file are unchanged", async () => {
+      const code = String(1_000_000_000 + Math.floor(Math.random() * 8_999_999_999));
+      const byTax = await db.client.create({ data: { name: `${prefix} Tax Holder`, taxCode: code, picAccountId: f.picAccount.id } });
+      const byAlias = await db.client.create({ data: { name: `${prefix} Alias Holder`, picAccountId: f.picAccount.id } });
+      const { clientDuplicateKey } = await import("../lib/crm/clientMerge");
+      await db.clientAlias.create({ data: { clientId: byAlias.id, name: `${prefix} Nick`, key: clientDuplicateKey(`${prefix} Nick`) } });
+      const taxRow = await row("CSKH", 20, "OK", { clientName: `${prefix} Unrelated Name`, touch: { date: "2027-04-01T03:00:00Z", level: 2 } });
+      assert.ok("error" in await resolveImportRow(db, steward, { rowId: taxRow.id, action: "EDIT", proposedPatch: { taxCode: "12-34" } }));
+      assert.ok("ok" in await resolveImportRow(db, steward, { rowId: taxRow.id, action: "EDIT", proposedPatch: { taxCode: ` ${code} ` } }));
+      const aliasRow = await row("CSKH", 21, "OK", { clientName: `${prefix} NICK JSC`, touch: { date: "2027-04-02T03:00:00Z", level: 2 } });
+      const before = await db.client.count({ where: { name: { startsWith: prefix } } });
+      const result = await applyImportRun(db, steward, run.id);
+      assert.ok("ok" in result && !result.errors.some((e) => [taxRow.id, aliasRow.id].includes(e.rowId)), JSON.stringify(result));
+      assert.equal((await db.trackerImportRow.findUniqueOrThrow({ where: { id: taxRow.id } })).matchedClientId, byTax.id);
+      assert.equal((await db.trackerImportRow.findUniqueOrThrow({ where: { id: aliasRow.id } })).matchedClientId, byAlias.id);
+      assert.equal(await db.client.count({ where: { name: { startsWith: prefix } } }), before);
+    });
   } finally {
     if (runId) await db.trackerImportRun.delete({ where: { id: runId } });
     await cleanupCrmFixture(db, prefix);

@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { OPEN_TASK_STATUS_FILTER } from "../types";
 import { loadTaskResource } from "./actor";
 import { crmCan, type CrmActor, type CrmAction } from "./policy";
+import { crmDeniedForUser } from "./access";
 
 type Actor = CrmActor & { name: string };
 type Failure = { error: string };
@@ -32,6 +33,7 @@ export async function assignCrmTask(db: PrismaClient, actor: Actor, input: { tas
     if (!loaded) return { error: DENIED };
     const assignee = await tx.user.findFirst({ where: { id: input.assigneeId, isActive: true, deletedAt: null }, select: { name: true } });
     if (!assignee) return { error: "Chọn người làm đang hoạt động." };
+    if (await crmDeniedForUser(tx, { id: input.assigneeId })) return { error: "Người này chưa được mở CRM." };
     await tx.task.updateMany({ where: { id: input.taskId, status: OPEN_TASK_STATUS_FILTER }, data: { assigneeId: input.assigneeId, dueDate: input.dueDate } });
     if (input.assigneeId !== actor.id) await tx.notification.create({ data: { userId: input.assigneeId, type: "CRM_TASK_ASSIGNED", taskId: input.taskId, clientId: loaded.clientId, opportunityId: loaded.opportunityId, message: `${actor.name} giao cho bạn: ${loaded.task.title}.` } });
     return { ok: true as const, clientId: loaded.clientId, opportunityId: loaded.opportunityId, assigneeName: assignee.name };

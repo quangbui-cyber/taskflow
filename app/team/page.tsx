@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { teamMemberOpenTasksWhere, taskOwnerSelect, toTaskOwnerDisplay } from "@/lib/taskQueries";
 import { crmEnabled } from "@/lib/features";
+import { crmAllowed } from "@/lib/crm/access";
 import { resolveOfficialSource, countBiddingOpportunitiesByUser } from "@/lib/crm/officialReport";
 import { activeDirectReportsWhere } from "@/lib/directReports";
 import { requireUser } from "@/lib/auth";
@@ -133,7 +134,8 @@ export default async function TeamPage({
   const isAdmin = user.role === "ADMIN";
   const { period: periodParam } = await searchParams;
   const period = getPerformancePeriod(periodParam);
-  const crmOn = crmEnabled();
+  // crm54: CRM tasks follow the viewer's access; the official report source stays on the company-wide switch.
+  const crmOn = await crmAllowed(user);
   const allowedOwners: Prisma.TaskWhereInput = { OR: [{ projectId: { not: null } }, ...(crmOn ? [{ clientId: { not: null } }, { opportunityId: { not: null } }] : [])] };
   const activeOwners: Prisma.TaskWhereInput = { OR: [{ project: { status: { notIn: [...ARCHIVED_PROJECT_STATUS_KEYS] } } }, ...(crmOn ? [{ clientId: { not: null } }, { opportunity: { outcome: null } }] : [])] };
   const performanceTaskWhere: Prisma.TaskWhereInput = {
@@ -178,7 +180,7 @@ export default async function TeamPage({
         orderBy: { name: "asc" },
       }),
       prisma.task.findMany({
-        where: { assigneeId: user.id, OR: [teamMemberOpenTasksWhere(user.id), { status: "DONE", completedAt: { gte: period.start, lt: period.end }, AND: [allowedOwners] }] },
+        where: { assigneeId: user.id, OR: [teamMemberOpenTasksWhere(user.id, crmOn), { status: "DONE", completedAt: { gte: period.start, lt: period.end }, AND: [allowedOwners] }] },
         select: {
           status: true,
           dueDate: true,
@@ -223,7 +225,7 @@ export default async function TeamPage({
             orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }],
           })
         : Promise.resolve([]),
-      resolveOfficialSource(prisma, crmOn),
+      resolveOfficialSource(prisma, crmEnabled()),
     ]);
 
   const biddingByUser = source === "OPPORTUNITY" ? await countBiddingOpportunitiesByUser(prisma, members.map((m) => m.id)) : new Map<string, number>();

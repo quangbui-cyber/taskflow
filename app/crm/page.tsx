@@ -8,18 +8,19 @@ import ReviewBoard from "@/components/crm/ReviewBoard";
 import ReviewUnratedSection from "@/components/crm/ReviewUnratedSection";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { crmEnabled } from "@/lib/features";
+import { crmAllowed } from "@/lib/crm/access";
 import { loadCrmActor } from "@/lib/crm/actor";
 import { loadWeeklyReview } from "@/lib/crm/reviewData";
 import { loadTouchpointDialogOptions, loadOpenOpportunityDialogOptions } from "@/lib/crm/dialogOptions";
 import { getCrmSettings } from "@/lib/crm/settings";
-import { draftsOpenFrom, rowActionsFor, reviewTiles } from "@/lib/crm/reviewView";
+import { draftsOpenFrom, rowActionsFor, reviewWeekProgress } from "@/lib/crm/reviewView";
+import { crmCan } from "@/lib/crm/policy";
 
 export default async function CrmReviewPage({ searchParams }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const [user, params] = await Promise.all([requireUser(), searchParams]);
-  if (!crmEnabled()) notFound();
+  if (!(await crmAllowed(user))) notFound();
   const actor = await loadCrmActor(user);
   const now = new Date();
   const [review, dialogOptions, settings, assignmentOptions] = await Promise.all([
@@ -28,20 +29,15 @@ export default async function CrmReviewPage({ searchParams }: {
     getCrmSettings(prisma),
     loadOpenOpportunityDialogOptions(prisma, actor, {}),
   ]);
-  const tiles = reviewTiles(review.metrics);
+  const progress = reviewWeekProgress(review.groups, review.doneThisWeek, now);
+  const [weekTitle, ...weekRange] = review.week.label.split(" · ");
+  const teamName = review.teams.find(t => t.id === review.filters.teamId)?.name;
   const actionsByKey = Object.fromEntries(
     Object.values(review.groups).flatMap(rows => rows.map(row => [row.key, rowActionsFor(row.group, row)])),
   );
-  const query = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    if (typeof value === "string") query.set(key, value);
-    else value?.forEach(item => query.append(key, item));
-  }
-  query.set("drafts", "open");
-  const draftHref = `/crm?${query}#crm-drafts`; // drafts=open preserves the current filters.
   const emptyState = <section className="tf-panel tf-empty flex-col gap-4 p-8">
     <h2 className="text-base font-semibold text-zinc-900">Tuần này chưa có khách cần review</h2>
-    <p>Thêm sự kiện dự kiến hoặc bước tiếp theo trong hồ sơ khách để khách xuất hiện ở đây.</p>
+    <p>Thêm sự kiện dự kiến hoặc việc tiếp theo trong hồ sơ khách để khách xuất hiện ở đây.</p>
     <Link href="/crm/clients" className="tf-button-secondary">Mở danh sách khách hàng</Link>
   </section>;
 
@@ -49,13 +45,13 @@ export default async function CrmReviewPage({ searchParams }: {
     <Sidebar user={user} activeSection="crm" />
     <main className="tf-main">
       <HubTabs section="crm" role={user.role} />
-      <div className="tf-page space-y-6">
+      <div className="tf-page space-y-4">
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="tf-page-title">Review tuần</h1>
-            <p className="tf-page-subtitle">{review.week.label}</p>
+            <h1 className="tf-page-title"><span className="sr-only">Review tuần · </span>{weekTitle}</h1>
+            <p className="tf-page-subtitle">{[...weekRange, `${progress.total} việc chăm sóc`, `đã xong ${progress.counts.done}`, teamName].filter(Boolean).join(" · ")}</p>
           </div>
-          <div className="flex min-w-0 flex-wrap items-end gap-4">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <ReviewFilters
               teams={review.teams}
               pics={review.pics}
@@ -69,26 +65,21 @@ export default async function CrmReviewPage({ searchParams }: {
             />
           </div>
         </header>
-        <div className="tf-metric-strip">
-          {tiles.map(tile => <a
-            key={tile.anchor}
-            className="tf-metric-item hover:bg-zinc-50"
-            href={tile.anchor === "crm-drafts" ? draftHref : `#${tile.anchor}`}
-          >
-            <p className="text-xs font-semibold text-zinc-500">{tile.label}</p>
-            <p className={`mt-2 text-xl font-semibold tabular-nums ${tile.warning ? "text-[#b86a08]" : "text-zinc-950"}`}>{tile.count}</p>
-          </a>)}
-        </div>
         <ReviewBoard
           key={review.filters.key}
           groups={review.groups}
           drafts={review.drafts}
-          tiles={tiles}
+          doneThisWeek={review.doneThisWeek}
+          upcomingEvents={review.upcomingEvents}
           draftsOpen={draftsOpenFrom(params)}
           actionsByKey={actionsByKey}
           dialogOptions={dialogOptions}
           accounts={assignmentOptions.picAccounts}
           now={now}
+          cadenceWeeks={settings.cadenceWeeks}
+          showPic={review.filters.pic === "all"}
+          unratedCount={review.unrated.length}
+          dataToolHref={crmCan(actor, "REVIEW_IMPORT") || crmCan(actor, "MERGE_CLIENT") ? "/admin/crm-data" : null}
           emptyState={emptyState}
           unrated={<ReviewUnratedSection
             key={review.filters.key}

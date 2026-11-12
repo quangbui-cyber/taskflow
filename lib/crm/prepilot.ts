@@ -2,11 +2,13 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { vnDateKey } from "./dates";
 import { parsePipelineMode } from "./pipelineMode";
 import { isTierConfigured, parseCadenceWeeks, parsePotentialScale, parseTierMatrix } from "./settingsSchema";
+import { parsePersonaDepth, personaDepthConfigured } from "./personaDepth";
+import { CRM_ACCESS_SETTING_KEY, parseCrmAccessUsers } from "../features";
 
 export type PrepilotItemKey =
   | "TIER_CADENCE" | "POTENTIAL_SCALE" | "TIER_MATRIX" | "PILOT_TEAM" | "TEAM_MANAGERS" | "DATA_STEWARD"
-  | "PLANNED_CUTOVER" | "REASONS_LOST" | "REASONS_CANCELLED" | "REASONS_DECLINED";
-export type PrepilotSection = "TIER" | "ACCESS" | "SOURCE" | "REASONS";
+  | "PLANNED_CUTOVER" | "REASONS_LOST" | "REASONS_CANCELLED" | "REASONS_DECLINED" | "PERSONA_DEPTH" | "ACCESS_LIST";
+export type PrepilotSection = "TIER" | "ACCESS" | "SOURCE" | "REASONS" | "PERSONA" | "ACCESS_LIST";
 export type PrepilotStatus = "CONFIGURED" | "NOT_CONFIGURED" | "NOT_APPLICABLE";
 
 export const PREPILOT_STATUS_LABELS: Record<PrepilotStatus, string> = {
@@ -20,9 +22,12 @@ export type PrepilotInput = {
   cadenceWeeksRaw: unknown;
   potentialScaleRaw: unknown;
   tierMatrixRaw: unknown;
+  personaDepthRaw?: unknown;
   pipelineModeRaw: unknown;
   teams: { id: string; name: string; activeManagerCount: number }[];
   activeStewardCount: number;
+  /** crm54: active non-Admin users in access.users. Missing means not loaded and reads as an empty list. */
+  crmAccessUserCount?: number;
   reasons: { group: string; active: boolean; requiresNote: boolean }[];
   today: string;
 };
@@ -46,10 +51,14 @@ function cutoverItem(mode: ReturnType<typeof parsePipelineMode>, selected: Retur
   return { ...item, status: "CONFIGURED", detail: displayDate(date) };
 }
 
+const NON_BLOCKING: readonly PrepilotItemKey[] = ["ACCESS_LIST"];
+
 export function evaluatePrepilot(input: PrepilotInput): { items: PrepilotItem[]; ready: boolean; missing: PrepilotItemKey[] } {
   const cadence = parseCadenceWeeks(input.cadenceWeeksRaw);
   const scale = parsePotentialScale(input.potentialScaleRaw) ?? [];
   const matrix = isTierConfigured(parseTierMatrix(input.tierMatrixRaw), scale);
+  const personaDepth = parsePersonaDepth(input.personaDepthRaw);
+  const personaReady = !!personaDepth && personaDepthConfigured(personaDepth);
   const raw = input.pipelineModeRaw;
   const pipeline = parsePipelineMode(raw);
   // A bad date must not hide the cutover requirement when the stored mode and teams are otherwise valid.
@@ -74,6 +83,8 @@ export function evaluatePrepilot(input: PrepilotInput): { items: PrepilotItem[];
       detail: scale.length ? `${scale.length} mức` : "Chưa có mức nào" },
     { key: "TIER_MATRIX", section: "TIER", label: "Bảng ghép hạng", status: configured(matrix),
       detail: matrix ? "Đủ ô" : "Thiếu ô" },
+    { key: "PERSONA_DEPTH", section: "PERSONA", label: "Độ sâu persona theo hạng", status: configured(personaReady),
+      detail: personaReady ? "Đã thiết lập đủ 5 hạng" : "Còn hạng chưa thiết lập" },
     { key: "PILOT_TEAM", section: "SOURCE", label: "Team pilot", status: configured(validPilot && !invalidOfficialMode),
       detail: !pilotIds.size ? "Chưa chọn team pilot" : !validPilot ? "Team không còn tồn tại"
         : invalidOfficialMode ? "Cấu hình nguồn báo cáo không hợp lệ" : pilotTeams.map(({ name }) => name).join(", ") },
@@ -81,6 +92,8 @@ export function evaluatePrepilot(input: PrepilotInput): { items: PrepilotItem[];
       detail: missingManagers.length ? `Thiếu AD/AM: ${missingManagers.map(({ name }) => name).join(", ")}` : `${targetTeams.length} team có AD/AM` },
     { key: "DATA_STEWARD", section: "ACCESS", label: "Người giữ chất lượng dữ liệu", status: configured(input.activeStewardCount > 0),
       detail: input.activeStewardCount ? `${input.activeStewardCount} người đang hoạt động` : "Chưa có người giữ chất lượng dữ liệu" },
+    { key: "ACCESS_LIST", section: "ACCESS_LIST", label: "Người dùng CRM", status: configured((input.crmAccessUserCount ?? 0) > 0),
+      detail: input.crmAccessUserCount ? `${input.crmAccessUserCount} người ngoài Admin` : "Chỉ Admin" },
     cutoverItem(pipeline, selected, input.today),
     ...reasonGroups.map(([group, name]): PrepilotItem => {
       const active = input.reasons.filter((reason) => reason.group === group && reason.active);
@@ -91,17 +104,18 @@ export function evaluatePrepilot(input: PrepilotInput): { items: PrepilotItem[];
       };
     }),
   ];
-  const missing = items.filter(({ status }) => status === "NOT_CONFIGURED").map(({ key }) => key);
+  // crm54: an empty access list is a warning only; it never blocks readiness.
+  const missing = items.filter(({ status, key }) => status === "NOT_CONFIGURED" && !NON_BLOCKING.includes(key)).map(({ key }) => key);
   return { items, missing, ready: missing.length === 0 };
 }
 
 export function prepilotSectionFlags({ items }: ReturnType<typeof evaluatePrepilot>): Record<PrepilotSection, boolean> {
-  const flags = { TIER: false, ACCESS: false, SOURCE: false, REASONS: false };
+  const flags = { TIER: false, ACCESS: false, SOURCE: false, REASONS: false, PERSONA: false, ACCESS_LIST: false };
   for (const { status, section } of items) if (status === "NOT_CONFIGURED") flags[section] = true;
   return flags;
 }
 
-const keys = ["tier.cadenceWeeks", "tier.potentialScale", "tier.matrix", "pipeline.mode"];
+const keys = ["tier.cadenceWeeks", "tier.potentialScale", "tier.matrix", "pipeline.mode", "persona.depth", CRM_ACCESS_SETTING_KEY];
 
 export async function loadPrepilotInput(db: PrismaClient | Prisma.TransactionClient, now: Date): Promise<PrepilotInput> {
   const activeUser = { isActive: true, deletedAt: null } as const;
@@ -115,12 +129,15 @@ export async function loadPrepilotInput(db: PrismaClient | Prisma.TransactionCli
     db.crmReason.findMany({ select: { group: true, active: true, requiresNote: true } }),
   ]);
   const raw = new Map(rows.map(({ key, value }) => [key, value]));
+  const accessIds = parseCrmAccessUsers(raw.get(CRM_ACCESS_SETTING_KEY)) ?? [];
+  const crmAccessUserCount = accessIds.length ? await db.user.count({ where: { ...activeUser, id: { in: accessIds }, role: { not: "ADMIN" } } }) : 0;
   return {
     cadenceWeeksRaw: raw.get("tier.cadenceWeeks") ?? null,
     potentialScaleRaw: raw.get("tier.potentialScale") ?? null,
     tierMatrixRaw: raw.get("tier.matrix") ?? null,
+    personaDepthRaw: raw.get("persona.depth") ?? null,
     pipelineModeRaw: raw.get("pipeline.mode") ?? null,
     teams: teams.map(({ id, name, _count }) => ({ id, name, activeManagerCount: _count.crmManagedTeam })),
-    activeStewardCount, reasons, today: vnDateKey(now),
+    activeStewardCount, crmAccessUserCount, reasons, today: vnDateKey(now),
   };
 }

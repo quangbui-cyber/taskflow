@@ -3,6 +3,7 @@ import { after } from "next/server";
 import { crmEnabled } from "@/lib/features";
 import { prisma } from "@/lib/prisma";
 import { runCrmReminderJob } from "@/lib/crm/reminderJob";
+import { listCrmAllowedUserIds } from "@/lib/crm/access";
 import { deliverPush } from "@/lib/webPush";
 
 export const runtime = "nodejs";
@@ -34,8 +35,12 @@ export async function GET(request: Request) {
   if (!cronSecret || request.headers.get("authorization") !== `Bearer ${cronSecret}`) return new Response("Unauthorized", { status: 401 });
   if (!crmEnabled()) return Response.json({ ok: true, skipped: "CRM_DISABLED" });
   try {
-    const summary = await withDatabaseRetry(() => runCrmReminderJob(prisma, { now: new Date() }));
-    const created = summary.notifications.length ? await withDatabaseRetry(() => prisma.notification.createManyAndReturn({ data: summary.notifications, skipDuplicates: true })) : [];
+    // crm54: CRM stays on the master switch here; work and notices only reach users who may use CRM.
+    const allowedUserIds = await withDatabaseRetry(() => listCrmAllowedUserIds(prisma));
+    const allowed = new Set(allowedUserIds);
+    const summary = await withDatabaseRetry(() => runCrmReminderJob(prisma, { now: new Date(), allowedPicUserIds: allowedUserIds }));
+    const notifications = summary.notifications.filter(row => allowed.has(row.userId));
+    const created = notifications.length ? await withDatabaseRetry(() => prisma.notification.createManyAndReturn({ data: notifications, skipDuplicates: true })) : [];
     if (created.length) after(async () => {
       const results = await Promise.allSettled(created.map(row => deliverPush([row.userId], {
         type: row.type, message: row.message, taskId: row.taskId ?? undefined, clientId: row.clientId ?? undefined, opportunityId: row.opportunityId ?? undefined,

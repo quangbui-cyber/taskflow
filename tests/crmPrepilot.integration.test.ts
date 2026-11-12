@@ -25,7 +25,8 @@ test("prepilot loader reads stored configuration and leaves every monitored data
     assert.deepEqual(input.potentialScaleRaw, raw.get("tier.potentialScale") ?? null);
     assert.deepEqual(input.tierMatrixRaw, raw.get("tier.matrix") ?? null);
     assert.deepEqual(input.pipelineModeRaw, raw.get("pipeline.mode") ?? null);
-    assert.equal(evaluatePrepilot(input).items.length, 10);
+    assert.deepEqual(input.personaDepthRaw, raw.get("persona.depth") ?? null);
+    assert.equal(evaluatePrepilot(input).items.length, 12);
     assert.deepEqual(await snapshot(db), before);
   } finally {
     await db.$disconnect();
@@ -56,7 +57,7 @@ test("prepilot CLI reports the same statuses, exit code and host without exposin
     assert.equal(report.database, target.hostname);
     assert.equal(report.ready, evaluated.ready);
     assert.equal(json.status, evaluated.ready ? 0 : 1);
-    assert.equal(report.items.length, 10);
+    assert.equal(report.items.length, 12);
     assert.deepEqual(report.items, evaluated.items);
 
     const text = invoke([]);

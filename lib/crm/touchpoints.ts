@@ -4,6 +4,7 @@ import { crmCan, type CrmActor } from "./policy";
 import { lockOpportunity, openOpportunityTx } from "./opportunityWorkflow";
 import { validateOpenOpportunityInput, type OpenOpportunityInput } from "./opportunityStage";
 import { TOUCHPOINT_KINDS } from "./labels";
+import { crmDeniedForUser } from "./access";
 
 type Actor = CrmActor & { name: string };
 type Failure = { error: string; fieldErrors?: Record<string, string> };
@@ -97,6 +98,7 @@ export async function logTouchpoint(db: PrismaClient, actor: Actor, raw: unknown
     if (completeTask && !["TODO", "IN_PROGRESS"].includes(completeTask.status)) return { error: "Việc đã kết thúc. Tải lại trang để xem bản mới." };
     const assigneeId = input.next.mode === "NEXT_STEP" ? input.next.assigneeId : actor.id;
     if (!await tx.user.findFirst({ where: { id: assigneeId, isActive: true, deletedAt: null }, select: { id: true } })) return { error: "Chọn người làm đang hoạt động." };
+    if (await crmDeniedForUser(tx, { id: assigneeId })) return { error: "Người này chưa được mở CRM." };
     const draft = input.confirmDraftId ? await tx.touchpoint.findUnique({ where: { id: input.confirmDraftId } }) : null;
     if (input.confirmDraftId && (!draft || draft.status !== "DRAFT" || draft.clientId !== input.clientId || draft.opportunityId !== input.opportunityId)) return { error: "Điểm chạm nháp không còn phù hợp để xác nhận." };
     let openedOpportunityId: string | null = null;
@@ -144,7 +146,7 @@ export async function produceMeetingDrafts(db: PrismaClient, meetingId: string, 
     if (created.count) {
       const client = await tx.client.findUnique({ where: { id: clientId }, select: { picAccount: { select: { user: { select: { id: true, isActive: true, deletedAt: true } } } } } });
       const pic = client?.picAccount?.user;
-      if (pic?.isActive && !pic.deletedAt) await tx.notification.create({ data: { dedupeKey: `crm-meeting-draft:${meetingId}:${clientId}`, userId: pic.id, type: "CRM_DRAFT", clientId, opportunityId: meeting.opportunityId, meetingId, message: `Có điểm chạm nháp từ cuộc họp ${meeting.title} chờ xác nhận.` } });
+      if (pic?.isActive && !pic.deletedAt && !await crmDeniedForUser(tx, pic)) await tx.notification.create({ data: { dedupeKey: `crm-meeting-draft:${meetingId}:${clientId}`, userId: pic.id, type: "CRM_DRAFT", clientId, opportunityId: meeting.opportunityId, meetingId, message: `Có điểm chạm nháp từ cuộc họp ${meeting.title} chờ xác nhận.` } });
     }
     return { created: created.count };
   });

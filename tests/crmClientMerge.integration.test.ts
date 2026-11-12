@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
+import { Prisma } from "@prisma/client";
 import { clientHasCrmData, listDuplicateClientPairs, mergeClients } from "../lib/crm/clientMerge";
 import { KPI_RECOGNIZED_STATUSES } from "../lib/kpi";
 import { crmTestDatabaseUrl, createCrmTestDb, seedCrmFixture, cleanupCrmFixture } from "./helpers/crmTestDb";
 
 test("client merge preserves all owners, collisions, fields, audit and recognized revenue", { skip: !crmTestDatabaseUrl() }, async (t) => {
   const db = createCrmTestDb(); const prefix = `merge-${randomUUID()}`;
-  const folderIds: string[] = []; const runIds: string[] = [];
+  const folderIds: string[] = []; const runIds: string[] = []; const tagIds: string[] = []; const agencyIds: string[] = [];
   try {
     const f = await seedCrmFixture(db, prefix);
     const actor = { id: f.admin.id, name: f.admin.name, role: "ADMIN", accountId: null, managedTeamIds: [], isDataSteward: false };
@@ -62,7 +63,7 @@ test("client merge preserves all owners, collisions, fields, audit and recognize
     });
     await t.test("admin atomically moves every relation and handles conflicts without losing ownership", async () => {
       const result = await mergeClients(db, actor, input); assert.ok("ok" in result);
-      assert.deepEqual(result.movedCounts, { projects: 1, opportunities: 1, expectedEvents: 1, buyingUnitsMoved: 1, buyingUnitsMerged: 1, touchpoints: 2, touchpointCollisions: 3, tasks: 1, files: 1, meetings: 1, potentialScores: 1, cadenceMoved: 1, cadenceDropped: 1, trackerRows: 1, notifications: 1, driveFoldersRekeyed: true });
+      assert.deepEqual(result.movedCounts, { projects: 1, opportunities: 1, expectedEvents: 1, buyingUnitsMoved: 1, buyingUnitsMerged: 1, touchpoints: 2, touchpointCollisions: 3, tasks: 1, files: 1, meetings: 1, potentialScores: 1, cadenceMoved: 1, cadenceDropped: 1, trackerRows: 1, notifications: 1, driveFoldersRekeyed: true, aliasesMoved: 0, aliasesDropped: 0, sourceNameAlias: true, tagsMoved: 0, competitorsMoved: 0, competitorsMerged: 0, childClients: 0, fieldChanges: 0, playbookFields: 0, playbookSections: 0 });
       assert.equal(await db.client.findUnique({ where: { id: source.id } }), null);
       for (const moved of [await db.project.findUniqueOrThrow({ where: { id: project.id } }), await db.opportunity.findUniqueOrThrow({ where: { id: f.opportunity.id } }), await db.expectedEvent.findUniqueOrThrow({ where: { id: event.id } }), await db.task.findUniqueOrThrow({ where: { id: task.id } }), await db.projectFile.findUniqueOrThrow({ where: { id: file.id } }), await db.meeting.findUniqueOrThrow({ where: { id: meeting.id } }), await db.clientPotentialScore.findUniqueOrThrow({ where: { id: score.id } }), await db.notification.findUniqueOrThrow({ where: { id: notice.id } })]) assert.equal(moved.clientId, target.id);
       assert.equal((await db.opportunity.findUniqueOrThrow({ where: { id: f.opportunity.id } })).buyingUnitId, unitB.id);
@@ -100,6 +101,58 @@ test("client merge preserves all owners, collisions, fields, audit and recognize
       assert.equal(await db.client.count({ where: { id: { in: [a.id, b.id] } } }), 1);
       assert.equal(await db.clientMergeLog.count({ where: { sourceClientId: { in: [a.id, b.id] } } }), 1);
     });
+    await t.test("crm50 merge moves aliases, tags, agencies, child companies and field history to the target", async () => {
+      const tag = await db.clientTag.create({ data: { label: `${prefix} Tag` } }); tagIds.push(tag.id);
+      const tag2 = await db.clientTag.create({ data: { label: `${prefix} Tag 2` } }); tagIds.push(tag2.id);
+      const agency = await db.competitor.create({ data: { name: `${prefix} Agency` } }); agencyIds.push(agency.id);
+      const agency2 = await db.competitor.create({ data: { name: `${prefix} Agency 2` } }); agencyIds.push(agency2.id);
+      const parent = await db.client.create({ data: { name: `${prefix} Holding` } });
+      const src = await db.client.create({ data: { name: `${prefix} Source Brand`, parentClientId: parent.id, taxCode: null, legalName: "Pháp nhân nguồn", notes: "Ghi chú nguồn" } });
+      const dst = await db.client.create({ data: { name: `${prefix} Target Brand`, parentClientId: src.id } });
+      const child = await db.client.create({ data: { name: `${prefix} Child`, parentClientId: src.id } });
+      await db.clientAlias.createMany({ data: [{ clientId: src.id, name: "SRC", key: `${prefix} src alias` }, { clientId: src.id, name: "Shared", key: `${prefix} shared` }, { clientId: dst.id, name: "Shared", key: `${prefix} shared-dst` }] });
+      await db.clientTagLink.createMany({ data: [{ clientId: src.id, tagId: tag.id }, { clientId: src.id, tagId: tag2.id }, { clientId: dst.id, tagId: tag.id }] });
+      await db.clientCompetitor.createMany({ data: [{ clientId: src.id, competitorId: agency.id, note: "Nguồn" }, { clientId: dst.id, competitorId: agency.id }, { clientId: src.id, competitorId: agency2.id }] });
+      await db.clientFieldChange.create({ data: { clientId: src.id, field: "legalName", oldValue: Prisma.JsonNull, newValue: "Pháp nhân nguồn", actorName: "Test" } });
+      const result = await mergeClients(db, actor, { sourceClientId: src.id, targetClientId: dst.id, expectedSourceVersion: 0, expectedTargetVersion: 0 });
+      assert.ok("ok" in result, JSON.stringify(result));
+      assert.equal(result.movedCounts.aliasesMoved, 2); assert.equal(result.movedCounts.sourceNameAlias, true);
+      assert.equal(result.movedCounts.tagsMoved, 1); assert.equal(result.movedCounts.competitorsMoved, 1); assert.equal(result.movedCounts.competitorsMerged, 1);
+      assert.equal(result.movedCounts.childClients, 1); assert.equal(result.movedCounts.fieldChanges, 1);
+      const kept = await db.client.findUniqueOrThrow({ where: { id: dst.id } });
+      assert.equal(kept.parentClientId, null, "target that was a child of the source is detached first");
+      assert.equal(kept.legalName, "Pháp nhân nguồn"); assert.equal(kept.notes, "Ghi chú nguồn");
+      assert.equal((await db.client.findUniqueOrThrow({ where: { id: child.id } })).parentClientId, dst.id);
+      assert.deepEqual((await db.clientAlias.findMany({ where: { clientId: dst.id }, orderBy: { key: "asc" } })).map((a) => a.name).sort(), ["SRC", "Shared", "Shared", src.name].sort());
+      assert.equal(await db.clientTagLink.count({ where: { clientId: dst.id } }), 2);
+      assert.equal((await db.clientCompetitor.findFirstOrThrow({ where: { clientId: dst.id, competitorId: agency.id } })).note, "Nguồn");
+      assert.equal(await db.clientCompetitor.count({ where: { clientId: dst.id } }), 2);
+      assert.equal(await db.clientFieldChange.count({ where: { clientId: dst.id } }), 1);
+    });
+    await t.test("crm50 merge refuses different tax codes and a group deeper than 3 levels", async () => {
+      const a = await db.client.create({ data: { name: `${prefix} Tax One`, taxCode: `9${String(Date.now()).slice(-9)}` } });
+      const b = await db.client.create({ data: { name: `${prefix} Tax Two`, taxCode: `8${String(Date.now()).slice(-9)}` } });
+      assert.match((await mergeClients(db, actor, { sourceClientId: a.id, targetClientId: b.id, expectedSourceVersion: 0, expectedTargetVersion: 0 }) as { error: string }).error, /mã số thuế khác nhau/);
+      const top = await db.client.create({ data: { name: `${prefix} Deep Top` } });
+      const mid = await db.client.create({ data: { name: `${prefix} Deep Mid`, parentClientId: top.id } });
+      const leaf = await db.client.create({ data: { name: `${prefix} Deep Leaf`, parentClientId: mid.id } });
+      const other = await db.client.create({ data: { name: `${prefix} Deep Other` } });
+      await db.client.create({ data: { name: `${prefix} Deep Kid`, parentClientId: other.id } });
+      assert.match((await mergeClients(db, actor, { sourceClientId: other.id, targetClientId: leaf.id, expectedSourceVersion: 0, expectedTargetVersion: 0 }) as { error: string }).error, /3 cấp/);
+      assert.ok(await db.client.findUnique({ where: { id: other.id } }));
+    });
+    await t.test("duplicate detection uses tax code and aliases before names", async () => {
+      const code = `7${String(Date.now()).slice(-9)}`;
+      const a = await db.client.create({ data: { name: `${prefix} Totally Alpha`, taxCode: code } });
+      const b = await db.client.create({ data: { name: `${prefix} Different Beta` } });
+      const c = await db.client.create({ data: { name: `${prefix} Gamma Brand` } });
+      await db.clientAlias.create({ data: { clientId: a.id, name: "Gamma", key: (await import("../lib/crm/clientMerge")).clientDuplicateKey(c.name) } });
+      await db.client.update({ where: { id: b.id }, data: { taxCode: null } });
+      const pairs = await listDuplicateClientPairs(db);
+      const has = (x: string, y: string) => pairs.find((p) => [p.a.id, p.b.id].includes(x) && [p.a.id, p.b.id].includes(y));
+      assert.match(has(a.id, c.id)!.key, /^alias:/);
+      assert.equal(has(a.id, b.id), undefined);
+    });
     await t.test("CRM data guard distinguishes a bare catalog client", async () => {
       const bare = await db.client.create({ data: { name: `${prefix} Bare` } });
       assert.equal(await clientHasCrmData(db, bare.id), false); assert.equal(await clientHasCrmData(db, target.id), true);
@@ -109,6 +162,9 @@ test("client merge preserves all owners, collisions, fields, audit and recognize
     await db.driveFolder.deleteMany({ where: { folderId: { in: folderIds } } });
     await db.trackerImportRun.deleteMany({ where: { id: { in: runIds } } });
     await db.clientMergeLog.deleteMany({ where: { sourceClientName: { startsWith: `${prefix} ` } } });
-    await cleanupCrmFixture(db, prefix); await db.$disconnect();
+    await cleanupCrmFixture(db, prefix);
+    await db.clientTagLink.deleteMany({ where: { tagId: { in: tagIds } } }); await db.clientTag.deleteMany({ where: { id: { in: tagIds } } });
+    await db.clientCompetitor.deleteMany({ where: { competitorId: { in: agencyIds } } }); await db.competitor.deleteMany({ where: { id: { in: agencyIds } } });
+    await db.$disconnect();
   }
 });

@@ -184,8 +184,8 @@ function TouchpointDialogBody({ options, prefill = {}, lockClient, onSaved, onCl
         {field("demandSignal", "Tín hiệu nhu cầu", <textarea {...a("demandSignal")} rows={2} maxLength={2000} className="tf-field" value={state.demandSignal} onChange={e => set("demandSignal", e.target.value)} />)}
       </div>}
       {field("notes", "Điều mới biết", <textarea {...a("notes")} rows={3} maxLength={2000} className="tf-field" value={state.notes} onChange={e => set("notes", e.target.value)} />)}
-      <div role="radiogroup" aria-label="Bước tiếp theo" className="flex gap-1 rounded-[10px] bg-zinc-100 p-1">
-        {([ ["NEXT_STEP", "Có bước tiếp theo"], ["WAIT", "Chờ khách"] ] as const).map(([value, label]) => <label key={value} className={`flex-1 cursor-pointer rounded-[8px] px-3 py-2 text-center text-sm focus-within:ring-2 focus-within:ring-zinc-400 ${state.mode === value ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"}`}><input type="radio" className="sr-only" name={`${uid}-next`} checked={state.mode === value} onChange={() => set("mode", value)} />{label}</label>)}
+      <div role="radiogroup" aria-label="Việc tiếp theo" className="flex gap-1 rounded-[10px] bg-zinc-100 p-1">
+        {([ ["NEXT_STEP", "Có việc tiếp theo"], ["WAIT", "Chờ khách"] ] as const).map(([value, label]) => <label key={value} className={`flex-1 cursor-pointer rounded-[8px] px-3 py-2 text-center text-sm focus-within:ring-2 focus-within:ring-zinc-400 ${state.mode === value ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"}`}><input type="radio" className="sr-only" name={`${uid}-next`} checked={state.mode === value} onChange={() => set("mode", value)} />{label}</label>)}
       </div>
       {state.mode === "NEXT_STEP" ? <>
         {field("nextTitle", "Việc cần làm", <input {...a("nextTitle")} maxLength={200} className="tf-field" value={state.nextTitle} onChange={e => set("nextTitle", e.target.value)} />)}

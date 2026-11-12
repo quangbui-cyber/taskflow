@@ -3,6 +3,7 @@ import { ownerOf, ownerWhere, type WorkOwner } from "./workOwner";
 import { crmCan, type CrmActor } from "./crm/policy";
 import { loadClientResource, loadOpportunityResource } from "./crm/actor";
 import { OPEN_TASK_STATUS_FILTER } from "./types";
+import { crmDeniedForUser } from "./crm/access";
 type Db = PrismaClient | Prisma.TransactionClient;
 type User = { id: string; role: string };
 const denied = { error: "Bạn không có quyền sửa mục này. Liên hệ PIC hoặc AD/AM của team." };
@@ -37,6 +38,7 @@ export async function assertOwnerAccess(db: Db, user: User, owner: WorkOwner, ac
     const project = await db.project.findUnique({ where: { id: owner.id }, select: { id: true, members: { where: { userId: user.id }, select: { id: true } } } });
     return project && (user.role === "ADMIN" || project.members.length) ? { ok: true } : denied;
   }
+  if (await crmDeniedForUser(db, user)) return denied;
   const resource = await resourceWith(db, owner);
   return resource && crmCan(await actorWith(db, user), action === "CREATE_TASK" ? "ASSIGN" : "VIEW", resource) ? { ok: true } : denied;
 }
@@ -44,11 +46,13 @@ export async function assertTaskAccess(db: Db, user: User, taskId: string, actio
   const task = await loadTaskWithOwner(db, taskId);
   if (!task) return denied;
   if (task.owner.kind === "PROJECT") return "ok" in await assertOwnerAccess(db, user, task.owner, "VIEW") ? { task } : denied;
+  if (await crmDeniedForUser(db, user)) return denied;
   const resource = await resourceWith(db, task.owner);
   const policyAction = action === "EDIT" ? "EDIT_TASK" : action === "DELETE" ? "ASSIGN" : "VIEW";
   return resource && crmCan(await actorWith(db, user), policyAction, { kind: "TASK", owner: resource, assigneeId: task.assigneeId, creatorId: task.creatorId }) ? { task } : denied;
 }
 export async function isValidAssignee(db: Db, owner: WorkOwner, userId: string): Promise<boolean> {
   if (owner.kind === "PROJECT") return !!await db.projectMember.findUnique({ where: { projectId_userId: { projectId: owner.id, userId } } });
+  if (await crmDeniedForUser(db, { id: userId })) return false;
   return !!await db.user.findFirst({ where: { id: userId, isActive: true, deletedAt: null }, select: { id: true } });
 }

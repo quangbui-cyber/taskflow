@@ -26,7 +26,7 @@ test("home focus shares the PIC review without copying tasks", { skip: !crmTestD
       const focus = await loadMyCrmFocus(db, f.pic, now);
       assert.equal(HOME_FOCUS_LIMIT, 2); assert.equal(focus.isPic, true);
       assert.deepEqual(focus.rows, [
-        { clientId: a.id, clientName: a.name, reason: "Bước tiếp theo", dueLabel: "hạn 08/11" },
+        { clientId: a.id, clientName: a.name, reason: "Việc tiếp theo", dueLabel: "hạn 08/11" },
         { clientId: b.id, clientName: b.name, reason: "Nhắc định kỳ", dueLabel: "hạn 15/11" },
       ]);
       const review = await loadWeeklyReviewGroups(db, { id: f.pic.id, role: f.pic.role, accountId: f.picAccount.id, managedTeamIds: [], isDataSteward: false }, { team: "all", pic: "me" }, now);
@@ -36,13 +36,13 @@ test("home focus shares the PIC review without copying tasks", { skip: !crmTestD
     await t.test("closed Opportunity tasks are ignored", async () => {
       const closed = await db.opportunity.create({ data: { name: `${prefix} Closed`, clientId: a.id, stage: "CARE", outcome: "CUSTOMER_CANCELLED", programTypeCode: "MICE", expectedYear: 2026, source: "OTHER", demandSignal: "Synthetic closed deal" } });
       await db.task.create({ data: { title: `${prefix} Closed task`, opportunityId: closed.id, creatorId: f.pic.id, crmKind: "APPOINTMENT", dueDate: new Date("2026-10-01T00:00:00Z") } });
-      assert.equal((await loadMyCrmFocus(db, f.pic, now)).rows[0].reason, "Bước tiếp theo");
+      assert.equal((await loadMyCrmFocus(db, f.pic, now)).rows[0].reason, "Việc tiếp theo");
     });
     await t.test("DONE and CANCELLED do not count as next steps", async () => {
       await db.task.update({ where: { id: ta.id }, data: { status: "DONE" } });
       await db.task.update({ where: { id: tb.id }, data: { status: "CANCELLED" } });
       const focus = await loadMyCrmFocus(db, f.pic, now);
-      assert.equal(focus.rows[0].clientId, c.id); assert.equal(focus.rows[0].reason, "Chưa có bước tiếp theo");
+      assert.equal(focus.rows[0].clientId, c.id); assert.equal(focus.rows[0].reason, "Chưa có việc tiếp theo");
       assert.ok(focus.rows.every((r) => r.dueLabel === null));
     });
     await t.test("PIC with only future tasks has an empty card", async () => {

@@ -59,3 +59,26 @@ export function crmEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
 
 export const CRM_DISABLED_MESSAGE = "Khu vực Khách hàng đang tắt.";
 
+
+/**
+ * crm54: CRM is opened per person during the pilot. CRM_ENABLED stays the master switch.
+ * Admin always has access; others need their id in CrmSetting access.users. Disabled users never do.
+ */
+export const CRM_ACCESS_SETTING_KEY = "access.users";
+export const CRM_ACCESS_MAX_USERS = 500;
+export type CrmAccessUser = { id: string; role: string; isActive?: boolean; deletedAt?: Date | null };
+
+/** Strict parser: malformed values are read as null, which callers treat as an empty list (Admin only). */
+export function parseCrmAccessUsers(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length > CRM_ACCESS_MAX_USERS) return null;
+  if (value.some((id) => typeof id !== "string" || !id.trim() || id.length > 64 || id !== id.trim())) return null;
+  if (new Set(value).size !== value.length) return null;
+  return [...value] as string[];
+}
+
+export function crmAccessFor(user: CrmAccessUser | null | undefined, settings: { enabled: boolean; accessUserIds: readonly string[] | null }): boolean {
+  if (!settings.enabled || !user?.id) return false;
+  if (user.isActive === false || (user.deletedAt !== undefined && user.deletedAt !== null)) return false;
+  if (user.role === "ADMIN") return true;
+  return (settings.accessUserIds ?? []).includes(user.id);
+}

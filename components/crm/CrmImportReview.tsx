@@ -27,7 +27,7 @@ export function CrmTrackerUpload() {
       const response = await fetch("/api/crm/import", { method: "POST", body: form });
       const result = await response.json();
       if (!response.ok || !result.runId) { setError(result.error ?? "Không chạy thử được file."); return; }
-      router.push(`/crm/import?run=${encodeURIComponent(result.runId)}`); router.refresh();
+      router.push(`/admin/crm-data?run=${encodeURIComponent(result.runId)}`); router.refresh();
     } catch { setError("Mất kết nối. Vui lòng thử lại."); }
     finally { setBusy(false); }
   }
@@ -78,7 +78,7 @@ export default function CrmImportReview({ runId, rows, clients, accounts, progra
       } catch { setError("Mất kết nối. Vui lòng thử lại."); }
     });
   }
-  return <div className="space-y-4"><div className="flex flex-wrap items-center justify-between gap-4"><nav aria-label="Lọc dòng nhập" className="flex flex-wrap gap-2">{[["", "Tất cả"], ...["DUPLICATE", "UNCLEAR", "TEXT_DATE", "MISSING_PIC", "CONFIRMED"].map((s) => [s, IMPORT_STATUSES[s]])].map(([key, label]) => <Link key={key} href={`/crm/import?${new URLSearchParams({ run: runId, ...(key ? { status: key } : {}) })}`} aria-current={currentStatus === key ? "page" : undefined} className={`rounded-full px-3 py-2 text-xs ${currentStatus === key ? "bg-zinc-900 text-white" : "bg-white text-zinc-600 hover:bg-zinc-100"}`}>{label}</Link>)}</nav>
+  return <div className="space-y-4"><div className="flex flex-wrap items-center justify-between gap-4"><nav aria-label="Lọc dòng nhập" className="flex flex-wrap gap-2">{[["", "Tất cả"], ...["DUPLICATE", "UNCLEAR", "TEXT_DATE", "MISSING_PIC", "CONFIRMED"].map((s) => [s, IMPORT_STATUSES[s]])].map(([key, label]) => <Link key={key} href={`/admin/crm-data?${new URLSearchParams({ run: runId, ...(key ? { status: key } : {}) })}`} aria-current={currentStatus === key ? "page" : undefined} className={`rounded-full px-3 py-2 text-xs ${currentStatus === key ? "bg-zinc-900 text-white" : "bg-white text-zinc-600 hover:bg-zinc-100"}`}>{label}</Link>)}</nav>
     <button className="tf-button-primary" disabled={pending} onClick={() => { setError(""); setMessage(""); startTransition(async () => { try { const result = await applyImportRunAction(runId); if (result.error) { setError(result.error); return; } setMessage(result.success ?? "Đã nhập."); setRowErrors(result.errors ?? []); router.refresh(); } catch { setError("Mất kết nối. Vui lòng thử lại."); } }); }}>{pending ? "Đang xử lý…" : "Nhập các dòng đã xác nhận"}</button></div>
     {message && <p role="status" className="text-sm text-emerald-700">{message}</p>}{error && <p role="alert" className="text-sm text-red-700">{error}</p>}{rowErrors.length > 0 && <ul role="alert" className="space-y-1 text-sm text-red-700">{rowErrors.map((e) => <li key={e.rowId}>{e.label}: {e.error}</li>)}</ul>}
     <div className="tf-panel max-w-full overflow-x-auto"><table className="w-full text-left text-sm"><caption className="sr-only">Rà dữ liệu nhập</caption><thead><tr>{["Sheet và dòng", originalLabel, "Ánh xạ đề xuất", "Trạng thái", "Thao tác"].map((label) => <th scope="col" key={label} className="px-4 py-3 text-xs font-semibold text-zinc-500">{label}</th>)}</tr></thead><tbody className="divide-y divide-zinc-100">{rows.map((row) => {

@@ -4,7 +4,7 @@ import { MAX_DRIVE_FILE_SIZE, validateUploadMeta, type UploadMeta } from "@/lib/
 import { isTaskFileKind } from "@/lib/taskFiles";
 import { assertTaskAccess, assertOwnerAccess } from "./taskAccess";
 import { parseOwnerInput, type WorkOwnerKind } from "./workOwner";
-import { crmEnabled } from "./features";
+import { crmAllowed } from "./crm/access";
 
 /**
  * Tải file thẳng từ trình duyệt lên Drive:
@@ -84,11 +84,11 @@ export function parseUploadRequest(body: unknown): { target: UploadTarget; meta:
 export async function uploadAccess(target: UploadTarget, user: { id: string; role: string }) {
   if (target.type === "task") {
     const access = await assertTaskAccess(prisma, user, target.taskId, "EDIT");
-    if (!("task" in access) || (access.task.owner.kind !== "PROJECT" && !crmEnabled())) return null;
+    if (!("task" in access) || (access.task.owner.kind !== "PROJECT" && !(await crmAllowed(user)))) return null;
     return { owner: access.task.owner, projectId: access.task.projectId, task: access.task };
   }
   const owner = target.type === "project" ? parseOwnerInput("PROJECT", target.projectId) : parseOwnerInput(target.type.toUpperCase(), target.id);
-  if (!owner || (owner.kind !== "PROJECT" && !crmEnabled())) return null;
+  if (!owner || (owner.kind !== "PROJECT" && !(await crmAllowed(user)))) return null;
   const access = await assertOwnerAccess(prisma, user, owner, "CREATE_TASK");
   return "ok" in access ? { owner, projectId: owner.kind === "PROJECT" ? owner.id : null, task: null } : null;
 }

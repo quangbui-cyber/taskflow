@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useId, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { scorePotentialAction } from "@/app/actions/crmClients";
 import { useInteraction } from "@/components/InteractionProvider";
 import type { UnratedRow } from "@/lib/crm/reviewData";
@@ -11,24 +11,27 @@ import { formatCompactVnd } from "@/lib/crm/opportunityFormat";
 type Props = { rows: UnratedRow[]; potentialScale: PotentialLevel[]; potentialScaleConfigured: boolean; isAdmin: boolean };
 export default function ReviewUnratedSection({ rows: initialRows, potentialScale, potentialScaleConfigured, isAdmin }: Props) {
   const [rows] = useState(() => initialRows);
-  if (!rows.length) return null;
-  return <section className="tf-panel !mt-12 overflow-hidden" aria-label="Chưa xếp hạng">
-    <header className="px-5 py-3"><h2 className="text-base font-semibold">Chưa xếp hạng</h2></header>
+  if (!rows.length) return <p className="text-zinc-500">Khách nào cũng đã có hạng.</p>;
+  // crm51: rendered inside "Dọn dữ liệu" in the right column, so rows stack instead of using two columns.
+  return <div aria-label="Chưa xếp hạng">
     {potentialScaleConfigured ? <div className="divide-y divide-zinc-100">{rows.map(row => <PotentialRow key={row.clientId} row={row} potentialScale={potentialScale} />)}</div> : <>
-      <div className="flex flex-wrap items-center gap-4 px-5 py-4 text-sm text-zinc-500"><span>Chưa có thang tiềm năng</span>{isAdmin && <Link href="/admin?tab=crm" className="tf-button-secondary">Mở cấu hình CRM</Link>}</div>
-      <div className="divide-y divide-zinc-100">{rows.map(row => <div key={row.clientId} className="px-5 py-4"><Link href={`/crm/clients/${row.clientId}`} className="text-sm font-semibold hover:underline">{row.name}</Link><p className="mt-1 text-xs text-zinc-500">Doanh thu 24 tháng: {row.revenue24m ? formatCompactVnd(row.revenue24m) : "0"}</p></div>)}</div>
+      <div className="flex flex-wrap items-center gap-3 py-2 text-zinc-500"><span>Chưa có thang tiềm năng</span>{isAdmin && <Link href="/admin?tab=crm" className="tf-button-secondary">Mở cấu hình CRM</Link>}</div>
+      <div className="divide-y divide-zinc-100">{rows.map(row => <div key={row.clientId} className="py-2"><ClientLine row={row} /></div>)}</div>
     </>}
-  </section>;
+  </div>;
+}
+function ClientLine({ row }: { row: UnratedRow }) {
+  return <div className="min-w-0"><Link href={`/crm/clients/${row.clientId}`} className="break-words text-sm font-semibold hover:underline">{row.name}</Link><p className="mt-0.5 text-xs text-zinc-500">Doanh thu 24 tháng {row.revenue24m ? formatCompactVnd(row.revenue24m) : "0"}</p></div>;
 }
 function PotentialRow({ row, potentialScale }: { row: UnratedRow; potentialScale: PotentialLevel[] }) {
   const { notify } = useInteraction();
-  const [level, setLevel] = useState("");
   const [saved, setSaved] = useState<string | null>(null);
+  const [chosen, setChosen] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const busy = useRef(false);
-  const uid = useId();
-  return <form className="flex flex-wrap items-center justify-between gap-4 px-5 py-4" onSubmit={e => {
-    e.preventDefault(); if (busy.current || !level) return; busy.current = true;
+  function score(level: string) {
+    if (busy.current || pending) return;
+    busy.current = true; setChosen(level);
     startTransition(async () => {
       try {
         const result = await scorePotentialAction({ clientId: row.clientId, level, expectedVersion: row.version });
@@ -37,8 +40,9 @@ function PotentialRow({ row, potentialScale }: { row: UnratedRow; potentialScale
       } catch { notify({ tone: "error", message: "Không lưu được. Kiểm tra kết nối rồi thử lại." }); }
       finally { busy.current = false; }
     });
-  }} aria-busy={pending}>
-    <div><Link href={`/crm/clients/${row.clientId}`} className="text-sm font-semibold hover:underline">{row.name}</Link><p className="mt-1 text-xs text-zinc-500">Doanh thu 24 tháng: {row.revenue24m ? formatCompactVnd(row.revenue24m) : "0"}</p></div>
-    {saved ? <span role="status" className="text-xs text-zinc-500">{saved}</span> : <div className="flex flex-wrap items-end gap-2"><div><label htmlFor={uid} className="tf-label">Tiềm năng</label><select id={uid} required className="tf-field" disabled={pending} value={level} onChange={e => setLevel(e.target.value)}><option value="">Chọn tiềm năng</option>{potentialScale.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}</select></div><button type="submit" className="tf-button-secondary min-h-10 md:!min-h-9" disabled={pending || !level} aria-busy={pending}>{pending && <span className="tf-spinner" />}Lưu hạng</button></div>}
-  </form>;
+  }
+  return <div className="grid gap-2 py-2" aria-busy={pending}>
+    <ClientLine row={row} />
+    {saved ? <span role="status" className="text-xs text-zinc-500">{saved}</span> : <div role="group" aria-label={`Tiềm năng của ${row.name}`} className="flex flex-wrap gap-1.5">{potentialScale.map(p => <button key={p.key} type="button" disabled={pending} aria-busy={pending && chosen === p.key} className="inline-flex min-h-10 items-center gap-2 rounded-[10px] border border-zinc-200 bg-white px-2.5 text-xs text-zinc-700 transition-colors duration-150 hover:border-zinc-400 hover:bg-zinc-50 disabled:opacity-60 md:min-h-8" onClick={() => score(p.key)}>{pending && chosen === p.key && <span className="tf-spinner" />}{p.label}</button>)}</div>}
+  </div>;
 }

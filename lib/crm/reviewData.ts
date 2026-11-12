@@ -3,7 +3,8 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import * as review from "./review";
 import type { TierValue, CadenceWeeks } from "./settingsSchema";
 import { REVIEW_REASON_LABELS, EVENT_SOURCES, TOUCHPOINT_KINDS, OUTCOME_LEVELS } from "./labels";
-import { vnDateKey, vnDayStart, addDaysVn, crmWeekRange, formatCrmWeekLabel } from "./dates";
+import { vnDateKey, vnDayStart, vnDayStartFromKey, addDaysVn, crmWeekRange, formatCrmWeekLabel } from "./dates";
+import { eventTimingLabel } from "./seasonGrid";
 import { vietnamYearMonth } from "../kpi";
 import { OPEN_TASK_STATUS_FILTER } from "../types";
 import { crmCan, type CrmActor, type CrmOwnerResource } from "./policy";
@@ -53,7 +54,8 @@ export type ReviewRow = {
 export type UnratedRow = { clientId: string; name: string; revenue24m: number; version: number };
 export type DraftRow = { id: string; clientId: string; clientName: string; opportunityId: string | null; occurredAt: Date; sourceLabel: "Họp TaskFlow" | "Biên bản họp" | "Nhập tracker"; title: string; canConfirm: boolean };
 export type WeeklyReviewGroups = { week: { mondayKey: string; label: string; start: Date; end: Date }; filters: ReviewFilters; metrics: { overdue: number; dueThisWeek: number; noNextStep: number }; groups: Record<ReviewGroup, ReviewRow[]>; isEmpty: boolean };
-export type WeeklyReview = WeeklyReviewGroups & { teams: { id: string; name: string }[]; pics: { accountId: string; name: string }[]; metrics: WeeklyReviewGroups["metrics"] & { drafts: number }; unrated: UnratedRow[]; potentialScaleConfigured: boolean; drafts: DraftRow[] };
+export type UpcomingEventRow = { id: string; clientId: string; clientName: string; programLabel: string; timingLabel: string; startsAt: Date };
+export type WeeklyReview = WeeklyReviewGroups & { teams: { id: string; name: string }[]; pics: { accountId: string; name: string }[]; metrics: WeeklyReviewGroups["metrics"] & { drafts: number }; unrated: UnratedRow[]; potentialScaleConfigured: boolean; drafts: DraftRow[]; doneThisWeek: number; upcomingEvents: UpcomingEventRow[] };
 
 const accountSelect = { id: true, name: true, userId: true, teamId: true } as const;
 const clientSelect = {
@@ -68,6 +70,7 @@ function clientResource(client: ReviewClient): CrmOwnerResource {
 }
 function careScope(teamId: string | null): Prisma.ClientWhereInput {
   return { AND: [
+    { archivedAt: null },
     { OR: [{ picAccountId: { not: null } }, { clientOpportunities: { some: { outcome: null } } }, { clientExpectedEvents: { some: { status: "ACTIVE" } } }, { importStatus: { not: null } }] },
     ...(teamId ? [{ OR: [{ responsibleTeamId: teamId }, { responsibleTeamId: null, picAccount: { teamId } }] }] : []),
   ] };
@@ -141,10 +144,26 @@ export async function loadWeeklyReviewGroups(db: PrismaClient, actor: CrmActor, 
   return (await loadReviewCore(db, actor, raw, now, false)).result;
 }
 
+export const UPCOMING_EVENT_DAYS = 90;
+/** Vietnam-time window an expected event covers: a day, a month or a quarter. */
+export function expectedEventWindow(e: { precision: string; year: number; month: number | null; quarter: number | null; date: Date | null }): { start: Date; end: Date } | null {
+  const monthStart = (y: number, m: number) => vnDayStartFromKey(`${y + Math.floor((m - 1) / 12)}-${String((m - 1) % 12 + 1).padStart(2, "0")}-01`);
+  if (e.precision === "DAY" && e.date) { const start = vnDayStart(e.date); return { start, end: addDaysVn(start, 1) }; }
+  if (e.precision === "MONTH" && e.month && e.month >= 1 && e.month <= 12) return { start: monthStart(e.year, e.month), end: monthStart(e.year, e.month + 1) };
+  if (e.precision === "QUARTER" && e.quarter && e.quarter >= 1 && e.quarter <= 4) return { start: monthStart(e.year, (e.quarter - 1) * 3 + 1), end: monthStart(e.year, e.quarter * 3 + 1) };
+  return null;
+}
+
 export async function loadWeeklyReview(db: PrismaClient, actor: CrmActor, raw: ReviewRawFilters, now = new Date()): Promise<WeeklyReview> {
   const core = await loadReviewCore(db, actor, raw, now, true);
   const clientIds = core.clients.map((c) => c.id);
-  const draftPoints = await db.touchpoint.findMany({ where: { clientId: { in: clientIds }, status: "DRAFT" }, select: { id: true, clientId: true, opportunityId: true, occurredAt: true, sourceType: true, sourceId: true }, orderBy: [{ occurredAt: "desc" }, { id: "desc" }] });
+  const year = Number(vnDateKey(now).slice(0, 4));
+  // crm51: one count and one batched event query for the week bar and the right column; no per-client queries.
+  const [draftPoints, doneThisWeek, events] = await Promise.all([
+    db.touchpoint.findMany({ where: { clientId: { in: clientIds }, status: "DRAFT" }, select: { id: true, clientId: true, opportunityId: true, occurredAt: true, sourceType: true, sourceId: true }, orderBy: [{ occurredAt: "desc" }, { id: "desc" }] }),
+    db.task.count({ where: { status: "DONE", crmKind: { not: null }, completedAt: { gte: core.result.week.start, lt: core.result.week.end }, OR: [{ clientId: { in: clientIds } }, { opportunity: { clientId: { in: clientIds } } }] } }),
+    db.expectedEvent.findMany({ where: { clientId: { in: clientIds }, status: "ACTIVE", year: { gte: year, lte: year + 1 } }, select: { id: true, clientId: true, precision: true, year: true, month: true, quarter: true, date: true, programType: { select: { label: true } } } }),
+  ]);
   const meetingIds = [...new Set(draftPoints.filter((d) => d.sourceType === "MEETING" || d.sourceType === "RECAP").flatMap((d) => d.sourceId ? [d.sourceId] : []))];
   const meetings = await db.meeting.findMany({ where: { id: { in: meetingIds } }, select: { id: true, title: true } });
   const titles = new Map(meetings.map((m) => [m.id, m.title]));
@@ -157,5 +176,11 @@ export async function loadWeeklyReview(db: PrismaClient, actor: CrmActor, raw: R
   const unrated: UnratedRow[] = core.clients.filter((c) => core.tierByClient.get(c.id)?.reason === "NOT_SCORED" && crmCan(actor, "SCORE_POTENTIAL", clientResource(c)))
     .map((c) => ({ clientId: c.id, name: c.name, revenue24m: core.revenue.get(c.id) ?? 0, version: c.version }))
     .sort((a, b) => b.revenue24m - a.revenue24m || a.name.localeCompare(b.name, "vi") || a.clientId.localeCompare(b.clientId)).slice(0, 50);
-  return { ...core.result, metrics: { ...core.result.metrics, drafts: drafts.length }, teams: core.teams.map((t) => ({ id: t.id, name: "name" in t ? t.name as string : "" })), pics: core.pics, unrated, potentialScaleConfigured: core.settings.potentialScale.length > 0, drafts };
+  const horizon = addDaysVn(vnDayStart(now), UPCOMING_EVENT_DAYS);
+  const upcomingEvents: UpcomingEventRow[] = events.flatMap((e) => {
+    const window = expectedEventWindow(e);
+    if (!window || window.end <= vnDayStart(now) || window.start >= horizon) return [];
+    return [{ id: e.id, clientId: e.clientId, clientName: clients.get(e.clientId)!.name, programLabel: e.programType.label, timingLabel: eventTimingLabel({ precision: e.precision as "DAY" | "MONTH" | "QUARTER", year: e.year, month: e.month, quarter: e.quarter, date: e.date }), startsAt: window.start }];
+  }).sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.clientName.localeCompare(b.clientName, "vi") || a.id.localeCompare(b.id)).slice(0, 8);
+  return { ...core.result, doneThisWeek, upcomingEvents, metrics: { ...core.result.metrics, drafts: drafts.length }, teams: core.teams.map((t) => ({ id: t.id, name: "name" in t ? t.name as string : "" })), pics: core.pics, unrated, potentialScaleConfigured: core.settings.potentialScale.length > 0, drafts };
 }

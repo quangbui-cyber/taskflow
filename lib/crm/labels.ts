@@ -24,5 +24,5 @@ export const EVENT_SOURCES = [
 ] as const;
 export const TIER_ORDER = ["S", "A", "UNRATED", "B", "C"] as const;
 export const TIER_LABELS = { S: "Hạng S", A: "Hạng A", B: "Hạng B", C: "Hạng C", UNRATED: "Chưa xếp hạng" };
-export const REVIEW_REASON_LABELS = { APPOINTMENT: "Lịch khách hẹn", PLAN_CLOSE: "Kỳ chốt kế hoạch", EVENT_REMINDER: "Mốc trước sự kiện", VERIFY_MONTH: "Xác minh tháng", CADENCE: "Nhắc định kỳ", POST_PROJECT: "Sau dự án", NEXT_STEP: "Bước tiếp theo", WAIT: "Chờ khách", ESCALATED: "Cần AD/AM" };
+export const REVIEW_REASON_LABELS = { APPOINTMENT: "Lịch khách hẹn", PLAN_CLOSE: "Kỳ chốt kế hoạch", EVENT_REMINDER: "Mốc trước sự kiện", VERIFY_MONTH: "Xác minh tháng", CADENCE: "Nhắc định kỳ", POST_PROJECT: "Sau dự án", NEXT_STEP: "Việc tiếp theo", WAIT: "Chờ khách", ESCALATED: "Đã nhờ AD/AM" };
 export const REASON_GROUP_LABELS = { LOST: "Thua cạnh tranh", CANCELLED: "Khách hủy", DECLINED: "CS không tham gia" };

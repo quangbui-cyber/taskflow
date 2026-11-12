@@ -3,6 +3,7 @@ import { after } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { crmEnabled } from "@/lib/features";
+import { crmEnabledForUser } from "@/lib/crm/access";
 import { loadCrmActor, loadOpportunityResource } from "@/lib/crm/actor";
 import { crmCan } from "@/lib/crm/policy";
 import { lockOpportunity } from "@/lib/crm/opportunityWorkflow";
@@ -17,6 +18,7 @@ const expired = () => Response.json({ error: "Phiên đăng nhập đã hết h�
 export async function GET(request: Request, { params }: Context) {
   if (!crmEnabled()) return missing();
   const user = await getCurrentUser(); if (!user) return expired();
+  if (!(await crmEnabledForUser(prisma, user))) return missing();
   const { id, fileId } = await params;
   const [file, resource, actor] = await Promise.all([
     prisma.projectFile.findFirst({ where: { id: fileId, opportunityId: id } }),
@@ -29,6 +31,7 @@ export async function GET(request: Request, { params }: Context) {
 export async function DELETE(_request: Request, { params }: Context) {
   if (!crmEnabled()) return missing();
   const user = await getCurrentUser(); if (!user) return expired();
+  if (!(await crmEnabledForUser(prisma, user))) return missing();
   const { id, fileId } = await params;
   const actor = await loadCrmActor(user);
   // Serialize with win/close/assignment so stale Opportunity URLs cannot delete Project files.

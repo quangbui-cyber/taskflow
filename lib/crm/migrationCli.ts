@@ -14,6 +14,7 @@ export type MigrationArgs = {
     actorEmail: string | null;
     confirmDatabase: string | null;
     approveReviewIds: string | null;
+    switchSource: boolean;
 };
 export class MigrationUsageError extends Error {
 }
@@ -21,13 +22,19 @@ export class MigrationTargetError extends Error {
 }
 const usage = (message: string): never => { throw new MigrationUsageError(message); };
 export function parseMigrationArgs(argv: string[]): MigrationArgs {
-    const args: MigrationArgs = { mode: "DRY_RUN", batchId: null, projectIds: null, year: vietnamYearMonth(new Date()).year, outDir: path.join(os.tmpdir(), "taskflow-crm-migration"), actorEmail: null, confirmDatabase: null, approveReviewIds: null };
+    const args: MigrationArgs = { mode: "DRY_RUN", batchId: null, projectIds: null, year: vietnamYearMonth(new Date()).year, outDir: path.join(os.tmpdir(), "taskflow-crm-migration"), actorEmail: null, confirmDatabase: null, approveReviewIds: null, switchSource: false };
     const seen = new Set<string>(), modes: string[] = [];
     for (let i = 0; i < argv.length; i++) {
         const [flag, ...inline] = argv[i].split("=");
         if (seen.has(flag))
             usage("Không lặp lại tham số.");
         seen.add(flag);
+        if (flag === "--switch-source") {
+            if (inline.length)
+                usage("Cờ chế độ không nhận giá trị.");
+            args.switchSource = true;
+            continue;
+        }
         if (["--dry-run", "--apply", "--rollback"].includes(flag)) {
             if (inline.length)
                 usage("Cờ chế độ không nhận giá trị.");
@@ -78,6 +85,8 @@ export function parseMigrationArgs(argv: string[]): MigrationArgs {
         usage("Giới hạn dự án ở bước chạy thử bằng --project-ids.");
     if (args.mode !== "APPLY" && args.approveReviewIds)
         usage("--approve-review-ids chỉ dùng với --apply.");
+    if (args.mode !== "APPLY" && args.switchSource)
+        usage("--switch-source chỉ dùng với --apply.");
     return args;
 }
 export function parseReviewIdList(text: string): string[] {
@@ -219,7 +228,10 @@ export async function runMigrationCommand(db: PrismaClient, args: MigrationArgs,
                     deps.log(`Doanh thu/KPI lệch; tự khôi phục: ${"ok" in rollback ? "đã khôi phục" : JSON.stringify(rollback.blocked)}`);
                     return { exitCode: 1, batchId, reportPaths: await writeReport(report, batchId) };
                 }
-                try {
+                // CRM is in limited mode (crm54): keep the official report source unless the operator opts in explicitly.
+                if (!args.switchSource)
+                    deps.log("Giữ nguồn báo cáo chính thức hiện tại (chế độ giới hạn). Thêm --switch-source khi mở CRM cho toàn công ty.");
+                else try {
                     await saveMode({ ...previousPipelineMode, mode: "OPPORTUNITY_OFFICIAL" });
                 }
                 catch (error) {

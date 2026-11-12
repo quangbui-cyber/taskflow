@@ -13,7 +13,8 @@ import Sidebar from "@/components/Sidebar";
 import HubTabs from "@/components/HubTabs";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
-import { crmEnabled, meetingRecapsEnabled, meetingsEnabled } from "@/lib/features";
+import { meetingRecapsEnabled, meetingsEnabled } from "@/lib/features";
+import { crmAllowed } from "@/lib/crm/access";
 import { formatHour, toDateInputVN } from "@/lib/dates";
 import { formatMeetingDay, meetingResponseLabel } from "@/lib/meetings";
 import { recurrenceLabel } from "@/lib/meetingRecurrence";
@@ -279,6 +280,7 @@ export default async function MeetingsPage({
   searchParams: Promise<{ view?: string; focus?: string; week?: string; room?: string }>;
 }) {
   const user = await requireUser();
+  const crmOn = await crmAllowed(user);
   // Tính năng đang tạm ẩn: link cũ (thông báo, email) đưa về trang chính.
   if (!meetingsEnabled()) redirect("/");
   const params = await searchParams;
@@ -508,7 +510,7 @@ export default async function MeetingsPage({
                   <div className="px-5">
                     {day.meetings.map((meeting) => (
                       <MeetingCard
-                        fromOpportunity={crmEnabled() && Boolean(meeting.projectId && meeting.sourceOpportunityId)}
+                        fromOpportunity={crmOn && Boolean(meeting.projectId && meeting.sourceOpportunityId)}
                         key={meeting.id}
                         meeting={meeting}
                         viewer={user}

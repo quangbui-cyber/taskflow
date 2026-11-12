@@ -4,7 +4,8 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { requireAdmin, requireUser } from "@/lib/auth";
-import { MEETINGS_DISABLED_MESSAGE, meetingsEnabled, crmEnabled, CRM_DISABLED_MESSAGE } from "@/lib/features";
+import { MEETINGS_DISABLED_MESSAGE, meetingsEnabled, CRM_DISABLED_MESSAGE } from "@/lib/features";
+import { crmAllowed } from "@/lib/crm/access";
 import { ownerData, ownerRevalidatePaths, parseOwnerInput, type WorkOwner } from "@/lib/workOwner";
 import { assertOwnerAccess } from "@/lib/taskAccess";
 import { sendMeetingEmail, type MeetingMailKind } from "@/lib/meetingMail";
@@ -280,7 +281,7 @@ export async function createMeeting(
     if (!owner) return { error: "Chọn dự án hợp lệ." };
   }
   if (owner) {
-    if (owner.kind !== "PROJECT" && !crmEnabled()) return { error: CRM_DISABLED_MESSAGE };
+    if (owner.kind !== "PROJECT" && !(await crmAllowed(user))) return { error: CRM_DISABLED_MESSAGE };
     const access = await assertOwnerAccess(prisma, user, owner, "CREATE_TASK");
     if ("error" in access) return access;
   }

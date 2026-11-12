@@ -3,6 +3,7 @@ import { after } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { crmEnabled } from "@/lib/features";
+import { crmEnabledForUser } from "@/lib/crm/access";
 import { assertOwnerAccess } from "@/lib/taskAccess";
 import { lockOpportunity } from "@/lib/crm/opportunityWorkflow";
 import { pushPendingFiles } from "@/lib/driveStorage";
@@ -13,6 +14,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!crmEnabled()) return Response.json({ error: "Không tìm thấy tài liệu hoặc bạn không có quyền xem." }, { status: 404 });
   const user = await getCurrentUser();
   if (!user) return Response.json({ error: "Phiên đăng nhập đã hết hạn." }, { status: 401 });
+  if (!(await crmEnabledForUser(prisma, user))) return Response.json({ error: "Không tìm thấy tài liệu hoặc bạn không có quyền xem." }, { status: 404 });
   const { id } = await params;
   const owner = { kind: "OPPORTUNITY" as const, id };
   if (!("ok" in await assertOwnerAccess(prisma, user, owner, "CREATE_TASK"))) return Response.json({ error: "Bạn không có quyền tải tệp lên đây." }, { status: 403 });

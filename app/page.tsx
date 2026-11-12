@@ -29,7 +29,8 @@ import { myOpenTasksWhere, assignedByMeOpenWhere, taskOwnerSelect, toTaskOwnerDi
 import { buildLeaderboard, monthKeyOf, monthRange } from "@/lib/gameLeaderboard";
 import { canCreateProjects, requireUser } from "@/lib/auth";
 import { daysUntil, isOverdue } from "@/lib/dates";
-import { creativeEnabled, crmEnabled, meetingsEnabled } from "@/lib/features";
+import { creativeEnabled, meetingsEnabled } from "@/lib/features";
+import { crmAllowed } from "@/lib/crm/access";
 import { loadMyCrmFocus } from "@/lib/crm/homeFocus";
 import { isTextLine, type ArticleLine } from "@/lib/creative";
 import { ensureInitialCreativeArticles } from "@/lib/creativeSeed";
@@ -237,6 +238,7 @@ export default async function HomePage({
   searchParams: Promise<{ sort?: string; view?: string }>;
 }) {
   const [user, params] = await Promise.all([requireUser(), searchParams]);
+  const crmOn = await crmAllowed(user);
 
   // Trang Công việc cũ nằm ở "/": giữ link cũ (?view=, ?sort=) chạy được.
   if (params.view || params.sort) {
@@ -301,13 +303,13 @@ export default async function HomePage({
       },
     }),
     prisma.task.findMany({
-      where: myOpenTasksWhere(user.id),
+      where: myOpenTasksWhere(user.id, crmOn),
       include: taskInclude,
       orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }],
     }),
     prisma.task.findMany({
       where: {
-        ...assignedByMeOpenWhere(user.id),
+        ...assignedByMeOpenWhere(user.id, crmOn),
         dueDate: { not: null, lt: new Date(dayStart.getTime() + 4 * DAY_MS) },
       },
       include: taskInclude,
@@ -396,7 +398,7 @@ export default async function HomePage({
       },
       orderBy: [{ executionStartAt: "asc" }, { name: "asc" }, { id: "asc" }],
     }),
-    crmEnabled() ? loadMyCrmFocus(prisma, user, now) : null,
+    crmOn ? loadMyCrmFocus(prisma, user, now) : null,
   ]);
 
   // Người dẫn đầu từng game trong tháng này (chỉ hiện khi đã có người thắng).
@@ -858,7 +860,7 @@ export default async function HomePage({
                     </ul>
                   ) : (
                     <p className="rounded-[10px] bg-zinc-50 px-3.5 py-3 text-sm text-zinc-600">
-                      Khách của bạn đều đã có bước tiếp theo.
+                      Khách của bạn đều đã có việc tiếp theo.
                     </p>
                   )}
                 </Card>

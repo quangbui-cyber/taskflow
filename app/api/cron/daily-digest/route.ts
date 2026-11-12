@@ -6,7 +6,8 @@ import { hasProjectChat, sendProjectChat } from "@/lib/projectChatMessage";
 import { deadlineDigestChatMessage } from "@/lib/taskGoogleChat";
 import { emailAppUrl } from "@/lib/email";
 import { daysUntil, formatDue, isOverdue } from "@/lib/dates";
-import { meetingsEnabled } from "@/lib/features";
+import { crmEnabled, meetingsEnabled } from "@/lib/features";
+import { listCrmAllowedUserIds } from "@/lib/crm/access";
 import { cleanupMeetingRecaps } from "@/lib/meetingRecapJob";
 import { formatMeetingTime, vnDayRange } from "@/lib/meetings";
 import { ARCHIVED_PROJECT_STATUS_KEYS, OPEN_TASK_STATUS_FILTER } from "@/lib/types";
@@ -210,7 +211,8 @@ export async function GET(request: Request) {
 
     // Việc chăm sóc chỉ nhắc đúng người được giao, cùng khóa chống lặp như task dự án.
     const crmRange = vnDayRange();
-    const crmTasks = await withDatabaseRetry(() => prisma.task.findMany({ where: digestCrmTasksWhere(crmRange), include: { project: taskOwnerSelect.project, opportunity: taskOwnerSelect.opportunity, client: taskOwnerSelect.client } }));
+    const crmAllowedIds = crmEnabled() ? await withDatabaseRetry(() => listCrmAllowedUserIds(prisma)) : undefined;
+    const crmTasks = await withDatabaseRetry(() => prisma.task.findMany({ where: digestCrmTasksWhere(crmRange, crmEnabled(), crmAllowedIds), include: { project: taskOwnerSelect.project, opportunity: taskOwnerSelect.opportunity, client: taskOwnerSelect.client } }));
     const crmRows: Prisma.NotificationCreateManyInput[] = crmTasks.map((task) => {
       const owner = toTaskOwnerDisplay(task);
       return { dedupeKey: `deadline:${dateKey}:${task.id}:${task.assigneeId}`, userId: task.assigneeId!, type: "DEADLINE_REMINDER", message: `Nhắc hạn: [${owner.name}] task “${task.title}” ${formatDue(task.dueDate!)}.`, taskId: task.id, ...ownerNotificationFields(owner) };

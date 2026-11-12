@@ -3,10 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { crmEnabled, CRM_DISABLED_MESSAGE } from "@/lib/features";
+import { CRM_DISABLED_MESSAGE } from "@/lib/features";
+import { crmAllowed, crmLimitedAccessActive } from "@/lib/crm/access";
 import { loadCrmActor } from "@/lib/crm/actor";
 import { crmCan } from "@/lib/crm/policy";
-import { CRM_SETTING_KEYS, saveCrmSetting, saveReason, saveProgramType, setTeamManagers, setCrmDataStewards, type CrmSettingKey } from "@/lib/crm/settings";
+import { CRM_SETTING_KEYS, saveCrmSetting, saveReason, saveProgramType, setTeamManagers, setCrmDataStewards, saveClientTag, saveCompetitor, type CrmSettingKey } from "@/lib/crm/settings";
 const DENIED = "Bạn không có quyền sửa mục này. Liên hệ PIC hoặc AD/AM của team.";
 const INVALID = "Cấu hình không hợp lệ.";
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -19,16 +20,16 @@ function saved() {
 
 export async function saveCrmSettingAction(key: unknown, value: unknown, expectedVersion: unknown) {
   const user = await requireUser();
-  if (!crmEnabled()) return { error: CRM_DISABLED_MESSAGE };
+  if (!(await crmAllowed(user))) return { error: CRM_DISABLED_MESSAGE };
   const actor = await loadCrmActor(user);
   if (!crmCan(actor, "CONFIGURE")) return { error: DENIED };
   if (typeof key !== "string" || !CRM_SETTING_KEYS.includes(key as CrmSettingKey) || typeof expectedVersion !== "number" || !Number.isInteger(expectedVersion) || expectedVersion < 0) return { error: INVALID };
-  const result = await saveCrmSetting(prisma, { key: key as CrmSettingKey, value, expectedVersion, actor: user });
+  const result = await saveCrmSetting(prisma, { key: key as CrmSettingKey, value, expectedVersion, actor: user, limitedAccess: crmLimitedAccessActive() });
   return "error" in result ? result : saved();
 }
 export async function saveReasonAction(input: unknown) {
   const user = await requireUser();
-  if (!crmEnabled()) return { error: CRM_DISABLED_MESSAGE };
+  if (!(await crmAllowed(user))) return { error: CRM_DISABLED_MESSAGE };
   const actor = await loadCrmActor(user);
   if (!crmCan(actor, "CONFIGURE")) return { error: DENIED };
   if (!record(input) || (input.id !== undefined && (typeof input.id !== "string" || !input.id || input.id.length > 64)) || typeof input.group !== "string" || typeof input.label !== "string" || typeof input.requiresNote !== "boolean" || typeof input.active !== "boolean" || typeof input.order !== "number" || !Number.isSafeInteger(input.order)) return { error: INVALID };
@@ -37,7 +38,7 @@ export async function saveReasonAction(input: unknown) {
 }
 export async function saveProgramTypeAction(input: unknown) {
   const user = await requireUser();
-  if (!crmEnabled()) return { error: CRM_DISABLED_MESSAGE };
+  if (!(await crmAllowed(user))) return { error: CRM_DISABLED_MESSAGE };
   const actor = await loadCrmActor(user);
   if (!crmCan(actor, "CONFIGURE")) return { error: DENIED };
   if (!record(input) || typeof input.code !== "string" || typeof input.label !== "string" || typeof input.color !== "string" || typeof input.active !== "boolean" || typeof input.order !== "number" || !Number.isSafeInteger(input.order)) return { error: INVALID };
@@ -46,7 +47,7 @@ export async function saveProgramTypeAction(input: unknown) {
 }
 export async function setTeamManagersAction(teamId: unknown, userIds: unknown) {
   const user = await requireUser();
-  if (!crmEnabled()) return { error: CRM_DISABLED_MESSAGE };
+  if (!(await crmAllowed(user))) return { error: CRM_DISABLED_MESSAGE };
   const actor = await loadCrmActor(user);
   if (!crmCan(actor, "CONFIGURE")) return { error: DENIED };
   if (typeof teamId !== "string" || !teamId || teamId.length > 64 || !idsValid(userIds)) return { error: INVALID };
@@ -55,10 +56,28 @@ export async function setTeamManagersAction(teamId: unknown, userIds: unknown) {
 }
 export async function setCrmDataStewardsAction(userIds: unknown) {
   const user = await requireUser();
-  if (!crmEnabled()) return { error: CRM_DISABLED_MESSAGE };
+  if (!(await crmAllowed(user))) return { error: CRM_DISABLED_MESSAGE };
   const actor = await loadCrmActor(user);
   if (!crmCan(actor, "CONFIGURE")) return { error: DENIED };
   if (!idsValid(userIds)) return { error: INVALID };
   const result = await setCrmDataStewards(prisma, userIds, user);
   return "error" in result ? result : saved();
+}
+export async function saveClientTagAction(input: unknown) {
+  const user = await requireUser();
+  if (!(await crmAllowed(user))) return { error: CRM_DISABLED_MESSAGE };
+  const actor = await loadCrmActor(user);
+  if (!crmCan(actor, "CONFIGURE")) return { error: DENIED };
+  if (!record(input) || (input.id !== undefined && (typeof input.id !== "string" || !input.id || input.id.length > 64)) || typeof input.label !== "string" || typeof input.active !== "boolean" || typeof input.order !== "number" || !Number.isSafeInteger(input.order)) return { error: INVALID };
+  const result = await saveClientTag(prisma, { id: input.id as string | undefined, label: input.label, active: input.active, order: input.order }, user);
+  return "error" in result ? result : { ...saved(), id: result.id };
+}
+export async function saveCompetitorAction(input: unknown) {
+  const user = await requireUser();
+  if (!(await crmAllowed(user))) return { error: CRM_DISABLED_MESSAGE };
+  const actor = await loadCrmActor(user);
+  if (!crmCan(actor, "CONFIGURE")) return { error: DENIED };
+  if (!record(input) || (input.id !== undefined && (typeof input.id !== "string" || !input.id || input.id.length > 64)) || typeof input.name !== "string" || typeof input.active !== "boolean") return { error: INVALID };
+  const result = await saveCompetitor(prisma, { id: input.id as string | undefined, name: input.name, active: input.active }, user);
+  return "error" in result ? result : { ...saved(), id: result.id };
 }

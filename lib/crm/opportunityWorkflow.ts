@@ -4,6 +4,7 @@ import { loadClientResource, loadOpportunityResource } from "./actor";
 import { crmCan, type CrmActor } from "./policy";
 import { OPPORTUNITY_OUTCOMES, OPPORTUNITY_STAGES } from "./labels";
 import { canAdvance, canClose, defaultOpportunityName, validateOpenOpportunityInput, validOpportunityMoney } from "./opportunityStage";
+import { crmDeniedForUser } from "./access";
 
 type Actor = CrmActor & { name: string };
 type WorkflowError = { error: string; fieldErrors?: Record<string, string> };
@@ -16,6 +17,7 @@ const DENIED = "Bạn không có quyền sửa mục này. Liên hệ PIC hoặc
 const STALE = "Dữ liệu vừa được người khác cập nhật. Tải lại trang để xem bản mới.";
 const CLOSED = "Cơ hội đã kết thúc không mở lại được.";
 const INVALID = "Thông tin Cơ hội không hợp lệ.";
+export const CLIENT_ARCHIVED = "Khách đang lưu trữ. Khôi phục khách trước khi mở Cơ hội mới.";
 const validId = (value: unknown): value is string => typeof value === "string" && !!value && value.length <= 64;
 const validVersion = (value: number) => Number.isSafeInteger(value) && value >= 0;
 const validDate = (value: unknown): value is Date => value instanceof Date && Number.isFinite(value.getTime());
@@ -33,7 +35,8 @@ export async function openOpportunityTx(tx: Prisma.TransactionClient, actor: Act
   await tx.$queryRaw`SELECT id FROM "Client" WHERE id = ${input.clientId} FOR UPDATE`;
   const resource = await loadClientResource(tx, input.clientId);
   if (!resource || !crmCan(actor, "EDIT", resource)) return { error: DENIED };
-  const client = await tx.client.findUniqueOrThrow({ where: { id: input.clientId }, select: { picAccountId: true, responsibleTeamId: true } });
+  const client = await tx.client.findUniqueOrThrow({ where: { id: input.clientId }, select: { picAccountId: true, responsibleTeamId: true, archivedAt: true } });
+  if (client.archivedAt) return { error: CLIENT_ARCHIVED };
   const picAccountId = input.picAccountId ?? client.picAccountId;
   const [program, pic, unit] = await Promise.all([
     tx.programType.findUnique({ where: { code: input.programTypeCode }, select: { label: true, active: true } }),
@@ -149,10 +152,13 @@ export type CloseOpportunityInput = {
   note?: string | null;
   lessons?: string | null;
   followUp?: { title: string; assigneeId: string; dueDate: Date } | null;
+  /** Optional agency that won the bid; only for LOST_COMPETITIVE. */
+  winnerCompetitorId?: string | null;
 };
 export async function closeOpportunity(db: PrismaClient, actor: Actor, input: CloseOpportunityInput): Promise<CloseResult> {
   if (!validId(input.opportunityId) || !validVersion(input.expectedVersion) || !["LOST_COMPETITIVE", "CUSTOMER_CANCELLED", "CS_DECLINED"].includes(input.outcome) || !validText(input.note) || !validText(input.lessons)) return { error: INVALID };
   if (!validId(input.reasonId)) return { error: "Chọn lý do." };
+  if (input.winnerCompetitorId != null && (!validId(input.winnerCompetitorId) || input.outcome !== "LOST_COMPETITIVE")) return { error: "Chỉ chọn agency thắng khi thua cạnh tranh." };
   if (input.followUp && (typeof input.followUp.title !== "string" || !input.followUp.title.trim() || !validText(input.followUp.title, 500) || !validId(input.followUp.assigneeId) || !validDate(input.followUp.dueDate))) return { error: "Nhập đủ việc, người làm và hạn tiếp cận lại." };
   return db.$transaction(async (tx) => {
     await lockOpportunity(tx, input.opportunityId);
@@ -168,11 +174,17 @@ export async function closeOpportunity(db: PrismaClient, actor: Actor, input: Cl
     if (!reason) return { error: "Chọn lý do." };
     if (reason.requiresNote && !text(input.note)) return { error: `Ghi chú cho lý do ${reason.label}.` };
     if (input.followUp && !await tx.user.findFirst({ where: { id: input.followUp.assigneeId, isActive: true, deletedAt: null }, select: { id: true } })) return { error: "Chọn người làm đang hoạt động." };
+    if (input.followUp && await crmDeniedForUser(tx, { id: input.followUp.assigneeId })) return { error: "Người này chưa được mở CRM." };
+    if (input.winnerCompetitorId && !await tx.competitor.findFirst({ where: { id: input.winnerCompetitorId, active: true }, select: { id: true } })) return { error: "Chọn agency đang dùng." };
     const changed = await tx.opportunity.updateMany({ where: { id: opportunity.id, version: input.expectedVersion, outcome: null }, data: { outcome: input.outcome, outcomeReasonId: reason.id, outcomeNote: text(input.note), lessons: text(input.lessons), closedAt: new Date(), closedById: actor.id, version: { increment: 1 } } });
     if (changed.count !== 1) return { error: STALE };
     const label = OPPORTUNITY_OUTCOMES.find((outcome) => outcome.key === input.outcome)!.label;
     const cancelled = await tx.task.updateMany({ where: { opportunityId: opportunity.id, status: OPEN_TASK_STATUS_FILTER }, data: { status: "CANCELLED", closedReason: `Cơ hội kết thúc: ${label}` } });
     if (opportunity.expectedEventId) await closeLinkedReminders(tx, opportunity.expectedEventId, "OPPORTUNITY_CLOSED", `Cơ hội kết thúc: ${label}`);
+    if (input.winnerCompetitorId) {
+      await tx.opportunityCompetitor.updateMany({ where: { opportunityId: opportunity.id }, data: { isWinner: false } });
+      await tx.opportunityCompetitor.upsert({ where: { opportunityId_competitorId: { opportunityId: opportunity.id, competitorId: input.winnerCompetitorId } }, create: { opportunityId: opportunity.id, competitorId: input.winnerCompetitorId, isWinner: true }, update: { isWinner: true } });
+    }
     if (input.followUp) await tx.task.create({ data: { title: input.followUp.title.trim(), assigneeId: input.followUp.assigneeId, creatorId: actor.id, dueDate: input.followUp.dueDate, clientId: opportunity.clientId, sourceOpportunityId: opportunity.id, crmKind: "WINBACK", status: "TODO" } });
     await tx.opportunityStageEvent.create({ data: { opportunityId: opportunity.id, fromStage: opportunity.stage, toStage: opportunity.stage, outcome: input.outcome, actorId: actor.id, actorName: actor.name, note: text(input.note) } });
     return { ok: true, cancelledTasks: cancelled.count, version: input.expectedVersion + 1 };

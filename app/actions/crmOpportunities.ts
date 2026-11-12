@@ -4,7 +4,8 @@ import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { crmEnabled, CRM_DISABLED_MESSAGE } from "@/lib/features";
+import { CRM_DISABLED_MESSAGE } from "@/lib/features";
+import { crmAllowed } from "@/lib/crm/access";
 import { loadCrmActor, loadOpportunityResource } from "@/lib/crm/actor";
 import { crmCan } from "@/lib/crm/policy";
 import { notify } from "@/lib/notify";
@@ -24,7 +25,7 @@ async function refresh(opportunityId: string, knownClientId?: string) {
 
 export async function openOpportunityAction(raw: unknown): Promise<CrmOpportunityActionState> {
   const user = await requireUser();
-  if (!crmEnabled()) return { error: CRM_DISABLED_MESSAGE };
+  if (!(await crmAllowed(user))) return { error: CRM_DISABLED_MESSAGE };
   const parsed = parseOpenOpportunityPayload(raw); if (!("ok" in parsed)) return parsed;
   const actor = { ...await loadCrmActor(user), name: user.name };
   try {
@@ -36,7 +37,7 @@ export async function openOpportunityAction(raw: unknown): Promise<CrmOpportunit
 }
 export async function advanceOpportunityStageAction(raw: unknown): Promise<CrmOpportunityActionState> {
   const user = await requireUser();
-  if (!crmEnabled()) return { error: CRM_DISABLED_MESSAGE };
+  if (!(await crmAllowed(user))) return { error: CRM_DISABLED_MESSAGE };
   const parsed = parseAdvancePayload(raw); if (!("ok" in parsed)) return parsed;
   const actor = { ...await loadCrmActor(user), name: user.name };
   try {
@@ -48,7 +49,7 @@ export async function advanceOpportunityStageAction(raw: unknown): Promise<CrmOp
 }
 export async function closeOpportunityAction(raw: unknown): Promise<CrmOpportunityActionState> {
   const user = await requireUser();
-  if (!crmEnabled()) return { error: CRM_DISABLED_MESSAGE };
+  if (!(await crmAllowed(user))) return { error: CRM_DISABLED_MESSAGE };
   const parsed = parseClosePayload(raw); if (!("ok" in parsed)) return parsed;
   const actor = { ...await loadCrmActor(user), name: user.name };
   try {
@@ -60,7 +61,7 @@ export async function closeOpportunityAction(raw: unknown): Promise<CrmOpportuni
 }
 export async function editOpportunityAction(raw: unknown): Promise<CrmOpportunityActionState> {
   const user = await requireUser();
-  if (!crmEnabled()) return { error: CRM_DISABLED_MESSAGE };
+  if (!(await crmAllowed(user))) return { error: CRM_DISABLED_MESSAGE };
   const parsed = parseEditPayload(raw); if (!("ok" in parsed)) return parsed;
   const actor = { ...await loadCrmActor(user), name: user.name };
   try {
@@ -72,7 +73,7 @@ export async function editOpportunityAction(raw: unknown): Promise<CrmOpportunit
 }
 export async function changeOpportunityPicOrTeamAction(raw: unknown): Promise<CrmOpportunityActionState> {
   const user = await requireUser();
-  if (!crmEnabled()) return { error: CRM_DISABLED_MESSAGE };
+  if (!(await crmAllowed(user))) return { error: CRM_DISABLED_MESSAGE };
   const parsed = parseChangePicPayload(raw); if (!("ok" in parsed)) return parsed;
   const actor = { ...await loadCrmActor(user), name: user.name };
   try {
@@ -84,7 +85,7 @@ export async function changeOpportunityPicOrTeamAction(raw: unknown): Promise<Cr
 }
 export async function winOpportunityAction(raw: unknown): Promise<CrmOpportunityActionState> {
   const user = await requireUser();
-  if (!crmEnabled()) return { error: CRM_DISABLED_MESSAGE };
+  if (!(await crmAllowed(user))) return { error: CRM_DISABLED_MESSAGE };
   const parsed = parseWinPayload(raw); if (!("ok" in parsed)) return parsed;
   const actor = { ...await loadCrmActor(user), name: user.name };
   let result: Awaited<ReturnType<typeof winOpportunity>>;
@@ -107,7 +108,7 @@ export async function winOpportunityAction(raw: unknown): Promise<CrmOpportunity
 }
 export async function winPreviewAction(opportunityId: unknown): Promise<{ error?: string; tasks?: number; files?: number; meetings?: number; budgetMin?: number | null; budgetMax?: number | null }> {
   const user = await requireUser();
-  if (!crmEnabled()) return { error: CRM_DISABLED_MESSAGE };
+  if (!(await crmAllowed(user))) return { error: CRM_DISABLED_MESSAGE };
   if (typeof opportunityId !== "string" || !opportunityId.trim() || opportunityId.length > 64) return { error: "Chọn Cơ hội." };
   const actor = { ...await loadCrmActor(user), name: user.name };
   try {

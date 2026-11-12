@@ -2,7 +2,8 @@ import ExcelJS from "exceljs";
 import type { Prisma } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { crmEnabled, CRM_DISABLED_MESSAGE } from "@/lib/features";
+import { CRM_DISABLED_MESSAGE } from "@/lib/features";
+import { crmEnabledForUser } from "@/lib/crm/access";
 import { loadCrmActor } from "@/lib/crm/actor";
 import { crmCan } from "@/lib/crm/policy";
 import { readXlsxUpload } from "@/lib/financeImportSave";
@@ -16,7 +17,7 @@ export async function POST(request: Request) {
   try {
     const user = await getCurrentUser();
     if (!user) return Response.json({ error: "Phiên đăng nhập đã hết hạn." }, { status: 401 });
-    if (!crmEnabled()) return Response.json({ error: CRM_DISABLED_MESSAGE }, { status: 403 });
+    if (!(await crmEnabledForUser(prisma, user))) return Response.json({ error: CRM_DISABLED_MESSAGE }, { status: 403 });
     const actor = await loadCrmActor(user);
     if (!crmCan(actor, "REVIEW_IMPORT")) return Response.json({ error: "Bạn không có quyền nhập tracker." }, { status: 403 });
     const length = Number(request.headers.get("content-length"));

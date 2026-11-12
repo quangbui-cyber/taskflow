@@ -20,6 +20,8 @@ function harness() {
     "@/lib/features": { crmEnabled: () => state.enabled, CRM_DISABLED_MESSAGE: "Disabled" },
     "@/lib/crm/actor": { loadCrmActor: async () => { state.actors++; return { ...user, accountId: null, managedTeamIds: [], isDataSteward: false }; }, loadOpportunityResource: async () => ({ kind: "OPPORTUNITY", closed: false, picUserId: null, teamId: null }) },
     "@/lib/crm/policy": { crmCan },
+    // crm54: per-person check; denied exactly like the master switch in this harness.
+    "@/lib/crm/access": { crmAllowed: async () => state.enabled },
     "@/lib/notify": { notify: async (ids: string[], data: Record<string, unknown>) => { if (state.throwEffects) throw new Error("notify unavailable"); state.notices.push({ ids, data }); } },
     "@/lib/crm/opportunityWorkflow": { openOpportunity: service({ ok: true, opportunityId: "opp", version: 0 }), advanceStage: service({ ok: true, closedReminders: 3, version: 2 }), closeOpportunity: service({ ok: true, cancelledTasks: 2 }) },
     "@/lib/crm/opportunityService": { editOpportunity: service({ ok: true, version: 2 }), changeOpportunityPicOrTeam: service({ ok: true, version: 2 }) },

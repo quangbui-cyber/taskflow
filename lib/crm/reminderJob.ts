@@ -10,12 +10,15 @@ import { crmDedupeKey, dueMessage, missingNextStepMessage, overdueDays, overdueM
 import { getCrmSettings } from "./settings";
 import { cadenceWeeksFor, computeTier, revenueBandFor, revenuePercentiles } from "./tier";
 import { produceMeetingDrafts } from "./touchpoints";
+import { renewalPeriodKey, renewalReminderDue, renewalTaskTitle, type RenewalKind } from "./clientHub";
 
 type NotificationCandidate = { userId: string; type: string; message: string; taskId: string | null; clientId: string | null; opportunityId: string | null; dedupeKey: string };
 export type CrmReminderJobSummary = {
   openedSteps: number; mergedSteps: number; cadenceTasks: number; planCloseTasks: number;
   passedEvents: number; meetingDrafts: number; notifications: NotificationCandidate[];
   skipped: { reason: string; id: string }[]; partial: boolean;
+  /** crm53: vendor registration / framework contract renewal tasks opened this run. */
+  renewalTasks?: number;
 };
 const activeUser = { isActive: true, deletedAt: null } as const;
 const openTaskInclude = {
@@ -34,7 +37,8 @@ function logicalTasks(tasks: JobTask[], clientId: string): OpenCrmTask[] {
 /** Writes reminder work atomically; notification candidates are inserted/deduped by the route.
  * Meeting provenance and its existing CRM_DRAFT notice remain owned by produceMeetingDrafts.
  */
-export async function runCrmReminderJob(db: PrismaClient, opts: { now: Date; budgetMs?: number }): Promise<CrmReminderJobSummary> {
+/** crm54: allowedPicUserIds (cron in limited mode) limits cadence, event and renewal work to clients whose PIC may use CRM. */
+export async function runCrmReminderJob(db: PrismaClient, opts: { now: Date; budgetMs?: number; allowedPicUserIds?: readonly string[] }): Promise<CrmReminderJobSummary> {
   const started = Date.now();
   const budgetMs = opts.budgetMs ?? 45_000;
   const now = opts.now;
@@ -42,16 +46,19 @@ export async function runCrmReminderJob(db: PrismaClient, opts: { now: Date; bud
   const week = crmWeekRange(now);
   const staleBefore = addDaysVn(today, -STALE_DRAFT_DAYS);
   const expired = () => Date.now() - started >= budgetMs;
-  const summary: CrmReminderJobSummary = { openedSteps: 0, mergedSteps: 0, cadenceTasks: 0, planCloseTasks: 0, passedEvents: 0, meetingDrafts: 0, notifications: [], skipped: [], partial: false };
+  const summary: CrmReminderJobSummary = { openedSteps: 0, mergedSteps: 0, cadenceTasks: 0, planCloseTasks: 0, passedEvents: 0, meetingDrafts: 0, notifications: [], skipped: [], partial: false, renewalTasks: 0 };
+  const allowedPics = opts.allowedPicUserIds ? new Set(opts.allowedPicUserIds) : null;
   const settings = await getCrmSettings(db);
   const revenue = await loadClientRevenue24m(db, now);
   const percentiles = revenuePercentiles(revenue);
+  // Archived clients get no new cadence, plan-close or event reminders and no nudges until restored.
   const clients = await db.client.findMany({
-    where: { OR: [
+    where: { archivedAt: null, OR: [
       { picAccountId: { not: null } }, { clientOpportunities: { some: { outcome: null } } }, { budgetSeasonMonth: { not: null } },
       { clientExpectedEvents: { some: { status: "ACTIVE" } } }, { clientTouchpoints: { some: { status: "DRAFT", createdAt: { lt: staleBefore } } } },
       { taskClient: { some: { status: OPEN_TASK_STATUS_FILTER, crmKind: { in: [...REACH_TASK_KINDS] } } } },
-    ] }, select: { id: true }, orderBy: { id: "asc" },
+      { vendorRegisteredUntil: { not: null } }, { frameworkContractUntil: { not: null } },
+    ], ...(allowedPics ? { picAccount: { userId: { in: [...allowedPics] } } } : {}) }, select: { id: true }, orderBy: { id: "asc" },
   });
   for (const { id: clientId } of clients) {
     if (expired()) { summary.partial = true; break; }
@@ -59,9 +66,11 @@ export async function runCrmReminderJob(db: PrismaClient, opts: { now: Date; bud
       // Same critical section as eventService and touchpoints; always re-read after acquiring it.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${clientId}))`;
       const client = await tx.client.findUnique({ where: { id: clientId }, include: { picAccount: { include: { user: true } } } });
-      const out = { openedSteps: 0, mergedSteps: 0, cadenceTasks: 0, planCloseTasks: 0, passedEvents: 0, notifications: [] as NotificationCandidate[], skipped: [] as { reason: string; id: string }[] };
-      if (!client) return out;
+      const out = { openedSteps: 0, mergedSteps: 0, cadenceTasks: 0, planCloseTasks: 0, passedEvents: 0, renewalTasks: 0, notifications: [] as NotificationCandidate[], skipped: [] as { reason: string; id: string }[] };
+      if (!client || client.archivedAt) return out;
       const picUser = client.picAccount?.user;
+      // Re-checked under the client lock: the PIC may have changed since the list was read.
+      if (allowedPics && !(picUser && allowedPics.has(picUser.id))) { out.skipped.push({ reason: "PIC_NOT_IN_CRM_ACCESS", id: clientId }); return out; }
       const assigneeId = picUser?.isActive && !picUser.deletedAt ? picUser.id : null;
       let fallbackCreator: string | null | undefined;
       async function creator(eventCreatorId?: string | null) {
@@ -120,6 +129,19 @@ export async function runCrmReminderJob(db: PrismaClient, opts: { now: Date; bud
         await tx.cadenceReminder.update({ where: { clientId_periodKey: { clientId, periodKey: period.periodKey } }, data: { taskId: task.id } });
         if (kind === "PLAN_CLOSE") out.planCloseTasks++; else out.cadenceTasks++;
       }
+      // crm53: one PIC task 30 days before a vendor registration or framework contract expires, reserved per expiry date.
+      const renewals: [RenewalKind, Date | null][] = [["VENDOR", client.vendorStatus === "NOT_REGISTERED" || client.vendorStatus === "EXPIRED" ? null : client.vendorRegisteredUntil], ["FRAMEWORK", client.frameworkContractUntil]];
+      for (const [kind, until] of renewals) {
+        if (!until || !renewalReminderDue(until, now)) continue;
+        const creatorId = await creator();
+        if (!creatorId) { out.skipped.push({ reason: "NO_CREATOR", id: clientId }); continue; }
+        const reserved = await tx.cadenceReminder.createMany({ data: [{ clientId, periodKey: renewalPeriodKey(kind, until) }], skipDuplicates: true });
+        if (!reserved.count) continue;
+        const task = await tx.task.create({ data: { title: renewalTaskTitle(kind, client.name, until), clientId, crmKind: "RENEWAL", creatorId, assigneeId, status: "TODO", dueDate: today } });
+        await tx.cadenceReminder.update({ where: { clientId_periodKey: { clientId, periodKey: renewalPeriodKey(kind, until) } }, data: { taskId: task.id } });
+        out.renewalTasks++;
+        if (assigneeId) out.notifications.push({ userId: assigneeId, type: "CRM_NUDGE", message: `${task.title}.`, taskId: task.id, clientId, opportunityId: null, dedupeKey: crmDedupeKey(["renewal", kind.toLowerCase(), clientId, vnDateKey(until), assigneeId]) });
+      }
       const close = planClosePeriod(client.budgetSeasonMonth, now);
       if (close) await periodTask("PLAN_CLOSE", close);
       let openTasks = await readTasks();
@@ -154,6 +176,7 @@ export async function runCrmReminderJob(db: PrismaClient, opts: { now: Date; bud
       return out;
     }, { maxWait: 10_000, timeout: 15_000 });
     for (const key of ["openedSteps", "mergedSteps", "cadenceTasks", "planCloseTasks", "passedEvents"] as const) summary[key] += result[key];
+    summary.renewalTasks = (summary.renewalTasks ?? 0) + result.renewalTasks;
     summary.notifications.push(...result.notifications); summary.skipped.push(...result.skipped);
   }
   if (!expired()) {

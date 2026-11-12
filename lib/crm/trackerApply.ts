@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { clientNameError, clientNameKey, normalizeClientName } from "../clientCatalog";
 import { crmCan, type CrmActor } from "./policy";
+import { matchClient, normalizeTaxCode } from "./clientProfile";
 import { parseTrackerDate, TRACKER_COLUMN_MAP } from "./trackerImport";
 
 type Json = Record<string, unknown>;
@@ -47,6 +48,8 @@ async function validateProposed(tx: Prisma.TransactionClient, p: Json, sheet: st
   if (!pic || (pic.user && (!pic.user.isActive || pic.user.deletedAt))) return false;
   if (p.matchedClientId && (!id(p.matchedClientId) || !await tx.client.findUnique({ where: { id: p.matchedClientId }, select: { id: true } }))) return false;
   if (p.period != null && !periodParts(p.period)) return false;
+  // crm50: a reviewer may add the tax code while reviewing; the file columns read are unchanged.
+  if (p.taxCode != null && (typeof p.taxCode !== "string" || "error" in normalizeTaxCode(p.taxCode))) return false;
   for (const key of ["briefReceivedAt", "occurredAt"]) if (p[key] != null && !date(p[key])) return false;
   if (sheetKind(sheet) === "OPPORTUNITY") {
     if (!periodParts(p.period) || !id(p.programTypeCode)) return false;
@@ -75,7 +78,7 @@ export async function resolveImportRow(db: PrismaClient, actor: Actor, input: Re
       proposed.clientResolution = "CREATE_NEW";
     } else if (input.action === "EDIT") {
       const patch = object(input.proposedPatch);
-      for (const key of ["clientName", "programTypeCode", "picAccountId", "period", "reasonId", "briefReceivedAt", "occurredAt"] as const) {
+      for (const key of ["clientName", "programTypeCode", "picAccountId", "period", "reasonId", "briefReceivedAt", "occurredAt", "taxCode"] as const) {
         if (Object.hasOwn(patch, key)) proposed[key] = patch[key];
       }
     }
@@ -108,10 +111,13 @@ export async function applyImportRun(db: PrismaClient, actor: Actor, runId: stri
         const pic = await tx.account.findUniqueOrThrow({ where: { id: p.picAccountId as string }, select: { teamId: true } });
         let clientId = typeof p.matchedClientId === "string" ? p.matchedClientId : null;
         if (!clientId) {
-          const candidates = await tx.client.findMany({ select: { id: true, name: true } });
-          const matches = candidates.filter((c) => clientNameKey(c.name) === nameKey);
+          // Match order: tax code, alias key, then normalized name.
+          const candidates = await tx.client.findMany({ select: { id: true, name: true, taxCode: true, clientAliases: { select: { key: true } } } });
+          const taxCode = typeof p.taxCode === "string" ? p.taxCode : null;
+          const matches = matchClient({ name, taxCode }, candidates.map((c) => ({ id: c.id, name: c.name, taxCode: c.taxCode, aliasKeys: c.clientAliases.map((a) => a.key) }))).ids;
           if (matches.length > 1 || (matches.length && p.clientResolution === "CREATE_NEW")) throw new Error("Tên khách đã tồn tại. Ghép khách hoặc sửa tên trước khi tạo mới.");
-          clientId = matches[0]?.id ?? (await tx.client.create({ data: { name, picAccountId: p.picAccountId as string, responsibleTeamId: pic.teamId, importStatus: "PENDING_PIC_CONFIRM" } })).id;
+          const tax = normalizeTaxCode(taxCode);
+          clientId = matches[0] ?? (await tx.client.create({ data: { name, picAccountId: p.picAccountId as string, responsibleTeamId: pic.teamId, importStatus: "PENDING_PIC_CONFIRM", taxCode: "ok" in tax ? tax.value : null } })).id;
         }
         const client = await tx.client.findUniqueOrThrow({ where: { id: clientId }, select: { picAccountId: true, responsibleTeamId: true } });
         await tx.client.update({ where: { id: clientId }, data: { importStatus: "PENDING_PIC_CONFIRM", importConfirmedAt: null, picAccountId: client.picAccountId ?? p.picAccountId as string, responsibleTeamId: client.responsibleTeamId ?? pic.teamId, version: { increment: 1 } } });

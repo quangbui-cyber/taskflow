@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { crmEnabled, CRM_DISABLED_MESSAGE } from "@/lib/features";
+import { CRM_DISABLED_MESSAGE } from "@/lib/features";
+import { crmAllowed } from "@/lib/crm/access";
 import { loadCrmActor } from "@/lib/crm/actor";
 import { createExpectedEvent, updateExpectedEvent, cancelExpectedEvent } from "@/lib/crm/eventService";
 import { assignCrmTask, postponeCrmTask, escalateCrmTask } from "@/lib/crm/reviewActions";
@@ -28,7 +29,7 @@ function refresh(clientId: string, opportunityId?: string | null) {
 
 export async function createExpectedEventAction(raw: unknown) {
   const user = await requireUser();
-  if (!crmEnabled()) return { error: CRM_DISABLED_MESSAGE };
+  if (!(await crmAllowed(user))) return { error: CRM_DISABLED_MESSAGE };
   if (!record(raw)) return { error: INVALID };
   const actor = { ...await loadCrmActor(user), name: user.name };
   const result = await createExpectedEvent(prisma, actor, raw);
@@ -39,7 +40,7 @@ export async function createExpectedEventAction(raw: unknown) {
 
 export async function updateExpectedEventAction(raw: unknown) {
   const user = await requireUser();
-  if (!crmEnabled()) return { error: CRM_DISABLED_MESSAGE };
+  if (!(await crmAllowed(user))) return { error: CRM_DISABLED_MESSAGE };
   if (!record(raw) || !id(raw.eventId)) return { error: INVALID };
   const actor = { ...await loadCrmActor(user), name: user.name };
   const result = await updateExpectedEvent(prisma, actor, raw);
@@ -50,7 +51,7 @@ export async function updateExpectedEventAction(raw: unknown) {
 
 export async function cancelExpectedEventAction(eventId: unknown) {
   const user = await requireUser();
-  if (!crmEnabled()) return { error: CRM_DISABLED_MESSAGE };
+  if (!(await crmAllowed(user))) return { error: CRM_DISABLED_MESSAGE };
   if (!id(eventId)) return { error: INVALID };
   const actor = { ...await loadCrmActor(user), name: user.name };
   const result = await cancelExpectedEvent(prisma, actor, eventId);
@@ -61,7 +62,7 @@ export async function cancelExpectedEventAction(eventId: unknown) {
 
 export async function assignCrmTaskAction(raw: unknown) {
   const user = await requireUser();
-  if (!crmEnabled()) return { error: CRM_DISABLED_MESSAGE };
+  if (!(await crmAllowed(user))) return { error: CRM_DISABLED_MESSAGE };
   if (!record(raw) || !id(raw.taskId) || !id(raw.assigneeId)) return { error: INVALID };
   const dueDate = date(raw.dueDate); if (!dueDate) return { error: INVALID };
   const actor = { ...await loadCrmActor(user), name: user.name };
@@ -73,7 +74,7 @@ export async function assignCrmTaskAction(raw: unknown) {
 
 export async function postponeCrmTaskAction(raw: unknown) {
   const user = await requireUser();
-  if (!crmEnabled()) return { error: CRM_DISABLED_MESSAGE };
+  if (!(await crmAllowed(user))) return { error: CRM_DISABLED_MESSAGE };
   if (!record(raw) || !id(raw.taskId) || typeof raw.reason !== "string") return { error: "Nhập lý do hoãn và ngày xem lại." };
   const reviewDate = date(raw.reviewDate); if (!reviewDate) return { error: "Nhập lý do hoãn và ngày xem lại." };
   const actor = { ...await loadCrmActor(user), name: user.name };
@@ -85,7 +86,7 @@ export async function postponeCrmTaskAction(raw: unknown) {
 
 export async function escalateCrmTaskAction(taskId: unknown) {
   const user = await requireUser();
-  if (!crmEnabled()) return { error: CRM_DISABLED_MESSAGE };
+  if (!(await crmAllowed(user))) return { error: CRM_DISABLED_MESSAGE };
   if (!id(taskId)) return { error: INVALID };
   const actor = { ...await loadCrmActor(user), name: user.name };
   const result = await escalateCrmTask(prisma, actor, taskId);
@@ -96,7 +97,7 @@ export async function escalateCrmTaskAction(taskId: unknown) {
 
 export async function assignClientPicAction(clientId: unknown, picAccountId: unknown, expectedVersion: unknown) {
   const user = await requireUser();
-  if (!crmEnabled()) return { error: CRM_DISABLED_MESSAGE };
+  if (!(await crmAllowed(user))) return { error: CRM_DISABLED_MESSAGE };
   if (!id(clientId) || !id(picAccountId) || typeof expectedVersion !== "number" || !Number.isSafeInteger(expectedVersion) || expectedVersion < 0) return { error: INVALID };
   const actor = { ...await loadCrmActor(user), name: user.name };
   const client = await prisma.client.findUnique({ where: { id: clientId }, select: { responsibleTeamId: true } });

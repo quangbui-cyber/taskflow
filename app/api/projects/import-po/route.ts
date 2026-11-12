@@ -2,7 +2,7 @@ import { canViewRevenue, getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { MAX_PROJECT_FILE_SIZE } from "@/lib/projectFiles";
 import { parsePurchaseOrderPdf } from "@/lib/purchaseOrderPdf";
-import { crmEnabled } from "@/lib/features";
+import { crmEnabledForUser } from "@/lib/crm/access";
 import { loadCrmActor } from "@/lib/crm/actor";
 import { listPurchaseOrderSourceOpportunities } from "@/lib/crm/purchaseOrderLink";
 
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
         );
       }
     }
-    const sourceOpportunities = crmEnabled() ? await listPurchaseOrderSourceOpportunities(prisma, await loadCrmActor(user)) : [];
+    const sourceOpportunities = (await crmEnabledForUser(prisma, user)) ? await listPurchaseOrderSourceOpportunities(prisma, await loadCrmActor(user)) : [];
     const programLabels = new Map(sourceOpportunities.length > 0 ? (await prisma.programType.findMany({
       where: { code: { in: [...new Set(sourceOpportunities.map((o) => o.programTypeCode))] } },
       select: { code: true, label: true },

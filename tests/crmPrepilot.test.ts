@@ -19,10 +19,10 @@ const item = (key: string, overrides: Partial<PrepilotInput> = {}) =>
 test("seeded defaults report only configured persisted inputs and preserve item order", () => {
   const result = evaluatePrepilot(seed);
   assert.deepEqual(result.items.map(({ key }) => key), [
-    "TIER_CADENCE", "POTENTIAL_SCALE", "TIER_MATRIX", "PILOT_TEAM", "TEAM_MANAGERS", "DATA_STEWARD",
-    "PLANNED_CUTOVER", "REASONS_LOST", "REASONS_CANCELLED", "REASONS_DECLINED",
+    "TIER_CADENCE", "POTENTIAL_SCALE", "TIER_MATRIX", "PERSONA_DEPTH", "PILOT_TEAM", "TEAM_MANAGERS", "DATA_STEWARD",
+    "ACCESS_LIST", "PLANNED_CUTOVER", "REASONS_LOST", "REASONS_CANCELLED", "REASONS_DECLINED",
   ]);
-  assert.deepEqual(result.missing, ["POTENTIAL_SCALE", "TIER_MATRIX", "PILOT_TEAM", "TEAM_MANAGERS", "DATA_STEWARD"]);
+  assert.deepEqual(result.missing, ["POTENTIAL_SCALE", "TIER_MATRIX", "PERSONA_DEPTH", "PILOT_TEAM", "TEAM_MANAGERS", "DATA_STEWARD"]);
   assert.equal(result.ready, false);
   assert.equal(item("TIER_CADENCE").detail, "S 2 · A 4 · B 8 · C 13 · Chưa xếp hạng 4 tuần");
   assert.equal(item("PLANNED_CUTOVER").status, "NOT_APPLICABLE");
@@ -71,14 +71,48 @@ test("fully persisted readiness sets all Admin warning flags false", () => {
     ...seed,
     potentialScaleRaw: [{ key: "high", label: "Cao" }],
     tierMatrixRaw: { revenueBands: [{ key: "base", label: "Cơ sở", minPercentile: 0 }], cells: { base: { high: "A" } } },
+    personaDepthRaw: { S: [], A: [], B: [], C: [], UNRATED: [] },
     pipelineModeRaw: { mode: "PROJECT_OFFICIAL", pilotTeamIds: ["t1"], plannedCutoverDate: "2026-11-10" },
     teams: [{ ...seed.teams[0], activeManagerCount: 1 }, seed.teams[1]],
     activeStewardCount: 1,
+    crmAccessUserCount: 2,
   };
   const result = evaluatePrepilot(ready);
   assert.equal(result.ready, true);
   assert.deepEqual(result.missing, []);
-  assert.deepEqual(prepilotSectionFlags(result), { TIER: false, ACCESS: false, SOURCE: false, REASONS: false });
+  assert.deepEqual(prepilotSectionFlags(result), { TIER: false, ACCESS: false, SOURCE: false, REASONS: false, PERSONA: false, ACCESS_LIST: false });
   const warnings = evaluatePrepilot({ ...ready, cadenceWeeksRaw: null, reasons: [] });
-  assert.deepEqual(prepilotSectionFlags(warnings), { TIER: true, ACCESS: false, SOURCE: false, REASONS: true });
+  assert.deepEqual(prepilotSectionFlags(warnings), { TIER: true, ACCESS: false, SOURCE: false, REASONS: true, PERSONA: false, ACCESS_LIST: false });
+  const pendingPersona = evaluatePrepilot({ ...ready, personaDepthRaw: null });
+  assert.deepEqual(prepilotSectionFlags(pendingPersona), { TIER: false, ACCESS: false, SOURCE: false, REASONS: false, PERSONA: true, ACCESS_LIST: false }, "pending persona must not mark an already configured tier matrix as missing");
+});
+
+test("persona readiness needs an explicit choice for every tier and rejects malformed stored policy", () => {
+  const complete = { S: ["budgetSeason"], A: ["vendorSelection"], B: [], C: [], UNRATED: [] };
+  assert.equal(item("PERSONA_DEPTH", { personaDepthRaw: complete }).status, "CONFIGURED");
+  for (const personaDepthRaw of [null, {}, { ...complete, C: null }, { ...complete, UNRATED: ["unknown"] }]) {
+    assert.equal(item("PERSONA_DEPTH", { personaDepthRaw }).status, "NOT_CONFIGURED");
+  }
+});
+
+test("crm54: an empty CRM access list warns in its own section but never blocks readiness", () => {
+  const ready: PrepilotInput = {
+    ...seed,
+    potentialScaleRaw: [{ key: "high", label: "Cao" }],
+    tierMatrixRaw: { revenueBands: [{ key: "base", label: "Cơ sở", minPercentile: 0 }], cells: { base: { high: "A" } } },
+    personaDepthRaw: { S: [], A: [], B: [], C: [], UNRATED: [] },
+    pipelineModeRaw: { mode: "PROJECT_OFFICIAL", pilotTeamIds: ["t1"], plannedCutoverDate: "2026-11-10" },
+    teams: [{ ...seed.teams[0], activeManagerCount: 1 }, seed.teams[1]],
+    activeStewardCount: 1,
+  };
+  for (const crmAccessUserCount of [undefined, 0]) {
+    const result = evaluatePrepilot({ ...ready, crmAccessUserCount });
+    const access = result.items.find(({ key }) => key === "ACCESS_LIST")!;
+    assert.deepEqual([access.status, access.section, access.label, access.detail], ["NOT_CONFIGURED", "ACCESS_LIST", "Người dùng CRM", "Chỉ Admin"]);
+    assert.equal(result.ready, true);
+    assert.deepEqual(result.missing, []);
+    assert.equal(prepilotSectionFlags(result).ACCESS_LIST, true);
+  }
+  const listed = evaluatePrepilot({ ...ready, crmAccessUserCount: 3 }).items.find(({ key }) => key === "ACCESS_LIST")!;
+  assert.deepEqual([listed.status, listed.detail], ["CONFIGURED", "3 người ngoài Admin"]);
 });
