@@ -1,7 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { MAX_RECIPIENTS, mergeDuplicates } from "@/lib/customerMail";
+import { DEFAULT_SALUTATION, MAX_RECIPIENTS, mergeDuplicates } from "@/lib/customerMail";
 import {
   MAX_IMPORT_BYTES,
   MAX_PASTE_CHARS,
@@ -76,7 +76,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   await prisma.$transaction([
     prisma.mailRecipient.createMany({
-      data: fresh.map((row) => ({ campaignId: id, ...row })),
+      data: fresh.map((row) => ({ campaignId: id, ...row, salutation: row.salutation ?? DEFAULT_SALUTATION })),
       skipDuplicates: true,
     }),
     ...repeats.map((row) => {
@@ -85,7 +85,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         where: { id: current.id },
         data: {
           callName: current.callName ?? row.callName,
-          salutation: current.salutation ?? row.salutation,
+          // Danh sách mới ghi rõ anh/chị thì thay cho "bạn" mặc định.
+          salutation: row.salutation && current.salutation === DEFAULT_SALUTATION ? row.salutation : current.salutation,
           group: current.group ?? row.group,
           note: current.note ?? row.note,
         },

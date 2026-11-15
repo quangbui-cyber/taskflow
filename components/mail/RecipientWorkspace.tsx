@@ -15,9 +15,11 @@ import { useInteraction } from "@/components/InteractionProvider";
 import {
   ISSUE_LABELS,
   RECIPIENT_STATUS_LABELS,
-  SALUTATIONS,
+  DEFAULT_SALUTATION,
+  SALUTATION_OPTIONS,
   SALUTATION_LABELS,
   duplicateEmails,
+  isSalutation,
   recipientIssues,
   type RecipientIssue,
   type Salutation,
@@ -65,7 +67,7 @@ async function prepareImage(file: File): Promise<File> {
   }
 }
 
-const ERROR_ISSUES: RecipientIssue[] = ["missing-email", "invalid-email", "duplicate-email", "missing-salutation", "missing-name"];
+const ERROR_ISSUES: RecipientIssue[] = ["missing-email", "invalid-email", "duplicate-email", "missing-name"];
 
 function InlineInput({
   value,
@@ -105,42 +107,32 @@ function InlineInput({
   );
 }
 
-function SalutationPicker({
+function SalutationSelect({
   value,
   disabled,
   onPick,
-  missing,
 }: {
   value: string | null;
   disabled: boolean;
   onPick: (value: Salutation) => void;
-  missing: boolean;
 }) {
+  const current = isSalutation(value) ? value : DEFAULT_SALUTATION;
   return (
-    <div
-      role="radiogroup"
+    <select
       aria-label="Xưng hô"
-      className={`inline-flex rounded-[8px] border p-0.5 ${missing ? "border-red-300 bg-white" : "border-zinc-200 bg-zinc-50"}`}
+      value={current}
+      disabled={disabled}
+      onChange={(event) => {
+        if (isSalutation(event.target.value) && event.target.value !== current) onPick(event.target.value);
+      }}
+      className="w-full min-w-0 rounded-[7px] border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-900 transition-colors duration-150 hover:border-zinc-300 focus:border-brand-400 focus:outline-none disabled:border-transparent disabled:bg-transparent"
     >
-      {SALUTATIONS.map((option) => {
-        const active = value === option;
-        return (
-          <button
-            key={option}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            disabled={disabled}
-            onClick={() => !active && onPick(option)}
-            className={`rounded-[6px] px-2 py-1 text-xs transition-colors duration-150 ${
-              active ? "bg-white font-semibold text-zinc-950 shadow-sm" : "text-zinc-500 hover:text-zinc-900"
-            }`}
-          >
-            {SALUTATION_LABELS[option]}
-          </button>
-        );
-      })}
-    </div>
+      {SALUTATION_OPTIONS.map((option) => (
+        <option key={option} value={option}>
+          {SALUTATION_LABELS[option]}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -164,7 +156,7 @@ export default function RecipientWorkspace({
   const [dragging, setDragging] = useState(false);
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState("");
-  const [filter, setFilter] = useState<"all" | "issues" | "no-salutation">("all");
+  const [filter, setFilter] = useState<"all" | "issues">("all");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [preview, setPreview] = useState<{ html: string; subject: string; to: string } | null>(null);
@@ -180,12 +172,10 @@ export default function RecipientWorkspace({
   const counts = {
     all: recipients.length,
     issues: recipients.filter((row) => issuesById.get(row.id)!.length).length,
-    "no-salutation": recipients.filter((row) => !row.salutation).length,
   };
   const needle = query.trim().toLowerCase();
   const visible = recipients.filter((row) => {
     if (filter === "issues" && !issuesById.get(row.id)!.length) return false;
-    if (filter === "no-salutation" && row.salutation) return false;
     if (!needle) return true;
     return [row.fullName, row.email, row.callName, row.group].some((value) => value?.toLowerCase().includes(needle));
   });
@@ -367,7 +357,6 @@ export default function RecipientWorkspace({
                 [
                   ["all", "Tất cả"],
                   ["issues", "Cần sửa"],
-                  ["no-salutation", "Chưa chọn xưng hô"],
                 ] as const
               ).map(([key, label]) => (
                 <button
@@ -410,7 +399,7 @@ export default function RecipientWorkspace({
           {editable && selectedIds.length > 0 && (
             <div className="tf-pop-in flex flex-wrap items-center gap-2 rounded-[12px] bg-zinc-900 px-3 py-2 text-sm text-white">
               <span className="mr-1 font-medium tabular-nums">Đã chọn {selectedIds.length}</span>
-              {SALUTATIONS.map((option) => (
+              {SALUTATION_OPTIONS.map((option) => (
                 <button
                   key={option}
                   type="button"
@@ -468,7 +457,7 @@ export default function RecipientWorkspace({
                   <th className="px-2 py-2.5 font-medium">Họ tên</th>
                   <th className="px-2 py-2.5 font-medium">Email</th>
                   <th className="w-28 px-2 py-2.5 font-medium">Tên gọi</th>
-                  <th className="w-40 px-2 py-2.5 font-medium">Xưng hô</th>
+                  <th className="w-28 px-2 py-2.5 font-medium">Xưng hô</th>
                   <th className="w-36 px-2 py-2.5 font-medium">Nhóm</th>
                   <th className="px-2 py-2.5 font-medium">{editable ? "Kiểm tra" : "Trạng thái"}</th>
                   <th className="w-20 px-2 py-2.5" />
@@ -508,10 +497,9 @@ export default function RecipientWorkspace({
                         <InlineInput label="Tên gọi" value={row.callName} placeholder="Tên gọi" disabled={!editable} onCommit={(value) => save({ callName: value })} />
                       </td>
                       <td className="px-2 py-1.5">
-                        <SalutationPicker
+                        <SalutationSelect
                           value={row.salutation}
                           disabled={!editable || pending}
-                          missing={issues.includes("missing-salutation")}
                           onPick={(value) => save({ salutation: value })}
                         />
                       </td>

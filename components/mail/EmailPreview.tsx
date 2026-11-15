@@ -1,6 +1,6 @@
 "use client";
 
-/** Khung xem thư: HTML thư nằm trong iframe sandbox (không chạy script), cao vừa nội dung. */
+/** Khung xem thư: HTML thư nằm trong iframe sandbox (không chạy script). */
 export default function EmailPreview({
   html,
   subject,
@@ -25,7 +25,8 @@ export default function EmailPreview({
           <iframe
             title="Xem trước thư"
             srcDoc={html}
-            sandbox=""
+            // Không cho chạy script; cùng origin để tải phông tự host của app.
+            sandbox="allow-same-origin"
             className="block h-[640px] w-full border-0 bg-zinc-100"
           />
         ) : (
