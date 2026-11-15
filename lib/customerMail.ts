@@ -6,6 +6,10 @@ export const SALUTATIONS = ["anh", "chi", "ban"] as const;
 export type Salutation = (typeof SALUTATIONS)[number];
 
 export const SALUTATION_LABELS: Record<Salutation, string> = { anh: "Anh", chi: "Chị", ban: "Bạn" };
+/** Danh sách không ghi rõ anh hay chị thì gọi là "bạn". */
+export const DEFAULT_SALUTATION: Salutation = "ban";
+/** Thứ tự trong ô chọn xưng hô: mặc định đứng đầu. */
+export const SALUTATION_OPTIONS: Salutation[] = ["ban", "anh", "chi"];
 
 export const CAMPAIGN_STATUSES = ["draft", "scheduled", "sending", "done"] as const;
 export type CampaignStatus = (typeof CAMPAIGN_STATUSES)[number];
@@ -148,13 +152,12 @@ export type RecipientLike = {
   reviewed: boolean;
 };
 
-export type RecipientIssue = "missing-email" | "invalid-email" | "duplicate-email" | "missing-salutation" | "missing-name" | "low-confidence";
+export type RecipientIssue = "missing-email" | "invalid-email" | "duplicate-email" | "missing-name" | "low-confidence";
 
 export const ISSUE_LABELS: Record<RecipientIssue, string> = {
   "missing-email": "Thiếu email",
   "invalid-email": "Email sai định dạng",
   "duplicate-email": "Trùng email",
-  "missing-salutation": "Chưa chọn xưng hô",
   "missing-name": "Thiếu tên gọi",
   "low-confidence": "Cần xem lại",
 };
@@ -165,7 +168,6 @@ export function recipientIssues(row: RecipientLike, duplicates?: Set<string>): R
   if (!row.email) issues.push("missing-email");
   else if (!isValidEmail(row.email)) issues.push("invalid-email");
   else if (duplicates?.has(row.email)) issues.push("duplicate-email");
-  if (!isSalutation(row.salutation)) issues.push("missing-salutation");
   if (!oneLine(row.callName)) issues.push("missing-name");
   if (!row.reviewed && row.confidence !== null && row.confidence < LOW_CONFIDENCE) issues.push("low-confidence");
   return issues;
@@ -189,14 +191,14 @@ export type Readiness = {
   ready: boolean;
 };
 
-/** Chỉ gửi được khi có người nhận và không còn dòng đỏ hay vàng. */
+/** Chỉ gửi được khi có người nhận và không còn dòng đỏ hay vàng. Xưng hô chưa chọn tính là "bạn". */
 export function campaignReadiness(rows: RecipientLike[]): Readiness {
   const duplicates = duplicateEmails(rows);
   const bySalutation: Record<Salutation, number> = { anh: 0, chi: 0, ban: 0 };
   let blocked = 0;
   for (const row of rows) {
     if (recipientIssues(row, duplicates).length) blocked += 1;
-    if (isSalutation(row.salutation)) bySalutation[row.salutation] += 1;
+    bySalutation[isSalutation(row.salutation) ? row.salutation : DEFAULT_SALUTATION] += 1;
   }
   return { total: rows.length, blocked, bySalutation, ready: rows.length > 0 && blocked === 0 };
 }
@@ -213,7 +215,7 @@ export function recipientVariables(row: {
   salutation: string | null;
   group: string | null;
 }): MailVariables {
-  const salutation = isSalutation(row.salutation) ? row.salutation : null;
+  const salutation = isSalutation(row.salutation) ? row.salutation : DEFAULT_SALUTATION;
   const lower = salutation === "anh" ? "anh" : salutation === "chi" ? "chị" : "bạn";
   return {
     ten_goi: oneLine(row.callName) || defaultCallName(row.fullName),

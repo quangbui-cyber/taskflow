@@ -7,6 +7,7 @@ import { Prisma } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
+  DEFAULT_SALUTATION,
   campaignReadiness,
   defaultCallName,
   isSalutation,
@@ -225,7 +226,7 @@ export async function addRecipient(campaignId: string, input: RecipientPatch): P
         fullName: fullName || email!.split("@")[0],
         email,
         callName: oneLine(input.callName, 60) || defaultCallName(fullName) || null,
-        salutation: isSalutation(input.salutation) ? input.salutation : null,
+        salutation: isSalutation(input.salutation) ? input.salutation : DEFAULT_SALUTATION,
         source: "Nhập tay",
         reviewed: true,
       },
@@ -260,7 +261,7 @@ export async function updateRecipient(recipientId: string, patch: RecipientPatch
   }
   if (patch.email !== undefined) data.email = normalizeEmail(patch.email);
   if (patch.callName !== undefined) data.callName = oneLine(patch.callName, 60) || null;
-  if (patch.salutation !== undefined) data.salutation = isSalutation(patch.salutation) ? patch.salutation : null;
+  if (isSalutation(patch.salutation)) data.salutation = patch.salutation;
   if (patch.group !== undefined) data.group = oneLine(patch.group, 120) || null;
   if (patch.note !== undefined) data.note = oneLine(patch.note, 300) || null;
   try {

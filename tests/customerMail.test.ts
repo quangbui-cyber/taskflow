@@ -70,7 +70,9 @@ test("send stays locked until every row has email, salutation and review", () =>
   assert.deepEqual(recipientIssues(row()), []);
   assert.deepEqual(recipientIssues(row({ email: null })), ["missing-email"]);
   assert.deepEqual(recipientIssues(row({ email: "nhung@example" })), ["invalid-email"]);
-  assert.deepEqual(recipientIssues(row({ salutation: null })), ["missing-salutation"]);
+  // Chưa chọn xưng hô thì gọi là "bạn", không chặn gửi.
+  assert.deepEqual(recipientIssues(row({ salutation: null })), []);
+  assert.equal(fillTemplate("{{Xung_ho}} {{ten_goi}} thân mến,", recipientVariables(row({ salutation: null }))), "Nhung thân mến,");
   assert.deepEqual(recipientIssues(row({ confidence: 0.6 })), ["low-confidence"]);
   assert.deepEqual(recipientIssues(row({ confidence: 0.6, reviewed: true })), []);
 
@@ -78,6 +80,7 @@ test("send stays locked until every row has email, salutation and review", () =>
   const ready = campaignReadiness([row(), row({ email: "minh@example.com", salutation: "anh" })]);
   assert.equal(ready.ready, true);
   assert.deepEqual(ready.bySalutation, { anh: 1, chi: 1, ban: 0 });
+  assert.deepEqual(campaignReadiness([row({ salutation: null })]).bySalutation, { anh: 0, chi: 0, ban: 1 });
   const duplicate = campaignReadiness([row(), row()]);
   assert.equal(duplicate.ready, false);
   assert.equal(duplicate.blocked, 2);
@@ -107,6 +110,8 @@ test("customer email personalises greeting, escapes text and ships a plain-text 
   assert.ok(email.text.includes("Hẹn gặp lại!"));
   assert.ok(email.text.endsWith("Thân mến,\nGa"));
   assert.ok(email.html.includes("Cảm ơn chị &lt;3 đã chơi hết mình."));
+  assert.ok(email.html.includes("font-family:'Be Vietnam Pro',Arial"));
+  assert.ok(email.html.includes("fonts.googleapis.com/css2?family=Be+Vietnam+Pro"));
   assert.ok(email.html.includes('alt="Chị Nhung thân mến,"'));
   const cids = (email.inlineImages ?? []).map((image) => image.cid).sort();
   assert.deepEqual(cids, ["greeting@ga", "logo@ga", "sign@ga", "swash@ga", "title@ga"]);
@@ -114,6 +119,8 @@ test("customer email personalises greeting, escapes text and ships a plain-text 
   const preview = previewHtml(email);
   assert.ok(!preview.includes("cid:"));
   assert.ok(preview.includes("data:image/png;base64,"));
+  assert.ok(!preview.includes("fonts.googleapis.com"));
+  assert.ok(preview.includes("/fonts/be-vietnam-pro/be-vietnam-pro-vietnamese-400.woff2"));
 });
 
 test("CSV and spreadsheet tables map columns by Vietnamese headers", () => {

@@ -222,7 +222,7 @@ export default function MailComposer({
           {recipients.map((row) => (
             <option key={row.id} value={row.id}>
               {row.fullName}
-              {isSalutation(row.salutation) ? ` · ${SALUTATION_LABELS[row.salutation]}` : " · Chưa chọn xưng hô"}
+              {` · ${SALUTATION_LABELS[isSalutation(row.salutation) ? row.salutation : "ban"]}`}
             </option>
           ))}
         </select>
