@@ -22,6 +22,7 @@ export default function HubTabs({
     showSuppliers: financeEnabled(),
     showHr: canManageHr({ role, isHrManager }),
     showCreative: creativeEnabled(),
+    showMail: role === "ADMIN",
   });
   if (sections.length < 2) return null;
 

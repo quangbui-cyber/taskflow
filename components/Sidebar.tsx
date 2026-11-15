@@ -142,6 +142,7 @@ export default async function Sidebar({
     showSuppliers: financeEnabled(),
     showHr: canManageHr(user),
     showCreative: creativeEnabled(),
+    showMail: user.role === "ADMIN",
   };
   const activeHub = activeProjectId ? "projects" : hubForSection(activeSection)?.key;
   const isAdmin = user.role === "ADMIN";
