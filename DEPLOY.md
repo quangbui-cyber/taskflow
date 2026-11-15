@@ -412,3 +412,10 @@ Chưa đặt hai biến đó thì nút tạo link Meet được ẩn; vẫn dán
 - Cách dùng: trong form đặt lịch, bấm **Kết nối Google để tạo link Meet** (chỉ lần đầu, mở cửa sổ Google),
   sau đó mỗi lần bấm **Tạo link Google Meet** app điền sẵn link phòng mới vào ô link họp. Phòng thuộc tài khoản
   Google của người bấm.
+
+## Thư khách (gửi thư cảm ơn / thông báo cho khách)
+
+- Mục **Dự án → Thư khách** (`/mail`), chỉ Admin thấy.
+- Gửi bằng SMTP mặc định (`SMTP_USER`, `SMTP_APP_PASSWORD`). Muốn một thương hiệu gửi từ hộp thư riêng: đặt "Hộp thư SMTP riêng" là `GA` rồi thêm `SMTP_GA_USER`, `SMTP_GA_APP_PASSWORD` trên Vercel. Địa chỉ gửi phải là chính hộp thư đó hoặc alias đã xác minh trong Gmail.
+- Đọc PDF, ảnh, chữ dán bằng Gemini: cần `GEMINI_API_KEY` (dùng **bản trả phí**, vì danh sách là dữ liệu cá nhân của khách). Model mặc định giống biên bản họp; đổi bằng `MAIL_IMPORT_MODEL`. CSV/Excel có tiêu đề cột rõ ràng thì đọc thẳng, không cần Gemini. File gốc chỉ đọc trong bộ nhớ, không lưu lại.
+- Hẹn giờ và gửi tiếp chạy bằng cron `/api/cron/customer-mail` mỗi phút (cần `CRON_SECRET`), mỗi lượt tối đa 20 thư, cách nhau 1,5 giây. Gmail cá nhân giới hạn khoảng 500 thư/ngày, Workspace khoảng 2.000.

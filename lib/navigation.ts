@@ -9,6 +9,7 @@ export type ActiveSection =
   | "documents"
   | "projects"
   | "suppliers"
+  | "mail"
   | "team"
   | "kpi"
   | "revenue"
@@ -31,6 +32,8 @@ export type NavFlags = {
   /** Admin hoặc người phụ trách nhân sự. */
   showHr: boolean;
   showCreative?: boolean;
+  /** Gửi thư cho khách: chỉ quản trị viên. */
+  showMail?: boolean;
 };
 
 export type HubSection = {
@@ -74,6 +77,12 @@ export const HUBS: Hub[] = [
         label: "Nhà cung cấp",
         href: "/suppliers",
         visible: (flags) => flags.showSuppliers,
+      },
+      {
+        key: "mail",
+        label: "Thư khách",
+        href: "/mail",
+        visible: (flags) => flags.showMail ?? false,
       },
     ],
   },
