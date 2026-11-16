@@ -16,6 +16,7 @@ import {
   leaveApproverIds,
   leaveRangeError,
   leaveTypeInfo,
+  leaveWatcherIds,
   parseLeaveDate,
 } from "@/lib/leave";
 import { loadLeaveManagers } from "@/lib/leaveData";
@@ -107,15 +108,26 @@ export async function createLeaveRequest(
     },
   });
 
+  const watcherIds = leaveWatcherIds(
+    user.id,
+    approverIds,
+    leaveManagers.map((manager) => manager.id)
+  );
   queueLeaveEmail(
     { kind: "REQUESTED", request, requesterName: user.name },
-    [user.id, ...approverIds]
+    [user.id, ...approverIds, ...watcherIds]
   );
 
   // Báo cho người duyệt: quản lý trực tiếp, hoặc quản lý nghỉ phép nếu chưa có.
+  const summary = `${user.name} xin ${leaveTypeInfo(type).label.toLowerCase()} ${describeRange(startDate, endDate, days)}`;
   await notify(approverIds, {
     type: "LEAVE_REQUEST",
-    message: `${user.name} xin ${leaveTypeInfo(type).label.toLowerCase()} ${describeRange(startDate, endDate, days)}. Cần bạn duyệt.`,
+    message: `${summary}. Cần bạn duyệt.`,
+  });
+  // Quản lý nghỉ phép không duyệt đơn này vẫn được báo để nắm tình hình.
+  await notify(watcherIds, {
+    type: "LEAVE_REQUEST",
+    message: `${summary}. Chờ quản lý trực tiếp duyệt.`,
   });
 
   revalidatePath("/leave");
@@ -161,12 +173,16 @@ export async function cancelLeaveRequest(requestId: string): Promise<LeaveState>
 
   const leaveManagers = await loadLeaveManagers();
   const managerIds = leaveManagers.map((manager) => manager.id);
+  // Quản lý nghỉ phép đã được báo khi có đơn, nên cũng được báo khi đơn bị huỷ.
   const cancellationRecipients = request.status === "APPROVED"
     ? [request.deciderId, ...managerIds]
-    : leaveApproverIds(
-        { ...request.user, managerActive: request.user.manager?.isActive },
-        managerIds
-      );
+    : [
+        ...leaveApproverIds(
+          { ...request.user, managerActive: request.user.manager?.isActive },
+          managerIds
+        ),
+        ...managerIds,
+      ];
   queueLeaveEmail(
     { kind: "CANCELLED", request, requesterName: user.name },
     [user.id, ...cancellationRecipients]
