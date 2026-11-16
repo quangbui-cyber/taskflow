@@ -3,6 +3,12 @@
   "regions": [
     "sin1"
   ],
+  "git": {
+    "deploymentEnabled": {
+      "claude/**": false,
+      "codex/**": false
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/daily-digest",
