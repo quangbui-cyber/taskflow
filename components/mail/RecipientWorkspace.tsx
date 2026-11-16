@@ -1,5 +1,7 @@
 "use client";
 
+import { SALUTATION_STYLES } from "@/components/mail/salutationStyles";
+
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, ClipboardPaste, Eye, FileUp, Image as ImageIcon, Plus, Trash2, X } from "lucide-react";
@@ -125,10 +127,10 @@ function SalutationSelect({
       onChange={(event) => {
         if (isSalutation(event.target.value) && event.target.value !== current) onPick(event.target.value);
       }}
-      className="w-full min-w-0 rounded-[7px] border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-900 transition-colors duration-150 hover:border-zinc-300 focus:border-brand-400 focus:outline-none disabled:border-transparent disabled:bg-transparent"
+      className={`w-full min-w-0 rounded-[7px] border px-2 py-1.5 text-sm font-medium focus:outline-2 focus:outline-offset-2 focus:outline-brand-400 ${SALUTATION_STYLES[current]}`}
     >
       {SALUTATION_OPTIONS.map((option) => (
-        <option key={option} value={option}>
+        <option key={option} value={option} className={SALUTATION_STYLES[option]}>
           {SALUTATION_LABELS[option]}
         </option>
       ))}

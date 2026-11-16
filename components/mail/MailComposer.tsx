@@ -4,7 +4,8 @@ import { useEffect, useState, useTransition } from "react";
 import { BookmarkPlus, Save } from "lucide-react";
 import { previewCampaignEmail, saveAsTemplate, saveCampaignContent } from "@/app/actions/customerMail";
 import { useInteraction } from "@/components/InteractionProvider";
-import { SALUTATION_LABELS, VARIABLE_TOKENS, isSalutation } from "@/lib/customerMail";
+import TemplateField from "./TemplateField";
+import RecipientPreviewSelect from "./RecipientPreviewSelect";
 import EmailPreview from "@/components/mail/EmailPreview";
 import { Dialog } from "@/components/mail/MailCampaignList";
 
@@ -16,15 +17,6 @@ type Content = {
   body: string;
   signOff: string;
   signature: string;
-};
-type Field = Exclude<keyof Content, "senderId">;
-
-const TOKEN_LABELS: Record<(typeof VARIABLE_TOKENS)[number], string> = {
-  "{{Xung_ho}}": "Anh/Chị (đầu câu)",
-  "{{xung_ho}}": "anh/chị (giữa câu)",
-  "{{ten_goi}}": "Tên gọi",
-  "{{ho_ten}}": "Họ tên",
-  "{{nhom}}": "Nhóm",
 };
 
 export default function MailComposer({
@@ -49,7 +41,6 @@ export default function MailComposer({
   const [saving, startSaving] = useTransition();
   const [templateOpen, setTemplateOpen] = useState(false);
   const [templateName, setTemplateName] = useState("");
-  const [focused, setFocused] = useState<{ field: Field; element: HTMLInputElement | HTMLTextAreaElement } | null>(null);
   const dirty = (Object.keys(content) as (keyof Content)[]).some((key) => content[key] !== saved[key]);
 
   // Xem trước theo nội dung đang soạn, chờ người soạn dừng gõ một chút.
@@ -59,7 +50,13 @@ export default function MailComposer({
   useEffect(() => {
     let cancelled = false;
     const timer = setTimeout(async () => {
-      const result = await previewCampaignEmail(campaignId, sampleId || null, content);
+      let result: Awaited<ReturnType<typeof previewCampaignEmail>>;
+      try {
+        result = await previewCampaignEmail(campaignId, sampleId || null, content);
+      } catch {
+        if (!cancelled) { setRenderedKey(previewKey); setPreviewError("Chưa tải được bản xem trước. Hãy thử lại."); }
+        return;
+      }
       if (cancelled) return;
       setRenderedKey(previewKey);
       if (result.html) {
@@ -75,20 +72,6 @@ export default function MailComposer({
 
   function update(field: keyof Content, value: string) {
     setContent((current) => ({ ...current, [field]: value }));
-  }
-
-  function insertToken(token: string) {
-    const target = focused;
-    if (!target || !editable) return;
-    const { element, field } = target;
-    const start = element.selectionStart ?? element.value.length;
-    const end = element.selectionEnd ?? start;
-    const next = element.value.slice(0, start) + token + element.value.slice(end);
-    update(field, next);
-    requestAnimationFrame(() => {
-      element.focus();
-      element.setSelectionRange(start + token.length, start + token.length);
-    });
   }
 
   function save() {
@@ -118,23 +101,10 @@ export default function MailComposer({
     });
   }
 
-  function rememberFocus(event: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) {
-    setFocused({ field: event.currentTarget.dataset.field as Field, element: event.currentTarget });
-  }
-  function changeField(event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
-    update(event.currentTarget.dataset.field as Field, event.currentTarget.value);
-  }
-  const fieldProps = (field: Field) => ({
-    value: content[field],
-    disabled: !editable,
-    "data-field": field,
-    onChange: changeField,
-    onFocus: rememberFocus,
-  });
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-      <div className="space-y-5">
+      <div className="min-w-0 space-y-5">
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="tf-label" htmlFor="mail-sender">Thương hiệu gửi</label>
@@ -150,51 +120,14 @@ export default function MailComposer({
               ))}
             </select>
           </div>
-          <div>
-            <label className="tf-label" htmlFor="mail-title">Tiêu đề viết tay</label>
-            <input id="mail-title" className="tf-field" maxLength={60} {...fieldProps("title")} />
-          </div>
+          <TemplateField id="mail-title" label="Tiêu đề viết tay" value={content.title} onChange={(value) => update("title", value)} maxLength={60} disabled={!editable} />
         </div>
-        <div>
-          <label className="tf-label" htmlFor="mail-subject">Tiêu đề email</label>
-          <input id="mail-subject" className="tf-field" maxLength={200} {...fieldProps("subject")} />
-        </div>
-        <div>
-          <label className="tf-label" htmlFor="mail-greeting">Lời chào</label>
-          <input id="mail-greeting" className="tf-field" maxLength={120} {...fieldProps("greeting")} />
-        </div>
-        <div>
-          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-            <label className="tf-label mb-0" htmlFor="mail-body">Nội dung</label>
-            {editable && (
-              <div className="flex flex-wrap gap-1.5" aria-label="Chèn biến">
-                {VARIABLE_TOKENS.map((token) => (
-                  <button
-                    key={token}
-                    type="button"
-                    // Giữ con trỏ ở ô đang gõ khi bấm chèn.
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => insertToken(token)}
-                    className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-xs text-zinc-600 transition duration-150 hover:-translate-y-0.5 hover:border-brand-300 hover:text-zinc-900"
-                    title={token}
-                  >
-                    {TOKEN_LABELS[token]}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <textarea id="mail-body" rows={14} className="tf-field leading-relaxed" maxLength={8000} {...fieldProps("body")} />
-        </div>
+        <TemplateField id="mail-subject" label="Tiêu đề email" value={content.subject} onChange={(value) => update("subject", value)} maxLength={200} disabled={!editable} />
+        <TemplateField id="mail-greeting" label="Lời chào" value={content.greeting} onChange={(value) => update("greeting", value)} maxLength={120} disabled={!editable} />
+        <TemplateField id="mail-body" label="Nội dung" value={content.body} onChange={(value) => update("body", value)} maxLength={8000} disabled={!editable} multiline />
         <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className="tf-label" htmlFor="mail-signoff">Lời kết</label>
-            <input id="mail-signoff" className="tf-field" maxLength={60} {...fieldProps("signOff")} />
-          </div>
-          <div>
-            <label className="tf-label" htmlFor="mail-signature">Chữ ký</label>
-            <input id="mail-signature" className="tf-field" maxLength={60} {...fieldProps("signature")} />
-          </div>
+          <TemplateField id="mail-signoff" label="Lời kết" value={content.signOff} onChange={(value) => update("signOff", value)} maxLength={60} disabled={!editable} />
+          <TemplateField id="mail-signature" label="Chữ ký" value={content.signature} onChange={(value) => update("signature", value)} maxLength={60} disabled={!editable} />
         </div>
         {editable && (
           <div className="flex flex-wrap justify-end gap-2">
@@ -211,21 +144,7 @@ export default function MailComposer({
       </div>
 
       <div className="space-y-3 lg:sticky lg:top-4 lg:self-start">
-        <select
-          className="tf-field"
-          value={sampleId}
-          onChange={(event) => setSampleId(event.target.value)}
-          aria-label="Xem thư của"
-          disabled={!recipients.length}
-        >
-          {recipients.length === 0 && <option value="">Người nhận mẫu: Chị Nhung</option>}
-          {recipients.map((row) => (
-            <option key={row.id} value={row.id}>
-              {row.fullName}
-              {` · ${SALUTATION_LABELS[isSalutation(row.salutation) ? row.salutation : "ban"]}`}
-            </option>
-          ))}
-        </select>
+        <RecipientPreviewSelect recipients={recipients} value={sampleId} onChange={setSampleId} />
         {previewError ? (
           <p className="rounded-[12px] bg-red-50 px-4 py-3 text-sm text-red-700">{previewError}</p>
         ) : (
