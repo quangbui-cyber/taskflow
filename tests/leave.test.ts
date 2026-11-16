@@ -5,6 +5,7 @@ import {
   canDecideLeave,
   countLeaveDays,
   leaveApproverIds,
+  leaveWatcherIds,
   leaveDaysByMonth,
   leaveRangeError,
   parseLeaveDate,
@@ -73,6 +74,14 @@ test("approvers are the manager, otherwise the other leave-tab managers", () => 
   assert.deepEqual(leaveApproverIds({ id: "u1", managerId: null }, ["h1", "h2"]), ["h1", "h2"]);
   assert.deepEqual(leaveApproverIds({ id: "h1", managerId: null }, ["h1", "h2"]), ["h2"]);
   assert.deepEqual(leaveApproverIds({ id: "h1", managerId: "h1" }, ["h1"]), []);
+});
+
+test("leave managers who are not approving still hear about new requests", () => {
+  assert.deepEqual(leaveWatcherIds("u1", ["m1"], ["h1", "h2"]), ["h1", "h2"]);
+  // Đã là người duyệt thì không báo thêm lần nữa.
+  assert.deepEqual(leaveWatcherIds("u1", ["h1", "h2"], ["h1", "h2"]), []);
+  // Quản lý nghỉ phép tự xin nghỉ thì không tự báo cho mình.
+  assert.deepEqual(leaveWatcherIds("h1", ["m1"], ["h1", "h2"]), ["h2"]);
 });
 
 test("pending requests can be cancelled, approved ones only before they start", () => {
