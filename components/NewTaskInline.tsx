@@ -12,6 +12,7 @@ import {
   type FormEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import { upload } from "@vercel/blob/client";
 import { ChevronDown, Plus, X } from "lucide-react";
 import { createTask, type ActionState } from "@/app/actions/tasks";
 import { PRIORITIES, STATUSES, type MemberDTO } from "@/lib/types";
@@ -21,8 +22,12 @@ import TaskAttributeSelect from "@/components/TaskAttributeSelect";
 import { useInteraction } from "@/components/InteractionProvider";
 import TaskAttachmentPicker from "@/components/TaskAttachmentPicker";
 import DetectedLinks from "@/components/DetectedLinks";
-import { MAX_TASK_CREATION_FILE_SIZE } from "@/lib/taskCreationFiles";
-import { formatProjectFileSize } from "@/lib/projectFiles";
+import {
+  MAX_INLINE_TASK_FILE_BYTES,
+  MAX_TASK_CREATION_FILE_SIZE,
+  taskCreationUploadPath,
+  validateTaskCreationFile,
+} from "@/lib/taskCreationFiles";
 
 // Same breakpoint where the board switches to three columns side by side.
 const DESKTOP_QUERY = "(min-width: 768px)";
@@ -53,11 +58,13 @@ function useIsDesktop() {
 
 export default function NewTaskInline({
   projectId,
+  currentUserId,
   status,
   members,
   defaultOpen = false,
 }: {
   projectId: string;
+  currentUserId: string;
   status: string;
   members: MemberDTO[];
   defaultOpen?: boolean;
@@ -100,14 +107,39 @@ export default function NewTaskInline({
       const dueDate = String(formData.get("dueDate") ?? "");
       if (startDate) formData.set("startDate", new Date(startDate).toISOString());
       if (dueDate) formData.set("dueDate", new Date(dueDate).toISOString());
-      for (const file of briefFiles) formData.append("briefFiles", file);
-      for (const file of resultFiles) formData.append("resultFiles", file);
+      const selections = [
+        { kind: "BRIEF", field: "briefFiles", files: briefFiles },
+        { kind: "RESULT", field: "resultFiles", files: resultFiles },
+      ];
+      const useBlob = [...briefFiles, ...resultFiles].reduce((total, file) => total + file.size, 0) > MAX_INLINE_TASK_FILE_BYTES;
 
       let result: ActionState;
       try {
+        for (const { kind, field, files } of selections) {
+          for (const file of files) {
+            if (!useBlob) {
+              formData.append(field, file);
+              continue;
+            }
+            const meta = validateTaskCreationFile(file);
+            const pathname = taskCreationUploadPath(projectId, currentUserId, crypto.randomUUID());
+            const payload = { name: file.name, type: meta.mimeType, size: meta.size };
+            try {
+              const blob = await upload(pathname, file, {
+                access: "private",
+                contentType: meta.mimeType,
+                handleUploadUrl: "/api/tasks/creation-upload",
+                clientPayload: JSON.stringify({ ...payload, projectId }),
+              });
+              formData.append("stagedFiles", JSON.stringify({ ...payload, kind, pathname: blob.pathname }));
+            } catch {
+              throw new Error(`Không tải được tệp “${file.name}”. Vui lòng thử lại.`);
+            }
+          }
+        }
         result = await createTask(prev, formData);
-      } catch {
-        result = { error: "Không thể tạo task. Vui lòng thử lại." };
+      } catch (error) {
+        result = { error: error instanceof Error ? error.message : "Không thể tạo task. Vui lòng thử lại." };
       }
       if (result.error) {
         notify({ message: result.error, tone: "error" });
@@ -120,7 +152,6 @@ export default function NewTaskInline({
     },
     {}
   );
-  const totalFileSize = [...briefFiles, ...resultFiles].reduce((size, file) => size + file.size, 0);
 
   const closeEditor = useCallback(() => {
     if (pending) return;
@@ -151,10 +182,9 @@ export default function NewTaskInline({
       notify({ message: `Tệp “${empty.name}” không có nội dung.`, tone: "error" });
       return;
     }
-    const otherFiles = kind === "BRIEF" ? resultFiles : briefFiles;
-    const total = [...files, ...otherFiles].reduce((size, file) => size + file.size, 0);
-    if (total > MAX_TASK_CREATION_FILE_SIZE) {
-      notify({ message: "Tổng dung lượng tệp đính kèm khi tạo task tối đa 4 MB.", tone: "error" });
+    const oversized = files.find((file) => file.size > MAX_TASK_CREATION_FILE_SIZE);
+    if (oversized) {
+      notify({ message: `Tệp “${oversized.name}” vượt quá 25 MB.`, tone: "error" });
       return;
     }
     if (kind === "BRIEF") setBriefFiles(files);
@@ -373,11 +403,6 @@ export default function NewTaskInline({
     </details>
   );
 
-  const fileNote =
-    totalFileSize > 0 ? (
-      <p className="text-xs text-zinc-500">Đã chọn {formatProjectFileSize(totalFileSize)} / 4 MB</p>
-    ) : null;
-
   const errorMessage = state.error && (
     <p role="alert" className="text-xs text-red-600">{state.error}</p>
   );
@@ -457,7 +482,6 @@ export default function NewTaskInline({
             <div className="sticky bottom-0 z-10 flex items-center justify-between gap-4 border-t border-zinc-200 bg-white px-6 py-3">
               <div className="min-w-0 space-y-1">
                 {errorMessage}
-                {fileNote}
               </div>
               <div className="flex shrink-0 gap-2">
                 {cancelButton}
@@ -492,7 +516,6 @@ export default function NewTaskInline({
         {descriptionField}
         {briefPicker}
         {deliverableFields}
-        {fileNote}
 
         {errorMessage}
         <div className="flex gap-2">

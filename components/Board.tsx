@@ -357,6 +357,7 @@ export default function Board({
                 <NewTaskInline
                   key={`${col.key}-${col.key === "TODO" ? todoComposerSignal : 0}`}
                   projectId={projectId}
+                  currentUserId={currentUserId}
                   status={col.key}
                   members={members}
                   defaultOpen={

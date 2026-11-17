@@ -1,5 +1,6 @@
 import { nightlyDriveSync } from "@/lib/driveStorage";
 import { pushPendingMeetingRecaps } from "@/lib/recapDrive";
+import { cleanExpiredTaskUploads } from "@/lib/taskCreationUploads";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +14,10 @@ export async function GET(request: Request) {
   }
   try {
     const deadline = Date.now() + 270_000;
-    const result = await nightlyDriveSync(deadline - 60_000);
+    const [result] = await Promise.all([
+      nightlyDriveSync(deadline - 60_000),
+      cleanExpiredTaskUploads().catch((error) => console.error("Expired task attachment cleanup failed", error)),
+    ]);
     const recaps = result.skipped ? null : await pushPendingMeetingRecaps(deadline);
     return Response.json({ ...result, recaps });
   } catch (error) {

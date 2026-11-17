@@ -5,6 +5,7 @@ import { trashDriveFileSafe } from "@/lib/driveStorage";
 import { openStoredFileResponse, storedFileResponse } from "@/lib/storedFileResponse";
 import { prisma } from "@/lib/prisma";
 import { findAccessibleTask } from "@/lib/taskFiles";
+import { MAX_TASK_CREATION_FILE_SIZE } from "@/lib/taskCreationFiles";
 
 export const runtime = "nodejs";
 
@@ -45,7 +46,7 @@ export async function GET(request: Request, context: Context) {
   if (new URL(request.url).searchParams.get("open") === "1") {
     return openStoredFileResponse(file, user.email);
   }
-  return storedFileResponse(file);
+  return storedFileResponse(file, { streamFromDrive: file.size <= MAX_TASK_CREATION_FILE_SIZE });
 }
 
 export async function DELETE(_request: Request, context: Context) {

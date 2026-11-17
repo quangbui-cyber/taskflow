@@ -40,12 +40,32 @@ const headers = (name: string, mimeType: string, size?: number) => ({
  * file trên Drive thì app lấy từ Drive rồi trả về. File rất lớn (quá giới hạn trả về của Vercel)
  * thì mở trên Google Drive — người xem đã được share thư mục dự án.
  */
-export async function storedFileResponse(file: StoredFile): Promise<Response> {
-  if (file.data) return new Response(new Uint8Array(file.data), { headers: headers(file.name, file.mimeType, file.size) });
+export async function storedFileResponse(
+  file: StoredFile,
+  { streamFromDrive = false }: { streamFromDrive?: boolean } = {}
+): Promise<Response> {
+  if (file.data) {
+    const data = file.data;
+    const responseHeaders = headers(file.name, file.mimeType, file.size);
+    if (data.byteLength <= MAX_PROJECT_FILE_SIZE) {
+      return new Response(new Uint8Array(data), { headers: responseHeaders });
+    }
+
+    let offset = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const end = Math.min(offset + 256 * 1024, data.byteLength);
+        controller.enqueue(data.subarray(offset, end));
+        offset = end;
+        if (offset === data.byteLength) controller.close();
+      },
+    });
+    return new Response(body, { headers: responseHeaders });
+  }
   if (!file.driveFileId) {
     return Response.json({ error: "Tệp không còn nội dung." }, { status: 404 });
   }
-  if (file.mimeType !== GOOGLE_DOC_MIME_TYPE && file.size > MAX_PROJECT_FILE_SIZE) {
+  if (!streamFromDrive && file.mimeType !== GOOGLE_DOC_MIME_TYPE && file.size > MAX_PROJECT_FILE_SIZE) {
     return Response.redirect(driveViewUrl(file.driveFileId, file.mimeType), 302);
   }
   try {
