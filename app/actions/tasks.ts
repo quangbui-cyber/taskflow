@@ -11,6 +11,7 @@ import { taskCommentChatMessage, taskGoogleChatMessage, type TaskChatInput } fro
 import type { GoogleChatMessage } from "@/lib/googleChat";
 import { PRIORITIES, STATUSES } from "@/lib/types";
 import { readTaskCreationFiles } from "@/lib/taskCreationFiles";
+import { discardStagedTaskFiles, readStagedTaskFiles } from "@/lib/taskCreationUploads";
 import { driveFolderKeys, queueDrivePush, renameDriveFolderSafe, trashTaskFolderSafe } from "@/lib/driveStorage";
 import { after } from "next/server";
 import { validTaskTimeRange } from "@/lib/taskTimeRange";
@@ -141,8 +142,12 @@ export async function createTask(
   }
 
   let attachments: Awaited<ReturnType<typeof readTaskCreationFiles>>;
+  let stagedPaths: string[];
   try {
     attachments = await readTaskCreationFiles(formData);
+    const staged = await readStagedTaskFiles(formData, projectId, user.id);
+    attachments.push(...staged.uploads);
+    stagedPaths = staged.paths;
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : "Tệp đính kèm không hợp lệ.",
@@ -179,6 +184,7 @@ export async function createTask(
     },
     include: { assignee: { select: { name: true } } },
   });
+  if (stagedPaths.length > 0) after(() => discardStagedTaskFiles(stagedPaths));
 
   if (assigneeId && assigneeId !== user.id) {
     await notify([assigneeId], {
