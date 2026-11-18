@@ -15,7 +15,7 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { meetingRecapsEnabled, meetingsEnabled } from "@/lib/features";
 import { formatHour, toDateInputVN } from "@/lib/dates";
-import { formatMeetingDay, meetingResponseLabel } from "@/lib/meetings";
+import { formatMeetingDay, meetingConflicts, meetingResponseLabel } from "@/lib/meetings";
 import { recurrenceLabel } from "@/lib/meetingRecurrence";
 import { calendarWeekRange, resolveCalendarWeek } from "@/lib/meetingCalendar";
 import { canManageMeetingRecap, meetingRecorderId } from "@/lib/meetingRecap";
@@ -74,6 +74,7 @@ function MeetingCard({
   composerProps,
   recapsEnabled,
   seriesOccurrences,
+  conflicts,
 }: {
   meeting: MeetingRow;
   viewer: { id: string; role: string };
@@ -82,6 +83,8 @@ function MeetingCard({
   composerProps: MeetingComposerData;
   recapsEnabled: boolean;
   seriesOccurrences: SeriesOccurrence[];
+  /** Cuộc họp khác mình đang giữ lịch, trùng giờ với cuộc họp này */
+  conflicts: MeetingRow[];
 }) {
   const isOrganizer = meeting.organizerId === viewer.id;
   const myInvite = meeting.attendees.find((attendee) => attendee.userId === viewer.id);
@@ -221,6 +224,21 @@ function MeetingCard({
 
         {open && (myInvite || canManage || canRecap) && (
           <div className="mt-3.5 flex flex-wrap items-center gap-2">
+            {myInvite && conflicts.length > 0 && (
+              <span
+                className={`inline-flex min-h-9 min-w-0 max-w-full items-center gap-1.5 rounded-full bg-amber-50 px-3 text-xs font-medium text-amber-700 ${
+                  myInvite.response === "DECLINED" ? "opacity-50" : ""
+                }`}
+              >
+                <CalendarClock size={14} className="shrink-0" aria-hidden="true" />
+                <span className="truncate">
+                  Trùng giờ với{" "}
+                  {conflicts.length === 1
+                    ? `${conflicts[0].title} · ${formatHour(conflicts[0].startAt)}`
+                    : `${conflicts.length} cuộc họp`}
+                </span>
+              </span>
+            )}
             {myInvite && (
               <MeetingResponseButtons meetingId={meeting.id} response={myInvite.response} />
             )}
@@ -406,6 +424,21 @@ export default async function MeetingsPage({
     seriesByMeeting.set(row.seriesId!, list);
   }
 
+  // Lời mời nào trùng giờ với cuộc họp mình đang giữ (tự tổ chức hoặc chưa từ chối).
+  const conflicts =
+    view === "mine"
+      ? meetingConflicts(
+          meetings,
+          meetings.filter(
+            (meeting) =>
+              meeting.organizerId === user.id ||
+              meeting.attendees.some(
+                (attendee) => attendee.userId === user.id && attendee.response !== "DECLINED"
+              )
+          )
+        )
+      : new Map<string, MeetingRow[]>();
+
   const recapsEnabled = meetingRecapsEnabled();
   const calendarMeetings: CalendarMeeting[] = weekMeetings.map((meeting) => {
     const isMine =
@@ -515,6 +548,7 @@ export default async function MeetingsPage({
                         seriesOccurrences={
                           meeting.seriesId ? (seriesByMeeting.get(meeting.seriesId) ?? []) : []
                         }
+                        conflicts={conflicts.get(meeting.id) ?? []}
                       />
                     ))}
                   </div>

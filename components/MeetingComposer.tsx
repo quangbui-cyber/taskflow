@@ -26,14 +26,17 @@ import MeetingRecurrenceField, {
   seriesSubmitCount,
   type RecurrenceValues,
 } from "@/components/MeetingRecurrenceField";
-import { formatHour, toDateInputVN } from "@/lib/dates";
+import { formatDateVN, formatHour, toDateInputVN } from "@/lib/dates";
 import {
   MEETING_DESCRIPTION_MAX,
   MEETING_TITLE_MAX,
+  findFreeMeetingSlots,
   formatMeetingTime,
   presetMeetingAttendees,
   rangesOverlap,
   vnDateTimeToUtc,
+  weekdayVN,
+  type FreeMeetingSlot,
 } from "@/lib/meetings";
 
 export type MeetingPerson = {
@@ -116,6 +119,14 @@ function defaultValues(attendeeIds: string[] = [], now = new Date()): FormValues
     attendeeIds,
     recorderId: "",
   };
+}
+
+/** "15:30 – 16:30" nếu cùng ngày đang chọn, khác ngày thì thêm thứ và ngày */
+function freeSlotLabel(slot: FreeMeetingSlot, selectedDate: string) {
+  const time = `${slot.startTime} – ${slot.endTime}`;
+  if (slot.date === selectedDate) return time;
+  const day = vnDateTimeToUtc(slot.date, slot.startTime)!;
+  return `${weekdayVN(day)}, ${formatDateVN(day).slice(0, 5)} · ${time}`;
 }
 
 function sameIds(a: string[], b: string[]) {
@@ -275,6 +286,39 @@ export default function MeetingComposer({
     daySchedules.get(userId)?.some((slot) => slot.clash) ?? false;
   const busySelectedCount = values.attendeeIds.filter(isBusy).length;
   const selectedRoomClash = values.roomId ? roomClashes.get(values.roomId) : undefined;
+  // Có người hoặc phòng bị trùng: tìm giờ gần nhất mà người tổ chức, mọi người mời và phòng đều trống.
+  const hasConflict = timeValid && (busySelectedCount > 0 || Boolean(selectedRoomClash));
+  const freeSlots = useMemo(() => {
+    if (!hasConflict) return [];
+    const involved = new Set([organizerId, ...values.attendeeIds]);
+    const busy = [
+      ...schedules.filter(
+        (schedule) =>
+          schedule.meetingId !== meeting?.id && schedule.userIds.some((id) => involved.has(id))
+      ),
+      ...bookings.filter(
+        (booking) =>
+          values.roomId !== "" && booking.roomId === values.roomId && booking.meetingId !== meeting?.id
+      ),
+    ].map((range) => ({ startAt: new Date(range.startAt), endAt: new Date(range.endAt) }));
+    return findFreeMeetingSlots({
+      date: values.date,
+      startTime: values.startTime,
+      endTime: values.endTime,
+      busy,
+    });
+  }, [
+    hasConflict,
+    organizerId,
+    values.attendeeIds,
+    values.roomId,
+    values.date,
+    values.startTime,
+    values.endTime,
+    schedules,
+    bookings,
+    meeting?.id,
+  ]);
   const pickerAvailability = useMemo<Record<string, PeoplePickerAvailability>>(() => {
     if (!timeValid) return {};
     return Object.fromEntries(
@@ -448,6 +492,34 @@ export default function MeetingComposer({
                     }))
                   }
                 />
+
+                {freeSlots.length > 0 && (
+                  <div
+                    className="-mt-2 flex flex-wrap items-center gap-2"
+                    role="group"
+                    aria-label="Giờ trống gần nhất"
+                  >
+                    <span className="text-xs font-medium text-zinc-500">Giờ trống gần nhất</span>
+                    {freeSlots.map((slot) => (
+                      <button
+                        key={`${slot.date}-${slot.startTime}`}
+                        type="button"
+                        onClick={() =>
+                          setValues((current) => ({
+                            ...current,
+                            date: slot.date,
+                            startTime: slot.startTime,
+                            endTime: slot.endTime,
+                          }))
+                        }
+                        className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 px-3 text-xs font-medium tabular-nums text-zinc-800 transition-[transform,border-color] duration-150 ease-out hover:-translate-y-0.5 hover:border-brand-400 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                      >
+                        <Check size={13} className="text-brand-700" aria-hidden="true" />
+                        {freeSlotLabel(slot, values.date)}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 {!meeting && (
                   <MeetingRecurrenceField
