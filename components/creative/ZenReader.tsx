@@ -4,7 +4,12 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
+  ArrowRight,
+  ArrowUpRight,
+  Award,
   Bookmark,
+  BookOpen,
+  Building2,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -13,6 +18,7 @@ import {
   Share2,
 } from "lucide-react";
 import { creativeHeading, serifBody } from "@/app/fonts";
+import { getAuthorProfile } from "@/app/creative/authors/profiles";
 import {
   type ArticleLine,
   estimateReadingMinutes,
@@ -185,6 +191,7 @@ export default function ZenReader({
   };
 
   const author = getArticleAuthor(article.tags);
+  const authorProfile = getAuthorProfile(author.slug);
   const originalArticleUrl = getOriginalArticleUrl(article);
   const readingMinutes = estimateReadingMinutes(article.wordCount);
   const origLines = article.originalLines || [];
@@ -276,7 +283,19 @@ export default function ZenReader({
             <span>•</span>
             <span>{readingMinutes} phút đọc</span>
             <span>•</span>
-            <span className="font-medium text-zinc-700">{author.name}</span>
+            <Link
+              href={`/creative?tac-gia=${author.slug}`}
+              className="inline-flex items-center gap-1.5 font-semibold text-zinc-800 transition-colors hover:text-brand-800"
+            >
+              {authorProfile && (
+                <img
+                  src={authorProfile.image}
+                  alt={author.name}
+                  className="h-5 w-5 rounded-full border border-zinc-300 object-cover"
+                />
+              )}
+              <span>{author.name}</span>
+            </Link>
           </div>
 
           {/* Tiêu đề tiếng Anh gốc IN HOA */}
@@ -379,6 +398,81 @@ export default function ZenReader({
               </a>
             )}
           </div>
+
+          {/* Thẻ Giới Thiệu & Thành Tựu Tác Giả ở cuối bài đọc */}
+          {authorProfile && (
+            <section
+              aria-labelledby="reader-author-heading"
+              className="mt-8 rounded-[16px] border border-zinc-200 bg-white p-5 shadow-xs sm:p-6"
+            >
+              <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+                <img
+                  src={authorProfile.image}
+                  alt={authorProfile.name}
+                  style={{ objectPosition: "center 20%" }}
+                  className="h-20 w-20 shrink-0 rounded-[14px] border border-zinc-200 object-cover sm:h-24 sm:w-24"
+                />
+                <div className="min-w-0 flex-1 space-y-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <span className="inline-block rounded-full bg-brand-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brand-900">
+                        {authorProfile.badge}
+                      </span>
+                      <h2
+                        id="reader-author-heading"
+                        className={`${creativeHeading.className} mt-1 text-xl font-bold text-zinc-950`}
+                      >
+                        {authorProfile.name}
+                      </h2>
+                      <p className="text-xs text-zinc-500">{authorProfile.role}</p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        href={`/creative?tac-gia=${authorProfile.slug}`}
+                        className="inline-flex items-center gap-1.5 rounded-[10px] bg-brand-400 px-3.5 py-2 text-xs font-bold text-zinc-950 shadow-xs transition-[transform,background-color] duration-150 ease-out hover:-translate-y-0.5 hover:bg-brand-500 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                      >
+                        <span>Xem bài của {authorProfile.name}</span>
+                        <ArrowRight size={13} aria-hidden="true" />
+                      </Link>
+                      <Link
+                        href={`/creative/authors?author=${authorProfile.slug}`}
+                        className="inline-flex items-center gap-1 rounded-[10px] border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 transition-colors hover:border-zinc-300 hover:text-zinc-950"
+                      >
+                        <span>Hồ sơ chi tiết</span>
+                        <ArrowUpRight size={13} aria-hidden="true" />
+                      </Link>
+                    </div>
+                  </div>
+
+                  <p className="text-xs leading-relaxed text-zinc-600 sm:text-sm">
+                    {authorProfile.bio[0]}
+                  </p>
+
+                  <div className="grid grid-cols-1 gap-2 pt-1 sm:grid-cols-3">
+                    {authorProfile.achievements.map((ac) => (
+                      <div
+                        key={ac.title}
+                        className="flex items-start gap-2 rounded-[10px] border border-zinc-200/80 bg-zinc-50/70 p-2.5"
+                      >
+                        <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-brand-100 text-brand-900">
+                          {ac.icon === "award" ? (
+                            <Award size={13} aria-hidden="true" />
+                          ) : ac.icon === "agency" ? (
+                            <Building2 size={13} aria-hidden="true" />
+                          ) : (
+                            <BookOpen size={13} aria-hidden="true" />
+                          )}
+                        </span>
+                        <span className="text-xs font-semibold leading-snug text-zinc-800">
+                          {ac.title}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
 
           {/* Điều hướng bài trước / bài tiếp theo */}
           {(prevArticle || nextArticle) && (

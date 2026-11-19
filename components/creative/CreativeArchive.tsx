@@ -3,9 +3,24 @@
 import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowRight, Bookmark, BookOpen, Check, ChevronDown, Heart, Search, User } from "lucide-react";
+import {
+  ArrowRight,
+  ArrowUpRight,
+  Award,
+  Bookmark,
+  BookOpen,
+  Building2,
+  Check,
+  ChevronDown,
+  Heart,
+  Lightbulb,
+  Search,
+  Sparkles,
+  User,
+} from "lucide-react";
 import { creativeHeading, serifBody } from "@/app/fonts";
 import { estimateReadingMinutes } from "@/lib/creative";
+import { authorProfiles, getAuthorProfile, type AuthorProfile } from "@/app/creative/authors/profiles";
 import { toggleSaveArticle } from "@/app/actions/creative";
 
 export interface CreativeCardData {
@@ -211,15 +226,37 @@ export default function CreativeArchive({
     router.replace(nextUrl, { scroll: false });
   };
 
+  const selectedAuthorProfile = useMemo(() => getAuthorProfile(authorFilter), [authorFilter]);
+  const selectedAuthorCount = useMemo(
+    () => (authorFilter ? authorCounts.find((a) => a.slug === authorFilter)?.count ?? 0 : 0),
+    [authorFilter, authorCounts]
+  );
+
   return (
     <div className="space-y-8">
-      {featured && (
-        <FeaturedArticle
-          article={featured}
-          personal={personal}
-          saved={isSaved(featured)}
-          onToggleSave={() => handleToggleSave(featured)}
+      {/* Thanh khám phá theo tác giả với ảnh chân dung HD */}
+      <AuthorSelectorStrip
+        authors={authorCounts}
+        totalCount={articles.length}
+        selectedSlug={authorFilter}
+        onSelect={handleSelectAuthor}
+      />
+
+      {/* Khi chọn 1 tác giả: Hiện khối Hồ Sơ & Thành Tựu Tác Giả (Stitch 3-column Spotlight) */}
+      {selectedAuthorProfile ? (
+        <AuthorSpotlightCard
+          profile={selectedAuthorProfile}
+          articleCount={selectedAuthorCount}
         />
+      ) : (
+        featured && (
+          <FeaturedArticle
+            article={featured}
+            personal={personal}
+            saved={isSaved(featured)}
+            onToggleSave={() => handleToggleSave(featured)}
+          />
+        )
       )}
 
       {/* Hàng công cụ: Bộ lọc cá nhân / số bài + Menu tác giả + Tìm kiếm */}
@@ -251,6 +288,12 @@ export default function CreativeArchive({
             selectedSlug={authorFilter}
             onSelect={handleSelectAuthor}
           />
+          <Link
+            href={`/creative/authors${authorFilter ? `?author=${authorFilter}` : ""}`}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-500 hover:text-brand-700"
+          >
+            Về tác giả <ArrowRight size={13} aria-hidden="true" />
+          </Link>
         </div>
 
         <div className="relative w-full sm:w-80">
@@ -335,6 +378,263 @@ export default function CreativeArchive({
         </div>
       )}
     </div>
+  );
+}
+
+function AuthorSelectorStrip({
+  authors,
+  totalCount,
+  selectedSlug,
+  onSelect,
+}: {
+  authors: { slug: string; name: string; count: number }[];
+  totalCount: number;
+  selectedSlug: string | null;
+  onSelect: (slug: string | null) => void;
+}) {
+  const countMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const a of authors) map.set(a.slug, a.count);
+    return map;
+  }, [authors]);
+
+  return (
+    <div className="space-y-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+          Khám phá theo tác giả
+        </span>
+        <Link
+          href={`/creative/authors${selectedSlug ? `?author=${selectedSlug}` : ""}`}
+          className="inline-flex items-center gap-1 text-xs font-semibold text-brand-800 hover:underline"
+        >
+          <span>Hồ sơ 6 bộ óc sáng tạo</span>
+          <ArrowRight size={13} aria-hidden="true" />
+        </Link>
+      </div>
+
+      <div
+        role="group"
+        aria-label="Chọn tác giả để xem giới thiệu và lọc bài viết"
+        className="flex items-center gap-2 overflow-x-auto pb-1.5"
+      >
+        <button
+          type="button"
+          onClick={() => onSelect(null)}
+          aria-pressed={selectedSlug === null}
+          className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3.5 py-2 text-xs transition-[transform,background-color,border-color,color,box-shadow] duration-150 ease-out hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${
+            selectedSlug === null
+              ? "border-zinc-300 bg-white font-bold text-zinc-950 shadow-sm ring-2 ring-brand-200"
+              : "border-zinc-200/80 bg-zinc-100/80 font-medium text-zinc-600 hover:bg-white hover:text-zinc-900"
+          }`}
+        >
+          <span>Tất cả tác giả</span>
+          <span
+            className={`rounded-full px-2 py-0.5 text-[11px] ${
+              selectedSlug === null
+                ? "bg-brand-100 font-bold text-brand-900"
+                : "bg-zinc-200/70 text-zinc-600"
+            }`}
+          >
+            {totalCount}
+          </span>
+        </button>
+
+        {authorProfiles.map((profile) => {
+          const active = selectedSlug === profile.slug;
+          const count = countMap.get(profile.slug) ?? 0;
+          return (
+            <button
+              key={profile.slug}
+              type="button"
+              onClick={() => onSelect(active ? null : profile.slug)}
+              aria-pressed={active}
+              className={`inline-flex shrink-0 items-center gap-2.5 rounded-full border px-3.5 py-1.5 text-xs transition-[transform,background-color,border-color,color,box-shadow] duration-150 ease-out hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${
+                active
+                  ? "border-zinc-300 bg-white font-bold text-zinc-950 shadow-sm ring-2 ring-brand-200"
+                  : "border-zinc-200/80 bg-zinc-100/80 font-medium text-zinc-600 hover:bg-white hover:text-zinc-900"
+              }`}
+            >
+              <img
+                src={profile.image}
+                alt={profile.name}
+                className="h-6 w-6 rounded-full border border-zinc-300 object-cover"
+              />
+              <span>{profile.name}</span>
+              {count > 0 && (
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[11px] ${
+                    active ? "bg-brand-100 font-bold text-brand-900" : "bg-zinc-200/70 text-zinc-600"
+                  }`}
+                >
+                  {count} bài
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AuthorSpotlightCard({
+  profile,
+  articleCount,
+}: {
+  profile: AuthorProfile;
+  articleCount: number;
+}) {
+  return (
+    <section
+      aria-labelledby="author-spotlight-name"
+      className="rounded-[18px] border border-zinc-200 bg-white p-5 shadow-sm sm:p-7"
+    >
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
+        {/* Cột Trái: Ảnh Chân Dung HD + Danh ngôn + Hồ sơ vắn tắt */}
+        <div className="space-y-4 lg:col-span-4">
+          <div className="group relative aspect-[4/4.2] w-full overflow-hidden rounded-[16px] border border-zinc-200 bg-zinc-900 shadow-xs">
+            <img
+              src={profile.image}
+              alt={profile.name}
+              style={{ objectPosition: "center 20%" }}
+              className="h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+            />
+            <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-zinc-950/90 via-zinc-950/25 to-transparent p-4">
+              <span className="mb-1.5 inline-block self-start rounded-full bg-brand-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brand-900">
+                {profile.badge}
+              </span>
+              <h2
+                id="author-spotlight-name"
+                className={`${creativeHeading.className} text-2xl font-bold leading-tight text-white`}
+              >
+                {profile.name}
+              </h2>
+              <p className="mt-0.5 text-xs text-zinc-300">{profile.role}</p>
+            </div>
+          </div>
+
+          <div className="relative rounded-[14px] border border-brand-200/70 bg-brand-50/50 p-4">
+            <div className="absolute bottom-3 left-0 top-3 w-1 rounded-full bg-brand-500" />
+            <p className={`${serifBody.className} pl-2 text-base italic leading-snug text-zinc-900`}>
+              “{profile.quote}”
+            </p>
+          </div>
+
+          <div className="space-y-2 rounded-[14px] border border-zinc-200/80 bg-zinc-50 p-3.5 text-xs">
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-brand-800">
+              Hồ sơ vắn tắt
+            </span>
+            <div className="text-zinc-600">
+              <strong className="text-zinc-900">Xuất thân:</strong> {profile.origin}
+            </div>
+            <div className="text-zinc-600">
+              <strong className="text-zinc-900">Phong cách:</strong> {profile.style}
+            </div>
+          </div>
+        </div>
+
+        {/* Cột Giữa: Giới thiệu tác giả & Thành tựu nổi bật */}
+        <div className="space-y-5 lg:col-span-5">
+          <div className="space-y-2.5">
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-zinc-700">
+              <Sparkles size={13} className="text-brand-700" aria-hidden="true" />
+              <span>Giới thiệu tác giả</span>
+            </div>
+            <h3
+              className={`${creativeHeading.className} text-xl font-bold leading-snug text-zinc-950 sm:text-2xl`}
+            >
+              {profile.specialtyHeadline}
+            </h3>
+            {profile.bio.map((paragraph) => (
+              <p key={paragraph} className="text-xs leading-relaxed text-zinc-600 sm:text-sm">
+                {paragraph}
+              </p>
+            ))}
+          </div>
+
+          <div className="space-y-2.5 pt-1">
+            <span className="block text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+              Thành tựu & Dấu ấn nổi bật
+            </span>
+            <div className="space-y-2.5">
+              {profile.achievements.map((ac) => (
+                <div
+                  key={ac.title}
+                  className="flex items-start gap-3 rounded-[14px] border border-zinc-200/90 bg-zinc-50/70 p-3.5 transition-colors hover:border-zinc-300 hover:bg-white"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-brand-100 text-brand-900">
+                    {ac.icon === "award" ? (
+                      <Award size={18} aria-hidden="true" />
+                    ) : ac.icon === "agency" ? (
+                      <Building2 size={18} aria-hidden="true" />
+                    ) : (
+                      <BookOpen size={18} aria-hidden="true" />
+                    )}
+                  </span>
+                  <div className="space-y-0.5">
+                    <h4 className="text-xs font-bold text-zinc-950 sm:text-sm">{ac.title}</h4>
+                    <p className="text-xs leading-relaxed text-zinc-600">{ac.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Cột Phải: Gợi ý khi đọc + Tác phẩm tiêu biểu + Liên kết hồ sơ */}
+        <div className="space-y-4 lg:col-span-3">
+          <div className="space-y-2 rounded-[14px] border border-brand-200/80 bg-brand-50/50 p-4">
+            <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-brand-800">
+              <Lightbulb size={14} aria-hidden="true" />
+              <span>Một gợi ý khi đọc</span>
+            </div>
+            <p className="text-xs leading-relaxed text-zinc-800 sm:text-sm">{profile.perspective}</p>
+          </div>
+
+          <div className="space-y-2.5 rounded-[14px] border border-zinc-200/90 bg-zinc-50 p-4">
+            <span className="block text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+              Tác phẩm tiêu biểu
+            </span>
+            <div className="space-y-2">
+              {profile.bookDetails.map((b) => (
+                <div
+                  key={b.title}
+                  className="flex items-center gap-2.5 rounded-[10px] border border-zinc-200/80 bg-white p-2"
+                >
+                  <span
+                    className={`${serifBody.className} flex h-9 w-7 shrink-0 items-center justify-center rounded bg-zinc-900 text-[10px] font-bold text-white`}
+                  >
+                    {b.code}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-bold text-zinc-900">{b.title}</p>
+                    <p className="truncate text-[11px] text-zinc-500">{b.sub}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2 pt-1">
+            <a
+              href="#group-results"
+              className="flex w-full items-center justify-center gap-1.5 rounded-[12px] bg-brand-400 px-4 py-3 text-xs font-bold text-zinc-950 shadow-xs transition-[transform,background-color] duration-150 ease-out hover:-translate-y-0.5 hover:bg-brand-500 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+            >
+              <span>Đọc {articleCount} bài của {profile.name}</span>
+              <ArrowRight size={14} aria-hidden="true" />
+            </a>
+            <Link
+              href={`/creative/authors?author=${profile.slug}`}
+              className="flex w-full items-center justify-center gap-1 rounded-[10px] border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 transition-colors hover:border-zinc-300 hover:text-zinc-950"
+            >
+              <span>Xem trang hồ sơ & hành trình</span>
+              <ArrowUpRight size={13} aria-hidden="true" />
+            </Link>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
