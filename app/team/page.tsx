@@ -143,7 +143,7 @@ export default async function TeamPage({
       // Admin thấy mọi nhân viên; quản lý thấy nhân viên trực tiếp của mình
       prisma.user.findMany({
         where: isAdmin
-          ? { id: { not: user.id }, deletedAt: null }
+          ? { id: { not: user.id }, isActive: true, deletedAt: null }
           : activeDirectReportsWhere(user.id),
         include: {
           assignedTasks: {

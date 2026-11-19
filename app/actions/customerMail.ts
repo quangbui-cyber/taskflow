@@ -8,6 +8,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
   DEFAULT_SALUTATION,
+  MAX_RECIPIENTS,
   campaignReadiness,
   defaultCallName,
   isSalutation,
@@ -237,6 +238,66 @@ export async function addRecipient(campaignId: string, input: RecipientPatch): P
   }
   refresh(campaignId);
   return { success: "Đã thêm người nhận." };
+}
+
+export async function addCompanyRecipients(campaignId: string): Promise<MailActionState> {
+  const user = await requireMailAdmin();
+  if (!user) return NO_ACCESS;
+  const found = await editableCampaign(campaignId);
+  if ("error" in found) return found;
+
+  const [staff, existing] = await Promise.all([
+    prisma.user.findMany({
+      where: { isActive: true, deletedAt: null },
+      orderBy: { name: "asc" },
+      select: {
+        name: true,
+        email: true,
+        groupMemberships: {
+          select: { group: { select: { name: true } } },
+          orderBy: { group: { name: "asc" } },
+          take: 1,
+        },
+      },
+    }),
+    prisma.mailRecipient.findMany({
+      where: { campaignId },
+      select: { email: true },
+    }),
+  ]);
+
+  const existingEmails = new Set(existing.map((row) => row.email).filter(Boolean));
+  const fresh = staff
+    .map((person) => {
+      const email = normalizeEmail(person.email);
+      const fullName = oneLine(person.name, 160) || (email ? email.split("@")[0] : "");
+      return {
+        campaignId,
+        fullName,
+        email,
+        callName: defaultCallName(fullName) || null,
+        salutation: DEFAULT_SALUTATION,
+        group: person.groupMemberships[0]?.group.name ?? null,
+        source: "Toàn công ty",
+        reviewed: true,
+      };
+    })
+    .filter((row) => row.email && !existingEmails.has(row.email));
+
+  if (existing.length + fresh.length > MAX_RECIPIENTS) {
+    return { error: `Mỗi chiến dịch tối đa ${MAX_RECIPIENTS} người nhận.` };
+  }
+  if (fresh.length === 0) {
+    return { success: "Tất cả nhân sự đang hoạt động đã có trong danh sách." };
+  }
+
+  await prisma.mailRecipient.createMany({
+    data: fresh,
+    skipDuplicates: true,
+  });
+  await logEvent(campaignId, user.id, "import", `Toàn công ty: thêm ${fresh.length} người`);
+  refresh(campaignId);
+  return { success: `Đã thêm ${fresh.length} nhân sự trong công ty.` };
 }
 
 export async function updateRecipient(recipientId: string, patch: RecipientPatch): Promise<MailActionState> {

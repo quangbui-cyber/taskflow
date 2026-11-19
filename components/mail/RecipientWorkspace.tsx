@@ -4,8 +4,9 @@ import { SALUTATION_STYLES } from "@/components/mail/salutationStyles";
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ClipboardPaste, Eye, FileUp, Image as ImageIcon, Plus, Trash2, X } from "lucide-react";
+import { Check, ClipboardPaste, Eye, FileUp, Image as ImageIcon, Plus, Trash2, Users, X } from "lucide-react";
 import {
+  addCompanyRecipients,
   addRecipient,
   deleteRecipients,
   markRecipientsReviewed,
@@ -311,6 +312,15 @@ export default function RecipientWorkspace({
                   Dán danh sách
                 </button>
               )}
+              <button
+                type="button"
+                className="tf-button-secondary"
+                disabled={pending}
+                onClick={() => run(() => addCompanyRecipients(campaignId))}
+              >
+                <Users size={16} aria-hidden="true" />
+                Toàn công ty
+              </button>
             </div>
             <input
               ref={fileInput}
