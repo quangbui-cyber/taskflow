@@ -3,6 +3,12 @@
   "regions": [
     "sin1"
   ],
+  "git": {
+    "deploymentEnabled": {
+      "claude/**": false,
+      "codex/**": false
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/daily-digest",
@@ -23,6 +29,10 @@
     {
       "path": "/api/cron/creative-drop",
       "schedule": "0 0 * * 1-5"
+    },
+    {
+      "path": "/api/cron/customer-mail",
+      "schedule": "* * * * *"
     }
   ]
 }

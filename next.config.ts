@@ -33,6 +33,15 @@ const nextConfig: NextConfig = {
       "./assets/fonts/DancingScript.ttf",
       "./public/brand/creative-station-logo-email.png",
     ],
+    // Thư cho khách vẽ lời chào viết tay ở máy chủ (cron gửi, nút gửi thử, xem trước).
+    "/api/cron/customer-mail": [
+      "./assets/fonts/DancingScript.ttf",
+      "./public/brand/creative-station-logo-email.png",
+    ],
+    "/mail/**": [
+      "./assets/fonts/DancingScript.ttf",
+      "./public/brand/creative-station-logo-email.png",
+    ],
   },
   experimental: {
     serverActions: {

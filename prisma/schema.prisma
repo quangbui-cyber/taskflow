@@ -81,6 +81,8 @@ model User {
   financeApprovalEvents    FinanceApprovalEvent[]
   creativeArticlesReviewed CreativeArticle[]        @relation("CreativeArticleReviewer")
   articleReads             ArticleReader[]
+  mailCampaigns            MailCampaign[]           @relation("MailCampaignCreator")
+  mailCampaignEvents       MailCampaignEvent[]      @relation("MailCampaignEventUser")
 
   @@index([isActive])
 }
@@ -1042,4 +1044,101 @@ model SudokuMatch {
   finishedAt   DateTime @default(now())
 
   @@index([finishedAt])
+}
+
+// ---------- Gửi thư cho khách (cảm ơn / thông báo sau chương trình) ----------
+
+// Thương hiệu đứng tên gửi thư (Ga, hoặc thương hiệu của khách hàng khác).
+model MailSender {
+  id        String         @id @default(cuid())
+  name      String // tên người gửi hiện trong hộp thư: "Ga – Creative Station"
+  replyTo   String? // email thật để khách hồi âm; trống = hộp thư gửi
+  // Tiền tố biến môi trường chứa thông tin đăng nhập SMTP riêng: "GA" → SMTP_GA_USER, SMTP_GA_APP_PASSWORD.
+  // Trống = dùng SMTP mặc định của app. Không bao giờ lưu mật khẩu ở đây.
+  smtpRef   String?
+  createdAt DateTime       @default(now())
+  templates MailTemplate[]
+  campaigns MailCampaign[]
+}
+
+model MailTemplate {
+  id        String         @id @default(cuid())
+  senderId  String?
+  sender    MailSender?    @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  name      String
+  subject   String
+  title     String // tiêu đề viết tay đầu thư: "Lời cảm ơn"
+  greeting  String // "{{Xung_ho}} {{ten_goi}} thân mến,"
+  body      String // các đoạn cách nhau bằng một dòng trống, có biến {{...}}
+  signOff   String // "Thân mến,"
+  signature String // "Ga"
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  campaigns MailCampaign[]
+}
+
+// Một chương trình / khách hàng là một chiến dịch: nội dung thư được chép từ mẫu để sửa riêng.
+model MailCampaign {
+  id          String              @id @default(cuid())
+  senderId    String
+  sender      MailSender          @relation(fields: [senderId], references: [id], onDelete: Restrict)
+  templateId  String?
+  template    MailTemplate?       @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  name        String
+  subject     String
+  title       String
+  greeting    String
+  body        String
+  signOff     String
+  signature   String
+  status      String              @default("draft") // draft | scheduled | sending | done
+  sendAt      DateTime? // giờ hẹn (UTC)
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  createdById String?
+  createdBy   User?               @relation("MailCampaignCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  recipients  MailRecipient[]
+  events      MailCampaignEvent[]
+
+  @@index([status, sendAt])
+}
+
+model MailRecipient {
+  id         String       @id @default(cuid())
+  campaignId String
+  campaign   MailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  fullName   String
+  email      String? // chữ thường; null = chưa có, chặn nút Gửi
+  callName   String? // tên trong thư: "Nhung"
+  salutation String       @default("ban") // anh | chi | ban; mặc định "bạn"
+  group      String?
+  note       String?
+  source     String? // tên file/ảnh gốc
+  confidence Float? // độ chắc chắn Gemini trả về
+  reviewed   Boolean      @default(false) // người duyệt đã xem lại dòng nghi ngờ
+  status     String       @default("pending") // pending | sending | sent | failed
+  attempts   Int          @default(0)
+  error      String?
+  claimedAt  DateTime?
+  sentAt     DateTime?
+  createdAt  DateTime     @default(now())
+
+  @@unique([campaignId, email]) // chống gửi trùng
+  @@index([campaignId, status])
+}
+
+// Nhật ký: ai tải danh sách, ai bấm gửi, lúc nào.
+model MailCampaignEvent {
+  id         String       @id @default(cuid())
+  campaignId String
+  campaign   MailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  userId     String?
+  user       User?        @relation("MailCampaignEventUser", fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  detail     String?
+  createdAt  DateTime     @default(now())
+
+  @@index([campaignId, createdAt])
 }

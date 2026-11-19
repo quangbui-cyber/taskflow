@@ -170,6 +170,15 @@ export function leaveApproverIds(
     : leaveManagerIds.filter((id) => id !== requester.id);
 }
 
+/** Quản lý nghỉ phép được báo khi có đơn mới để nắm tình hình, dù không phải người duyệt. */
+export function leaveWatcherIds(
+  requesterId: string,
+  approverIds: string[],
+  leaveManagerIds: string[]
+) {
+  return leaveManagerIds.filter((id) => id !== requesterId && !approverIds.includes(id));
+}
+
 /** Người xin tự huỷ được đơn đang chờ, hoặc đơn đã duyệt nhưng chưa tới ngày nghỉ. */
 export function canCancelLeave(
   request: { status: string; startDate: Date },
